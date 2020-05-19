@@ -216,7 +216,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,
-      workbenchMetricBaseName
+      workbenchMetricBaseName,
+      workspaceManagerDAO,
+      mockServer.mockServerBaseUrl
     )_
 
     def cleanupSupervisor = {

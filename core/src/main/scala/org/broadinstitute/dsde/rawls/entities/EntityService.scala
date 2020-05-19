@@ -4,6 +4,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderBuilder
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProviderBuilder
@@ -23,7 +24,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object EntityService {
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoUrl: String)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext) = {
 
@@ -31,7 +32,7 @@ object EntityService {
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
     // and execution context for the rawls entity provider that the entity service uses.
     val defaultEntityProviderBuilder = new LocalEntityProviderBuilder(dataSource) // implicit executionContext
-    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder
+    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO, terraDataRepoUrl)
 
     val entityManager = new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))
 
