@@ -183,11 +183,10 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
               check {
                 val response = responseAs[DataRepoSnapshotList]
                 assertResult(StatusCodes.OK) {status}
-                assert(response.snapshots.size == 2)
                 // Our mock doesn't guarantee order, so we just check that there are two
                 // elements, that one is named "foo", and that one is named "bar"
-                assert(response.snapshots(0).name == "bar" || response.snapshots(1).name == "bar")
-                assert(response.snapshots(0).name == "foo" || response.snapshots(1).name == "foo")
+                assert(response.snapshots.size == 2)
+                assertResult(Set("foo", "bar")) { response.snapshots.map(_.name).toSet }
               }
           }
       }

@@ -20,7 +20,9 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
   def mockGetWorkspaceResponse(workspaceId: UUID) = new WorkspaceDescription().id(workspaceId)
   def mockCreateWorkspaceResponse(workspaceId: UUID) = new CreatedWorkspace().id(workspaceId.toString)
   def mockReferenceResponse(workspaceId: UUID, referenceId: UUID) = references.get((workspaceId, referenceId)).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
-  def mockEnumerateReferenceResponse(workspaceId: UUID) = new DataReferenceList().resources(references.filterKeys(_._1 == workspaceId).values.toList.asJava)
+  def mockEnumerateReferenceResponse(workspaceId: UUID) = new DataReferenceList().resources(references.collect {
+    case ((wsId, _), refDescription) if wsId == workspaceId => refDescription
+  }.toList.asJava)
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
 
