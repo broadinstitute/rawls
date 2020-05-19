@@ -2,21 +2,21 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import spray.json.JsObject
+import spray.json.{JsArray, JsBoolean, JsNumber, JsObject, JsString}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -1574,6 +1574,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  // evaluate expressions
+
   it should "return 200 on successfully parsing an expression" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("this.samples.type")) ~>
       sealRoute(services.entityRoutes) ~>
@@ -1587,8 +1589,118 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 200 on successfully parsing a raw JSON" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""{"example":"foo", "array": [1, 2, 3]}""")) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Array(JsObject(Map("example" -> JsString("foo"), "array" -> JsArray(Vector(JsNumber(1), JsNumber(2), JsNumber(3))))))) {
+          responseAs[Array[JsObject]]
+        }
+      }
+  }
+
+  it should "return 200 on successfully parsing a JSON with single attribute reference" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""{"example":"foo", "array": this.samples.type}""")) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Array(JsObject(Map("example" -> JsString("foo"), "array" -> JsArray(Vector(JsString("normal"), JsString("tumor"), JsString("tumor"))))))) {
+          responseAs[Array[JsObject]]
+        }
+      }
+  }
+
+  it should "return 200 on successfully parsing a nested JSON with multiple attribute reference" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""{"array": this.samples.type, "details": {"values": this.samples.type}}""")) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val attrRefArray = JsArray(Vector(JsString("normal"), JsString("tumor"), JsString("tumor")))
+        assertResult(Array(JsObject(Map("array" -> attrRefArray, "details" -> JsObject(Map("values" -> attrRefArray)))))) {
+          responseAs[Array[JsObject]]
+        }
+      }
+  }
+
+  it should "return 200 on successfully parsing a raw array" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""[1, 2, 3, 4, 5]""")) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Array(1, 2, 3, 4, 5)) {
+          responseAs[Array[Int]]
+        }
+      }
+  }
+
+  it should "return 200 on successfully parsing a raw heterogeneous array" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""[1, 2, 3, "foo", "bar", true]""")) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(JsArray(Vector(JsNumber(1), JsNumber(2), JsNumber(3), JsString("foo"), JsString("bar"), JsBoolean(true)))) {
+          responseAs[JsArray]
+        }
+      }
+  }
+
+  it should "return 200 on successfully parsing a heterogeneous array with attribute references" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""[1, 2, 3, this.samples.type, ["foo", "bar", this.samples.type]]""")) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val attrRefArray = JsArray(Vector(JsString("normal"), JsString("tumor"), JsString("tumor")))
+        assertResult(Array(JsArray(Vector(JsNumber(1), JsNumber(2), JsNumber(3), attrRefArray, JsArray(JsString("foo"), JsString("bar"), attrRefArray))))) {
+          responseAs[Array[JsArray]]
+        }
+      }
+  }
+
   it should "return 400 on failing to parse an expression" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("nonexistent.anything")) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 while parsing invalid expression with invalid reference in array" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""[1, 2, "foo", invalid.ref]""")) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 while parsing invalid expression with invalid reference in JSON" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""{"example": [1, 2], "foo": invalid.ref}""")) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 while parsing expression with non-existent reference" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""{"example": [1, 2], "foo": nonexistent.anything}""")) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
