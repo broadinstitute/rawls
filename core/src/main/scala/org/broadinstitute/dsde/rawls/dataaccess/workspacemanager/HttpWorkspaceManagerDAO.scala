@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.api.WorkspaceApi
 import bio.terra.workspace.client.ApiClient
-import bio.terra.workspace.model.{CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, DeleteWorkspaceRequestBody, WorkspaceDescription}
+import bio.terra.workspace.model.{CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, DataReferenceList, DeleteWorkspaceRequestBody, WorkspaceDescription}
 import spray.json.JsObject
 
 import scala.concurrent.ExecutionContext
@@ -44,6 +44,10 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
 
   override def getDataReference(workspaceId: UUID, snapshotId: UUID, accessToken: OAuth2BearerToken): DataReferenceDescription = {
     getWorkspaceApi(accessToken).getDataReference(workspaceId.toString, snapshotId.toString)
+  }
+
+  override def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList = {
+    getWorkspaceApi(accessToken).enumerateReferences(workspaceId.toString, offset, limit)
   }
 
 }

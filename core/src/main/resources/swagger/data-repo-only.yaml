@@ -38,11 +38,52 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/DataRepoSnapshot'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
+    get:
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/DataRepoSnapshotList'
+        '404':
+          description: Workspace not found or user lacks permissions
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "Enumerate references to snapshots in the Terra Data Repo"
+      tags:
+      - snapshots
+      summary: List snapshots
+      operationId: enumerateDataRepoSnapshot
+      parameters:
+      - in: path
+        description: The workspace namespace
+        name: namespace
+        required: true
+        type: string
+      - in: path
+        description: The workspace name
+        name: name
+        required: true
+        type: string
+      - in: query
+        name: offset
+        description: The number of items to skip before starting to collect the result set.
+        type: int
+        required: true
+      - in: query
+        name: limit
+        description: The number of items to return.
+        type: int
+        required: true
+
+    security:
+      - authorization:
+          - openid
+          - email
+          - profile
   '/api/workspaces/{namespace}/{name}/snapshots/{snapshotId}':
     get:
       responses:
@@ -111,3 +152,12 @@ definitions:
         type: object
       cloningInstructions:
         type: string
+
+  DataRepoSnapshotReferenceList:
+    description: A list of DataRepoSnapshotReferences
+    properties:
+      resources:
+        description: A list of Data Reference definitions from Workspace Manager
+        type: array
+        items:
+          $ref: '#/definitions/DataRepoSnapshotReferences'

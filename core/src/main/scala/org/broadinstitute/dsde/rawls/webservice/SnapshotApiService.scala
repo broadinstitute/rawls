@@ -25,6 +25,13 @@ trait SnapshotApiService extends UserInfoDirectives {
             snapshotServiceConstructor(userInfo).CreateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), dataRepoSnapshot).map(StatusCodes.Created -> _)
           }
         }
+      } ~
+      get {
+        parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
+          complete {
+            snapshotServiceConstructor(userInfo).EnumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit).map(StatusCodes.OK -> _)
+          }
+        }
       }
     } ~
     path("workspaces" / Segment / Segment / "snapshots" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
