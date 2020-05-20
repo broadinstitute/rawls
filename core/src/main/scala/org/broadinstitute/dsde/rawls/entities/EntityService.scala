@@ -151,7 +151,11 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def entityTypeMetadata(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      entityManager.resolveProvider(workspaceContext.workspace, userInfo).entityTypeMetadata()
+
+      // TODO: insert the dataReference name and billing project, if present
+      val entityRequestArguments = EntityRequestArguments(workspaceContext.workspace, userInfo)
+
+      entityManager.resolveProvider(entityRequestArguments).entityTypeMetadata()
         .map(r => RequestComplete(StatusCodes.OK, r))
     }
 
