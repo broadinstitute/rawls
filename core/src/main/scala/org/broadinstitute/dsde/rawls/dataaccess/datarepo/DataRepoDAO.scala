@@ -7,5 +7,7 @@ import bio.terra.datarepo.model.SnapshotModel
 
 trait DataRepoDAO {
 
+  def getBaseURL: String
+
   def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel
 }

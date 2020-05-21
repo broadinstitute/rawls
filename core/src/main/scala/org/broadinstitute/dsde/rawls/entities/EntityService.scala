@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, SlickWorkspaceContext}
@@ -24,7 +25,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object EntityService {
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoUrl: String)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, workspaceManagerDAO: WorkspaceManagerDAO, dataRepoDAO: DataRepoDAO)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext) = {
 
@@ -32,7 +33,7 @@ object EntityService {
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
     // and execution context for the rawls entity provider that the entity service uses.
     val defaultEntityProviderBuilder = new LocalEntityProviderBuilder(dataSource) // implicit executionContext
-    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO, terraDataRepoUrl)
+    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO)
 
     val entityManager = new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))
 
@@ -51,7 +52,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference]) = deleteEntities(workspaceName, entities)
   def RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) = renameEntity(workspaceName, entityType, entityName, newName)
   def EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) = evaluateExpression(workspaceName, entityType, entityName, expression)
-  def GetEntityTypeMetadata(workspaceName: WorkspaceName) = entityTypeMetadata(workspaceName)
+  def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[String]) = entityTypeMetadata(workspaceName, dataReference)
   def ListEntities(workspaceName: WorkspaceName, entityType: String) = listEntities(workspaceName, entityType)
   def QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) = queryEntities(workspaceName, entityType, query)
   def CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri, linkExistingEntities: Boolean) = copyEntities(entityCopyDefinition, uri, linkExistingEntities)
@@ -149,11 +150,11 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def entityTypeMetadata(workspaceName: WorkspaceName): Future[PerRequestMessage] =
+  def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[String]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      // TODO: insert the dataReference name and billing project, if present
-      val entityRequestArguments = EntityRequestArguments(workspaceContext.workspace, userInfo)
+      // TODO: insert the billing project, if present
+      val entityRequestArguments = EntityRequestArguments(workspaceContext.workspace, userInfo, dataReference)
 
       entityManager.resolveProvider(entityRequestArguments).entityTypeMetadata()
         .map(r => RequestComplete(StatusCodes.OK, r))
