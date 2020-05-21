@@ -78,12 +78,12 @@ paths:
         description: The number of items to return.
         type: int
         required: true
-
     security:
       - authorization:
           - openid
           - email
           - profile
+
   '/api/workspaces/{namespace}/{name}/snapshots/{snapshotId}':
     get:
       responses:
@@ -158,10 +158,6 @@ paths:
             - openid
             - email
             - profile
-
-tags:
-  - name: snapshots
-    description: Data Repo snapshot API
 
 definitions:
   DataRepoSnapshot:

@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
-import spray.json.JsObject
+import spray.json.{JsObject, JsString}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -196,34 +196,41 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when a user lists all snapshots in a workspace" in withTestDataApiServices { services =>
+    // First, create two data references
     Post(s"${testData.wsName.path}/snapshots", httpJson(
       DataRepoSnapshot(
-        name = "bar",
-        snapshotId = "realsnapshot2"
+        name = "foo",
+        snapshotId = "realsnapshot"
       )
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
         val response = responseAs[DataRepoSnapshotReference]
-        assertResult(StatusCodes.Created) {
-          status
-        }
-        // Then, list them both
-        Get(s"${testData.wsName.path}/snapshots?offset=0&limit=10") ~>
+        assertResult(StatusCodes.Created) {status}
+        Post(s"${testData.wsName.path}/snapshots", httpJson(
+          DataRepoSnapshot(
+            name = "bar",
+            snapshotId = "realsnapshot2"
+          )
+        )) ~>
           sealRoute(services.snapshotRoutes) ~>
           check {
-            val response = responseAs[DataRepoSnapshotList]
-            assertResult(StatusCodes.OK) {
-              status
-            }
-            // Our mock doesn't guarantee order, so we just check that there are two
-            // elements, that one is named "foo", and that one is named "bar"
-            assert(response.snapshots.size == 2)
-            assertResult(Set("foo", "bar")) {
-              response.snapshots.map(_.name).toSet
-            }
+            val response = responseAs[DataRepoSnapshotReference]
+            assertResult(StatusCodes.Created) {status}
+            // Then, list them both
+            Get(s"${testData.wsName.path}/snapshots?offset=0&limit=10") ~>
+              sealRoute(services.snapshotRoutes) ~>
+              check {
+                val response = responseAs[DataRepoSnapshotList]
+                assertResult(StatusCodes.OK) {status}
+                // Our mock doesn't guarantee order, so we just check that there are two
+                // elements, that one is named "foo", and that one is named "bar"
+                assert(response.snapshots.size == 2)
+                assertResult(Set("foo", "bar")) { response.snapshots.map(_.name).toSet }
+              }
           }
       }
+
   }
 
   it should "return 404 when a user lists references without workspace read permission" in withTestDataApiServicesAndUser("no-access") { services =>
@@ -275,7 +282,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when a user tries to delete a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
-    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), "test", "DataRepoSnapshot", JsObject(), "foo", OAuth2BearerToken("foo")).getReferenceId
+    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), "test", "DataRepoSnapshot", JsObject("instance" -> JsString("foo"), "snapshot" -> JsString("bar")), "foo", OAuth2BearerToken("foo")).getReferenceId
     Delete(s"${testData.wsName.path}/snapshots/${id.toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
