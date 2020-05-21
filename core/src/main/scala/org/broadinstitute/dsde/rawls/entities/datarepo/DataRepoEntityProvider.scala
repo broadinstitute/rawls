@@ -37,7 +37,8 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     // reformat TDR's response into the expected response structure
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
       val attrs: Seq[String] = table.getColumns.asScala.map(_.getName)
-      val primaryKey = Option(table.getPrimaryKey).getOrElse(new java.util.ArrayList()).asScala.mkString(",") // TODO: better way to describe the list, if multiple PKs?
+      // TODO: better way to describe the primary key, if null or more than one PK?
+      val primaryKey = Option(table.getPrimaryKey).getOrElse(new java.util.ArrayList()).asScala.mkString(",")
       // TODO: once DR-1003 is implemented, add the actual row counts
       (table.getName, EntityTypeMetadata(-1, primaryKey, attrs))
     }.toMap
@@ -54,10 +55,11 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
   private def lookupSnapshotForName(dataReferenceName: String): UUID = {
     // contact WSM to retrieve the data reference specified in the request
-    // TODO: this should use lookup-by-name, not lookup-by-id
-    val dataRef = workspaceManagerDAO.getDataReference(UUID.fromString(workspace.workspaceId),
-      UUID.fromString(dataReferenceName), userInfo.accessToken)
-    // TODO: verify we got one back (should be noop; request will throw if 0 found)
+    val dataRef = workspaceManagerDAO.getDataReferenceByName(UUID.fromString(workspace.workspaceId),
+      ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue,
+      dataReferenceName,
+      userInfo.accessToken)
+    // TODO: verify we got one back (should be noop; request will throw if 0 found, but could use better error-trapping)
 
     // verify it's a TDR snapshot.
     if (ReferenceTypeEnum.DATAREPOSNAPSHOT != dataRef.getReferenceType) {
