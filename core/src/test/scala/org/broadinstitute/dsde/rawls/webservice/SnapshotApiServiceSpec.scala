@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
-import spray.json.{JsObject, JsString}
+import spray.json.JsObject
 
 import scala.concurrent.{ExecutionContext, Future}
 
