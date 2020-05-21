@@ -44,6 +44,8 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
     mockReferenceResponse(workspaceId, referenceId)
   }
 
+  override def getDataReferenceByName(workspaceId: UUID, refType: String, refName: String, accessToken: OAuth2BearerToken): DataReferenceDescription = ???
+
   override def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList = {
     mockEnumerateReferenceResponse(workspaceId)
   }

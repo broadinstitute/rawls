@@ -15,6 +15,7 @@ trait WorkspaceManagerDAO {
   def createDataReference(workspaceId: UUID, name: String, referenceType: String, reference: String, cloningInstructions: String, accessToken: OAuth2BearerToken): DataReferenceDescription
   def deleteDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit
   def getDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): DataReferenceDescription
+  def getDataReferenceByName(workspaceId: UUID, refType: String, refName: String, accessToken: OAuth2BearerToken): DataReferenceDescription
   def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList
 
 }
