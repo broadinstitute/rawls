@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -34,6 +34,7 @@ import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
@@ -118,6 +119,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val samDAO: SamDAO = new MockSamDAO(dataSource)
 
     val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
+
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
@@ -218,7 +221,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       samDAO,
       workbenchMetricBaseName,
       workspaceManagerDAO,
-      mockServer.mockServerBaseUrl
+      dataRepoDAO
     )_
 
     def cleanupSupervisor = {

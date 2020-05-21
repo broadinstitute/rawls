@@ -49,6 +49,7 @@ import scala.concurrent.duration._
 import scala.language.higherKinds
 import scala.language.postfixOps
 import net.ceedubs.ficus.Ficus._
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -313,6 +314,8 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.baseUrl"))
 
+      val dataRepoDAO = new HttpDataRepoDAO(conf.getString("dataRepo.terraInstance"))
+
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
       val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt(
@@ -396,7 +399,7 @@ object Boot extends IOApp with LazyLogging {
         samDAO,
         workbenchMetricBaseName = metricsPrefix,
         workspaceManagerDAO,
-        conf.getString("dataRepo.terraInstance")
+        dataRepoDAO
       )
 
       val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(

@@ -27,6 +27,7 @@ trait EntityApiService extends UserInfoDirectives {
   val entityServiceConstructor: UserInfo => EntityService
 
   val entityRoutes: server.Route = requireUserInfo() { userInfo =>
+    parameters("dataReference".?, "billingProject".?) { (dataReference, billingProject) =>
       path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
         get {
           parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
@@ -49,7 +50,7 @@ trait EntityApiService extends UserInfoDirectives {
       } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
           get {
-            complete { entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName)) }
+            complete { entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference) }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
@@ -129,5 +130,6 @@ trait EntityApiService extends UserInfoDirectives {
             }
           }
         }
+      }
     }
 }

@@ -6,7 +6,7 @@ import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import com.typesafe.scalalogging.LazyLogging
 import io.circe.Json
 import io.circe.parser._
-import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.{DataRepoDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
@@ -17,7 +17,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
-class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoUrl: String)
+class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspaceManagerDAO: WorkspaceManagerDAO, dataRepoDAO: DataRepoDAO)
   extends EntityProvider with LazyLogging {
 
   val workspace = requestArguments.workspace
@@ -26,22 +26,23 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
   override def entityTypeMetadata(): Future[Map[String, EntityTypeMetadata]] = {
 
-    // TODO: auto-switch to see if the ref supplied in argument is a UUID or a name??
+    // TODO: auto-switch to see if the ref supplied in argument is a UUID or a name?? Use separate query params? Never allow ID?
 
     // get snapshotId from reference name
     val snapshotId = lookupSnapshotForName(dataReferenceName)
 
-    // TODO: contact TDR to describe the snapshot
-    val snapshotModel = new HttpDataRepoDAO().getSnapshot(snapshotId, userInfo.accessToken)
+    // contact TDR to describe the snapshot
+    val snapshotModel = dataRepoDAO.getSnapshot(snapshotId, userInfo.accessToken)
 
-    // TODO: reformat TDR's response into the expected response structure
-    // get tables
-    val tableNames:List[String] = snapshotModel.getTables.asScala.map(_.getName).toList
-
-    val entityTypesResponse = tableNames.map((_, EntityTypeMetadata(-1, "snapshotId", Seq.empty[String]))).toMap
+    // reformat TDR's response into the expected response structure
+    val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
+      val attrs: Seq[String] = table.getColumns.asScala.map(_.getName)
+      val primaryKey = Option(table.getPrimaryKey).getOrElse(new java.util.ArrayList()).asScala.mkString(",") // TODO: better way to describe the list, if multiple PKs?
+      // TODO: once DR-1003 is implemented, add the actual row counts
+      (table.getName, EntityTypeMetadata(-1, primaryKey, attrs))
+    }.toMap
 
     Future.successful(entityTypesResponse)
-
 
   }
 
@@ -75,8 +76,9 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     val refSnapshot: String = cursor.get[String]("snapshot").getOrElse(throw new DataEntityException(s"Reference value for $dataReferenceName does not contain a snapshotId value."))
 
     // verify the instance matches our target instance
-    if (refInstance != terraDataRepoUrl) {
-      logger.error(s"expected instance $terraDataRepoUrl, got $refInstance")
+    // TODO: is this the right place to validate this? We could add a "validateInstanceURL" method to the DAO itself, for instance
+    if (refInstance != dataRepoDAO.getBaseURL) {
+      logger.error(s"expected instance ${dataRepoDAO.getBaseURL}, got $refInstance")
       throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected instance value")
     }
 
