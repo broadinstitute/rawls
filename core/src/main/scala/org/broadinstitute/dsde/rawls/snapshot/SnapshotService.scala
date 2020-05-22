@@ -36,7 +36,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         workspaceManagerDAO.createWorkspace(workspaceContext.workspaceId, getServiceAccountAccessToken, userInfo.accessToken)
       }
 
-      val dataRepoReference = JsObject.apply(("instance", JsString(terraDataRepoUrl)), ("snapshot", JsString(snapshot.snapshotId)))
+      val dataRepoReference = JsObject("instance" -> JsString(terraDataRepoUrl), "snapshot" -> JsString(snapshot.snapshotId)).toString()
       val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceId, snapshot.name, ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue, dataRepoReference, CloningInstructionsEnum.NOTHING.getValue, userInfo.accessToken)
 
       Future.successful(DataRepoSnapshotReference(ref))

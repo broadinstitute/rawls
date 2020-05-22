@@ -8,7 +8,6 @@ import akka.stream.Materializer
 import bio.terra.workspace.api.WorkspaceApi
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model.{CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, DataReferenceList, DeleteWorkspaceRequestBody, WorkspaceDescription}
-import spray.json.JsObject
 
 import scala.concurrent.ExecutionContext
 
@@ -38,7 +37,7 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(folderManagerAccessToken).deleteWorkspace(workspaceId.toString, new DeleteWorkspaceRequestBody().authToken(bodyAccessToken.token))
   }
 
-  override def createDataReference(workspaceId: UUID, name: String, referenceType: String, reference: JsObject, cloningInstructions: String, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+  override def createDataReference(workspaceId: UUID, name: String, referenceType: String, reference: String, cloningInstructions: String, accessToken: OAuth2BearerToken): DataReferenceDescription = {
     getWorkspaceApi(accessToken).createDataReference(workspaceId.toString, new CreateDataReferenceRequestBody().name(name).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions))
   }
 
