@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
@@ -124,7 +127,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult] = {
-    val url = samServiceURL + s"/api/users/v1/$userEmail"
+    val url = samServiceURL + s"/api/users/v1/${URLEncoder.encode(userEmail, UTF_8.name)}"
     val httpRequest = RequestBuilding.Get(url).addHeader(authHeader(userInfo))
     retry(when401or500) { () =>
       httpClientUtils.executeRequestUnmarshalResponseAcceptNoContent[UserIdInfo](http, httpRequest).map {
@@ -137,7 +140,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = {
-    val url = samServiceURL + s"/api/google/v1/user/proxyGroup/$targetUserEmail"
+    val url = samServiceURL + s"/api/google/v1/user/proxyGroup/${URLEncoder.encode(targetUserEmail.value, UTF_8.name)}"
     retry(when401or500) { () =>
       pipeline[WorkbenchEmail](userInfo) apply RequestBuilding.Get(url)
     }
@@ -195,21 +198,21 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/$memberEmail"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/${URLEncoder.encode(memberEmail, UTF_8.name)}"
     val httpRequest = RequestBuilding.Put(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/$memberEmail"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/${URLEncoder.encode(memberEmail, UTF_8.name)}"
     val httpRequest = RequestBuilding.Delete(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/users/v1/invite/$userEmail"
+    val url = samServiceURL + s"/api/users/v1/invite/${URLEncoder.encode(userEmail, UTF_8.name)}"
     val httpRequest = RequestBuilding.Post(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
@@ -226,7 +229,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def getPetServiceAccountKeyForUser(googleProject: String, userEmail: RawlsUserEmail): Future[String] = {
-    val url = samServiceURL + s"/api/google/v1/petServiceAccount/$googleProject/${userEmail.value}"
+    val url = samServiceURL + s"/api/google/v1/petServiceAccount/$googleProject/${URLEncoder.encode(userEmail.value, UTF_8.name)}"
     retry(when401or500) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
   }
 
