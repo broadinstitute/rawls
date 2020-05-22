@@ -409,6 +409,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val methodRepoBadPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, agoraMethodConfigName)
     val methodRepoLibrary = MethodRepoConfigurationImport("workspace_test", "rawls_test_library", 1, newMethodConfigName)
 
+    val methodConfigForWdlStruct = MethodConfiguration("dsde", "WdlStructConfig", Some("Sample"), None,
+      Map("wdl_struct_wf.struct_obj" -> AttributeString("""{"id":this.participant_id,"sample_name":this.sample_name}""")), Map.empty,
+      AgoraMethod("dsde", "wdl_struct_wf", 1)
+    )
+
     val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
     val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
     val missingOutputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
@@ -802,6 +807,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 methodConfigurationQuery.create(context, methodConfigEntityUpdate),
                 methodConfigurationQuery.create(context, methodConfigWorkspaceLibraryUpdate),
                 methodConfigurationQuery.create(context, methodConfigMissingOutputs),
+                methodConfigurationQuery.create(context, methodConfigForWdlStruct),
                 //HANDY HINT: if you're adding a new method configuration, don't reuse the name!
                 //If you do, methodConfigurationQuery.create() will archive the old query and update it to point to the new one!
 
@@ -1286,6 +1292,47 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val meth1WDLWorkflowDescription = makeWorkflowDescription(meth1WDLName, List(i1Input), List(o1Output))
   mockCromwellSwaggerClient.workflowDescriptions += (meth1WDL -> meth1WDLWorkflowDescription)
 
+  val wdlStructWDL =
+    WdlSource(
+      """
+        |version 1.0
+        |
+        |struct Participant {
+        |  Int id
+        |  String sample_name
+        |}
+        |
+        |task do_something {
+        |  input {
+        |    Int id
+        |    String sample_name
+        |  }
+        |
+        |  command {
+        |    echo "Hello participant ~{id} ~{sample_name} !"
+        |  }
+        |
+        |  runtime {
+        |    docker: "docker image"
+        |  }
+        |}
+        |
+        |workflow wdl_struct_wf {
+        |  input {
+        |    Participant struct_obj
+        |  }
+        |
+        |  call do_something {input: id = struct_obj.id, sample_name = struct_obj.sample_name}
+        |}
+      """.stripMargin)
+
+  val wdlStructWDLName = "wdl_struct_wf"
+  val wdlStructWDLInputName = "wdl_struct_wf.struct_obj"
+  val wdlStructWDLInput = makeToolInputParameter("struct_obj", false, makeValueType("Object"), "Participant")
+  val wdlStructWDLWorkflowDescription = makeWorkflowDescription(wdlStructWDLName, List(wdlStructWDLInput), List.empty)
+  mockCromwellSwaggerClient.workflowDescriptions += (wdlStructWDL -> wdlStructWDLWorkflowDescription)
+
+  val wdlStructMethod = AgoraEntity(Some("dsde"),Some(wdlStructWDLName),Some(1),None,None,None,None,Option(wdlStructWDL.source),None,Some(AgoraEntityType.Workflow))
 }
 
 trait TestData {

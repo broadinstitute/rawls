@@ -162,6 +162,17 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
+        .withPath(methodPath + "/dsde/wdl_struct_wf/1")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(wdlStructMethod.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
         .withPath(methodPath + "/dsde/three_step/2")
     ).respond(
         response()

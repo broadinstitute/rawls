@@ -54,7 +54,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
               by visit the parsed tree of input expression
             - for each entity, pass the reconstructed input expression to JSONEvaluator to parse the expression into
               AttributeValue
-    To help understand the approach if their are atrribute references present, we will follow the below example roughly:
+    To help understand the approach if their are attribute references present, we will follow the below example roughly:
       expression = "{"exampleRef1":this.bam, "exampleIndex":this.index}"
       rootEntities = Seq(101, 102) (here we assume the entity name is 101 for Entity Record 1 and 102 for Entity record 2
 
