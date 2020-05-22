@@ -9,10 +9,10 @@ import scala.collection.JavaConverters._
 class ReconstructExpressionVisitor(lookupMap: Map[String, JsValue]) extends ExtendedJSONBaseVisitor[JsValue] {
 
   /**
-    * {@inheritDoc }
+    * Visit a parse tree produced by ExtendedJSONParser#root
     *
-    * <p>The default implementation returns the result of calling
-    * {@link #visitChildren} on {@code ctx}.</p>
+    * @param ctx the parse tree
+    * @return the visitor result
     */
   override def visitRoot(ctx: ExtendedJSONParser.RootContext): JsValue = {
     // ROOT rule always has 1 child

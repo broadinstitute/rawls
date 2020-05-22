@@ -51,13 +51,19 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
             - through a series of transformations, generate a Map of entity name to Map of lookup expressions and their
               evaluated value for that entity
             - for each entity, substitute the evaluated values of attribute references back into the input expression
-              by visit the parsed tree of input expression
+              by visiting the parsed tree of input expression
             - for each entity, pass the reconstructed input expression to JSONEvaluator to parse the expression into
               AttributeValue
     To help understand the approach if their are attribute references present, we will follow the below example roughly:
       expression = "{"exampleRef1":this.bam, "exampleIndex":this.index}"
-      rootEntities = Seq(101, 102) (here we assume the entity name is 101 for Entity Record 1 and 102 for Entity record 2
+      rootEntities = Seq(101, 102) (here we assume the entity name is 101 for Entity Record 1 and 102 for Entity record 2)
 
+    The final output will be:
+    ReadWriteAction(Map(
+          "101" -> Try(Seq(AttributeValueRawJson("{"exampleRef1":"gs://abc", "exampleIndex":123}"))),
+          "102" -> Try(Seq(AttributeValueRawJson("{"exampleRef1":"gs://def", "exampleIndex":456}")))
+        )
+    )
    */
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String)
                         (implicit executionContext: ExecutionContext) : ReadWriteAction[Map[EntityName, Try[Iterable[AttributeValue]]]] = {
@@ -65,9 +71,9 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
 
     /*
       Evaluate each attribute reference expression using the Slick Evaluator.
-      @return: Sequence of tuples of (attribute reference expressions, their slick evaluated value) wrapped in a single DBIO action
+      @return: Sequence of tuples of attribute reference expressions and their slick evaluated value wrapped in a single DBIO action
       For our example:
-        input: attrRefs = Set(this.bam, this.index)
+        input: Set(this.bam, this.index)
         output: ReadWriteAction(Seq(
           ("this.bam", Map("101" -> Try(Seq(AttributeString("gs://abc"))), "102" -> Try(Seq(AttributeString("gs://def"))))),
           ("this.index", Map("101" -> Try(Seq(AttributeNumber(123))), "102" -> Try(Seq(AttributeNumber(456)))))
