@@ -53,7 +53,8 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities not supported by this provider.")
 
-  private def lookupSnapshotForName(dataReferenceName: String): UUID = {
+  // not marked as private to ease unit testing
+  def lookupSnapshotForName(dataReferenceName: String): UUID = {
     // contact WSM to retrieve the data reference specified in the request
     val dataRef = workspaceManagerDAO.getDataReferenceByName(UUID.fromString(workspace.workspaceId),
       ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue,
@@ -63,7 +64,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
     // verify it's a TDR snapshot. should be a noop, since getDataReferenceByName enforces this.
     if (ReferenceTypeEnum.DATAREPOSNAPSHOT != dataRef.getReferenceType) {
-      throw new DataEntityException(s"Reference value for $dataReferenceName is not of type ${ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue}")
+      throw new DataEntityException(s"Reference type value for $dataReferenceName is not of type ${ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue}")
     }
 
     // parse the reference value as a json object
@@ -76,7 +77,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     // TODO: AS-321 should we parse into a case class instead of using Json directly?
     val cursor = refObj.hcursor
     val refInstance: String = cursor.get[String]("instance").getOrElse(throw new DataEntityException(s"Reference value for $dataReferenceName does not contain an instance value."))
-    val refSnapshot: String = cursor.get[String]("snapshot").getOrElse(throw new DataEntityException(s"Reference value for $dataReferenceName does not contain a snapshotId value."))
+    val refSnapshot: String = cursor.get[String]("snapshot").getOrElse(throw new DataEntityException(s"Reference value for $dataReferenceName does not contain a snapshot value."))
 
     // verify the instance matches our target instance
     // TODO: AS-321 is this the right place to validate this? We could add a "validateInstanceURL" method to the DAO itself, for instance
@@ -90,7 +91,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
       case Success(uuid) => uuid
       case Failure(ex) =>
         logger.error(s"invalid UUID for snapshotId in reference: $refSnapshot")
-        throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected snapshotId value", ex)
+        throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected snapshot value", ex)
     }
 
   }
