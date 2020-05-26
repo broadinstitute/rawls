@@ -197,14 +197,13 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
     def reconstructInputExprForEachEntity(mapOfEntityToEvaluatedExprMap: Map[EntityName, Try[Map[LookupExpression, JsValue]]],
                                           parsedTree: ParseTree): Map[EntityName, Try[JsValue]] = {
       mapOfEntityToEvaluatedExprMap.map{
-        case (entityName, evaluatedLookupMapTry) => {
+        case (entityName, evaluatedLookupMapTry) =>
           val inputExprWithEvaluatedRef = evaluatedLookupMapTry.flatMap { lookupMap =>
             val visitor = new ReconstructExpressionVisitor(lookupMap)
             Try(visitor.visit(parsedTree))
           }
 
           entityName -> inputExprWithEvaluatedRef
-        }
       }
     }
 
