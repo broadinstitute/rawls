@@ -10,8 +10,8 @@ import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
-import spray.json.{JsObject, JsString}
+import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, TerraDataRepoSnapshotRequest, UserInfo}
+import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -282,7 +282,8 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when a user tries to delete a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
-    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), "test", "DataRepoSnapshot", JsObject("instance" -> JsString("foo"), "snapshot" -> JsString("bar")), "foo", OAuth2BearerToken("foo")).getReferenceId
+    val dataReferenceString = TerraDataRepoSnapshotRequest("foo", "bar").toJson.compactPrint
+    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), "test", "DataRepoSnapshot", dataReferenceString, "foo", OAuth2BearerToken("foo")).getReferenceId
     Delete(s"${testData.wsName.path}/snapshots/${id.toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }

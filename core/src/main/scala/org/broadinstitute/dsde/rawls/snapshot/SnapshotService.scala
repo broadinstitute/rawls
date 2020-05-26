@@ -7,9 +7,10 @@ import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEn
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamWorkspaceActions, TerraDataRepoSnapshotRequest, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import spray.json.{JsObject, JsString}
+import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
+import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
@@ -36,7 +37,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         workspaceManagerDAO.createWorkspace(workspaceContext.workspaceId, getServiceAccountAccessToken, userInfo.accessToken)
       }
 
-      val dataRepoReference = JsObject.apply(("instance", JsString(terraDataRepoUrl)), ("snapshot", JsString(snapshot.snapshotId)))
+      val dataRepoReference = TerraDataRepoSnapshotRequest(terraDataRepoUrl, snapshot.snapshotId).toJson.compactPrint
       val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceId, snapshot.name, ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue, dataRepoReference, CloningInstructionsEnum.NOTHING.getValue, userInfo.accessToken)
 
       Future.successful(DataRepoSnapshotReference(ref))
