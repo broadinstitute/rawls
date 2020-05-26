@@ -4,11 +4,9 @@ import java.util.UUID
 
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.scalatest.AsyncFlatSpec
 import org.broadinstitute.dsde.rawls.model.EntityTypeMetadata
-import org.scalatest.Matchers
+import org.scalatest.{AsyncFlatSpec, Matchers}
 import spray.json.{JsArray, JsNumber, JsObject, JsString}
-
 
 class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with Matchers {
 
@@ -157,7 +155,6 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   }
 
   it should "error if workspace manager reference json `instance` value does not match DataRepoDAO's base url" in {
-    // TODO: can we assert that we logged a message?
     val provider = createTestProvider(
       workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refInstance = "this is wrong")))
     )
@@ -167,7 +164,6 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   }
 
   it should "error if workspace manager reference json `snapshot` value is not a valid UUID" in {
-    // TODO: can we assert that we logged a message?
     val provider = createTestProvider(
       workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refSnapshot = "this is not a uuid")))
     )
