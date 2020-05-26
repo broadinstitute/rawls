@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.AttributeString
+import org.broadinstitute.dsde.rawls.model.{AttributeString}
 import org.scalatest.FlatSpec
 
 class ExpressionParserSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils  {

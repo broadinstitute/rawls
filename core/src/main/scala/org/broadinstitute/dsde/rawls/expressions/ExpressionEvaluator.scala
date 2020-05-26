@@ -34,14 +34,27 @@ object ExpressionEvaluator {
 
 class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEntities: Option[Seq[EntityRecord]]) {
 
-  /*
+  /**
      These type aliases are to help differentiate between the Entity Name and the Lookup expressions in return types
      in below functions. Since both of them are String, it becomes difficult to understand what is being referenced where.
    */
   private type EntityName = String
   private type LookupExpression = String // attribute reference expression
 
-  /*
+  /**
+    * Converts AttributeValue to JsValue (JsValue instead of String so as to preserve the evaluated value structure)
+    */
+  def unpackSlickEvaluatedOutput(value: AttributeValue): JsValue = {
+    value match {
+      case AttributeNull => JsNull
+      case AttributeString(v) => JsString(v)
+      case AttributeNumber(v) => JsNumber(v)
+      case AttributeBoolean(v) => JsBoolean(v)
+      case AttributeValueRawJson(v) => v
+    }
+  }
+
+  /**
     The overall approach is:
         - Parse the input expression using ANTLR Extended JSON parser
         - Visit the parsed tree to find all the look up nodes (i.e. attribute reference expressions)
@@ -70,8 +83,8 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
     import slickEvaluator.parser.driver.api._
 
     /*
-      Evaluate each attribute reference expression using the Slick Evaluator.
-      @return: Sequence of tuples of attribute reference expressions and their slick evaluated value wrapped in a single DBIO action
+      Evaluate each attribute reference expression using the Slick Evaluator. It returns sequence of tuples of
+      attribute reference expressions and their slick evaluated value wrapped in a single DBIO action
       For our example:
         input: Set(this.bam, this.index)
         output: ReadWriteAction(Seq(
@@ -80,23 +93,12 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
         ))
      */
     def evaluateAttributeReferences(attrRefs: Set[LookupExpression]): ReadWriteAction[Seq[(LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])]] = {
-      val evaluatedLookupSeq: Set[ReadWriteAction[(LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])]] = attrRefs.map { attrRef =>
+      val evaluatedLookupSeq: Seq[ReadWriteAction[(LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])]] = attrRefs.toSeq.map { attrRef =>
         slickEvaluator.evalFinalAttribute(workspaceContext, attrRef).map((attrRef, _))
       }
 
       // sequence Set[ReadWriteAction[T]] into single ReadWriteAction[Seq[T]]
-      DBIO.sequence(evaluatedLookupSeq.toSeq)
-    }
-
-    // Converts AttributeValue to JsValue (JsValue instead of String so as to preserve the evaluated value structure)
-    def unpackSlickEvaluatedOutput(value: AttributeValue): JsValue = {
-      value match {
-        case AttributeNull => JsNull
-        case AttributeString(v) => JsString(v)
-        case AttributeNumber(v) => JsNumber(v)
-        case AttributeBoolean(v) => JsBoolean(v)
-        case AttributeValueRawJson(v) => v
-      }
+      DBIO.sequence(evaluatedLookupSeq)
     }
 
     /*
@@ -135,7 +137,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
 
     /*
       Group the tuples based on entity name as key and convert it into a Map. The values are tuple of lookup expression
-      and it's evaluated value
+      and its evaluated value
       For our example:
         input = Seq(
           ("101", ("this.bam", Try(JsString("gs://abc")))),

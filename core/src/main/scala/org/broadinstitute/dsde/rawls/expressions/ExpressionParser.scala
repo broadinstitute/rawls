@@ -14,7 +14,6 @@ From your rawls directory, run:
  */
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONValidationVisitor
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ParsedMCExpressions}
-//import spray.json._
 
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}

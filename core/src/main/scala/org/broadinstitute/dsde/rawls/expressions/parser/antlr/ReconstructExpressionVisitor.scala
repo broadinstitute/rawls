@@ -8,37 +8,23 @@ import scala.collection.JavaConverters._
 
 class ReconstructExpressionVisitor(lookupMap: Map[String, JsValue]) extends ExtendedJSONBaseVisitor[JsValue] {
 
-  /**
-    * Visit a parse tree produced by ExtendedJSONParser#root
-    *
-    * @param ctx the parse tree
-    * @return the visitor result
-    */
   override def visitRoot(ctx: ExtendedJSONParser.RootContext): JsValue = {
     // ROOT rule always has 1 child
     visit(ctx.getChild(0))
   }
 
-  /**
-    * Visit a parse tree produced by ExtendedJSONParser#obj
-    *
-    * @param ctx the parse tree
-    * @return the visitor result
-    */
   override def visitObj(ctx: ExtendedJSONParser.ObjContext): JsValue = {
     ctx.getRuleContexts(classOf[PairContext]).asScala // get all children that are pairs
       .map(visit) // visitPair returns each pair as JsObject
       .map(_.asJsObject.fields)
-      .reduceOption(_ ++ _) // duplicate keys will be lost
+      .reduceOption(_ ++ _) // duplicate keys will be lost. This should be ok as per: https://stackoverflow.com/questions/21832701/does-json-syntax-allow-duplicate-keys-in-an-object
       .map(JsObject.apply)
       .getOrElse(JsObject.empty)
   }
 
   /**
-    * Visit a parse tree produced by ExtendedJSONParser#pair
-    *
-    * @param ctx the parse tree
-    * @return the visitor result
+    * Visit the VALUE node child of a PAIR node, and return the results back as a JsObject to make it easier
+    * to combine pairs while visiting OBJ node
     */
   override def visitPair(ctx: ExtendedJSONParser.PairContext): JsValue = {
     // PAIR has 3 children: STRING, COLON and VALUE
@@ -63,40 +49,16 @@ class ReconstructExpressionVisitor(lookupMap: Map[String, JsValue]) extends Exte
     JsObject(unquotedKeyString -> childValue)
   }
 
-  /**
-    * Visit a parse tree produced by ExtendedJSONParser#arr.
-    *
-    * @param ctx the parse tree
-    * @return the visitor result
-    */
   override def visitArr(ctx: ExtendedJSONParser.ArrContext): JsValue = {
     JsArray(ctx.getRuleContexts(classOf[ValueContext]).asScala.map(visit).toVector)
   }
 
-  /**
-    * Visit a parse tree produced by ExtendedJSONParser#lookup
-    *
-    * @param ctx the parse tree
-    * @return the evaluated value for the lookup expression
-    */
   override def visitLookup(ctx: ExtendedJSONParser.LookupContext): JsValue = lookupMap(ctx.getText)
 
-  /**
-    * Visit a parse tree produced by ExtendedJSONParser#value
-    *
-    * @param ctx the parse tree
-    * @return the visitor result
-    */
   override def visitValue(ctx: ExtendedJSONParser.ValueContext): JsValue = {
     // VALUE rule always has 1 child
     visit(ctx.getChild(0))
   }
 
-  /**
-    * Visit a parse tree produced by ExtendedJSONParser#literal.
-    *
-    * @param ctx the parse tree
-    * @return the visitor result
-    */
   override def visitLiteral(ctx: ExtendedJSONParser.LiteralContext): JsValue = ctx.getText.parseJson
 }
