@@ -74,7 +74,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     }
 
     // verify reference object contains the instance and snapshotId keys
-    // TODO: AS-321 should we parse into a case class instead of using Json directly?
+    // TODO: AS-321 when broadinstitute/rawls#1219 merges, adopt its case class instead of using raw json objects
     val cursor = refObj.hcursor
     val refInstance: String = cursor.get[String]("instance").getOrElse(throw new DataEntityException(s"Reference value for $dataReferenceName does not contain an instance value."))
     val refSnapshot: String = cursor.get[String]("snapshot").getOrElse(throw new DataEntityException(s"Reference value for $dataReferenceName does not contain a snapshot value."))
