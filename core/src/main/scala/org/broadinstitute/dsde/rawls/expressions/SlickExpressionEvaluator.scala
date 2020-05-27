@@ -6,6 +6,7 @@ import _root_.slick.dbio
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.entities.local.SlickExpressionContext
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.concurrent.ExecutionContext

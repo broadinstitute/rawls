@@ -17,7 +17,7 @@ trait EntitySupport {
   import dataSource.dataAccess.driver.api._
 
   //Finds a single entity record in the db.
-  def withSingleEntityRec(entityType: String, entityName: String, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  def withSingleEntityRec[T](entityType: String, entityName: String, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[T]): ReadWriteAction[T] = {
     val entityRec = dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceId, entityType, entityName).result
     entityRec flatMap { entities =>
       if (entities.isEmpty) {

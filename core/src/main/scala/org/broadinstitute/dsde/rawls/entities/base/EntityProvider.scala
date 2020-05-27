@@ -15,4 +15,8 @@ trait EntityProvider {
 
   def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
 
+//  def evaluateExpressionsForAllEntitiesOfType(entityType: String, expressions: Seq[String]): Future[Stream[SubmissionValidationEntityInputs]]
+
+//  def expressionEvaluator: ExpressionValidator
+
 }

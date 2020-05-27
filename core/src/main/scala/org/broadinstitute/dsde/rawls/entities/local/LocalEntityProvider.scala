@@ -36,4 +36,6 @@ class LocalEntityProvider(workspace: Workspace, dataSource: SlickDataSource)
   }
 
   override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = ???
+
+//  override def expressionEvaluator: ExpressionValidator = new LocalEntityExpressionValidator()
 }

@@ -40,13 +40,13 @@ trait SubmissionApiService extends UserInfoDirectives {
           }
         }
       } ~
-      path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
-        post {
-          entity(as[SubmissionRequest]) { submission =>
-            complete { workspaceServiceConstructor(userInfo).ValidateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission) }
-          }
-        }
-      } ~
+//      path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
+//        post {
+//          entity(as[SubmissionRequest]) { submission =>
+//            complete { workspaceServiceConstructor(userInfo).ValidateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission) }
+//          }
+//        }
+//      } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
         get {
           complete { workspaceServiceConstructor(userInfo).GetSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }

@@ -1,36 +1,19 @@
-package org.broadinstitute.dsde.rawls.expressions
+package org.broadinstitute.dsde.rawls.entities.local
 
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.{AttributeString, ErrorReport, MethodConfiguration, ValidatedMethodConfiguration}
 import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
+import org.broadinstitute.dsde.rawls.expressions.ExpressionParser
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
+import org.broadinstitute.dsde.rawls.model.{AttributeString, ErrorReport, MethodConfiguration, ValidatedMethodConfiguration}
 
 import scala.util.Try
 
-object ExpressionValidator {
-  // inputsToParse is parameterized in order to validate in the presence or absence of the associated Method
-  // presence: inputs which are both empty and optional are pre-validated, so they are skipped here
-  // absence: validate all inputs normally
-
-  /*
-  private[expressions] def validateAndParse(methodConfiguration: MethodConfiguration, gatherInputsResult: GatherInputsResult, allowRootEntity: Boolean, parser: SlickExpressionParser): ValidatedMethodConfiguration = {
-    val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
-    val (emptyOutputs, outputsToParse) = methodConfiguration.outputs.partition { case (_, expr) => expr.value.isEmpty }
-
-    val parsed = ExpressionParser.parseMCExpressions(inputsToParse.toMap, outputsToParse, allowRootEntity, parser)
-
-    // empty output expressions are also valid
-    val validatedOutputs = emptyOutputs.keys.toSet ++ parsed.validOutputs
-
-    ValidatedMethodConfiguration(methodConfiguration, parsed.validInputs, parsed.invalidInputs, gatherInputsResult.missingInputs, gatherInputsResult.extraInputs, validatedOutputs, parsed.invalidOutputs)
-  }
-  */
-
+class LocalEntityExpressionValidator(parser: SlickExpressionParser) extends ExpressionValidator {
   // validate a MC, skipping optional empty inputs, and return a ValidatedMethodConfiguration
   def validateAndParseMCExpressions(methodConfiguration: MethodConfiguration,
                                     gatherInputsResult: GatherInputsResult,
-                                    allowRootEntity: Boolean,
-                                    parser: SlickExpressionParser): ValidatedMethodConfiguration = {
+                                    allowRootEntity: Boolean): ValidatedMethodConfiguration = {
 
     val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.getName, AttributeString(mi.expression)) }
     val (emptyOutputs, outputsToParse) = methodConfiguration.outputs.partition { case (_, expr) => expr.value.isEmpty }
@@ -49,8 +32,7 @@ object ExpressionValidator {
   // validate a MC, skipping optional empty inputs, and return failure when any inputs/outputs are invalid
   def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration,
                                        gatherInputsResult: GatherInputsResult,
-                                       allowRootEntity: Boolean,
-                                       parser: SlickExpressionParser): Try[ValidatedMethodConfiguration] = {
+                                       allowRootEntity: Boolean): Try[ValidatedMethodConfiguration] = {
 
     val validated = validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity, parser)
 
@@ -66,5 +48,4 @@ object ExpressionValidator {
       validated
     }
   }
-
 }
