@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.joda.time.format.{ISODateTimeFormat, DateTimeFormatter}
-import spray.json._
 import org.joda.time.DateTime
+import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
+import spray.json._
 
 object AgoraEntityType extends Enumeration {
   type EntityType = Value

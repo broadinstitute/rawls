@@ -4,10 +4,9 @@ package org.broadinstitute.dsde.rawls.expressions
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ExprEvalRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.scalatest.FunSuite
 
 import scala.collection.immutable.IndexedSeq
@@ -21,7 +20,7 @@ import scala.util.{Random, Success => TrySuccess}
 class ExpressionParserTest extends FunSuite with TestDriverComponent {
   import driver.api._
 
-  def withTestWorkspace[T](testCode: (SlickWorkspaceContext) => T): T = {
+  def withTestWorkspace[T](testCode: (Workspace) => T): T = {
     withDefaultTestDatabase {
       withWorkspaceContext(testData.workspace) { workspaceContext =>
         testCode(workspaceContext)
@@ -29,14 +28,14 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
     }
   }
 
-  def evalFinalEntity(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, expression: String) = {
+  def evalFinalEntity(workspaceContext: Workspace, entityType: String, entityName: String, expression: String) = {
     ExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, entityType, entityName) { evaluator =>
       evaluator.evalFinalEntity(workspaceContext, expression)
     }
   }
 
-  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, expression: String) = {
-    entityQuery.findEntityByName(workspaceContext.workspaceId, entityType, entityName).result flatMap { entityRec =>
+  def evalFinalAttribute(workspaceContext: Workspace, entityType: String, entityName: String, expression: String) = {
+    entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, entityName).result flatMap { entityRec =>
       ExpressionEvaluator.withNewExpressionEvaluator(this, Some(entityRec)) { evaluator =>
         evaluator.evalFinalAttribute(workspaceContext, expression)
       }
@@ -272,7 +271,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       assertResult(wsNameResults) { Map( "2" -> TrySuccess( wsEntityResults.map(e => AttributeString(e.name)))) }
     }
 
-    def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, AttributeMap)], wsc: SlickWorkspaceContext): IndexedSeq[AttributeEntityReference] = {
+    def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, AttributeMap)], wsc: Workspace): IndexedSeq[AttributeEntityReference] = {
       val saveActions = for ((nameAndAttributes, index) <- entitiesNameAndAttributes.zipWithIndex) yield {
         entityQuery.save(wsc, Entity(nameAndAttributes._1, entityType, nameAndAttributes._2))
       }
@@ -283,7 +282,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       entitiesNameAndAttributes.map { case (name, _) => AttributeEntityReference(entityType, name)}
     }
 
-    def createEntityStructure(wsc: SlickWorkspaceContext) = {
+    def createEntityStructure(wsc: Workspace) = {
       val aAttributes = for (a <- 0 until 5) yield {
         val bAttributes = for (b <- 0 until 5) yield {
           val cAttributes = for (c <- (0 until 20)) yield {
@@ -299,7 +298,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       val as = createEntities("a", aAttributes, wsc)
 
-      runAndWait(workspaceQuery.save(wsc.workspace.copy(attributes = wsc.workspace.attributes + (AttributeName.withDefaultNS("as") -> AttributeEntityReferenceList(as)))))
+      runAndWait(workspaceQuery.save(wsc.copy(attributes = wsc.attributes + (AttributeName.withDefaultNS("as") -> AttributeEntityReferenceList(as)))))
     }
   }
 
@@ -427,11 +426,11 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "this.samples.entityType"))
       }
 
-      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString(workspaceContext.workspace.name))))) {
+      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString(workspaceContext.name))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "workspace.name"))
       }
 
-      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString(workspaceContext.workspace.name))))) {
+      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString(workspaceContext.name))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "workspace.workspace_id"))
       }
 
@@ -755,7 +754,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("extra data in entity attribute temp table should not mess things up") {
     withTestWorkspace { workspaceContext =>
       val action = for {
-        entityRecs <- this.entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceId).result
+        entityRecs <- this.entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID).result
         extraScratchRecord = ExprEvalRecord(entityRecs.tail.head.id, entityRecs.tail.head.name, "not a transaction id")
         _ <- this.exprEvalQuery += extraScratchRecord
         result <- evalFinalAttribute(workspaceContext, entityRecs.head.entityType, entityRecs.head.name, "this.name").transactionally

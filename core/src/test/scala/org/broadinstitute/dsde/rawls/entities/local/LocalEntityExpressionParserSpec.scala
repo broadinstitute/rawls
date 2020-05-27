@@ -1,11 +1,12 @@
-package org.broadinstitute.dsde.rawls.expressions
+package org.broadinstitute.dsde.rawls.entities.local
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{AttributeString}
+import org.broadinstitute.dsde.rawls.expressions.ExpressionFixture
+import org.broadinstitute.dsde.rawls.model.AttributeString
 import org.scalatest.FlatSpec
 
-class ExpressionParserSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils  {
+class LocalEntityExpressionParserSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils  {
 
   // assumes that expressions have already been validated: see ExpressionValidatorSpec for that step
 
@@ -13,25 +14,25 @@ class ExpressionParserSpec extends FlatSpec with TestDriverComponent with Expres
     def toExpressionMap(expressions: Seq[String]): Map[String, AttributeString] =
       expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap
 
-    val actualParseable = ExpressionParser.parseMCExpressions(toExpressionMap(parseableInputExpressions), toExpressionMap(parseableOutputExpressions), allowRootEntity = true, this)
+    val actualParseable = parseMCExpressions(toExpressionMap(parseableInputExpressions), toExpressionMap(parseableOutputExpressions), allowRootEntity = true)
     assertSameElements(parseableInputExpressions, actualParseable.validInputs)
     assertSameElements(parseableOutputExpressions, actualParseable.validOutputs)
     actualParseable.invalidInputs shouldBe 'empty
     actualParseable.invalidOutputs shouldBe 'empty
 
-    val actualParseableWithNoRoot = ExpressionParser.parseMCExpressions(toExpressionMap(parseableInputExpressionsWithNoRoot), toExpressionMap(parseableOutputExpressionsWithNoRoot), allowRootEntity = false, this)
+    val actualParseableWithNoRoot = parseMCExpressions(toExpressionMap(parseableInputExpressionsWithNoRoot), toExpressionMap(parseableOutputExpressionsWithNoRoot), allowRootEntity = false)
     assertSameElements(parseableInputExpressionsWithNoRoot, actualParseableWithNoRoot.validInputs)
     assertSameElements(parseableOutputExpressionsWithNoRoot, actualParseableWithNoRoot.validOutputs)
     actualParseableWithNoRoot.invalidInputs shouldBe 'empty
     actualParseableWithNoRoot.invalidOutputs shouldBe 'empty
 
-    val actualUnparseable = ExpressionParser.parseMCExpressions(toExpressionMap(unparseableInputExpressions), toExpressionMap(unparseableOutputExpressions), allowRootEntity = true, this)
+    val actualUnparseable = parseMCExpressions(toExpressionMap(unparseableInputExpressions), toExpressionMap(unparseableOutputExpressions), allowRootEntity = true)
     actualUnparseable.validInputs shouldBe 'empty
     actualUnparseable.validOutputs shouldBe 'empty
     actualUnparseable.invalidInputs should have size unparseableInputExpressions.size
     actualUnparseable.invalidOutputs should have size unparseableOutputExpressions.size
 
-    val actualUnparseableWithNoRoot = ExpressionParser.parseMCExpressions(toExpressionMap(unparseableInputExpressionsWithNoRoot), toExpressionMap(unparseableOutputExpressionsWithNoRoot), allowRootEntity = false, this)
+    val actualUnparseableWithNoRoot = parseMCExpressions(toExpressionMap(unparseableInputExpressionsWithNoRoot), toExpressionMap(unparseableOutputExpressionsWithNoRoot), allowRootEntity = false)
     actualUnparseableWithNoRoot.validInputs shouldBe 'empty
     actualUnparseableWithNoRoot.validOutputs shouldBe 'empty
     actualUnparseableWithNoRoot.invalidInputs should have size unparseableInputExpressionsWithNoRoot.size

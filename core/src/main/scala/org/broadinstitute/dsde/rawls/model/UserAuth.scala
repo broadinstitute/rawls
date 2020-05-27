@@ -107,9 +107,9 @@ case class SyncReport(groupEmail: RawlsGroupEmail, items: Seq[SyncReportItem])
 case class BillingAccountScopes(requiredScopes: Seq[String])
 
 class UserAuthJsonSupport extends JsonSupport {
-  import spray.json.DefaultJsonProtocol._
-  import UserModelJsonSupport._
   import ExecutionJsonSupport._
+  import UserModelJsonSupport._
+  import spray.json.DefaultJsonProtocol._
 
   // need "apply" here so it doesn't choose the companion class
   implicit val RawlsUserFormat = jsonFormat2(RawlsUser.apply)

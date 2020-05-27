@@ -1,8 +1,12 @@
 package org.broadinstitute.dsde.rawls.user
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
+
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import cats.implicits._
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
@@ -16,13 +20,9 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
-
-import cats.implicits._
 
 /**
  * Created by dvoet on 10/27/15.

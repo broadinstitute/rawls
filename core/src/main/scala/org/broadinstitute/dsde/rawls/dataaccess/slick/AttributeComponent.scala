@@ -3,15 +3,15 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.ast.{BaseTypedType, TypedType}
 import slick.dbio.Effect.Write
 import slick.jdbc.JdbcProfile
-import akka.http.scaladsl.model.StatusCodes
 
-import reflect.runtime.universe._
+import scala.reflect.runtime.universe._
 
 /**
  * Created by dvoet on 2/4/16.

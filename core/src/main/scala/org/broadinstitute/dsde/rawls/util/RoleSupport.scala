@@ -1,10 +1,10 @@
 package org.broadinstitute.dsde.rawls.util
 
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUserEmail, UserInfo}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
-import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
 import scala.concurrent.{ExecutionContext, Future}
 

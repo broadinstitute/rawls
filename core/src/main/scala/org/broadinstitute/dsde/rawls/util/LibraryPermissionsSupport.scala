@@ -1,10 +1,10 @@
 package org.broadinstitute.dsde.rawls.util
 
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, _}
-import akka.http.scaladsl.model.StatusCodes
 
 import scala.collection.Set
 import scala.concurrent.Future
@@ -17,14 +17,14 @@ trait LibraryPermissionsSupport extends RoleSupport {
   final val publishedFlag = AttributeName.withLibraryNS("published")
   final val discoverableWSAttribute = AttributeName.withLibraryNS("discoverableByGroups")
 
-  def withLibraryPermissions(ctx: SlickWorkspaceContext,
+  def withLibraryPermissions(ctx: Workspace,
                              operations: Seq[AttributeUpdateOperation],
                              userInfo: UserInfo,
                              isCurator: Boolean)
                             (op: => Future[Workspace]): Future[Workspace] = {
     val names = operations.map(attribute => attribute.name)
 
-    getPermissionChecker(names, isCurator, ctx.workspace.workspaceId)(op)
+    getPermissionChecker(names, isCurator, ctx.workspaceId)(op)
   }
 
   def getPermissionChecker(names: Seq[AttributeName], isCurator: Boolean, workspaceId: String): ((=> Future[Workspace]) => Future[Workspace]) = {

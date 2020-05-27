@@ -1,7 +1,9 @@
 package org.broadinstitute.dsde.rawls.config
 
 import java.util.concurrent.TimeUnit
+
 import com.typesafe.config.Config
+
 import scala.concurrent.duration.Duration
 
 

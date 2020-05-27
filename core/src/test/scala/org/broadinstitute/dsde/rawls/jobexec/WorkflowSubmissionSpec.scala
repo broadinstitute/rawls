@@ -331,7 +331,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.workspace.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
+      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
     }
   }
 
@@ -363,7 +363,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.workspace.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
+      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
     }
   }
 
@@ -381,7 +381,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         AttributeEntityReference("Sample", "sample6"))
       val sset = Entity("testset6", "SampleSet", Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(samples)))
 
-      runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
+      runAndWait(entityQuery.save(testData.workspace, sset))
 
       def inputResolutions(sampleName: String) = {
         Seq(SubmissionValidationValue(Option(AttributeString(sampleName)), Option("message"), "three_step.cgrep.pattern"))
