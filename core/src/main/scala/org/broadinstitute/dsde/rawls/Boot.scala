@@ -380,6 +380,7 @@ object Boot extends IOApp with LazyLogging {
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         workspaceManagerDAO,
+        dataRepoDAO,
         methodConfigResolver,
         gcsDAO,
         samDAO,

@@ -7,8 +7,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, SlickWorkspaceContext}
-import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderBuilder
-import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProviderBuilder
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -29,15 +27,7 @@ object EntityService {
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext) = {
 
-    // create the EntityManager along with its associated provider-builders. Since entities are only accessed
-    // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
-    // and execution context for the rawls entity provider that the entity service uses.
-    val defaultEntityProviderBuilder = new LocalEntityProviderBuilder(dataSource) // implicit executionContext
-    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO)
-
-    val entityManager = new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))
-
-    new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName)
+    new EntityService(userInfo, dataSource, samDAO, EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO), workbenchMetricBaseName)
   }
 }
 

@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverCompo
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -24,6 +24,7 @@ import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json._
 
@@ -53,6 +54,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   val bigQueryDAO = new MockGoogleBigQueryDAO
   val mockSubmissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
   val workspaceManagerDAO = new MockWorkspaceManagerDAO
+  val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -325,6 +327,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         execServiceCluster,
         execServiceBatchSize,
         workspaceManagerDAO,
+        dataRepoDAO,
         methodConfigResolver,
         gcsDAO,
         samDAO,

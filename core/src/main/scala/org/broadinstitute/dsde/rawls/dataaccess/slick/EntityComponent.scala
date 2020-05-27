@@ -51,36 +51,36 @@ object EntityComponent {
   val allAttributeValuesColumnSize = 65534
 }
 
+import slick.jdbc.MySQLProfile.api._
+
+sealed abstract class EntityTableBase[RECORD_TYPE <: EntityRecordBase](tag: Tag) extends Table[RECORD_TYPE](tag, "ENTITY") {
+  def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
+  def name = column[String]("name", O.Length(254))
+  def entityType = column[String]("entity_type", O.Length(254))
+  def workspaceId = column[UUID]("workspace_id")
+  def version = column[Long]("record_version")
+  def deleted = column[Boolean]("deleted")
+  def deletedDate = column[Option[Timestamp]]("deleted_date")
+
+//  def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
+  def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)
+}
+
+class EntityTable(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
+  def * = (id, name, entityType, workspaceId, version, deleted, deletedDate) <> (EntityRecord.tupled, EntityRecord.unapply)
+}
+
+class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRecordWithInlineAttributes](tag) {
+  def allAttributeValues = column[Option[String]]("all_attribute_values")
+
+  def * = (id, name, entityType, workspaceId, version, allAttributeValues, deleted, deletedDate) <> (EntityRecordWithInlineAttributes.tupled, EntityRecordWithInlineAttributes.unapply)
+}
+
 //noinspection TypeAnnotation
 trait EntityComponent {
   this: DriverComponent
     with WorkspaceComponent
     with AttributeComponent =>
-
-  import driver.api._
-
-  sealed abstract class EntityTableBase[RECORD_TYPE <: EntityRecordBase](tag: Tag) extends Table[RECORD_TYPE](tag, "ENTITY") {
-    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-    def name = column[String]("name", O.Length(254))
-    def entityType = column[String]("entity_type", O.Length(254))
-    def workspaceId = column[UUID]("workspace_id")
-    def version = column[Long]("record_version")
-    def deleted = column[Boolean]("deleted")
-    def deletedDate = column[Option[Timestamp]]("deleted_date")
-
-    def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-    def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)
-  }
-
-  class EntityTable(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
-    def * = (id, name, entityType, workspaceId, version, deleted, deletedDate) <> (EntityRecord.tupled, EntityRecord.unapply)
-  }
-
-  class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRecordWithInlineAttributes](tag) {
-    def allAttributeValues = column[Option[String]]("all_attribute_values")
-
-    def * = (id, name, entityType, workspaceId, version, allAttributeValues, deleted, deletedDate) <> (EntityRecordWithInlineAttributes.tupled, EntityRecordWithInlineAttributes.unapply)
-  }
 
   object entityQueryWithInlineAttributes extends TableQuery(new EntityTableWithInlineAttributes(_)) {
     type EntityQueryWithInlineAttributes = Query[EntityTableWithInlineAttributes, EntityRecordWithInlineAttributes, Seq]
@@ -114,7 +114,8 @@ trait EntityComponent {
         val entityRecs = entities.toSeq.map(e => marshalNewEntity(e, workspaceContext.workspaceId))
 
         workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-          insertInBatches(entityQueryWithInlineAttributes, entityRecs) andThen entityQuery.getEntityRecords(workspaceContext.workspaceId, entityRecs.map(_.toReference).toSet)
+          DBIO.sequence(entityRecs.grouped(batchSize).map(entityQueryWithInlineAttributes ++= _)).map(_.flatten.sum).andThen(
+            entityQuery.getEntityRecords(workspaceContext.workspaceId, entityRecs.map(_.toReference).toSet))
       }
       else {
         DBIO.successful(Seq.empty[EntityRecord])

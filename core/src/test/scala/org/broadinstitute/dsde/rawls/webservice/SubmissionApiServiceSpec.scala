@@ -119,7 +119,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
-  "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
+  "SubmissionApi" should "return 400 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
     Post(s"${testData.wsName.path}/submissions", httpJson(
       SubmissionRequest(
         methodConfigurationNamespace = "dsde",
@@ -132,7 +132,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       )
     )) ~>
       sealRoute(services.submissionRoutes) ~>
-      check { assertResult(StatusCodes.NotFound) {status} }
+      check { assertResult(StatusCodes.BadRequest) {status} }
   }
 
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>

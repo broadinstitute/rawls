@@ -1,190 +1,39 @@
-package org.broadinstitute.dsde.rawls.expressions
+package org.broadinstitute.dsde.rawls.entities.local
 
 import java.sql.Timestamp
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionParser
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeString}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
+import slick.jdbc.MySQLProfile.api._
 
-import scala.util.Try
-import scala.util.parsing.combinator.JavaTokenParsers
-
-case class SlickExpressionContext(workspaceContext: SlickWorkspaceContext, rootEntities: Option[Seq[EntityRecord]], transactionId: String) {
+case class LocalEntityExpressionContext(workspaceContext: SlickWorkspaceContext, rootEntities: Option[Seq[EntityRecord]], transactionId: String) {
   def rootEntityNames(): Seq[String] = rootEntities match {
     case Some(entities) => entities.map(_.name)
     case None => Seq("")
   }
 }
 
-trait SlickExpressionParser extends JavaTokenParsers {
-  this: DriverComponent
-    with ExprEvalComponent
-    with EntityComponent
-    with WorkspaceComponent
-    with AttributeComponent =>
-  import driver.api._
-
-  // A parsed expression will result in a PipelineQuery. Each step in a query traverses from entity to
-  // entity following references. The final step takes the last entity, producing a result dependent on the query
-  // (e.g. loading the entity itself, getting an attribute). The root step produces an entity to start the pipeline.
-  // If rootStep is None, steps should also be empty and finalStep does all the work.
-  case class PipelineQuery(rootStep: Option[RootFunc], steps: List[PipeFunc], finalStep: FinalFunc)
-
-  // starting with just an expression context produces a PipeResult
-  type RootFunc = (SlickExpressionContext) => PipeType
-
-  // extends the input PipeType producing a PipeType that traverses further down the chain
-  type PipeFunc = (SlickExpressionContext, PipeType) => PipeType
-
-  // converts the incoming PipeType into the appropriate db action
-  // PipeType may be None when there is no pipeline (e.g. workspace attributes)
-  // Returns a map of entity names to an iterable of the expression result
-  type FinalFunc = (SlickExpressionContext, Option[PipeType]) => ReadAction[Map[String, Iterable[Any]]]
-
+object LocalEntityExpressionParser {
   // a query that results in the root entity's name, entity records and a sort ordering
   type PipeType = Query[(Rep[String], EntityTable), (String, EntityRecord), Seq]
+}
 
-  /** Parser definitions **/
-  // Entity expressions take the general form entity.ref.ref.attribute.
-  // For now, we expect the initial entity to be the special token "this", which is bound at evaluation time to a root entity.
-
-  //Parser for expressions ending in an attribute value (not an entity reference)
-  private def attributeExpression(allowRootEntity: Boolean): Parser[PipelineQuery] = {
-
-    // the basic case: this.(ref.)*attribute
-    val entityExpr = entityRootDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
-      case root ~ Nil ~ last => PipelineQuery(Option(root), List.empty, last)
-      case root ~ ref ~ last => PipelineQuery(Option(root), ref, last)
-    }
-
-    // attributes at the end of a reference chain starting at a workspace: workspace.ref.(ref.)*attribute
-    val workspaceExpr = workspaceEntityRefDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
-      case workspace ~ Nil ~ last => PipelineQuery(Option(workspace), List.empty, last)
-      case workspace ~ ref ~ last => PipelineQuery(Option(workspace), ref, last)
-    } |
-    // attributes directly on a workspace: workspace.attribute
-    workspaceAttribute ^^ {
-      case workspace => PipelineQuery(None, List.empty, workspace)
-    }
-
-    if(allowRootEntity) {
-      entityExpr | workspaceExpr
-    } else {
-      workspaceExpr
-    }
-  }
-
-  //Parser for output expressions: this.attribute or workspace.attribute (no entity references in the middle)
-  private def outputAttributeExpression(allowRootEntity: Boolean): Parser[PipelineQuery] = {
-    // this.attribute
-    val entityOutput = entityRootDot ~ valueAttribute ^^ {
-      case root ~ attr => PipelineQuery(Option(root), List.empty, attr)
-    }
-    // workspace.attribute
-    val workspaceOutput = workspaceAttribute ^^ {
-      case workspace => PipelineQuery(None, List.empty, workspace)
-    }
-
-    if(allowRootEntity) {
-      entityOutput | workspaceOutput
-    } else {
-      workspaceOutput
-    }
-  }
-
-  //Parser for expressions ending in an attribute that's a reference to another entity
-  private def entityExpression: Parser[PipelineQuery] = {
-    // reference IS the entity: this
-    entityRoot ^^ {
-      case root => PipelineQuery(Option(root), List.empty, entityFinalFunc)
-    } |
-    // reference chain starting with an entity: this.(ref.)*ref
-    entityRootDot ~ rep(entityRefDot) ~ entityRef ^^ {
-      case root ~ Nil ~ last => PipelineQuery(Option(root), List(last), entityFinalFunc)
-      case root ~ ref ~ last => PipelineQuery(Option(root), ref :+ last, entityFinalFunc)
-    } |
-    // reference chain starting with the workspace: workspace.(ref.)*ref
-    workspaceEntityRefDot ~ rep(entityRefDot) ~ entityRef ^^ {
-      case workspace ~ Nil ~ last => PipelineQuery(Option(workspace), List(last), entityFinalFunc)
-      case workspace ~ ref ~ last => PipelineQuery(Option(workspace), ref :+ last, entityFinalFunc)
-    } |
-    // reference directly off the workspace: workspace.ref
-    workspaceEntityRef ^^ {
-      case workspace => PipelineQuery(None, List.empty, workspace)
-    }
-  }
-
-  // just root by itself with no refs or attributes
-  private def entityRoot: Parser[RootFunc] =
-    "this$".r ^^ { _ => entityRootFunc}
-
-  // root followed by dot meaning it is to be followed by refs or attributes
-  private def entityRootDot: Parser[RootFunc] =
-    "this." ^^ { _ => entityRootFunc}
-
-  // matches some_attr_namespace:attr_name or attr_name
-  private val attributeIdent: Parser[AttributeName] = opt(ident ~ ":") ~ ident ^^ {
-    case Some(namespace ~ ":") ~ name => AttributeName(namespace, name)
-    case _ ~ name => AttributeName.withDefaultNS(name)
-  }
-
-  // workspace.attribute, note that this is a FinalFunc - because workspaces are not entities they can be piped the same way
-  private def workspaceAttribute: Parser[FinalFunc] =
-    "workspace." ~> attributeIdent ^^ {
-      case attrName =>
-        if (Attributable.reservedAttributeNames.contains(attrName.name)) workspaceReservedAttributeFinalFunc(attrName.name)
-        else workspaceAttributeFinalFunc(attrName)
-    }
-
-  // an entity reference as the final attribute in an expression
-  private def entityRef: Parser[PipeFunc] =
-    attributeIdent ^^ { case entityRef => entityNameAttributePipeFunc(entityRef)}
-
-  // an entity reference in the middle of an expression
-  private def entityRefDot: Parser[PipeFunc] =
-    attributeIdent <~ "." ^^ { case entityRef => entityNameAttributePipeFunc(entityRef)}
-
-  // an entity reference after the workspace, this can be a RootFunc because it resolves to an entity query that can be piped
-  private def workspaceEntityRefDot: Parser[RootFunc] =
-    "workspace." ~> attributeIdent <~ "." ^^ { case entityRef => workspaceEntityRefRootFunc(entityRef)}
-
-  // an entity reference after the workspace, note that this is a FinalFunc - because workspaces are not entities they can be piped the same way
-  private def workspaceEntityRef: Parser[FinalFunc] =
-    "workspace." ~> attributeIdent ^^ { case entityRef => workspaceEntityFinalFunc(entityRef)}
-
-  // the last attribute has no dot after it
-  private def valueAttribute: Parser[FinalFunc] =
-    attributeIdent ^^ {
-      case attrName =>
-        if (Attributable.reservedAttributeNames.contains(attrName.name)) entityReservedAttributeFinalFunc(attrName.name)
-        else entityAttributeFinalFunc(attrName)
-    }
-
-  def parseAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery] = {
-    parse(expression, attributeExpression(allowRootEntity))
-  }
-
-  def parseOutputAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery] = {
-    parse(expression, outputAttributeExpression(allowRootEntity))
-  }
-
-  def parseEntityExpr(expression: String): Try[PipelineQuery] = {
-    parse(expression, entityExpression)
-  }
-
-  private def parse(expression: String, parser: Parser[PipelineQuery] ) = {
-    parseAll(parser, expression) match {
-      case Success(result, _) => scala.util.Success(result)
-      case NoSuccess(msg, next) => scala.util.Failure(new RuntimeException("Failed at line %s, column %s: %s".format(next.pos.line, next.pos.column, msg)))
-    }
-  }
+import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionParser.PipeType
+trait LocalEntityExpressionParser extends ExpressionParser[ReadAction, LocalEntityExpressionContext, PipeType] {
+  this: DriverComponent
+    with ExprEvalComponent
+    with WorkspaceComponent
+    with EntityComponent
+    with AttributeComponent =>
 
   /** functions against pipes **/
 
   // the root function starts the pipeline at some root entity type in the workspace
-  private def entityRootFunc(context: SlickExpressionContext): PipeType = {
+  protected override def entityRootFunc(context: LocalEntityExpressionContext): PipeType = {
     for {
       rootEntities <- exprEvalQuery if rootEntities.transactionId === context.transactionId
       entity <- entityQuery if rootEntities.id === entity.id
@@ -192,7 +41,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   // final func that gets an attribute off a workspace
-  private def workspaceAttributeFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Map[String,Iterable[Attribute]]] = {
+  protected override def workspaceAttributeFinalFunc(attrName: AttributeName)(context: LocalEntityExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Map[String,Iterable[Attribute]]] = {
     assert(shouldBeNone.isEmpty)
 
     val wsIdAndAttributeQuery = for {
@@ -214,7 +63,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   // root func that gets an entity reference off a workspace
-  private def workspaceEntityRefRootFunc(attrName: AttributeName)(context: SlickExpressionContext): PipeType = {
+  protected override def workspaceEntityRefRootFunc(attrName: AttributeName)(context: LocalEntityExpressionContext): PipeType = {
     for {
       rootEntity <- exprEvalQuery if rootEntity.transactionId === context.transactionId
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
@@ -224,7 +73,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   // add pipe to an entity referenced by the current entity
-  private def entityNameAttributePipeFunc(attrName: AttributeName)(context: SlickExpressionContext, queryPipeline: PipeType): PipeType = {
+  protected override def entityNameAttributePipeFunc(attrName: AttributeName)(context: LocalEntityExpressionContext, queryPipeline: PipeType): PipeType = {
     (for {
       (rootEntityName, entity) <- queryPipeline
       attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
@@ -234,7 +83,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
   // filter attributes to only the given attributeName and convert to attribute
   // Return a map from the entity names to the list of attribute values for each entity
-  private def entityAttributeFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Map[String, Iterable[Attribute]]] = {
+  protected override def entityAttributeFinalFunc(attrName: AttributeName)(context: LocalEntityExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Map[String, Iterable[Attribute]]] = {
     // attributeForNameQuery will only contain attribute records of the given name but for possibly more than 1 entity
     // and in the case of a list there will be more than one attribute record for an entity
     val attributeQuery = for {
@@ -308,7 +157,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   // final func that handles reserved attributes on an entity
-  private def entityReservedAttributeFinalFunc(attributeName: String)(context: SlickExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Map[String,Iterable[Attribute]]] = {
+  protected override def entityReservedAttributeFinalFunc(attributeName: String)(context: LocalEntityExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Map[String,Iterable[Attribute]]] = {
     //Given a single entity record, extract either name or entityType from it.
     def extractNameFromRecord( rec: EntityRecord ) = { AttributeString(rec.name) }
     def extractEntityTypeFromRecord( rec: EntityRecord ) = { AttributeString(rec.entityType) }
@@ -328,7 +177,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   // final func that handles reserved attributes on a workspace
-  private def workspaceReservedAttributeFinalFunc(attributeName: String)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Map[String,Iterable[Attribute]]] = {
+  protected override def workspaceReservedAttributeFinalFunc(attributeName: String)(context: LocalEntityExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Map[String,Iterable[Attribute]]] = {
     assert(shouldBeNone.isEmpty)
 
     attributeName match {
@@ -339,12 +188,12 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   //Takes a list of entities at the end of a pipeline and returns them in final format.
-  private def entityFinalFunc(context: SlickExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Map[String,Iterable[EntityRecord]]] = {
+  protected override def entityFinalFunc(context: LocalEntityExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Map[String,Iterable[EntityRecord]]] = {
     queryPipeline.get.sortBy(_._2.name.asc).result.map(CollectionUtils.groupByTuples)
   }
 
   //Takes a list of entities at the end of a pipeline and returns them in final format.
-  private def workspaceEntityFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Map[String,Iterable[EntityRecord]]] = {
+  protected override def workspaceEntityFinalFunc(attrName: AttributeName)(context: LocalEntityExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Map[String,Iterable[EntityRecord]]] = {
     assert(shouldBeNone.isEmpty)
 
     val query = for {

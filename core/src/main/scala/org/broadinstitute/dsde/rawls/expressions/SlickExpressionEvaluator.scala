@@ -6,6 +6,7 @@ import _root_.slick.dbio
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionContext
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.concurrent.ExecutionContext
@@ -62,7 +63,7 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
     parser.parseAttributeExpr(expression, rootEntities.nonEmpty) match {
       case Failure(regret) => DBIO.failed(new RawlsException(regret.getMessage))
       case Success(expr) =>
-        runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), expr) map { exprResults =>
+        runPipe(LocalEntityExpressionContext(workspaceContext, rootEntities, transactionId), expr) map { exprResults =>
           val results = exprResults map { case (key, attrVals) =>
             key -> Try(attrVals.collect {
               case AttributeNull => Seq.empty
@@ -101,7 +102,7 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
         case Failure(regret) => DBIO.failed(regret)
         case Success(expr) =>
           //If parsing succeeded, evaluate the expression using the given root entities and retype back to EntityRecord
-          runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), expr).map { resultMap =>
+          runPipe(LocalEntityExpressionContext(workspaceContext, rootEntities, transactionId), expr).map { resultMap =>
             //NOTE: As per the DBIO.failed a few lines up, resultMap should only have one key, the same root elem.
             val (rootElem, elems) = resultMap.head
             elems.collect { case e: EntityRecord => e }
@@ -110,7 +111,7 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
     }
   }
 
-  private def runPipe(expressionContext: SlickExpressionContext, pipe: parser.PipelineQuery): ReadAction[Map[String, Iterable[Any]]] = {
+  private def runPipe(expressionContext: LocalEntityExpressionContext, pipe: parser.PipelineQuery): ReadAction[Map[String, Iterable[Any]]] = {
     val builtPipe = pipe.rootStep.map(rootStep => pipe.steps.foldLeft(rootStep(expressionContext)){ ( queryPipeline, func ) => func(expressionContext, queryPipeline) })
 
     //Run the final step. This executes the pipeline and returns its output.

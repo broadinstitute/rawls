@@ -14,9 +14,11 @@ import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeV
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.expressions._
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -50,7 +52,7 @@ import scala.util.{Failure, Success, Try}
 object WorkspaceService {
   def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO,
                   executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, workspaceManagerDAO: WorkspaceManagerDAO,
-                  methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
+                  dataRepoDAO: DataRepoDAO, methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
                   notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
@@ -58,7 +60,7 @@ object WorkspaceService {
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext) = {
 
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, cromiamDAO,
+    new WorkspaceService(userInfo, dataSource, EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO), methodRepoDAO, cromiamDAO,
       executionServiceCluster, execServiceBatchSize, workspaceManagerDAO,
       methodConfigResolver, gcsDAO, samDAO,
       notificationDAO, userServiceConstructor,
@@ -89,7 +91,7 @@ object WorkspaceService {
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)(implicit protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport {
 
   import dataSource.dataAccess.driver.api._
@@ -987,34 +989,29 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   //validates the expressions in the method configuration, taking into account optional inputs
-  private def validateMethodConfiguration(methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
-    withMethodInputs(methodConfiguration, userInfo) { gatherInputsResult =>
-      val vmc = ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity = methodConfiguration.rootEntityType.isDefined, dataAccess)
-      DBIO.successful(vmc)
-    }
+  private def validateMethodConfiguration(methodConfiguration: MethodConfiguration, workspaceContext: SlickWorkspaceContext): Future[ValidatedMethodConfiguration] = {
+    val entityProvider = getEntityProviderForMethodConfig(workspaceContext, methodConfiguration)
+    for {
+      gatherInputsResult <- gatherMethodConfigInputs(methodConfiguration)
+      vmc <- entityProvider.expressionValidator.validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity = methodConfiguration.rootEntityType.isDefined)
+    } yield vmc
   }
 
-  def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
-    dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) flatMap { _ =>
-      validateMethodConfiguration(methodConfiguration, dataAccess)
-    }
-  }
-
-  def updateMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
-    dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration) flatMap { _ =>
-      validateMethodConfiguration(methodConfiguration, dataAccess)
-    }
+  private def getEntityProviderForMethodConfig(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration) = {
+    // TODO: user method config root entity to figure this out
+    entityManager.resolveProvider(EntityRequestArguments(workspaceContext.workspace, userInfo, None, None))
   }
 
   def getAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
-          validateMethodConfiguration(methodConfig, dataAccess) map { vmc =>
-            PerRequest.RequestComplete(StatusCodes.OK, vmc)
+      for {
+        methodConfig <- dataSource.inTransaction { dataAccess =>
+          withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
+            DBIO.successful(methodConfig)
           }
         }
-      }
+        vmc <- validateMethodConfiguration(methodConfig, workspaceContext)
+      } yield PerRequest.RequestComplete(StatusCodes.OK, vmc)
     }
   }
 
@@ -1024,9 +1021,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         dataSource.inTransaction { dataAccess =>
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
             case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")))
-            case None => createMCAndValidateExpressions(workspaceContext, methodConfiguration, dataAccess)
+            case None => dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration)
           }
-        }
+        }.flatMap { methodConfig =>
+          validateMethodConfiguration(methodConfig, workspaceContext) }
       }
     }
   }
@@ -1069,12 +1067,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         // create transaction
         dataSource.inTransaction { dataAccess =>
-          if(methodConfiguration.namespace != methodConfigurationNamespace || methodConfiguration.name != methodConfigurationName) {
+          if (methodConfiguration.namespace != methodConfigurationNamespace || methodConfiguration.name != methodConfigurationName) {
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest,
               s"The method configuration name and namespace in the URI should match the method configuration name and namespace in the request body. If you want to move this method configuration, use POST.")))
           } else {
-            createMCAndValidateExpressions(workspaceContext, methodConfiguration, dataAccess)
+            dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration)
           }
+        }.flatMap { methodConfig =>
+          validateMethodConfiguration(methodConfig, workspaceContext)
         }
       }
     }
@@ -1095,10 +1095,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   DBIO.failed(new RawlsExceptionWithErrorReport(errorReport =
                     ErrorReport(StatusCodes.Conflict, s"There is already a method configuration at ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
                 case _ =>
-                  updateMCAndValidateExpressions(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration, dataAccess)
-              } map (RequestComplete(StatusCodes.OK, _))
+                  dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration)
+              }
           }
-        }
+        }.flatMap { updatedMethodConfig =>
+          validateMethodConfiguration(updatedMethodConfig, workspaceContext)
+        }  map (RequestComplete(StatusCodes.OK, _))
       }
     }
   }
@@ -1132,6 +1134,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withAttributeNamespaceCheck(methodConfig) {
         dataSource.inTransaction { dataAccess =>
           saveCopiedMethodConfiguration(methodConfig, mcnp.destination, destContext, dataAccess)
+        }.flatMap { methodConfig =>
+          validateMethodConfiguration(methodConfig, destContext)
         }
       }
     }
@@ -1148,6 +1152,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           getWorkspaceContextAndPermissions(methodRepoQuery.destination.workspaceName, SamWorkspaceActions.write) flatMap { destContext =>
             dataSource.inTransaction { dataAccess =>
               saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, dataAccess)
+            }.flatMap { methodConfig =>
+              validateMethodConfiguration(methodConfig, destContext)
             }
           }
         }
@@ -1192,7 +1198,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     dataAccess.methodConfigurationQuery.get(destContext, dest.namespace, dest.name).flatMap {
       case Some(existingMethodConfig) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"A method configuration named ${dest.namespace}/${dest.name} already exists in ${dest.workspaceName}")))
-      case None => createMCAndValidateExpressions(destContext, target, dataAccess)
+      case None => dataAccess.methodConfigurationQuery.create(destContext, target)
     }
   }
 
@@ -1278,68 +1284,125 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] = {
-    requireComputePermission(workspaceName).flatMap { _ =>
-      withSubmissionParameters(workspaceName, submissionRequest) {
-        (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode]) =>
-          val submissionId: UUID = UUID.randomUUID()
-          val submissionEntityOpt = if (header.entityType.isEmpty) {
-            None
-          } else {
-            Some(AttributeEntityReference(entityType = submissionRequest.entityType.get, entityName = submissionRequest.entityName.get))
-          }
-
-          val workflows = successes map { entityInputs =>
-            val workflowEntityOpt = header.entityType.map(_ => AttributeEntityReference(entityType = header.entityType.get, entityName = entityInputs.entityName))
-            Workflow(workflowId = None,
-              status = WorkflowStatuses.Queued,
-              statusLastChangedDate = DateTime.now,
-              workflowEntity = workflowEntityOpt,
-              inputResolutions = entityInputs.inputResolutions.toSeq
-            )
-          }
-
-          val workflowFailures = failures map { entityInputs =>
-            val workflowEntityOpt = header.entityType.map(_ => AttributeEntityReference(entityType = header.entityType.get, entityName = entityInputs.entityName))
-            Workflow(workflowId = None,
-              status = WorkflowStatuses.Failed,
-              statusLastChangedDate = DateTime.now,
-              workflowEntity = workflowEntityOpt,
-              inputResolutions = entityInputs.inputResolutions.toSeq,
-              messages = (for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield AttributeString(entityValue.inputName + " - " + entityValue.error.get)).toSeq
-            )
-          }
-
-          val submission = Submission(submissionId = submissionId.toString,
-            submissionDate = DateTime.now(),
-            submitter = WorkbenchEmail(userInfo.userEmail.value),
-            methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
-            methodConfigurationName = submissionRequest.methodConfigurationName,
-            submissionEntity = submissionEntityOpt,
-            workflows = workflows ++ workflowFailures,
-            status = SubmissionStatuses.Submitted,
-            useCallCache = submissionRequest.useCallCache,
-            deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
-            workflowFailureMode = workflowFailureMode
-          )
-
-          // implicitly passed to SubmissionComponent.create
-          implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceName))
-          implicit val wfStatusCounter = (status: WorkflowStatus) =>
-            if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, submissionId))(status))
-            else None
-
-          dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
-            RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, successes))
-          }
-      }
+    for {
+      (workspaceContext, submissionParameters, workflowFailureMode, header) <- prepareSubmission(workspaceName, submissionRequest)
+      submission <- saveSubmission(workspaceContext, submissionRequest, submissionParameters, workflowFailureMode, header)
+    } yield {
+      RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, submissionParameters.filter(_.inputResolutions.forall(_.error.isEmpty))))
     }
   }
 
-  def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] =
-    withSubmissionParameters(workspaceName, submissionRequest) {
-      (_: DataAccess, _: SlickWorkspaceContext, header: SubmissionValidationHeader, succeeded: Seq[SubmissionValidationEntityInputs], failed: Seq[SubmissionValidationEntityInputs], _) =>
-        DBIO.successful(RequestComplete(StatusCodes.OK, SubmissionValidationReport(submissionRequest, header, succeeded, failed)))
+  private def prepareSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest) = {
+    for {
+      _ <- requireComputePermission(workspaceName)
+
+      // getWorkflowFailureMode early because it does validation and better to error early
+      workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
+
+      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+      methodConfigOption <- dataSource.inTransaction { dataAccess =>
+        dataAccess.methodConfigurationQuery.get(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName)
+      }
+      methodConfig = methodConfigOption.getOrElse(
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${submissionRequest.methodConfigurationNamespace}/${submissionRequest.methodConfigurationName} does not exist in ${workspaceContext}"))
+      )
+
+
+      _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
+
+      gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
+
+      entityProvider = getEntityProviderForMethodConfig(workspaceContext, methodConfig)
+      validationResult <- entityProvider.expressionValidator.validateExpressionsForSubmission(
+        methodConfig, gatherInputsResult, allowRootEntity = submissionRequest.entityName.isDefined)
+
+      // calling .get on the Try will throw the validation error
+      _ = validationResult.get
+
+      methodConfigInputs = gatherInputsResult.processableInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.getName, methodInput.expression) }
+      header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
+
+      submissionParameters <- entityProvider.evaluateExpressions(
+        workspaceContext,
+        ExpressionEvaluationContext(submissionRequest.entityType, submissionRequest.entityName, submissionRequest.expression, methodConfig.rootEntityType),
+        gatherInputsResult)
+    } yield {
+      (workspaceContext, submissionParameters, workflowFailureMode, header)
     }
+  }
+
+  private def gatherMethodConfigInputs(methodConfig: MethodConfiguration) = {
+    toFutureTry(methodRepoDAO.getMethod(methodConfig.methodRepoMethod, userInfo)).map {
+      case Success(None) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Cannot get ${methodConfig.methodRepoMethod.methodUri} from method repo."))
+      case Success(Some(wdl)) => methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl).recoverWith { case regrets =>
+        Failure(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regrets)))
+      }.get
+      case Failure(throwable) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.", methodRepoDAO.toErrorReport(throwable)))
+    }
+  }
+
+  def saveSubmission(workspaceContext: SlickWorkspaceContext, submissionRequest: SubmissionRequest, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader) = {
+    dataSource.inTransaction { dataAccess =>
+      val submissionId: UUID = UUID.randomUUID()
+      val (successes, failures) = submissionParameters.partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) })
+      val workflows = successes map { entityInputs =>
+        val workflowEntityOpt = header.entityType.map(_ => AttributeEntityReference(entityType = header.entityType.get, entityName = entityInputs.entityName))
+        Workflow(workflowId = None,
+          status = WorkflowStatuses.Queued,
+          statusLastChangedDate = DateTime.now,
+          workflowEntity = workflowEntityOpt,
+          inputResolutions = entityInputs.inputResolutions.toSeq
+        )
+      }
+
+      val workflowFailures = failures map { entityInputs =>
+        val workflowEntityOpt = header.entityType.map(_ => AttributeEntityReference(entityType = header.entityType.get, entityName = entityInputs.entityName))
+        Workflow(workflowId = None,
+          status = WorkflowStatuses.Failed,
+          statusLastChangedDate = DateTime.now,
+          workflowEntity = workflowEntityOpt,
+          inputResolutions = entityInputs.inputResolutions.toSeq,
+          messages = (for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield AttributeString(entityValue.inputName + " - " + entityValue.error.get)).toSeq
+        )
+      }
+
+      val submissionEntityOpt = if (header.entityType.isEmpty) {
+        None
+      } else {
+        Some(AttributeEntityReference(entityType = submissionRequest.entityType.get, entityName = submissionRequest.entityName.get))
+      }
+
+      val submission = Submission(submissionId = submissionId.toString,
+        submissionDate = DateTime.now(),
+        submitter = WorkbenchEmail(userInfo.userEmail.value),
+        methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
+        methodConfigurationName = submissionRequest.methodConfigurationName,
+        submissionEntity = submissionEntityOpt,
+        workflows = workflows ++ workflowFailures,
+        status = SubmissionStatuses.Submitted,
+        useCallCache = submissionRequest.useCallCache,
+        deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
+        workflowFailureMode = workflowFailureMode
+      )
+
+      // implicitly passed to SubmissionComponent.create
+      implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.workspace.toWorkspaceName))
+      implicit val wfStatusCounter = (status: WorkflowStatus) =>
+        if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceContext.workspace.toWorkspaceName, submissionId))(status))
+        else None
+
+      dataAccess.submissionQuery.create(workspaceContext, submission)
+    }
+  }
+
+  def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] = {
+    for {
+      (_, submissionParameters, _, header) <- prepareSubmission(workspaceName, submissionRequest)
+    } yield {
+      val (failed, succeeded) = submissionParameters.partition(_.inputResolutions.exists(_.error.isDefined))
+      RequestComplete(StatusCodes.OK, SubmissionValidationReport(submissionRequest, header, succeeded, failed))
+    }
+  }
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
     val submissionWithoutCosts = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
@@ -1865,93 +1928,29 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def withSubmissionEntityRecs(submissionRequest: SubmissionRequest, workspaceContext: SlickWorkspaceContext, rootEntityTypeOpt: Option[String], dataAccess: DataAccess)(op: (Option[Seq[EntityRecord]]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    if( rootEntityTypeOpt.isEmpty ) {
-      op(None)
-    } else {
-      val rootEntityType = rootEntityTypeOpt.get
-
-      //If there's an expression, evaluate it to get the list of entities to run this job on.
-      //Otherwise, use the entity given in the submission.
-      submissionRequest.expression match {
-        case None =>
-          if (submissionRequest.entityType.getOrElse("") != rootEntityType) {
-            val whatYouGaveUs = if (submissionRequest.entityType.isDefined) s"an entity of type ${submissionRequest.entityType.get}" else "no entity"
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Method configuration expects an entity of type $rootEntityType, but you gave us $whatYouGaveUs.")))
-          } else {
-            withSingleEntityRec(submissionRequest.entityType.get, submissionRequest.entityName.get, workspaceContext, dataAccess)(rec => op(Some(rec)))
-          }
-        case Some(expression) =>
-          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType.get, submissionRequest.entityName.get) { evaluator =>
-            evaluator.evalFinalEntity(workspaceContext, expression).asTry
-          } flatMap { //gotta close out the expression evaluator to wipe the EXPREVAL_TEMP table
-            case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret)))
-            case Success(entityRecords) =>
-              if (entityRecords.isEmpty) {
-                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))
-              } else {
-                val eligibleEntities = entityRecords.filter(_.entityType == rootEntityType).toSeq
-                if (eligibleEntities.isEmpty)
-                  DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
-                else
-                  op(Some(eligibleEntities))
-              }
-          }
-      }
-    }
-  }
 
   /** Validates the workflow failure mode in the submission request. */
-  private def withWorkflowFailureMode(submissionRequest: SubmissionRequest)(op: Option[WorkflowFailureMode] => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def getWorkflowFailureMode(submissionRequest: SubmissionRequest): Future[Option[WorkflowFailureMode]] = {
     Try(submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName)) match {
-      case Success(failureMode) => op(failureMode)
-      case Failure(NonFatal(e)) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, e.getMessage)))
+      case Success(failureMode) => Future.successful(failureMode)
+      case Failure(NonFatal(e)) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, e.getMessage)))
     }
   }
 
-
-  private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
-    (op: (DataAccess, SlickWorkspaceContext, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs], Option[WorkflowFailureMode]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, dataAccess) { methodConfig =>
-          withMethodInputs(methodConfig, userInfo) { gatherInputsResult =>
-
-            //either both entityName and entityType must be defined, or neither. Error otherwise
-            if(submissionRequest.entityName.isDefined != submissionRequest.entityType.isDefined) {
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"You must set both entityType and entityName to run on an entity, or neither (to run with literal or workspace inputs)."))
-            }
-            if(methodConfig.rootEntityType.isDefined != submissionRequest.entityName.isDefined) {
-              if(methodConfig.rootEntityType.isDefined) {
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config defines a root entity but you haven't passed one to the submission."))
-              } else {
-                //This isn't _strictly_ necessary, since a single submission entity will create one workflow.
-                //However, passing in a submission entity + an expression doesn't make sense for two reasons:
-                // 1. you'd have to write an expression from your submission entity to an entity of "no entity necessary" type
-                // 2. even if you _could_ do this, you'd kick off a bunch of identical workflows.
-                //More likely than not, an MC with no root entity + a submission entity = you're doing something wrong. So we'll just say no here.
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config uses no root entity, but you passed one to the submission."))
-              }
-            }
-            withValidatedMCExpressions(methodConfig, gatherInputsResult, allowRootEntity = submissionRequest.entityName.isDefined, dataAccess) { _ =>
-              withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
-                withWorkflowFailureMode(submissionRequest) { workflowFailureMode =>
-                  //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-                  methodConfigResolver.evaluateInputExpressions(workspaceContext, gatherInputsResult.processableInputs, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
-                    valuesByEntity
-                      .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values.toSet) })
-                      .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
-                      case (succeeded, failed) =>
-                        val methodConfigInputs = gatherInputsResult.processableInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.getName, methodInput.expression) }
-                        val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
-                        op(dataAccess, workspaceContext, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+  private def validateSubmissionRootEntity(submissionRequest: SubmissionRequest, methodConfig: MethodConfiguration): Unit = {
+    if (submissionRequest.entityName.isDefined != submissionRequest.entityType.isDefined) {
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"You must set both entityType and entityName to run on an entity, or neither (to run with literal or workspace inputs)."))
+    }
+    if (methodConfig.rootEntityType.isDefined != submissionRequest.entityName.isDefined) {
+      if (methodConfig.rootEntityType.isDefined) {
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config defines a root entity but you haven't passed one to the submission."))
+      } else {
+        //This isn't _strictly_ necessary, since a single submission entity will create one workflow.
+        //However, passing in a submission entity + an expression doesn't make sense for two reasons:
+        // 1. you'd have to write an expression from your submission entity to an entity of "no entity necessary" type
+        // 2. even if you _could_ do this, you'd kick off a bunch of identical workflows.
+        //More likely than not, an MC with no root entity + a submission entity = you're doing something wrong. So we'll just say no here.
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config uses no root entity, but you passed one to the submission."))
       }
     }
   }
