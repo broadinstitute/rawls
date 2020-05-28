@@ -4,14 +4,15 @@ import java.util.UUID
 
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import com.typesafe.scalalogging.LazyLogging
-import io.circe.Json
-import io.circe.parser._
-import org.broadinstitute.dsde.rawls.dataaccess.datarepo.{DataRepoDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, TerraDataRepoSnapshotRequest}
+import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
+
+import spray.json._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -70,30 +71,24 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
       throw new DataEntityException(s"Reference type value for $dataReferenceName is not of type ${ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue}")
     }
 
-    // parse the reference value as a json object
-    val refObj:Json = parse(dataRef.getReference) match {
-      case Right(json) => json
-      case Left(parsingFailure) => throw new DataEntityException(s"Could not parse reference value for $dataReferenceName: ${parsingFailure.message}", parsingFailure.underlying)
+    // parse the raw reference value into a snapshot reference
+    val dataReference = Try(dataRef.getReference.parseJson.convertTo[TerraDataRepoSnapshotRequest]) match {
+      case Success(ref) => ref
+      case Failure(err) => throw new DataEntityException(s"Could not parse reference value for $dataReferenceName: ${err.getMessage}", err)
     }
-
-    // verify reference object contains the instance and snapshotId keys
-    // TODO: AS-321 when broadinstitute/rawls#1219 merges, adopt its case class instead of using raw json objects
-    val cursor = refObj.hcursor
-    val refInstance: String = cursor.get[String]("instance").getOrElse(throw new DataEntityException(s"Reference value for $dataReferenceName does not contain an instance value."))
-    val refSnapshot: String = cursor.get[String]("snapshot").getOrElse(throw new DataEntityException(s"Reference value for $dataReferenceName does not contain a snapshot value."))
 
     // verify the instance matches our target instance
     // TODO: AS-321 is this the right place to validate this? We could add a "validateInstanceURL" method to the DAO itself, for instance
-    if (!refInstance.equalsIgnoreCase(dataRepoDAO.getBaseURL)) {
-      logger.error(s"expected instance ${dataRepoDAO.getBaseURL}, got $refInstance")
+    if (!dataReference.instance.equalsIgnoreCase(dataRepoDAO.getBaseURL)) {
+      logger.error(s"expected instance ${dataRepoDAO.getBaseURL}, got $dataReference.instance")
       throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected instance value")
     }
 
     // verify snapshotId value is a UUID
-    Try(UUID.fromString(refSnapshot)) match {
+    Try(UUID.fromString(dataReference.snapshot)) match {
       case Success(uuid) => uuid
       case Failure(ex) =>
-        logger.error(s"invalid UUID for snapshotId in reference: $refSnapshot")
+        logger.error(s"invalid UUID for snapshotId in reference: $dataReference.snapshot")
         throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected snapshot value", ex)
     }
 

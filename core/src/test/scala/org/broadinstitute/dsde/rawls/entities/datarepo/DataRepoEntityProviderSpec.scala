@@ -105,6 +105,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     }
   }
 
+  // warning: test could fail if spray-json changes the wording of their error messages
   it should "error if workspace manager reference json does not contain `instance` key" in  {
     // we have to drop to raw JsObjects to test malformed responses, since these shouldn't happen normally
     // given type safety
@@ -115,9 +116,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     )
 
     val ex = intercept[DataEntityException] { provider.lookupSnapshotForName("foo") }
-    assertResult("Reference value for foo does not contain an instance value.") { ex.getMessage }
+    assertResult("Could not parse reference value for foo: Object is missing required member 'instance'") { ex.getMessage }
   }
 
+  // warning: test could fail if spray-json changes the wording of their error messages
   it should "error if workspace manager reference json `instance` key is not a string" in  {
     // we have to drop to raw JsObjects to test malformed responses, since these shouldn't happen normally
     // given type safety
@@ -128,9 +130,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     )
 
     val ex = intercept[DataEntityException] { provider.lookupSnapshotForName("foo") }
-    assertResult("Reference value for foo does not contain an instance value.") { ex.getMessage }
+    assertResult("Could not parse reference value for foo: Expected String as JsString, but got [1,2]") { ex.getMessage }
   }
 
+  // warning: test could fail if spray-json changes the wording of their error messages
   it should "error if workspace manager reference json does not contain `snapshot` key" in  {
     // we have to drop to raw JsObjects to test malformed responses, since these shouldn't happen normally
     // given type safety
@@ -141,9 +144,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     )
 
     val ex = intercept[DataEntityException] { provider.lookupSnapshotForName("foo") }
-    assertResult("Reference value for foo does not contain a snapshot value.") { ex.getMessage }
+    assertResult("Could not parse reference value for foo: Object is missing required member 'snapshot'") { ex.getMessage }
   }
 
+  // warning: test could fail if spray-json changes the wording of their error messages
   it should "error if workspace manager reference json `snapshot` key is not a string" in {
     // we have to drop to raw JsObjects to test malformed responses, since these shouldn't happen normally
     // given type safety
@@ -154,7 +158,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     )
 
     val ex = intercept[DataEntityException] { provider.lookupSnapshotForName("foo") }
-    assertResult("Reference value for foo does not contain a snapshot value.") { ex.getMessage }
+    assertResult("Could not parse reference value for foo: Expected String as JsString, but got [1,2]") { ex.getMessage }
   }
 
   it should "error if workspace manager reference json `instance` value does not match DataRepoDAO's base url" in {
