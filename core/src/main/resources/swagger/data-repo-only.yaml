@@ -23,7 +23,7 @@ paths:
           name: dataReference
           required: false
           type: string
-        - in: path
+        - in: query
           description: Billing project to use for queries to the data reference
           name: billingProject
           required: false
