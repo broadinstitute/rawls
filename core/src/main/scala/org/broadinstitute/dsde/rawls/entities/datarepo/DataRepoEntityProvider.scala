@@ -37,7 +37,9 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     // reformat TDR's response into the expected response structure
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
       val attrs: Seq[String] = table.getColumns.asScala.map(_.getName)
-      // TODO: AS-321 better way to describe the primary key, if null or more than one PK?
+      // Is there a better way to describe the primary key if null or more than one PK, if TDR ever supports this.
+      // currently, TDR returns null for PKs in snapshots, and this is expected according to the TDR team,
+      // with no concrete plans to change.
       val primaryKey = Option(table.getPrimaryKey).getOrElse(new java.util.ArrayList()).asScala.mkString(",")
       // TODO: AS-321 once DR-1003 is implemented, add the actual row counts
       (table.getName, EntityTypeMetadata(-1, primaryKey, attrs))
@@ -60,7 +62,8 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
       ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue,
       dataReferenceName,
       userInfo.accessToken)
-    // TODO: AS-321 verify we got one back (should be noop; request will throw if 0 found, but could use better error-trapping)
+
+    // the above request will throw a 404 if the reference is not found, so we can assume we have one by the time we reach here.
 
     // verify it's a TDR snapshot. should be a noop, since getDataReferenceByName enforces this.
     if (ReferenceTypeEnum.DATAREPOSNAPSHOT != dataRef.getReferenceType) {
@@ -81,7 +84,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
     // verify the instance matches our target instance
     // TODO: AS-321 is this the right place to validate this? We could add a "validateInstanceURL" method to the DAO itself, for instance
-    if (refInstance != dataRepoDAO.getBaseURL) {
+    if (!refInstance.equalsIgnoreCase(dataRepoDAO.getBaseURL)) {
       logger.error(s"expected instance ${dataRepoDAO.getBaseURL}, got $refInstance")
       throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected instance value")
     }
