@@ -79,7 +79,7 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / "delete") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[AttributeEntityReference]]) { entities =>
-              complete { entityServiceConstructor(userInfo).DeleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities) }
+              complete { entityServiceConstructor(userInfo).DeleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, dataReference) }
             }
           }
         } ~
