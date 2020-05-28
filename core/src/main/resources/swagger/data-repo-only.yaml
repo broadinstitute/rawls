@@ -1,6 +1,33 @@
-
+# if Rawls config specifies dataRepo.enabled = true, this file is merged into api-docs.yaml.
+# merge mechanics are implemented by Circe's Json.deepMerge (tl;dr: objects are merged by key,
+# values are overwritten)
+#
+# so, this file should only contain the swagger additions to support data repo integration.
 
 paths:
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities':
+    get:
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: query
+          description: Data reference name to query for entity metadata
+          name: dataReference
+          required: false
+          type: string
+        - in: query
+          description: Billing project to use for queries to the data reference
+          name: billingProject
+          required: false
+          type: string
   '/api/workspaces/{namespace}/{name}/snapshots':
     post:
       responses:
