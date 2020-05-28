@@ -1,16 +1,14 @@
 package org.broadinstitute.dsde.rawls.util
 
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
-import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.entities.local.SlickExpressionParser
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
 //Well, this is a joke.
@@ -45,16 +43,6 @@ trait MethodWiths {
           op(gatherInputsResult)
       }
     }
-  }
-
-  def withValidatedMCExpressions[T](methodConfiguration: MethodConfiguration,
-                                    gatherInputsResult: GatherInputsResult,
-                                    allowRootEntity: Boolean,
-                                    parser: SlickExpressionParser)
-                                   (op: ValidatedMethodConfiguration => ReadWriteAction[T])
-                                   (implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    val validated = ExpressionValidator.validateExpressionsForSubmission(methodConfiguration, gatherInputsResult, allowRootEntity, parser)
-    DBIO.from(Future.fromTry(validated)) flatMap op
   }
 }
 

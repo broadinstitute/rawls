@@ -1,11 +1,13 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProviderBuilder}
-import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProvider
+import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
+import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.model.{UserInfo, Workspace}
 
+import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
 
 /**

@@ -6,12 +6,15 @@ import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import com.typesafe.scalalogging.LazyLogging
 import io.circe.Json
 import io.circe.parser._
-import org.broadinstitute.dsde.rawls.dataaccess.datarepo.{DataRepoDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
+import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata}
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs}
+
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -97,5 +100,10 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
   }
 
 
+  override def evaluateExpressions(workspaceContext: SlickWorkspaceContext, expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]] =
+    throw new UnsupportedEntityOperationException("evaluateExpressions not supported by this provider.")
+
+  override def expressionValidator: ExpressionValidator =
+    throw new UnsupportedEntityOperationException("expressionEvaluator not supported by this provider.")
 
 }

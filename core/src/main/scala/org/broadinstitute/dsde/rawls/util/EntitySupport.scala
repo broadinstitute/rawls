@@ -5,7 +5,6 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport}
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}

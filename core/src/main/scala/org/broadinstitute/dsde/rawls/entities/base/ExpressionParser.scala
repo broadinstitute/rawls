@@ -12,8 +12,8 @@ import cats.instances.try_._
 
 /**
   *
-  * @tparam F
-  * @tparam ExpressionContext
+  * @tparam F effect type
+  * @tparam ExpressionContext a context object that a particular implementation can use for context things
   * @tparam PipeType a query that results in the root entity's name, entity records and a sort ordering
   */
 trait ExpressionParser[F[_], ExpressionContext, PipeType] extends JavaTokenParsers {
