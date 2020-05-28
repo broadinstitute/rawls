@@ -62,8 +62,11 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     assertResult("whoops 2") { ex.getMessage }
   }
 
-  // to-do: tests for different primary key values returned by data repo, once TDR supports this
-  // to-do: tests for entity/row counts returned by data repo, once TDR supports this
+  // to-do: tests for different primary key values returned by data repo, if TDR ever supports this.
+  // currently, TDR returns null for PKs in snapshots, and this is expected according to the TDR team,
+  // with no concrete plans to change.
+
+  // to-do: tests for entity/row counts returned by data repo, once TDR supports this (see DR-1003)
 
   behavior of "DataEntityProvider.lookupSnapshotForName()"
 
