@@ -17,13 +17,13 @@ import scala.collection.JavaConverters._
 trait DataRepoEntityProviderSpecSupport {
 
   // default values for some important attributes
-  val wsid: UUID = UUID.randomUUID()
-  val refid: UUID = UUID.randomUUID()
+  val wsId: UUID = UUID.randomUUID()
+  val refId: UUID = UUID.randomUUID()
   val dataRepoInstance: String = "mock-base-url"
   val snapshot: String = UUID.randomUUID().toString
 
   // default Workspace object, mostly irrelevant for DataRepoEntityProviderSpec but necessary to exist
-  val workspace = new Workspace("namespace", "name", wsid.toString, "bucketName", None,
+  val workspace = new Workspace("namespace", "name", wsId.toString, "bucketName", None,
     DateTime.now(), DateTime.now(), "createdBy", Map.empty, false)
 
   // default UserInfo object, mostly irrelevant for DataRepoEntityProviderSpec but necessary to exist
@@ -47,10 +47,10 @@ trait DataRepoEntityProviderSpecSupport {
    */
   def createDataRefDescription(name: String = "refName",
                                referenceType: ReferenceTypeEnum = ReferenceTypeEnum.DATAREPOSNAPSHOT,
-                               referenceId: UUID = refid,
+                               referenceId: UUID = refId,
                                cloningInstructionsEnum: CloningInstructionsEnum = CloningInstructionsEnum.NOTHING,
                                credentialId: String = "",
-                               workspaceId: UUID = wsid,
+                               workspaceId: UUID = wsId,
                                refInstance: String = dataRepoInstance,
                                refSnapshot: String = snapshot,
                                refString: Option[String] = None
