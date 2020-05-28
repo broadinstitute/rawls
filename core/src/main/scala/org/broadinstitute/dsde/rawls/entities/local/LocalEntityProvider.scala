@@ -77,6 +77,8 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
+  // todo: can we change this from expressionValidator to validateExpressions somehow to better contain the DB transaction
+  // not exactly... ExpressionValidators have both validateMCExpressions and validateMCExpressionsForSubmission -- would need to replace both functions there
   override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator(dataSource)
 
 

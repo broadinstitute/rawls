@@ -97,9 +97,8 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]] =
     throw new UnsupportedEntityOperationException("evaluateExpressions not supported by this provider.")
 
-  override def expressionValidator: ExpressionValidator =
-    throw new UnsupportedEntityOperationException("expressionEvaluator not supported by this provider.")
-
-
-
+  override def expressionValidator: ExpressionValidator = new DataRepoExpressionValidator(
+    new DataRepoExpressionParser,
+    dataRepoDAO.getSnapshot(lookupSnapshotForName(dataReferenceName), userInfo.accessToken)
+  )
 }

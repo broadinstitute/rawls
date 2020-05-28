@@ -35,6 +35,8 @@ trait ExpressionParser[F[_], ExpressionContext, PipeType] extends JavaTokenParse
   
   type ExpressionOutputType = F[Map[String, Iterable[Any]]]
 
+
+  // Syntax checker
   def parseMCExpressions(inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], allowRootEntity: Boolean): ParsedMCExpressions = {
     val noEntityAllowedErrorMsg = "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."
     def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[Unit] ) = {
