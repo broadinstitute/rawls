@@ -8,26 +8,26 @@ paths:
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities':
     get:
       parameters:
-        - in: path
-          description: Workspace Namespace
-          name: workspaceNamespace
+        - $ref: '#/parameters/workspaceNamespacePathParam'
+        - $ref: '#/parameters/workspaceNamePathParam'
+        - $ref: '#/parameters/dataReferenceQueryParam'
+        - $ref: '#/parameters/billingProjectQueryParam'
+
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete':
+    post:
+      parameters:
+        - $ref: '#/parameters/workspaceNamespacePathParam'
+        - $ref: '#/parameters/workspaceNamePathParam'
+        - in: body
+          description: Set of entities to delete
+          name: entities
           required: true
-          type: string
-        - in: path
-          description: Workspace Name
-          name: workspaceName
-          required: true
-          type: string
-        - in: query
-          description: Data reference name to query for entity metadata
-          name: dataReference
-          required: false
-          type: string
-        - in: query
-          description: Billing project to use for queries to the data reference
-          name: billingProject
-          required: false
-          type: string
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/AttributeEntityReference'
+        - $ref: '#/parameters/dataReferenceQueryParam'
+        - $ref: '#/parameters/billingProjectQueryParam'
   '/api/workspaces/{namespace}/{name}/snapshots':
     post:
       responses:
@@ -49,16 +49,8 @@ paths:
       summary: Create a snapshot
       operationId: createDataRepoSnapshot
       parameters:
-        - in: path
-          description: The workspace namespace
-          name: namespace
-          required: true
-          type: string
-        - in: path
-          description: The workspace name
-          name: name
-          required: true
-          type: string
+        - $ref: '#/parameters/namespacePathParam'
+        - $ref: '#/parameters/workspaceNamePathParam'
         - in: body
           description: Reference to the Data Repo snapshot
           name: dataRepoSnapshot
@@ -81,30 +73,22 @@ paths:
             $ref: '#/definitions/ErrorReport'
       description: "Enumerate references to snapshots in the Terra Data Repo"
       tags:
-      - snapshots
+        - snapshots
       summary: List snapshots
       operationId: enumerateDataRepoSnapshot
       parameters:
-      - in: path
-        description: The workspace namespace
-        name: namespace
-        required: true
-        type: string
-      - in: path
-        description: The workspace name
-        name: name
-        required: true
-        type: string
-      - in: query
-        name: offset
-        description: The number of items to skip before starting to collect the result set.
-        type: int
-        required: true
-      - in: query
-        name: limit
-        description: The number of items to return.
-        type: int
-        required: true
+        - $ref: '#/parameters/namespacePathParam'
+        - $ref: '#/parameters/namePathParam'
+        - in: query
+          name: offset
+          description: The number of items to skip before starting to collect the result set.
+          type: int
+          required: true
+        - in: query
+          name: limit
+          description: The number of items to return.
+          type: int
+          required: true
     security:
       - authorization:
           - openid
@@ -132,21 +116,9 @@ paths:
       summary: Get a snapshot
       operationId: getDataRepoSnapshot
       parameters:
-        - in: path
-          description: The workspace namespace
-          name: namespace
-          required: true
-          type: string
-        - in: path
-          description: The workspace name
-          name: name
-          required: true
-          type: string
-        - in: path
-          description: The snapshot ID
-          name: snapshotId
-          required: true
-          type: string
+        - $ref: '#/parameters/namespacePathParam'
+        - $ref: '#/parameters/namePathParam'
+        - $ref: '#/parameters/snapshotIdPathParam'
     delete:
       responses:
         '204':
@@ -165,26 +137,58 @@ paths:
       summary: Delete a snapshot
       operationId: deleteDataRepoSnapshot
       parameters:
-        - in: path
-          description: The workspace namespace
-          name: namespace
-          required: true
-          type: string
-        - in: path
-          description: The workspace name
-          name: name
-          required: true
-          type: string
-        - in: path
-          description: The snapshot ID
-          name: snapshotId
-          required: true
-          type: string
+        - $ref: '#/parameters/namespacePathParam'
+        - $ref: '#/parameters/namePathParam'
+        - $ref: '#/parameters/snapshotIdPathParam'
       security:
         - authorization:
             - openid
             - email
             - profile
+
+parameters:
+  billingProjectQueryParam:
+    in: query
+    description: Billing project to use for queries to the data reference
+    name: billingProject
+    required: false
+    type: string
+  dataReferenceQueryParam:
+    in: query
+    description: Data reference name to query for entity metadata
+    name: dataReference
+    required: false
+    type: string
+  namespacePathParam:
+    in: path
+    description: The workspace namespace
+    name: namespace
+    required: true
+    type: string
+  namePathParam:
+    in: path
+    description: The workspace name
+    name: name
+    required: true
+    type: string
+  snapshotIdPathParam:
+    in: path
+    description: The snapshot ID
+    name: snapshotId
+    required: true
+    type: string
+  workspaceNamespacePathParam:
+    in: path
+    description: The workspace namespace
+    name: workspaceNamespace
+    required: true
+    type: string
+  workspaceNamePathParam:
+    in: path
+    description: The workspace name
+    name: workspaceName
+    required: true
+    type: string
 
 definitions:
   DataRepoSnapshot:
