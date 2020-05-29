@@ -24,7 +24,7 @@ private[expressions] object SlickExpressionEvaluator {
       evaluator.clearExprEvalScratchTable()
   }
 
-  def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: SlickWorkspaceContext, rootType: String, rootName: String)
+  def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: Workspace, rootType: String, rootName: String)
                                    (op: SlickExpressionEvaluator => ReadWriteAction[R])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
     import parser.driver.api._
@@ -58,7 +58,7 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
     parser.exprEvalQuery.filter(_.transactionId === transactionId).delete
   }
 
-  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
+  def evalFinalAttribute(workspaceContext: Workspace, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
     parser.parseAttributeExpr(expression, rootEntities.nonEmpty) match {
       case Failure(regret) => DBIO.failed(new RawlsException(regret.getMessage))
       case Success(expr) =>
@@ -90,7 +90,7 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
   }
 
   //This is boiling away the Try associated with attempting to parse the expression. Is this OK?
-  def evalFinalEntity(workspaceContext: SlickWorkspaceContext, expression:String): ReadWriteAction[Iterable[EntityRecord]] = {
+  def evalFinalEntity(workspaceContext: Workspace, expression:String): ReadWriteAction[Iterable[EntityRecord]] = {
     if( rootEntities.isEmpty || rootEntities.get.isEmpty ) {
       DBIO.failed(new RawlsException(s"ExpressionEvaluator has no entities passed to evalFinalEntity $expression"))
     } else if( rootEntities.get.size > 1 ) {

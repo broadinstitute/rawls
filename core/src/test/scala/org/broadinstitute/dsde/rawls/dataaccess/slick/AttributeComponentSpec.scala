@@ -4,7 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{SlickWorkspaceContext, _}
+import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.joda.time.DateTime
 import spray.json.{JsObject, JsString}
 
@@ -395,12 +395,12 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatedEntity = entity.copy(attributes = Map(AttributeName.withDefaultNS("attributeString") -> AttributeString(UUID.randomUUID().toString)))
 
     def saveWorkspace = DbResource.dataSource.inTransaction(d => d.workspaceQuery.save(workspace))
-    def saveEntity = DbResource.dataSource.inTransaction(d => d.entityQuery.save(SlickWorkspaceContext(workspace), entity))
+    def saveEntity = DbResource.dataSource.inTransaction(d => d.entityQuery.save(workspace, entity))
 
     val updateAction = for {
       entityRec <- this.entityQuery.findEntityByName(workspaceId, entity.entityType, entity.name).result
       _ <- this.entityAttributeScratchQuery += EntityAttributeScratchRecord(0, entityRec.head.id, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, None, false, None, "not a transaction id")
-      _ <- this.entityQuery.save(SlickWorkspaceContext(workspace), updatedEntity).transactionally
+      _ <- this.entityQuery.save(workspace, updatedEntity).transactionally
       result <- this.entityAttributeScratchQuery.map { r => (r.name, r.valueString) }.result
     } yield {
       result
@@ -416,7 +416,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
 
     assertResult(Option(updatedEntity)) {
-      runAndWait(this.entityQuery.get(SlickWorkspaceContext(workspace), entity.entityType, entity.name))
+      runAndWait(this.entityQuery.get(workspace, entity.entityType, entity.name))
     }
   }
 

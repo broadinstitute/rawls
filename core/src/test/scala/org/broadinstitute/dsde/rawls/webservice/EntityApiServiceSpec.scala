@@ -82,7 +82,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def dbId(ent: Entity): Long = runAndWait(entityQuery.getEntityRecords(SlickWorkspaceContext(testData.workspace).workspaceIdAsUUID, Set(ent.toReference))).head.id
+  def dbId(ent: Entity): Long = runAndWait(entityQuery.getEntityRecords(testData.workspace.workspaceIdAsUUID, Set(ent.toReference))).head.id
   def dbName(id: Long): String = runAndWait(entityQuery.getEntities(Seq(id))).head._2.name
 
   "EntityApi" should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>
@@ -164,7 +164,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             }
             assertResult(z1) {
               val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
-              runAndWait(entityQuery.get(SlickWorkspaceContext(ws2), z1.entityType, z1.name)).get
+              runAndWait(entityQuery.get(ws2, z1.entityType, z1.name)).get
             }
 
             val sourceWorkspace = WorkspaceName(workspaceSrcRequest.namespace, workspaceSrcRequest.name)
@@ -200,7 +200,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+          runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
         }
       }
     Get(testData.workspace.path) ~>
@@ -219,7 +219,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+          runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
         }
       }
     Get(testData.workspace.path) ~>
@@ -239,7 +239,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(newSample) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), newSample.entityType, newSample.name)).get
+          runAndWait(entityQuery.get(testData.workspace, newSample.entityType, newSample.name)).get
         }
         assertResult(newSample) {
           responseAs[Entity]
@@ -263,7 +263,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(newSample) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), newSample.entityType, newSample.name)).get
+          runAndWait(entityQuery.get(testData.workspace, newSample.entityType, newSample.name)).get
         }
         assertResult(newSample) {
           responseAs[Entity]
@@ -357,13 +357,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listEntities(SlickWorkspaceContext(testData.workspace)))
+    val ents = runAndWait(entityQuery.listEntities(testData.workspace))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
   // entity and attribute counts, non-deleted only
   def countActiveEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listActiveEntities(SlickWorkspaceContext(testData.workspace)))
+    val ents = runAndWait(entityQuery.listActiveEntities(testData.workspace))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
@@ -389,7 +389,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
         }
       }
 
@@ -432,10 +432,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+          runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e2.entityType, e2.name))
+          runAndWait(entityQuery.get(testData.workspace, e2.entityType, e2.name))
         }
       }
 
@@ -491,7 +491,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(new_e1)) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+          runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
         }
       }
 
@@ -502,13 +502,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+          runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e2.entityType, e2.name))
+          runAndWait(entityQuery.get(testData.workspace, e2.entityType, e2.name))
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e3.entityType, e3.name))
+          runAndWait(entityQuery.get(testData.workspace, e3.entityType, e3.name))
         }
       }
 
@@ -555,10 +555,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         val expected = Seq(e1, e2) map  { _.toReference }
         assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
         assertResult(Some(e1)) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+          runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
         }
         assertResult(Some(e2)) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e2.entityType, e2.name))
+          runAndWait(entityQuery.get(testData.workspace, e2.entityType, e2.name))
         }
       }
 
@@ -613,7 +613,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(new_e1)) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+          runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
         }
       }
 
@@ -626,13 +626,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         val expected = Seq(e1, e2, e3) map { _.toReference }
         assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
         assertResult(Some(new_e1)) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+          runAndWait(entityQuery.get(testData.workspace, e1.entityType, e1.name))
         }
         assertResult(Some(e2)) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e2.entityType, e2.name))
+          runAndWait(entityQuery.get(testData.workspace, e2.entityType, e2.name))
         }
         assertResult(Some(e3)) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e3.entityType, e3.name))
+          runAndWait(entityQuery.get(testData.workspace, e3.entityType, e3.name))
         }
       }
 
@@ -709,7 +709,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[Entity]
         }
         assertResult(sample) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), sample.entityType, sample.name)).get
+          runAndWait(entityQuery.get(testData.workspace, sample.entityType, sample.name)).get
         }
       }
 
@@ -736,7 +736,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[Entity]
         }
         assertResult(sampleNewAttrs) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), sample.entityType, sample.name)).get
+          runAndWait(entityQuery.get(testData.workspace, sample.entityType, sample.name)).get
         }
       }
 
@@ -764,7 +764,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[Entity]
         }
         assertResult(sampleAttrs3) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), sample.entityType, sample.name)).get
+          runAndWait(entityQuery.get(testData.workspace, sample.entityType, sample.name)).get
         }
       }
 
@@ -807,7 +807,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(Entity("newSample", "Sample", Map(AttributeName.withDefaultNS("newAttribute") -> AttributeString("foo"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Sample", "newSample"))
+          runAndWait(entityQuery.get(testData.workspace, "Sample", "newSample"))
         }
       }
   }
@@ -833,7 +833,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
         }
       }
 
@@ -846,7 +846,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(updatedEntity)) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
         }
       }
 
@@ -865,10 +865,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+          runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
         }
         assertResult(Some(Entity(testData.sample2.name, testData.sample2.entityType, testData.sample2.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("baz"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name))
+          runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, testData.sample2.name))
         }
       }
   }
@@ -886,10 +886,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> referenceList)))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+          runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
         }
         assertResult(Some(newEntity)) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), newEntity.entityType, newEntity.name))
+          runAndWait(entityQuery.get(testData.workspace, newEntity.entityType, newEntity.name))
         }
       }
   }
@@ -981,7 +981,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
         }
       }
 
@@ -1007,7 +1007,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+          runAndWait(entityQuery.get(testData.workspace, testData.sample1.entityType, testData.sample1.name))
         }
       }
   }
@@ -1059,7 +1059,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
 
           assertResult(testData.sample2) {
-            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name)).get
+            runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, testData.sample2.name)).get
           }
           assertResult(testData.sample2) {
             responseAs[Entity]
@@ -1102,7 +1102,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         assertMetadataMapsEqual(expectedMetadataMap, responseAs[Map[String, EntityTypeMetadata]])
-        assertMetadataMapsEqual(expectedMetadataMap, runAndWait(entityQuery.getEntityTypeMetadata(SlickWorkspaceContext(constantData.workspace))))
+        assertMetadataMapsEqual(expectedMetadataMap, runAndWait(entityQuery.getEntityTypeMetadata(constantData.workspace)))
       }
   }
 
@@ -1133,7 +1133,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         assertMetadataMapsEqual(expectedMetadataMap, responseAs[Map[String, EntityTypeMetadata]])
-        assertMetadataMapsEqual(expectedMetadataMap, runAndWait(entityQuery.getEntityTypeMetadata(SlickWorkspaceContext(constantData.workspace))))
+        assertMetadataMapsEqual(expectedMetadataMap, runAndWait(entityQuery.getEntityTypeMetadata(constantData.workspace)))
       }
   }
 
@@ -1154,7 +1154,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(SlickWorkspaceContext(constantData.workspace), "Sample"))
+        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(constantData.workspace, "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }
@@ -1187,7 +1187,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(SlickWorkspaceContext(constantData.workspace), "Sample"))
+        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(constantData.workspace, "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected :+ newSample)
         assertSameElements(dbSamples, expected :+ newSample)
       }
@@ -1207,7 +1207,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(SlickWorkspaceContext(constantData.workspace), "Sample"))
+        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(constantData.workspace, "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }
@@ -1302,7 +1302,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(Option(AttributeString("bang"))) {
-            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name)).get.attributes.get(AttributeName.withDefaultNS("boo"))
+            runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, testData.sample2.name)).get.attributes.get(AttributeName.withDefaultNS("boo"))
           }
         }
     } {capturedMetrics =>
@@ -1320,7 +1320,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name)).get.attributes.get(AttributeName.withDefaultNS("bar"))
+          runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, testData.sample2.name)).get.attributes.get(AttributeName.withDefaultNS("bar"))
         }
       }
   }
@@ -1353,7 +1353,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
         }
       }
 
@@ -1453,7 +1453,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(true) {
-            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, "s2_changed")).isDefined
+            runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, "s2_changed")).isDefined
           }
         }
     } {capturedMetrics =>
@@ -1472,7 +1472,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(true) {
-            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, "s2.changed")).isDefined
+            runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, "s2.changed")).isDefined
           }
         }
     } {capturedMetrics =>
@@ -1538,7 +1538,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, "s2_changed"))
+          runAndWait(entityQuery.get(testData.workspace, testData.sample2.entityType, "s2_changed"))
         }
       }
   }
@@ -1561,7 +1561,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+          runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
         }
       }
 
@@ -1626,7 +1626,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             }
             assertResult(z1) {
               val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
-              runAndWait(entityQuery.get(SlickWorkspaceContext(ws2), z1.entityType, z1.name)).get
+              runAndWait(entityQuery.get(ws2, z1.entityType, z1.name)).get
             }
 
             val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
@@ -1638,7 +1638,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                   status
                 }
                 assertResult(z1) {
-                  runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), z1.entityType, z1.name)).get
+                  runAndWait(entityQuery.get(testData.workspace, z1.entityType, z1.name)).get
                 }
               }
           }
@@ -1981,7 +1981,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
       DBIO.seq(
         workspaceQuery.save(workspace),
-        entityQuery.save(SlickWorkspaceContext(workspace), entities)
+        entityQuery.save(workspace, entities)
       )
     }
   }
@@ -2140,7 +2140,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(None) {
-            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+            runAndWait(entityQuery.get(testData.workspace, e.entityType, e.name))
           }
         }
 

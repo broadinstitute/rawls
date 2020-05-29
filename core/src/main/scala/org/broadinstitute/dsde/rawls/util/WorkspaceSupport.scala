@@ -5,7 +5,7 @@ import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, SlickWorkspaceContext, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, Workspace, UserInfo, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -55,9 +55,9 @@ trait WorkspaceSupport {
         samDAO.userHasAction(SamResourceTypeNames.billingProject, workspaceName.namespace, SamBillingProjectActions.launchBatchCompute, userInfo).flatMap { projectCanCompute =>
           if (!projectCanCompute) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceName))))
           else {
-            samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, SamWorkspaceActions.compute, userInfo).flatMap { launchBatchCompute =>
+            samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.compute, userInfo).flatMap { launchBatchCompute =>
               if (launchBatchCompute) Future.successful(())
-              else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, SamWorkspaceActions.read, userInfo).flatMap { workspaceRead =>
+              else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.read, userInfo).flatMap { workspaceRead =>
                 if (workspaceRead) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceName))))
                 else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
               }
@@ -109,14 +109,14 @@ trait WorkspaceSupport {
 
   // function name may be misleading. This returns the workspace context and checks the user's permission,
   // but does not return the permissions.
-  def getWorkspaceContextAndPermissions(workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[SlickWorkspaceContext] = {
+  def getWorkspaceContextAndPermissions(workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
     for {
       workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
-      _ <- accessCheck(workspaceContext.workspace, requiredAction, ignoreLock = false) // throws if user does not have permission
+      _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
   }
 
-  def getWorkspaceContext(workspaceName: WorkspaceName, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[SlickWorkspaceContext] = {
+  def getWorkspaceContext(workspaceName: WorkspaceName, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
         DBIO.successful(workspaceContext)
@@ -124,10 +124,10 @@ trait WorkspaceSupport {
     }
   }
 
-  def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, attributeSpecs: Option[WorkspaceAttributeSpecs] = None)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
+  def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, attributeSpecs: Option[WorkspaceAttributeSpecs] = None)(op: (Workspace) => ReadWriteAction[T]) = {
     dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
       case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
-      case Some(workspace) => op(SlickWorkspaceContext(workspace))
+      case Some(workspace) => op(workspace)
     }
   }
 

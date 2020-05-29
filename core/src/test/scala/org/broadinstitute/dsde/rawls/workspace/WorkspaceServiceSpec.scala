@@ -556,12 +556,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("myNamespace","method-a",1),"dsde"),
       MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSuccessfulSubmission))
     }
 
     //Check if submissions on workspace exist
     assertResult(List(testData.submissionSuccessful1)) {
-      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+      runAndWait(submissionQuery.list(testData.workspaceSuccessfulSubmission))
     }
 
     //Check if entities on workspace exist
@@ -579,12 +579,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //check if method configs have been deleted
     assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSuccessfulSubmission))
     }
 
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
-      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+      runAndWait(submissionQuery.list(testData.workspaceSuccessfulSubmission))
     }
 
     //Check if entities on workspace have been deleted
@@ -601,12 +601,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceFailedSubmission))
     }
 
     //Check if submissions on workspace exist
     assertResult(List(testData.submissionFailed)) {
-      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+      runAndWait(submissionQuery.list(testData.workspaceFailedSubmission))
     }
 
     //Check if entities on workspace exist
@@ -624,12 +624,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //check if method configs have been deleted
     assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceFailedSubmission))
     }
 
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
-      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+      runAndWait(submissionQuery.list(testData.workspaceFailedSubmission))
     }
 
 
@@ -647,12 +647,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSubmittedSubmission))
     }
 
     //Check if submissions on workspace exist
     assertResult(List(testData.submissionSubmitted)) {
-      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+      runAndWait(submissionQuery.list(testData.workspaceSubmittedSubmission))
     }
 
     //Check if entities on workspace exist
@@ -670,12 +670,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //check if method configs have been deleted
     assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSubmittedSubmission))
     }
 
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
-      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+      runAndWait(submissionQuery.list(testData.workspaceSubmittedSubmission))
     }
 
     //Check if entities on workspace exist
@@ -692,12 +692,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceMixedSubmissions))
     }
 
     //Check if submissions on workspace exist
     assertResult(2) {
-      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions))).length
+      runAndWait(submissionQuery.list(testData.workspaceMixedSubmissions)).length
     }
 
     //Check if entities on workspace exist
@@ -715,12 +715,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //check if method configs have been deleted
     assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceMixedSubmissions))
     }
 
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
-      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+      runAndWait(submissionQuery.list(testData.workspaceMixedSubmissions))
     }
 
     //Check if entities on workspace exist

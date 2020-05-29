@@ -452,7 +452,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       status
     }
 
-    runAndWait(entityQuery.hide(SlickWorkspaceContext(testData.workspace), Seq(testData.pair1.toReference)))
+    runAndWait(entityQuery.hide(testData.workspace, Seq(testData.pair1.toReference)))
 
     val monitorActor = waitForSubmissionActor(newSubmissionReport.submissionId)
     //not really necessary, failing to find the actor above will throw an exception and thus fail this test
@@ -465,7 +465,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   it should "fail to submit when given an entity expression that evaluates to a deleted entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
 
-    runAndWait(entityQuery.hide(SlickWorkspaceContext(testData.workspace), Seq(testData.pair1.toReference)))
+    runAndWait(entityQuery.hide(testData.workspace, Seq(testData.pair1.toReference)))
 
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = "dsde",
@@ -490,7 +490,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         AttributeEntityReference("Sample", "sample5"),
         AttributeEntityReference("Sample", "sample6")))))
 
-    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
+    runAndWait(entityQuery.save(testData.workspace, sset))
 
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = "dsde",

@@ -6,7 +6,7 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{SlickWorkspaceContext, _}
+import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import slick.jdbc.{GetResult, JdbcProfile}
 import akka.http.scaladsl.model.StatusCodes
 
@@ -104,7 +104,7 @@ trait EntityComponent {
       Option(s"${entity.name} ${collectAttributeStrings(entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]), List(), maxLength)}".toLowerCase.take(maxLength))
     }
 
-    def batchInsertEntities(workspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Seq[EntityRecord]] = {
+    def batchInsertEntities(workspaceContext: Workspace, entities: TraversableOnce[Entity]): ReadWriteAction[Seq[EntityRecord]] = {
       def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecordWithInlineAttributes = {
         EntityRecordWithInlineAttributes(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity), deleted = false, deletedDate = None)
       }
@@ -121,7 +121,7 @@ trait EntityComponent {
       }
     }
 
-    def insertNewEntities(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], existingEntityRefs: Seq[AttributeEntityReference]): ReadWriteAction[Seq[EntityRecord]] = {
+    def insertNewEntities(workspaceContext: Workspace, entities: Traversable[Entity], existingEntityRefs: Seq[AttributeEntityReference]): ReadWriteAction[Seq[EntityRecord]] = {
       val newEntities = entities.filterNot { e => existingEntityRefs.contains(e.toReference) }
       batchInsertEntities(workspaceContext, newEntities)
     }
@@ -206,11 +206,11 @@ trait EntityComponent {
 
       // Active actions: only return entities and attributes with their deleted flag set to false
 
-      def activeActionForType(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def activeActionForType(workspaceContext: Workspace, entityType: String): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
 
-      def activeActionForRefs(workspaceContext: SlickWorkspaceContext, entityRefs: Set[AttributeEntityReference]): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def activeActionForRefs(workspaceContext: Workspace, entityRefs: Set[AttributeEntityReference]): ReadAction[Seq[EntityAndAttributesResult]] = {
         if( entityRefs.isEmpty ) {
           DBIO.successful(Seq.empty[EntityAndAttributesResult])
         } else {
@@ -221,7 +221,7 @@ trait EntityComponent {
 
       }
 
-      def activeActionForWorkspace(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def activeActionForWorkspace(workspaceContext: Workspace): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
 
@@ -250,7 +250,7 @@ trait EntityComponent {
         concatSqlActions(sql"""select e.id, e.name, e.all_attribute_values #$sortColumns from ENTITY e """, sortJoin, sql""" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId """)
       }
 
-      def activeActionForPagination(workspaceContext: SlickWorkspaceContext, entityType: String, entityQuery: model.EntityQuery): ReadAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
+      def activeActionForPagination(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery): ReadAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
         /*
         The query here starts with baseEntityAndAttributeSql which is the typical select
         to pull entities will all attributes and references. A join is added on a sub select from ENTITY
@@ -293,7 +293,7 @@ trait EntityComponent {
 
       // actions which may include "deleted" hidden entities
 
-      def actionForTypeName(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def actionForTypeName(workspaceContext: Workspace, entityType: String, entityName: String): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
 
@@ -307,7 +307,7 @@ trait EntityComponent {
         }
       }
 
-      def actionForWorkspace(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def actionForWorkspace(workspaceContext: Workspace): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
     }
@@ -356,7 +356,7 @@ trait EntityComponent {
 
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"
 
-    def get(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Option[Entity]] = {
+    def get(workspaceContext: Workspace, entityType: String, entityName: String): ReadAction[Option[Entity]] = {
       EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map unmarshalEntities map(_.headOption)
     }
 
@@ -372,28 +372,28 @@ trait EntityComponent {
       }).map(_.flatten)
     }
 
-    def getActiveEntities(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
+    def getActiveEntities(workspaceContext: Workspace, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
       EntityAndAttributesRawSqlQuery.activeActionForRefs(workspaceContext, entityRefs.toSet) map unmarshalEntities
     }
 
     // list all entities or those in a category
 
-    def listActiveEntities(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {
+    def listActiveEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] = {
       EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map unmarshalEntities
     }
 
     // includes "deleted" hidden entities
-    def listEntities(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {
+    def listEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] = {
       EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map unmarshalEntities
     }
 
-    def listActiveEntitiesOfType(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[TraversableOnce[Entity]] = {
+    def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] = {
       EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map unmarshalEntities
     }
 
     // get entity types, counts, and attribute names to populate UI tables.  Active entities and attributes only.
 
-    def getEntityTypeMetadata(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, EntityTypeMetadata]] = {
+    def getEntityTypeMetadata(workspaceContext: Workspace): ReadAction[Map[String, EntityTypeMetadata]] = {
       val typesAndCountsQ = getEntityTypesWithCounts(workspaceContext)
       val typesAndAttrsQ = getAttrNamesAndEntityTypes(workspaceContext)
 
@@ -406,7 +406,7 @@ trait EntityComponent {
       }
     }
 
-    private[slick] def getEntityTypesWithCounts(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
+    private[slick] def getEntityTypesWithCounts(workspaceContext: Workspace): ReadAction[Map[String, Int]] = {
       findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID).groupBy(e => e.entityType).map { case (entityType, entities) =>
         (entityType, entities.length)
       }.result map { result =>
@@ -414,7 +414,7 @@ trait EntityComponent {
       }
     }
 
-    private[slick] def getAttrNamesAndEntityTypes(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Seq[String]]] = {
+    private[slick] def getAttrNamesAndEntityTypes(workspaceContext: Workspace): ReadAction[Map[String, Seq[String]]] = {
       val typesAndAttrNames = for {
         entityRec <- findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID)
         attrib <- findActiveAttributesByEntityId(entityRec.id)
@@ -429,7 +429,7 @@ trait EntityComponent {
 
     // get paginated entities for UI display, as a result of executing a query
 
-    def loadEntityPage(workspaceContext: SlickWorkspaceContext, entityType: String, entityQuery: model.EntityQuery): ReadAction[(Int, Int, Iterable[Entity])] = {
+    def loadEntityPage(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery): ReadAction[(Int, Int, Iterable[Entity])] = {
       EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext, entityType, entityQuery) map { case (unfilteredCount, filteredCount, pagination) =>
         (unfilteredCount, filteredCount, unmarshalEntities(pagination))
       }
@@ -437,11 +437,11 @@ trait EntityComponent {
 
     // create or replace entities
 
-    def save(workspaceContext: SlickWorkspaceContext, entity: Entity): ReadWriteAction[Entity] = {
+    def save(workspaceContext: Workspace, entity: Entity): ReadWriteAction[Entity] = {
       save(workspaceContext, Seq(entity)).map(_.head)
     }
 
-    def save(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
+    def save(workspaceContext: Workspace, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
       entities.foreach(validateEntity)
 
@@ -454,7 +454,7 @@ trait EntityComponent {
       } yield entities
     }
 
-    private def applyEntityPatch(workspaceContext: SlickWorkspaceContext, entityRecord: EntityRecord, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
+    private def applyEntityPatch(workspaceContext: Workspace, entityRecord: EntityRecord, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
       //yank the attribute list for this entity to determine what to do with upserts
       entityAttributeQuery.findByOwnerQuery(Seq(entityRecord.id)).map(attr => (attr.namespace, attr.name, attr.id)).result flatMap { attrCols =>
 
@@ -541,7 +541,7 @@ trait EntityComponent {
     }
 
     //"patch" this entity by applying the upserts and the deletes to its attributes, then save. a little more database efficient than a "full" save, but requires the entity already exist.
-    def saveEntityPatch(workspaceContext: SlickWorkspaceContext, entityRef: AttributeEntityReference, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
+    def saveEntityPatch(workspaceContext: Workspace, entityRef: AttributeEntityReference, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
       val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
       if (upserts.isEmpty && deletes.isEmpty) {
         DBIO.successful(()) //no-op
@@ -568,7 +568,7 @@ trait EntityComponent {
       }
     }
 
-    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRefs: Seq[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
+    private def lookupNotYetLoadedReferences(workspaceContext: Workspace, entities: Traversable[Entity], alreadyLoadedEntityRefs: Seq[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
       val allRefAttributes = (for {
         entity <- entities
         (_, attribute) <- entity.attributes
@@ -582,7 +582,7 @@ trait EntityComponent {
       lookupNotYetLoadedReferences(workspaceContext, allRefAttributes, alreadyLoadedEntityRefs)
     }
 
-    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, attrReferences: Set[AttributeEntityReference], alreadyLoadedEntityRefs: Seq[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
+    private def lookupNotYetLoadedReferences(workspaceContext: Workspace, attrReferences: Set[AttributeEntityReference], alreadyLoadedEntityRefs: Seq[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
       val notYetLoadedEntityRecs = attrReferences -- alreadyLoadedEntityRefs
 
       getEntityRecords(workspaceContext.workspaceIdAsUUID, notYetLoadedEntityRecs) map { foundEntities =>
@@ -611,7 +611,7 @@ trait EntityComponent {
 
     // "delete" entities by hiding and renaming
 
-    def hide(workspaceContext: SlickWorkspaceContext, entRefs: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
+    def hide(workspaceContext: Workspace, entRefs: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         getEntityRecords(workspaceContext.workspaceIdAsUUID, entRefs.toSet) flatMap { entRecs =>
           val hideAction = entRecs map { rec =>
@@ -646,7 +646,7 @@ trait EntityComponent {
       }
     }
 
-    def rename(workspaceContext: SlickWorkspaceContext, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
+    def rename(workspaceContext: Workspace, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
       validateEntityName(newName)
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, oldName).map(_.name).update(newName)
@@ -654,13 +654,13 @@ trait EntityComponent {
 
     // copy all entities from one workspace to another (empty) workspace
 
-    def copyAllEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Int] = {
+    def copyAllEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace): ReadWriteAction[Int] = {
       listActiveEntities(sourceWorkspaceContext).flatMap(copyEntities(destWorkspaceContext, _, Seq.empty))
     }
 
     // copy entities from one workspace to another, checking for conflicts first
 
-    def checkAndCopyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean): ReadWriteAction[EntityCopyResponse] = {
+    def checkAndCopyEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean): ReadWriteAction[EntityCopyResponse] = {
       def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
         val batchActions = createBatches(entityRefs.toSet).map(batch => getEntityRecords(workspaceId, batch))
         DBIO.sequence(batchActions).map(_.flatten.toSeq).map { recs =>
@@ -710,7 +710,7 @@ trait EntityComponent {
       }
     }
 
-    private def copyEntities(destWorkspaceContext: SlickWorkspaceContext, entitiesToCopy: TraversableOnce[Entity], entitiesToReference: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
+    private def copyEntities(destWorkspaceContext: Workspace, entitiesToCopy: TraversableOnce[Entity], entitiesToReference: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
       entityQueryWithInlineAttributes.batchInsertEntities(destWorkspaceContext, entitiesToCopy) flatMap { insertedRecs =>
         getEntityRecords(destWorkspaceContext.workspaceIdAsUUID, entitiesToReference.toSet) flatMap { toReferenceRecs =>
           val idsByRef = (insertedRecs ++ toReferenceRecs).map { rec => rec.toReference -> rec.id }.toMap
@@ -729,7 +729,7 @@ trait EntityComponent {
 
     // retrieve all paths from these entities, for checkAndCopyEntities
 
-    private[slick] def getEntitySubtrees(workspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Set[String]): ReadAction[Seq[EntityPath]] = {
+    private[slick] def getEntitySubtrees(workspaceContext: Workspace, entityType: String, entityNames: Set[String]): ReadAction[Seq[EntityPath]] = {
       val startingEntityRecsAction = filter(rec => rec.workspaceId === workspaceContext.workspaceIdAsUUID && rec.entityType === entityType && rec.name.inSetBind(entityNames))
 
       startingEntityRecsAction.result.flatMap { startingEntityRecs =>
@@ -740,13 +740,13 @@ trait EntityComponent {
 
     // return the entities already present in the destination workspace
 
-    private[slick] def getCopyConflicts(destWorkspaceContext: SlickWorkspaceContext, entitiesToCopy: TraversableOnce[AttributeEntityReference]): ReadAction[TraversableOnce[EntityRecord]] = {
+    private[slick] def getCopyConflicts(destWorkspaceContext: Workspace, entitiesToCopy: TraversableOnce[AttributeEntityReference]): ReadAction[TraversableOnce[EntityRecord]] = {
       getEntityRecords(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopy.toSet)
     }
 
     // the opposite of getEntitySubtrees: traverse the graph to retrieve all entities which ultimately refer to these
 
-    def getAllReferringEntities(context: SlickWorkspaceContext, entities: Set[AttributeEntityReference]): ReadAction[Set[AttributeEntityReference]] = {
+    def getAllReferringEntities(context: Workspace, entities: Set[AttributeEntityReference]): ReadAction[Set[AttributeEntityReference]] = {
       getEntityRecords(context.workspaceIdAsUUID, entities) flatMap { entityRecs =>
         val refsToId = entityRecs.map(rec => EntityPath(Seq(rec.toReference)) -> rec.id).toMap
         recursiveGetEntityReferences(Up, entityRecs.map(_.id).toSet, refsToId)

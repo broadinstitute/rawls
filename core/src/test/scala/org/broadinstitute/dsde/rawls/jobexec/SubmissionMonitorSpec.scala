@@ -329,7 +329,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
       runAndWait(monitor.saveErrors(workflowsRecs.map(r => (r, Seq(AttributeString("a"), AttributeString("b")))), this))
 
-      val submission = runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId)).get
+      val submission = runAndWait(submissionQuery.get(testData.workspace, testData.submission1.submissionId)).get
 
       assert(submission.workflows.forall(_.status == WorkflowStatuses.Failed))
 
@@ -351,7 +351,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
   }
@@ -377,7 +377,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val expectedOut = Map(AttributeName("library", "foo") -> AttributeString("result"))
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes ++ expectedOut))) {
       subUpdateEntityLibraryOutputs.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
 
@@ -400,7 +400,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val expectedIn = Map(AttributeName("library", "bar") -> AttributeString("result2"))
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes ++ expectedOut ++ expectedIn))) {
       subUpdateEntityLibraryOutputs.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
 
@@ -414,7 +414,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("abc"), AttributeString("def"))))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
   }
@@ -427,7 +427,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("abc"), AttributeString("def"))))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
 
@@ -437,7 +437,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("123"), AttributeString("456"), AttributeString("789"))))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
   }
@@ -450,7 +450,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("abc"), AttributeString("def"), AttributeString("xyz"))))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
 
@@ -459,7 +459,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("123"))))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
   }
@@ -518,7 +518,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
   }
@@ -556,7 +556,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     // only the bound attribute was updated
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + expectedAttributeUpdate))) {
       subUnboundExpr.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
 
@@ -609,7 +609,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       // the entity was not updated
       assertResult(Seq(testData.indiv1)) {
         subBadExprs.workflows.map { wf =>
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+          runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
         }
       }
 
@@ -673,7 +673,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         expectMsgClass(5 seconds, classOf[Terminated])
 
         assertResult(SubmissionStatuses.Done) {
-          runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submissionUpdateEntity.submissionId)).get.status
+          runAndWait(submissionQuery.get(testData.workspace, testData.submissionUpdateEntity.submissionId)).get.status
         }
       } { capturedMetrics =>
         capturedMetrics should contain (expectedSubmissionStatusMetric(testData.workspace, SubmissionStatuses.Done))
@@ -690,7 +690,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         expectMsgClass(5 seconds, classOf[Terminated])
 
         assertResult(SubmissionStatuses.Aborted) {
-          runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submissionUpdateEntity.submissionId)).get.status
+          runAndWait(submissionQuery.get(testData.workspace, testData.submissionUpdateEntity.submissionId)).get.status
         }
       } { capturedMetrics =>
         capturedMetrics should contain (expectedSubmissionStatusMetric(testData.workspace, SubmissionStatuses.Aborted))
@@ -702,7 +702,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitorRef = createSubmissionMonitorActor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString))
     watch(monitorRef)
 
-    runAndWait(submissionQuery.delete(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId))
+    runAndWait(submissionQuery.delete(testData.workspace, testData.submission1.submissionId))
 
     expectMsgClass(5 seconds, classOf[Terminated])
   }
@@ -722,7 +722,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       expectMsgClass(5 seconds, classOf[Terminated])
 
       assertResult(SubmissionStatuses.Done) {
-        runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submissionNoRootEntity.submissionId)).get.status
+        runAndWait(submissionQuery.get(testData.workspace, testData.submissionNoRootEntity.submissionId)).get.status
       }
     } { capturedMetrics =>
       capturedMetrics should contain (expectedSubmissionStatusMetric(testData.workspace, SubmissionStatuses.Done))

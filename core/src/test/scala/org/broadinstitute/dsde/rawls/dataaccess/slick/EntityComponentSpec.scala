@@ -15,13 +15,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listEntities(SlickWorkspaceContext(workspace)))
+    val ents = runAndWait(entityQuery.listEntities(workspace))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
   // entity and attribute counts, non-deleted only
   def countActiveEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listActiveEntities(SlickWorkspaceContext(workspace)))
+    val ents = runAndWait(entityQuery.listActiveEntities(workspace))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
@@ -29,7 +29,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
     runAndWait(workspaceQuery.save(workspace))
-    val workspaceContext = SlickWorkspaceContext(workspace)
+    val workspaceContext = workspace
 
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
 
@@ -417,8 +417,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     override def save() = {
       DBIOAction.seq(
         workspaceQuery.save(workspace),
-        entityQuery.save(SlickWorkspaceContext(workspace), aliquot1),
-        entityQuery.save(SlickWorkspaceContext(workspace), sample1))
+        entityQuery.save(workspace, aliquot1),
+        entityQuery.save(workspace, sample1))
     }
 
   }
@@ -473,7 +473,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
             AttributeName.withDefaultNS("control") -> AttributeEntityReference("Sample", "sample1")))
         runAndWait(entityQuery.save(context, pair2))
         assert {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined
+          runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
         }
       }
 
@@ -488,7 +488,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     withWorkspaceContext(testData.workspace) { context =>
       runAndWait(entityQuery.save(context, pair2))
       assert {
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined
+        runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
       }
     }
 
@@ -496,10 +496,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val count = 20
       runMultipleAndWait(count)(_ => entityQuery.save(context, pair2))
       assert {
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined
+        runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
       }
       assertResult(count+1) {
-        runAndWait(entityQuery.findEntityByName(SlickWorkspaceContext(testData.workspace).workspaceIdAsUUID, "Pair", "pair2").map(_.version).result).head
+        runAndWait(entityQuery.findEntityByName(testData.workspace.workspaceIdAsUUID, "Pair", "pair2").map(_.version).result).head
       }
     }
   }
@@ -875,7 +875,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
     runAndWait(workspaceQuery.save(workspace))
-    val workspaceContext = SlickWorkspaceContext(workspace)
+    val workspaceContext = workspace
 
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
 

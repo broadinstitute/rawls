@@ -5,11 +5,11 @@ import java.sql.Timestamp
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionParser
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeString, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeString, Workspace}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.jdbc.MySQLProfile.api._
 
-case class LocalEntityExpressionContext(workspaceContext: SlickWorkspaceContext, rootEntities: Option[Seq[EntityRecord]], transactionId: String) {
+case class LocalEntityExpressionContext(workspaceContext: Workspace, rootEntities: Option[Seq[EntityRecord]], transactionId: String) {
   def rootEntityNames(): Seq[String] = rootEntities match {
     case Some(entities) => entities.map(_.name)
     case None => Seq("")
@@ -181,7 +181,7 @@ trait LocalEntityExpressionParser extends ExpressionParser[ReadAction, LocalEnti
 
     attributeName match {
       case Attributable.nameReservedAttribute | Attributable.workspaceIdAttribute =>
-        DBIO.successful( context.rootEntityNames().map( _ -> Seq(AttributeString(context.workspaceContext.workspace.name))).toMap )
+        DBIO.successful( context.rootEntityNames().map( _ -> Seq(AttributeString(context.workspaceContext.name))).toMap )
       case Attributable.entityTypeReservedAttribute => DBIO.successful( context.rootEntityNames().map( _ -> Seq(AttributeString(Attributable.workspaceEntityType))).toMap )
     }
   }

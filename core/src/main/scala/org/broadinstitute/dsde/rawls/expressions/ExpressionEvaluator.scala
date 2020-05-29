@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.model.{AttributeValue, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.model.{AttributeValue, Workspace}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -18,7 +18,7 @@ object ExpressionEvaluator {
     }
   }
 
-  def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: SlickWorkspaceContext, rootType: String, rootName: String)
+  def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: Workspace, rootType: String, rootName: String)
                                    (op: ExpressionEvaluator => ReadWriteAction[R])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
 
@@ -29,7 +29,7 @@ object ExpressionEvaluator {
 }
 
 class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEntities: Option[Seq[EntityRecord]]) {
-  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
+  def evalFinalAttribute(workspaceContext: Workspace, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
     import slickEvaluator.parser.driver.api._
 
     JsonExpressionEvaluator.evaluate(expression) match {
@@ -45,7 +45,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
     }
   }
 
-  def evalFinalEntity(workspaceContext: SlickWorkspaceContext, expression:String): ReadWriteAction[Iterable[EntityRecord]] = {
+  def evalFinalEntity(workspaceContext: Workspace, expression:String): ReadWriteAction[Iterable[EntityRecord]] = {
     //entities have to be proper expressions, not JSON-y
     slickEvaluator.evalFinalEntity(workspaceContext, expression)
   }

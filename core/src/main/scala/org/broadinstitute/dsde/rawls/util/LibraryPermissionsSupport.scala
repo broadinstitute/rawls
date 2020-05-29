@@ -17,14 +17,14 @@ trait LibraryPermissionsSupport extends RoleSupport {
   final val publishedFlag = AttributeName.withLibraryNS("published")
   final val discoverableWSAttribute = AttributeName.withLibraryNS("discoverableByGroups")
 
-  def withLibraryPermissions(ctx: SlickWorkspaceContext,
+  def withLibraryPermissions(ctx: Workspace,
                              operations: Seq[AttributeUpdateOperation],
                              userInfo: UserInfo,
                              isCurator: Boolean)
                             (op: => Future[Workspace]): Future[Workspace] = {
     val names = operations.map(attribute => attribute.name)
 
-    getPermissionChecker(names, isCurator, ctx.workspace.workspaceId)(op)
+    getPermissionChecker(names, isCurator, ctx.workspaceId)(op)
   }
 
   def getPermissionChecker(names: Seq[AttributeName], isCurator: Boolean, workspaceId: String): ((=> Future[Workspace]) => Future[Workspace]) = {

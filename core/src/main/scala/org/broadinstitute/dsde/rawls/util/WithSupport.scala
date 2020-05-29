@@ -19,7 +19,7 @@ trait MethodWiths {
 
   import dataSource.dataAccess.driver.api._
 
-  def withMethodConfig[T](workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, dataAccess: DataAccess)(op: (MethodConfiguration) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+  def withMethodConfig[T](workspaceContext: Workspace, methodConfigurationNamespace: String, methodConfigurationName: String, dataAccess: DataAccess)(op: (MethodConfiguration) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
     dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspaceContext}")))
       case Some(methodConfiguration) => op(methodConfiguration)

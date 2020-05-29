@@ -53,7 +53,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-        entityManager.resolveProvider(workspaceContext.workspace, userInfo).createEntity(entity)
+        entityManager.resolveProvider(workspaceContext, userInfo).createEntity(entity)
       }
     }
 
@@ -144,7 +144,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       // TODO: AS-321 insert the billing project, if present. May want to use EntityRequestArguments or other container class.
-      val entityRequestArguments = EntityRequestArguments(workspaceContext.workspace, userInfo, dataReference)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
 
       entityManager.resolveProvider(entityRequestArguments).entityTypeMetadata()
         .map(r => RequestComplete(StatusCodes.OK, r))
@@ -185,8 +185,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       getWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { sourceWorkspaceContext =>
         dataSource.inTransaction { dataAccess =>
           for {
-            sourceAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspace.workspaceId, userInfo))
-            destAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWorkspaceContext.workspace.workspaceId, userInfo))
+            sourceAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo))
+            destAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWorkspaceContext.workspaceId, userInfo))
             result <- authDomainCheck(sourceAD.toSet, destAD.toSet) flatMap { _ =>
               val entityNames = entityCopyDef.entityNames
               val entityType = entityCopyDef.entityType
@@ -258,9 +258,9 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
   }
 
-  private def withEntity[T](workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  private def withEntity[T](workspaceContext: Workspace, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {
     dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext.workspace.toWorkspaceName}")))
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext.toWorkspaceName}")))
       case Some(entity) => op(entity)
     }
   }

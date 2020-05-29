@@ -1058,7 +1058,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val allEntities = Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)
     val allMCs = Seq(methodConfig, methodConfig2, methodConfig3, methodConfigValid, methodConfigUnparseable, methodConfigNotAllSamples, methodConfigAttrTypeMixup, methodConfigEntityUpdate)
-    def saveAllMCs(context: SlickWorkspaceContext) = DBIO.sequence(allMCs map { mc => methodConfigurationQuery.create(context, mc) })
+    def saveAllMCs(context: Workspace) = DBIO.sequence(allMCs map { mc => methodConfigurationQuery.create(context, mc) })
 
     override def save() = {
       DBIO.seq(
@@ -1132,8 +1132,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     }
   }
 
-  def withWorkspaceContext[T](workspace: Workspace)(testCode: (SlickWorkspaceContext) => T): T = {
-    testCode(SlickWorkspaceContext(workspace))
+  def withWorkspaceContext[T](workspace: Workspace)(testCode: (Workspace) => T): T = {
+    testCode(workspace)
   }
 
   def updateWorkflowExecutionServiceKey(execKey: String) = {

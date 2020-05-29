@@ -454,7 +454,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
     else {
       DBIO.sequence(entityUpdates map { entityUpd =>
-        dataAccess.entityQuery.saveEntityPatch(SlickWorkspaceContext(workspace), entityUpd.entityRef, entityUpd.upserts, Seq())
+        dataAccess.entityQuery.saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, Seq())
       })
     }
   }
@@ -510,7 +510,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       for {
         wfStatuses <- dataAccess.workflowQuery.countWorkflowsForSubmissionByQueueStatus(submissionId)
         workspace <- getWorkspace(dataAccess).map(_.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found")))
-        subStatuses <- dataAccess.submissionQuery.countByStatus(SlickWorkspaceContext(workspace))
+        subStatuses <- dataAccess.submissionQuery.countByStatus(workspace)
       } yield {
         val workflowStatuses = wfStatuses.map { case (k, v) => WorkflowStatuses.withName(k) -> v }
         val submissionStatuses = subStatuses.map { case (k, v) => SubmissionStatuses.withName(k) -> v }

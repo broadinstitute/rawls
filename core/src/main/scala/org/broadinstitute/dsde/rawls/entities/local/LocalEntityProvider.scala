@@ -5,12 +5,12 @@ import com.typesafe.scalalogging.LazyLogging
 import cromwell.client.model.ToolInputParameter
 import cromwell.client.model.ValueType.TypeNameEnum
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeNull, AttributeValue, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson, Entity, EntityTypeMetadata, ErrorReport, SlickWorkspaceContext, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeNull, AttributeValue, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson, Entity, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
 import org.broadinstitute.dsde.rawls.util.{CollectionUtils, EntitySupport}
 import spray.json.JsArray
 
@@ -26,7 +26,7 @@ class LocalEntityProvider(workspace: Workspace, protected val dataSource: SlickD
 
   import dataSource.dataAccess.driver.api._
 
-  private val workspaceContext = SlickWorkspaceContext(workspace)
+  private val workspaceContext = workspace
 
   override def entityTypeMetadata(): Future[Map[String, EntityTypeMetadata]] = {
     dataSource.inTransaction { dataAccess =>
@@ -45,7 +45,7 @@ class LocalEntityProvider(workspace: Workspace, protected val dataSource: SlickD
 
   override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = ???
 
-  override def evaluateExpressions(workspaceContext: SlickWorkspaceContext, expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]] = {
+  override def evaluateExpressions(workspaceContext: Workspace, expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]] = {
     dataSource.inTransaction { dataAccess =>
       withEntityRecsForExpressionEval(expressionEvaluationContext, workspaceContext, dataAccess) { jobEntityRecs =>
         //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
@@ -60,7 +60,7 @@ class LocalEntityProvider(workspace: Workspace, protected val dataSource: SlickD
   override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator(dataSource)
 
 
-  protected[local] def evaluateExpressionsInternal(workspaceContext: SlickWorkspaceContext, inputs: Set[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+  protected[local] def evaluateExpressionsInternal(workspaceContext: Workspace, inputs: Set[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
     val entityNames = entities match {

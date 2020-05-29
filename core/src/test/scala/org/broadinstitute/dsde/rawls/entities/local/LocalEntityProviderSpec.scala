@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
-import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, MethodConfiguration, SlickWorkspaceContext, SubmissionValidationValue, WDL}
+import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, MethodConfiguration, Workspace, SubmissionValidationValue, WDL}
 import org.scalatest.{Matchers, WordSpecLike}
 
 import scala.collection.immutable.Map
@@ -14,10 +14,10 @@ class LocalEntityProviderSpec extends WordSpecLike with Matchers with TestDriver
   import driver.api._
 
   //Test harness to call resolveInputsForEntities without having to go via the WorkspaceService
-  def testResolveInputs(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: WDL, dataAccess: DataAccess)
+  def testResolveInputs(workspaceContext: Workspace, methodConfig: MethodConfiguration, entity: Entity, wdl: WDL, dataAccess: DataAccess)
                        (implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
 
-    val localEntityProvider = new LocalEntityProvider(workspaceContext.workspace, slickDataSource)
+    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource)
 
     dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, entity.entityType, entity.name).result flatMap { entityRecs =>
       methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
@@ -34,7 +34,7 @@ class LocalEntityProviderSpec extends WordSpecLike with Matchers with TestDriver
 
   "LocalEntityProvider" should {
     "resolve method config inputs" in withConfigData {
-      val context = SlickWorkspaceContext(workspace)
+      val context = workspace
 
       runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
         Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgNameWithWfName)))
@@ -62,14 +62,14 @@ class LocalEntityProviderSpec extends WordSpecLike with Matchers with TestDriver
     }
 
     "resolve empty lists into AttributeEmptyLists" in withConfigData {
-      val context = SlickWorkspaceContext(workspace)
+      val context = workspace
 
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayNameWithWfName)))
     }
 
     "unpack AttributeValueRawJson into WDL-arrays" in withConfigData {
-      val context = SlickWorkspaceContext(workspace)
+      val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonDoubleArray, sampleSet2, doubleArrayWdl, this))
       val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
@@ -81,7 +81,7 @@ class LocalEntityProviderSpec extends WordSpecLike with Matchers with TestDriver
     }
 
     "unpack AttributeValueRawJson into optional WDL-arrays" in withConfigData {
-      val context = SlickWorkspaceContext(workspace)
+      val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonDoubleArray, sampleSet2, optionalDoubleArrayWdl, this))
       val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
@@ -93,7 +93,7 @@ class LocalEntityProviderSpec extends WordSpecLike with Matchers with TestDriver
     }
 
     "unpack AttributeValueRawJson into lists-of WDL-arrays" in withConfigData {
-      val context = SlickWorkspaceContext(workspace)
+      val context = workspace
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonTripleArray, sampleSet2, tripleArrayWdl, this))
       val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>

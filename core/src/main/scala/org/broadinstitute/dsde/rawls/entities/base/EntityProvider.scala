@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SlickWorkspaceContext, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, Workspace, SubmissionValidationEntityInputs}
 
 import scala.concurrent.Future
 
@@ -16,7 +16,7 @@ trait EntityProvider {
 
   def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
 
-  def evaluateExpressions(workspaceContext: SlickWorkspaceContext, expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]]
+  def evaluateExpressions(workspaceContext: Workspace, expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]]
 
   def expressionValidator: ExpressionValidator
 

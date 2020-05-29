@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{SlickWorkspaceContext, _}
+import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcProfile}
@@ -115,18 +115,18 @@ trait SubmissionComponent {
      */
 
     /* gets a submission */
-    def get(workspaceContext: SlickWorkspaceContext, submissionId: String): ReadAction[Option[Submission]] = {
+    def get(workspaceContext: Workspace, submissionId: String): ReadAction[Option[Submission]] = {
       loadSubmission(UUID.fromString(submissionId))
     }
 
     /* lists all submissions in a workspace */
-    def list(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[Submission]] = {
+    def list(workspaceContext: Workspace): ReadAction[Seq[Submission]] = {
       findByWorkspaceId(workspaceContext.workspaceIdAsUUID).result.flatMap(recs => DBIO.sequence(recs.map{ rec =>
         loadSubmission(rec.id) map(sub => sub.get)
       }))
     }
 
-    def listWithSubmitter(workspaceContext: SlickWorkspaceContext): ReadWriteAction[Seq[SubmissionListResponse]] = {
+    def listWithSubmitter(workspaceContext: Workspace): ReadWriteAction[Seq[SubmissionListResponse]] = {
       val query = for {
         (submissionRec, entityRec) <- findByWorkspaceId(workspaceContext.workspaceIdAsUUID) joinLeft entityQuery on(_.submissionEntityId === _.id)
         methodConfigRec <- methodConfigurationQuery if (submissionRec.methodConfigurationId === methodConfigRec.id)
@@ -153,7 +153,7 @@ trait SubmissionComponent {
       }
     }
 
-    def countByStatus(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
+    def countByStatus(workspaceContext: Workspace): ReadAction[Map[String, Int]] = {
       filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).groupBy(s => s.status).map { case (status, submissions) =>
         (status, submissions.length)
       }.result map { result =>
@@ -162,7 +162,7 @@ trait SubmissionComponent {
     }
 
     /* creates a submission and associated workflows in a workspace */
-    def create(workspaceContext: SlickWorkspaceContext, submission: Submission)(implicit submissionStatusCounter: SubmissionStatus => Counter, wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Submission] = {
+    def create(workspaceContext: Workspace, submission: Submission)(implicit submissionStatusCounter: SubmissionStatus => Counter, wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Submission] = {
 
       def saveSubmissionWorkflows(workflows: Seq[Workflow]) = {
         workflowQuery.createWorkflows(workspaceContext, UUID.fromString(submission.submissionId), workflows)
@@ -202,7 +202,7 @@ trait SubmissionComponent {
     }
 
     /* deletes a submission and all associated records */
-    def delete(workspaceContext: SlickWorkspaceContext, submissionId: String): ReadWriteAction[Boolean] = {
+    def delete(workspaceContext: Workspace, submissionId: String): ReadWriteAction[Boolean] = {
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submissionId))) flatMap {
         case None =>
           DBIO.successful(false)

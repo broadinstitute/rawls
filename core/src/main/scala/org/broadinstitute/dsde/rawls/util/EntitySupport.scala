@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord,
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, Workspace}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -18,7 +18,7 @@ trait EntitySupport {
   import dataSource.dataAccess.driver.api._
 
   //Finds a single entity record in the db.
-  def withSingleEntityRec[T](entityType: String, entityName: String, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def withSingleEntityRec[T](entityType: String, entityName: String, workspaceContext: Workspace, dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[T]): ReadWriteAction[T] = {
     val entityRec = dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, entityName).result
     entityRec flatMap { entities =>
       if (entities.isEmpty) {
@@ -31,10 +31,10 @@ trait EntitySupport {
     }
   }
 
-  def withAllEntities[T](workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess, entities: Seq[AttributeEntityReference])(op: (Seq[Entity]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def withAllEntities[T](workspaceContext: Workspace, dataAccess: DataAccess, entities: Seq[AttributeEntityReference])(op: (Seq[Entity]) => ReadWriteAction[T]): ReadWriteAction[T] = {
     val entityActions: Seq[ReadAction[Try[Entity]]] = entities map { e =>
       dataAccess.entityQuery.get(workspaceContext, e.entityType, e.entityName) map {
-        case None => Failure(new RawlsException(s"${e.entityType} ${e.entityName} does not exist in ${workspaceContext.workspace.toWorkspaceName}"))
+        case None => Failure(new RawlsException(s"${e.entityType} ${e.entityName} does not exist in ${workspaceContext.toWorkspaceName}"))
         case Some(entity) => Success(entity)
       }
     }
@@ -49,7 +49,7 @@ trait EntitySupport {
     }
   }
 
-  def withEntityRecsForExpressionEval[T](expressionEvaluationContext: ExpressionEvaluationContext, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess)(op: (Option[Seq[EntityRecord]]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def withEntityRecsForExpressionEval[T](expressionEvaluationContext: ExpressionEvaluationContext, workspaceContext: Workspace, dataAccess: DataAccess)(op: (Option[Seq[EntityRecord]]) => ReadWriteAction[T]): ReadWriteAction[T] = {
     if( expressionEvaluationContext.rootEntityType.isEmpty ) {
       op(None)
     } else {

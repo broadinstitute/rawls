@@ -2,11 +2,11 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{SlickWorkspaceContext, _}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats._
 import cats.implicits._
+import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 
@@ -59,7 +59,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     Seq.empty, Map.empty)
 
   "SubmissionComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+    val workspaceContext = testData.workspace
 
     runAndWait(submissionQuery.create(workspaceContext, submission3))
 
@@ -79,7 +79,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   }
 
   it should "save, get, list, and delete two submission statuses" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+    val workspaceContext = testData.workspace
 
     runAndWait(submissionQuery.create(workspaceContext, submission3))
 
@@ -105,7 +105,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   }
 
   it should "save and unmarshal listy input resolutions correctly" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+    val workspaceContext = testData.workspace
 
     runAndWait(submissionQuery.create(workspaceContext, submissionList))
 
@@ -115,7 +115,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   }
 
   it should "quietly marshal AttributeList(Seq()) input resolutions into AttributeEmptyList"  in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+    val workspaceContext = testData.workspace
 
     val turnedIntoAttrEmptyList = submissionListEmpty.copy(
       workflows = Seq(submissionListEmpty.workflows.head.copy(inputResolutions = inputResolutionsAttrEmptyList)))
@@ -128,7 +128,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   it should "save and unmarshal AttributeEmptyList input resolutions correctly"  in withDefaultTestDatabase {
     //This test passes because saving AttributeEmptyList gives us AttributeEmptyList back
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+    val workspaceContext = testData.workspace
 
       runAndWait(submissionQuery.create(workspaceContext, submissionAttrEmptyList))
     assertResult(Some(submissionAttrEmptyList)) {
@@ -137,7 +137,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   }
 
   it should "fail to delete submissions that don't exist" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+    val workspaceContext = testData.workspace
 
     val randomId = UUID.randomUUID()
 
@@ -146,7 +146,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   }
 
   it should "update a submission status" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+    val workspaceContext = testData.workspace
 
     runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Done))
 
@@ -156,7 +156,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   }
 
   it should "count submissions by their statuses" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+    val workspaceContext = testData.workspace
 
     // test data contains 5 submissions, all in "Submitted" state
     // update one of the submissions to "Done"
@@ -196,7 +196,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   }
 
   it should "unmarshal submission WorkflowFailureModes correctly" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspaceWorkflowFailureMode)
+    val workspaceContext = testData.workspaceWorkflowFailureMode
 
     assertResult(Some(testData.submissionWorkflowFailureMode)) {
       runAndWait(submissionQuery.get(workspaceContext, testData.submissionWorkflowFailureMode.submissionId))
