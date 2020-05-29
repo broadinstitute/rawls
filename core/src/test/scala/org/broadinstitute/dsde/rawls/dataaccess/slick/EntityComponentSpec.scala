@@ -5,7 +5,6 @@ import java.util.UUID
 
 import _root_.slick.dbio.DBIOAction
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
-import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 
 /**
@@ -114,9 +113,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(activeEntityCount2 + 1)(activeEntityCount3)
     assertResult(activeAttributeCount2)(activeAttributeCount3)
 
-    assertResult(entityCount3) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceId)) }
+    assertResult(entityCount3) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)) }
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "delete-me")) }
-    assertResult(0) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceId)) }
+    assertResult(0) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)) }
 
     val (entityCount4, attributeCount4) = countEntitiesAttrs(workspace)
     val (activeEntityCount4, activeAttributeCount4) = countActiveEntitiesAttrs(workspace)
@@ -293,7 +292,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "skip deleted entities when listing all entity types with their counts" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      val deleteSamples = entityQuery.findActiveEntityByType(context.workspaceId, "Sample").result flatMap { entityRecs =>
+      val deleteSamples = entityQuery.findActiveEntityByType(context.workspaceIdAsUUID, "Sample").result flatMap { entityRecs =>
         val deleteActions = entityRecs map { rec => entityQuery.hide(context, Seq(rec.toReference)) }
         DBIO.seq(deleteActions:_*)
       }
@@ -366,9 +365,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val id2 = 2   // arbitrary
 
       // count distinct misses rows with null columns, like this one
-      runAndWait(entityQueryWithInlineAttributes += EntityRecordWithInlineAttributes(id1, "test1", "null_attrs_type", context.workspaceId, 0, None, deleted = false, None))
+      runAndWait(entityQueryWithInlineAttributes += EntityRecordWithInlineAttributes(id1, "test1", "null_attrs_type", context.workspaceIdAsUUID, 0, None, deleted = false, None))
 
-      runAndWait(entityQueryWithInlineAttributes += EntityRecordWithInlineAttributes(id2, "test2", "blank_attrs_type", context.workspaceId, 0, Some(""), deleted = false, None))
+      runAndWait(entityQueryWithInlineAttributes += EntityRecordWithInlineAttributes(id2, "test2", "blank_attrs_type", context.workspaceIdAsUUID, 0, Some(""), deleted = false, None))
 
       val desiredTypeMetadata = Map[String, EntityTypeMetadata](
         "null_attrs_type" -> EntityTypeMetadata(1, "null_attrs_type_id", Seq()),
@@ -500,7 +499,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined
       }
       assertResult(count+1) {
-        runAndWait(entityQuery.findEntityByName(SlickWorkspaceContext(testData.workspace).workspaceId, "Pair", "pair2").map(_.version).result).head
+        runAndWait(entityQuery.findEntityByName(SlickWorkspaceContext(testData.workspace).workspaceIdAsUUID, "Pair", "pair2").map(_.version).result).head
       }
     }
   }

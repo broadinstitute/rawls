@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 
 /**
@@ -41,7 +40,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     //get the to-be-deleted method config record
-    val method = runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId,testData.methodConfig3.namespace, testData.methodConfig3.name).result)
+    val method = runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID,testData.methodConfig3.namespace, testData.methodConfig3.name).result)
 
     //assert that the result is unique (only one method config was returned)
     assertResult(1) {
@@ -76,7 +75,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   "MethodConfigurationComponent.upsert" should "in-place update a method config with incremented version" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
+    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
     val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
       prerequisites = None,
@@ -105,7 +104,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   "MethodConfigurationComponent.update" should "in-place update a method config with incremented version" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
+    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
     val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
       prerequisites = None,
@@ -146,7 +145,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigOldName))
 
-    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, methodConfigOldName.namespace, methodConfigOldName.name))).get.id
+    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, methodConfigOldName.namespace, methodConfigOldName.name))).get.id
 
     val changed = methodConfigOldName.copy(name = "newName")
 
@@ -193,7 +192,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigAlreadyThere))
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigAlreadyThere))
 
-    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, methodConfigToMove.namespace, methodConfigToMove.name))).get.id
+    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, methodConfigToMove.namespace, methodConfigToMove.name))).get.id
 
     val changed = methodConfigToMove.copy(name = "newName")
 

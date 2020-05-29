@@ -3,10 +3,10 @@ package org.broadinstitute.dsde.rawls.util
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadAction, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, SlickWorkspaceContext}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -19,7 +19,7 @@ trait EntitySupport {
 
   //Finds a single entity record in the db.
   def withSingleEntityRec[T](entityType: String, entityName: String, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    val entityRec = dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceId, entityType, entityName).result
+    val entityRec = dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, entityName).result
     entityRec flatMap { entities =>
       if (entities.isEmpty) {
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"No entity of type ${entityType} named ${entityName} exists in this workspace.")))

@@ -5,9 +5,8 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ExprEvalRecord, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{SlickWorkspaceContext, _}
 import org.scalatest.FunSuite
 
 import scala.collection.immutable.IndexedSeq
@@ -36,7 +35,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   }
 
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, expression: String) = {
-    entityQuery.findEntityByName(workspaceContext.workspaceId, entityType, entityName).result flatMap { entityRec =>
+    entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, entityName).result flatMap { entityRec =>
       ExpressionEvaluator.withNewExpressionEvaluator(this, Some(entityRec)) { evaluator =>
         evaluator.evalFinalAttribute(workspaceContext, expression)
       }
@@ -603,7 +602,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("extra data in entity attribute temp table should not mess things up") {
     withTestWorkspace { workspaceContext =>
       val action = for {
-        entityRecs <- this.entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceId).result
+        entityRecs <- this.entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID).result
         extraScratchRecord = ExprEvalRecord(entityRecs.tail.head.id, entityRecs.tail.head.name, "not a transaction id")
         _ <- this.exprEvalQuery += extraScratchRecord
         result <- evalFinalAttribute(workspaceContext, entityRecs.head.entityType, entityRecs.head.name, "this.name").transactionally

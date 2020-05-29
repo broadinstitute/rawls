@@ -4,7 +4,6 @@ import java.util.UUID
 
 import _root_.slick.dbio
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionContext
 import org.broadinstitute.dsde.rawls.model._
@@ -31,7 +30,7 @@ private[expressions] object SlickExpressionEvaluator {
     import parser.driver.api._
 
     //Find the root entity for the expression
-    val dbRootEntityRec = parser.entityQuery.findEntityByName(workspaceContext.workspaceId, rootType, rootName).result
+    val dbRootEntityRec = parser.entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, rootType, rootName).result
 
     //Sanity check that we've only got one, and then pass upwards
     dbRootEntityRec flatMap { rootEntityRec =>

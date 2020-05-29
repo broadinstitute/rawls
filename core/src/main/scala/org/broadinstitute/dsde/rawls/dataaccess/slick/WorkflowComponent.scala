@@ -9,7 +9,7 @@ import cats.instances.map._
 import cats.syntax.foldable._
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceId, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.dataaccess.ExecutionServiceId
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -94,7 +94,7 @@ trait WorkflowComponent {
     type WorkflowQueryWithInputResolutions = Query[(SubmissionValidationTable, SubmissionAttributeTable), (SubmissionValidationRecord, SubmissionAttributeRecord), Seq]
 
     def get(workspaceContext: SlickWorkspaceContext, submissionId: String, entityType: String, entityName: String): ReadAction[Option[Workflow]] = {
-      loadWorkflow(findWorkflowByEntity(UUID.fromString(submissionId), workspaceContext.workspaceId, entityType, entityName))
+      loadWorkflow(findWorkflowByEntity(UUID.fromString(submissionId), workspaceContext.workspaceIdAsUUID, entityType, entityName))
     }
 
     def get(id: Long): ReadAction[Option[Workflow]] = {
@@ -191,7 +191,7 @@ trait WorkflowComponent {
       }
 
       for {
-        entityRecs <- entityQuery.getEntityRecords(workspaceContext.workspaceId, workflows.flatMap(_.workflowEntity).toSet)
+        entityRecs <- entityQuery.getEntityRecords(workspaceContext.workspaceIdAsUUID, workflows.flatMap(_.workflowEntity).toSet)
         workflowRecsByEntity <- insertWorkflowRecs(submissionId, workflows, entityRecs)
         inputResolutionRecs <- insertInputResolutionRecs(submissionId, workflows, workflowRecsByEntity)
         _ <- insertInputResolutionAttributes(workflows, inputResolutionRecs)
@@ -496,7 +496,7 @@ trait WorkflowComponent {
 
     def findWorkflowsByWorkspace(workspaceContext: SlickWorkspaceContext): WorkflowQueryType = {
       for {
-        sub <- submissionQuery.findByWorkspaceId(workspaceContext.workspaceId)
+        sub <- submissionQuery.findByWorkspaceId(workspaceContext.workspaceIdAsUUID)
         wf <- filter(w => w.submissionId === sub.id)
       } yield wf
     }

@@ -3,9 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{SlickWorkspaceContext, _}
 import org.joda.time.DateTime
 import spray.json.{JsObject, JsString}
 

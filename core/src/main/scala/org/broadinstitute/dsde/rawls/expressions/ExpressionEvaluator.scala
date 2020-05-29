@@ -1,8 +1,7 @@
 package org.broadinstitute.dsde.rawls.expressions
 
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.model.AttributeValue
+import org.broadinstitute.dsde.rawls.model.{AttributeValue, SlickWorkspaceContext}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}

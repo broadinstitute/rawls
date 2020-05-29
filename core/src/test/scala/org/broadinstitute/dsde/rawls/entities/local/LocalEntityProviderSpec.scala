@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
-import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, MethodConfiguration, SubmissionValidationValue, WDL}
+import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, MethodConfiguration, SlickWorkspaceContext, SubmissionValidationValue, WDL}
 import org.scalatest.{Matchers, WordSpecLike}
 
 import scala.collection.immutable.Map
@@ -20,7 +19,7 @@ class LocalEntityProviderSpec extends WordSpecLike with Matchers with TestDriver
 
     val localEntityProvider = new LocalEntityProvider(workspaceContext.workspace, slickDataSource)
 
-    dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceId, entity.entityType, entity.name).result flatMap { entityRecs =>
+    dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, entity.entityType, entity.name).result flatMap { entityRecs =>
       methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
         case scala.util.Failure(exception) =>
           DBIO.failed(exception)

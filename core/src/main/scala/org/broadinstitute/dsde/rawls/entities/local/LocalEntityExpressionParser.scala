@@ -2,11 +2,10 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import java.sql.Timestamp
 
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionParser
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeString}
+import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeString, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.jdbc.MySQLProfile.api._
 
@@ -45,7 +44,7 @@ trait LocalEntityExpressionParser extends ExpressionParser[ReadAction, LocalEnti
     assert(shouldBeNone.isEmpty)
 
     val wsIdAndAttributeQuery = for {
-      workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
+      workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceIdAsUUID)
       attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === attrName.name && attribute.namespace === attrName.namespace
     } yield (workspace.id, attribute)
 
@@ -54,7 +53,7 @@ trait LocalEntityExpressionParser extends ExpressionParser[ReadAction, LocalEnti
       // unmarshalAttributes requires a structure of ((ws id, attribute rec), option[entity rec]) where
       // the optional entity rec is used for references. Since we know we are not dealing with a reference here
       // as this is the attribute final func, we can pass in None.
-      val attributesOption = workspaceAttributeQuery.unmarshalAttributes(wsIdAndAttributes.map((_, None))).get(context.workspaceContext.workspaceId)
+      val attributesOption = workspaceAttributeQuery.unmarshalAttributes(wsIdAndAttributes.map((_, None))).get(context.workspaceContext.workspaceIdAsUUID)
       val wsExprResult = attributesOption.map { attributes => Seq(attributes.getOrElse(attrName, AttributeNull)) }.getOrElse(Seq.empty)
 
       //Return the value of the expression once for each entity we wanted to evaluate this expression against!
@@ -66,7 +65,7 @@ trait LocalEntityExpressionParser extends ExpressionParser[ReadAction, LocalEnti
   protected override def workspaceEntityRefRootFunc(attrName: AttributeName)(context: LocalEntityExpressionContext): PipeType = {
     for {
       rootEntity <- exprEvalQuery if rootEntity.transactionId === context.transactionId
-      workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
+      workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceIdAsUUID)
       attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === attrName.name && attribute.namespace === attrName.namespace
       nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
     } yield (rootEntity.name, nextEntity)
@@ -197,7 +196,7 @@ trait LocalEntityExpressionParser extends ExpressionParser[ReadAction, LocalEnti
     assert(shouldBeNone.isEmpty)
 
     val query = for {
-      workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
+      workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceIdAsUUID)
       attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === attrName.name && attribute.namespace === attrName.namespace
       entity <- entityQuery if attribute.valueEntityRef === entity.id
     } yield entity

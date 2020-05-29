@@ -211,7 +211,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         // accessLevel, canCompute, canShare is specified, we have to get it.
         def accessLevelFuture(): Future[WorkspaceAccessLevels.WorkspaceAccessLevel] =
           if (options.contains("accessLevel") || options.contains("canCompute") || options.contains("canShare")) {
-            getMaximumAccessLevel(workspaceContext.workspaceId.toString)
+            getMaximumAccessLevel(workspaceContext.workspaceIdAsUUID.toString)
           } else {
             Future.successful(WorkspaceAccessLevels.NoAccess)
           }
@@ -231,24 +231,24 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             noFuture
           }
           def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
-            traceWithParent("getUserComputePermissions",s1)(_ =>  getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_)))
+            traceWithParent("getUserComputePermissions",s1)(_ =>  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel).map(Option(_)))
           } else {
             noFuture
           }
           def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
             //convoluted but accessLevel for both params because user could at most share with their own access level
-            traceWithParent("getUserSharePermissions",s1)(_ =>  getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_)))
+            traceWithParent("getUserSharePermissions",s1)(_ =>  getUserSharePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel, accessLevel).map(Option(_)))
           } else {
             noFuture
           }
           def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
-            traceWithParent("getUserCatalogPermissions",s1)(_ =>  getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_)))
+            traceWithParent("getUserCatalogPermissions",s1)(_ =>  getUserCatalogPermissions(workspaceContext.workspaceIdAsUUID.toString).map(Option(_)))
           } else {
             noFuture
           }
 
           def ownersFuture(): Future[Option[Set[String]]] = if (options.contains("owners")) {
-            traceWithParent("getWorkspaceOwners",s1)(_ =>  getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_)))
+            traceWithParent("getWorkspaceOwners",s1)(_ =>  getWorkspaceOwners(workspaceContext.workspaceIdAsUUID.toString).map(_.map(_.value)).map(Option(_)))
           } else {
             noFuture
           }
@@ -363,9 +363,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }}
 
         // Delete components of the workspace
-        _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceId)
-        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceId)
-        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceId)
+        _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
 
         // Delete the workspace
         _ <- dataAccess.workspaceQuery.delete(workspaceName)
@@ -385,9 +385,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       // Delete resource in sam outside of DB transaction
       _ <- workspaceContext.workspace.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
-      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo)
+      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo)
       // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
-      _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceId, OAuth2BearerToken(gcsDAO.getBucketServiceAccountCredential.getAccessToken), userInfo.accessToken)).recoverWith {
+      _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, OAuth2BearerToken(gcsDAO.getBucketServiceAccountCredential.getAccessToken), userInfo.accessToken)).recoverWith {
         //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
         case e: ApiException => {
           if(e.getCode != StatusCodes.NotFound.intValue) {
@@ -552,8 +552,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def getWorkspaceSubmissionStats(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceSubmissionStats] = {
     // listSubmissionSummaryStats works against a sequence of workspaces; we call it just for this one workspace
     dataAccess.workspaceQuery
-      .listSubmissionSummaryStats(Seq(workspaceContext.workspaceId))
-      .map {p => p.get(workspaceContext.workspaceId).get}
+      .listSubmissionSummaryStats(Seq(workspaceContext.workspaceIdAsUUID))
+      .map {p => p.get(workspaceContext.workspaceIdAsUUID).get}
   }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
@@ -1595,7 +1595,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       (workspace, maxAccessLevel) <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
-          DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)).map { accessLevel =>
+          DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceIdAsUUID.toString)).map { accessLevel =>
             (workspaceContext.workspace, accessLevel)
           }
         }
@@ -1897,7 +1897,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case Failure(_) =>
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission id ${submissionId} is not a valid submission id")))
       case Success(uuid) =>
-        dataAccess.submissionQuery.confirmInWorkspace(workspaceContext.workspaceId, uuid) flatMap {
+        dataAccess.submissionQuery.confirmInWorkspace(workspaceContext.workspaceIdAsUUID, uuid) flatMap {
           case None =>
             val report = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext.workspace.toWorkspaceName}")
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = report))

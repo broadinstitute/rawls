@@ -82,7 +82,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def dbId(ent: Entity): Long = runAndWait(entityQuery.getEntityRecords(SlickWorkspaceContext(testData.workspace).workspaceId, Set(ent.toReference))).head.id
+  def dbId(ent: Entity): Long = runAndWait(entityQuery.getEntityRecords(SlickWorkspaceContext(testData.workspace).workspaceIdAsUUID, Set(ent.toReference))).head.id
   def dbName(id: Long): String = runAndWait(entityQuery.getEntities(Seq(id))).head._2.name
 
   "EntityApi" should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>

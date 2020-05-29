@@ -3,8 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{SlickWorkspaceContext, _}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats._
 import cats.implicits._

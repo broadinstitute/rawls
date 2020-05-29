@@ -1,8 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SlickWorkspaceContext, SubmissionValidationEntityInputs}
 
 import scala.concurrent.Future
 
