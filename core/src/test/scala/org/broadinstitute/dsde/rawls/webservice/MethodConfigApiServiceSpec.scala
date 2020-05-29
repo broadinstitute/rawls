@@ -176,14 +176,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       }
   }
 
-  it should "return 400 if you try to create a method configuration that points to an unknown method" in withTestDataApiServices { services =>
+  it should "return 404 if you try to create a method configuration that points to an unknown method" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), None, Map(), Map(),
       AgoraMethod("dsde", "method_doesnt_exist", 1))
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest) {
+        assertResult(StatusCodes.NotFound) {
           status
         }
       }
