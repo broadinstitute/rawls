@@ -25,7 +25,7 @@ import org.scalatest.{FreeSpecLike, Matchers}
 import spray.json._
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -87,6 +87,17 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     mapper.registerModule(DefaultScalaModule)
 
     mapper.readTree(metadata).get("status").textValue()
+  }
+
+  def parseWorkflowOutputFromMetadata(metadata: String, outputField: String): String = {
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+
+    val metadataJson = mapper.readTree(metadata)
+    val outputsJson = metadataJson.get("outputs")
+    val outputFieldJson = Option(outputsJson.get(outputField))
+      .getOrElse(fail(s"Unable to find metadata output $outputField"))
+    outputFieldJson.asText()
   }
 
   // if these prove useful anywhere else, they should move into workbench-libs
@@ -467,6 +478,176 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             eventually {
               parseWorkflowStatusFromMetadata(Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)) should be("Succeeded")
             }
+          }
+        }
+      }
+    }
+
+    "should support running workflows with wdl structs" in {
+      implicit val token: AuthToken = ownerAuthToken
+
+      val privateMethod: Method = MethodData.SimpleMethod.copy(
+        methodName = s"${UUID.randomUUID()}-wdl_struct_test_method",
+        payload =
+          """version 1.0
+            |
+            |struct IndexedVcf {
+            |    File vcf
+            |    File vcf_idx
+            |}
+            |
+            |workflow test_count_variants {
+            |    input {
+            |        IndexedVcf indexedVcf
+            |        String interval
+            |    }
+            |
+            |    call count_variants {
+            |        input: indexedVcf = indexedVcf, interval = interval
+            |    }
+            |
+            |    output {
+            |        Int count = count_variants.count
+            |    }
+            |}
+            |
+            |task count_variants {
+            |    input {
+            |        IndexedVcf indexedVcf
+            |        String interval
+            |    }
+            |
+            |    command {
+            |        ln -s '~{indexedVcf.vcf}' '~{basename(indexedVcf.vcf)}'
+            |        ln -s '~{indexedVcf.vcf_idx}' '~{basename(indexedVcf.vcf_idx)}'
+            |
+            |        gatk \
+            |            CountVariants \
+            |            --intervals '~{interval}' \
+            |            --variant '~{basename(indexedVcf.vcf)}' | \
+            |        tail -n 1 > count.txt
+            |    }
+            |
+            |    output {
+            |        Int count = read_int("count.txt")
+            |    }
+            |
+            |    runtime {
+            |        docker: "broadinstitute/gatk:4.1.7.0"
+            |    }
+            |}
+            |""".stripMargin
+      )
+
+      withCleanBillingProject(owner) { projectName =>
+        withWorkspace(projectName, "rawls-wdl-struct") { workspaceName =>
+          withCleanUp {
+            Orchestration.methods.createMethod(privateMethod.creationAttributes)
+            register cleanUp Orchestration.methods.redact(privateMethod)
+
+            /*
+            HapMap is an old and very public project: https://en.wikipedia.org/wiki/International_HapMap_Project
+
+            The links below are using the GCP Cloud Life Sciences public datasets:
+            https://cloud.google.com/life-sciences/docs/resources/public-datasets
+
+            If someone at GCP pulls this copy of these reference files, there should be others public copies.
+            One example is the Broad's copy: gs://gcp-public-data--broad-references/hg38/v0/hapmap_3.3.hg38.vcf.gz
+
+            Also if/when we switch to multi-cloud, this file should be publicly available on other clouds, such as
+            https://registry.opendata.aws/broad-references/
+             */
+            val entityType = "participant"
+            val entityId = "hapmap_vcf"
+            val vcfPath =  "gs://genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz"
+            val vcfIndexPath =  "gs://genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz.tbi"
+
+            val entityTsv =
+              s"""|entity:${entityType}_id\tvcf_path\tvcf_index_path
+                  |$entityId\t$vcfPath\t$vcfIndexPath
+                  |""".stripMargin
+
+            val inputs = Map(
+              "test_count_variants.indexedVcf" ->
+                """{
+                  |  "vcf": this.vcf_path,
+                  |  "vcf_idx": this.vcf_index_path
+                  |}
+                  |""".stripMargin,
+              "test_count_variants.interval" -> """"chr20"""",
+            )
+
+            val outputs = Map(
+              "test_count_variants.count" -> "this.chr20_vcf_count",
+            )
+
+            Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+              wsNs = projectName,
+              wsName = workspaceName,
+              method = privateMethod,
+              configNamespace = SimpleMethodConfig.configNamespace,
+              configName = SimpleMethodConfig.configName,
+              methodConfigVersion = SimpleMethodConfig.snapshotId,
+              inputs = inputs,
+              outputs = outputs,
+              rootEntityType = entityType,
+            )
+
+            Orchestration.importMetaData(
+              ns = projectName,
+              wsName = workspaceName,
+              fileName = "entities",
+              fileContent = entityTsv,
+            )
+
+            // it currently takes ~ 5 min for google bucket read permissions to propagate.
+            // We can't launch a workflow until this happens.
+            // See https://github.com/broadinstitute/workbench-libs/pull/61
+            // and https://broadinstitute.atlassian.net/browse/GAWB-3327
+
+            Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+            val submissionId = Rawls.submissions.launchWorkflow(
+              billingProject = projectName,
+              workspaceName = workspaceName,
+              methodConfigurationNamespace = SimpleMethodConfig.configNamespace,
+              methodConfigurationName = SimpleMethodConfig.configName,
+              entityType = entityType,
+              entityName = entityId,
+              expression = "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false,
+            )
+            // clean up: Abort submission
+            register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+
+            val submissionPatience = PatienceConfig(
+              timeout = scaled(Span(16, Minutes)),
+              interval = scaled(Span(30, Seconds)),
+            )
+            implicit val patienceConfig: PatienceConfig = submissionPatience
+
+            val workflowId = eventually {
+              val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+              val clue =
+                s"queue status: ${getQueueStatus()}, " +
+                s"submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
+              withClue(clue) {
+                workflows should not be (empty)
+                workflows.head
+              }
+            }
+
+            val notRunningMetadata = eventually {
+              val metadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)
+              val status = parseWorkflowStatusFromMetadata(metadata)
+              status should not be("Submitted")
+              status should not be("Running")
+              metadata
+            }
+
+            parseWorkflowStatusFromMetadata(notRunningMetadata) should be("Succeeded")
+            parseWorkflowOutputFromMetadata(notRunningMetadata, "test_count_variants.count") should be("123997")
           }
         }
       }
