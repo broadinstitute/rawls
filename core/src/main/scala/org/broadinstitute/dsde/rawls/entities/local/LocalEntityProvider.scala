@@ -5,16 +5,18 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
+import org.broadinstitute.dsde.rawls.entities.exceptions.DeleteEntitiesConflictException
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, ErrorReport, Workspace}
+import org.broadinstitute.dsde.rawls.util.EntitySupport
 
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * Terra default entity provider, powered by Rawls and Cloud SQL
  */
-class LocalEntityProvider(workspace: Workspace, dataSource: SlickDataSource)
+class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource)
                          (implicit protected val executionContext: ExecutionContext)
-  extends EntityProvider with LazyLogging {
+  extends EntityProvider with EntitySupport with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
 
@@ -35,5 +37,19 @@ class LocalEntityProvider(workspace: Workspace, dataSource: SlickDataSource)
     }
   }
 
-  override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = ???
+  // EntityApiServiceSpec has good test coverage for this api
+  override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = {
+    dataSource.inTransaction { dataAccess =>
+      // withAllEntities throws exception if some entities not found; passes through if all ok
+      withAllEntities(workspaceContext, dataAccess, entRefs) { entities =>
+        dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
+          if (referringEntities != entRefs.toSet)
+            throw new DeleteEntitiesConflictException(referringEntities)
+          else {
+            dataAccess.entityQuery.hide(workspaceContext, entRefs)
+          }
+        }
+      }
+    }
+  }
 }

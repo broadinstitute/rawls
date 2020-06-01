@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderBuilder
+import org.broadinstitute.dsde.rawls.entities.exceptions.DeleteEntitiesConflictException
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProviderBuilder
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -49,7 +50,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
   def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) = getEntity(workspaceName, entityType, entityName)
   def UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) = updateEntity(workspaceName, entityType, entityName, operations)
-  def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference]) = deleteEntities(workspaceName, entities)
+  def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference], dataReference: Option[String]) = deleteEntities(workspaceName, entities, dataReference)
   def RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) = renameEntity(workspaceName, entityType, entityName, newName)
   def EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) = evaluateExpression(workspaceName, entityType, entityName, expression)
   def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[String]) = entityTypeMetadata(workspaceName, dataReference)
@@ -96,19 +97,20 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference]): Future[PerRequestMessage] =
+  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[String]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withAllEntities(workspaceContext, dataAccess, entRefs) { entities =>
-          dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
-            if (referringEntities != entRefs.toSet)
-              DBIO.successful(RequestComplete(StatusCodes.Conflict, referringEntities))
-            else {
-              dataAccess.entityQuery.hide(workspaceContext, entRefs).map(_ => RequestComplete(StatusCodes.NoContent))
-            }
-          }
+
+      // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
+      // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
+      // EntityService constructor, or other higher-level method
+      val entityRequestArguments = EntityRequestArguments(workspaceContext.workspace, userInfo, dataReference)
+
+      entityManager.resolveProvider(entityRequestArguments).deleteEntities(entRefs)
+        .map(r => RequestComplete(StatusCodes.NoContent))
+        .recover {
+          case delEx: DeleteEntitiesConflictException => RequestComplete(StatusCodes.Conflict, delEx.referringEntities)
+          case ex => RequestComplete(StatusCodes.InternalServerError, ex)
         }
-      }
     }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =
