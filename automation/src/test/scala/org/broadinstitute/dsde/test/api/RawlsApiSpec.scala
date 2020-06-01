@@ -551,7 +551,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             The links below are using the GCP Cloud Life Sciences public datasets:
             https://cloud.google.com/life-sciences/docs/resources/public-datasets
 
-            If someone at GCP pulls this copy of these reference files, there should be others public copies.
+            If someone at GCP pulls this copy of these reference files, there should be other public copies.
             One example is the Broad's copy: gs://gcp-public-data--broad-references/hg38/v0/hapmap_3.3.hg38.vcf.gz
 
             Also if/when we switch to multi-cloud, this file should be publicly available on other clouds, such as
@@ -600,7 +600,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
               fileContent = entityTsv,
             )
 
-            // it currently takes ~ 5 min for google bucket read permissions to propagate.
+            // It currently takes ~ 5 min for google bucket read permissions to propagate.
             // We can't launch a workflow until this happens.
             // See https://github.com/broadinstitute/workbench-libs/pull/61
             // and https://broadinstitute.atlassian.net/browse/GAWB-3327
@@ -618,7 +618,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
               useCallCache = false,
               deleteIntermediateOutputFiles = false,
             )
-            // clean up: Abort submission
+
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             val submissionPatience = PatienceConfig(
