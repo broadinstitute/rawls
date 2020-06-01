@@ -28,7 +28,7 @@ paths:
               $ref: '#/definitions/AttributeEntityReference'
         - $ref: '#/parameters/dataReferenceQueryParam'
         - $ref: '#/parameters/billingProjectQueryParam'
-  '/api/workspaces/{namespace}/{name}/snapshots':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots':
     post:
       responses:
         '201':
@@ -49,7 +49,7 @@ paths:
       summary: Create a snapshot
       operationId: createDataRepoSnapshot
       parameters:
-        - $ref: '#/parameters/namespacePathParam'
+        - $ref: '#/parameters/workspaceNamespacePathParam'
         - $ref: '#/parameters/workspaceNamePathParam'
         - in: body
           description: Reference to the Data Repo snapshot
@@ -77,8 +77,8 @@ paths:
       summary: List snapshots
       operationId: enumerateDataRepoSnapshot
       parameters:
-        - $ref: '#/parameters/namespacePathParam'
-        - $ref: '#/parameters/namePathParam'
+        - $ref: '#/parameters/workspaceNamespacePathParam'
+        - $ref: '#/parameters/workspaceNamePathParam'
         - in: query
           name: offset
           description: The number of items to skip before starting to collect the result set.
@@ -95,7 +95,7 @@ paths:
           - email
           - profile
 
-  '/api/workspaces/{namespace}/{name}/snapshots/{snapshotId}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}':
     get:
       responses:
         '200':
@@ -116,8 +116,8 @@ paths:
       summary: Get a snapshot
       operationId: getDataRepoSnapshot
       parameters:
-        - $ref: '#/parameters/namespacePathParam'
-        - $ref: '#/parameters/namePathParam'
+        - $ref: '#/parameters/workspaceNamespacePathParam'
+        - $ref: '#/parameters/workspaceNamePathParam'
         - $ref: '#/parameters/snapshotIdPathParam'
     delete:
       responses:
@@ -137,8 +137,8 @@ paths:
       summary: Delete a snapshot
       operationId: deleteDataRepoSnapshot
       parameters:
-        - $ref: '#/parameters/namespacePathParam'
-        - $ref: '#/parameters/namePathParam'
+        - $ref: '#/parameters/workspaceNamespacePathParam'
+        - $ref: '#/parameters/workspaceNamePathParam'
         - $ref: '#/parameters/snapshotIdPathParam'
       security:
         - authorization:
@@ -158,18 +158,6 @@ parameters:
     description: Data reference name to query for entity metadata
     name: dataReference
     required: false
-    type: string
-  namespacePathParam:
-    in: path
-    description: The workspace namespace
-    name: namespace
-    required: true
-    type: string
-  namePathParam:
-    in: path
-    description: The workspace name
-    name: name
-    required: true
     type: string
   snapshotIdPathParam:
     in: path
