@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
@@ -39,7 +39,15 @@ import scala.util.Try
  * Time: 11:06
  */
 //noinspection TypeAnnotation,ScalaUnusedSymbol
-class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with MockitoTestUtils with StatsDTestUtils {
+class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
+  with FlatSpecLike
+  with Matchers
+  with TestDriverComponent
+  with BeforeAndAfterAll
+  with Eventually
+  with MockitoTestUtils
+  with StatsDTestUtils
+  with RawlsTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("SubmissionSpec"))
@@ -511,6 +519,73 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
     assert( submission.workflows.forall(_.status == WorkflowStatuses.Queued) )
+  }
+
+  it should "return a successful Submission when given an wdl struct entity expression that evaluates to a set of entities" in withWorkspaceService { workspaceService =>
+    val sample1 = Entity("sample1", "Sample", Map(
+      AttributeName.withDefaultNS("participant_id") -> AttributeNumber(101),
+      AttributeName.withDefaultNS("sample_name") -> AttributeString("sample1"),
+    ))
+    val sample2 = Entity("sample2", "Sample", Map(
+      AttributeName.withDefaultNS("participant_id") -> AttributeNumber(102),
+      AttributeName.withDefaultNS("sample_name") -> AttributeString("sample2"),
+    ))
+    val sample3 = Entity("sample3", "Sample", Map(
+      AttributeName.withDefaultNS("participant_id") -> AttributeNumber(103),
+      AttributeName.withDefaultNS("sample_name") -> AttributeString("sample3"),
+    ))
+    val sample4 = Entity("sample4", "Sample", Map(
+      AttributeName.withDefaultNS("participant_id") -> AttributeNumber(104),
+      AttributeName.withDefaultNS("sample_name") -> AttributeString("sample4"),
+    ))
+
+    val sset = Entity("testset6", "SampleSet",
+      Map(
+        AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
+          sample1.toReference,
+          sample2.toReference,
+          sample3.toReference,
+          sample4.toReference
+        ))
+      ))
+
+    val expectedInputResolutions = Seq(
+      AttributeValueRawJson("""{"id":101,"sample_name":"sample1"}"""),
+      AttributeValueRawJson("""{"id":102,"sample_name":"sample2"}"""),
+      AttributeValueRawJson("""{"id":103,"sample_name":"sample3"}"""),
+      AttributeValueRawJson("""{"id":104,"sample_name":"sample4"}""")
+    )
+
+    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sample1))
+    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sample2))
+    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sample3))
+    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sample4))
+    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
+
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = "dsde",
+      methodConfigurationName = "WdlStructConfig",
+      entityType = Option(sset.entityType),
+      entityName = Option(sset.name),
+      expression = Option("this.samples"),
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+
+    val (status, newSubmissionReport) = rqComplete.response
+    assertResult(StatusCodes.Created) {
+      status
+    }
+
+    assert( newSubmissionReport.workflows.size == 4 )
+
+    checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
+
+    val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
+    val actualInputResolutions = submission.workflows.flatMap(_.inputResolutions.map(_.value.get))
+    assert( submission.workflows.forall(_.status == WorkflowStatuses.Queued) )
+    assertSameElements(expectedInputResolutions, actualInputResolutions)
   }
 
   it should "400 when given an entity expression that evaluates to an empty set of entities" in withWorkspaceService { workspaceService =>

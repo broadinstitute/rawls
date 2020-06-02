@@ -14,6 +14,7 @@
 $ git clone git@github.com:broadinstitute/rawls.git
 $ brew install git-secrets # if not already installed
 $ cd rawls
+$ sbt antlr4:antlr4Generate # Generates source code for IntellIJ IDEA
 $ cp -r hooks/* .git/hooks  #this step can be skipped if you use the rsync script to spin up locally
 $ chmod 755 .git/hooks/apply-git-secrets.sh #this step as well
 $ sbt clean compile test

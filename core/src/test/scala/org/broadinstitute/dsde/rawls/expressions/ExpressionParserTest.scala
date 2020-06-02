@@ -4,8 +4,8 @@ package org.broadinstitute.dsde.rawls.expressions
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ExprEvalRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ExprEvalRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.FunSuite
@@ -154,6 +154,42 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("sample1"))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.library:name"))
       }
+
+      // workspace library attribute references inside JSON
+
+      assertResult(Map("sampleWithLibraryNamespaceAttribute" -> TrySuccess(Seq(AttributeValueRawJson("""{"book": "arbitrary"}""")))), "JSON with single library entity attribute reference failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sampleWithLibraryNamespaceAttribute", """{"book": this.library:book}"""))
+      }
+
+      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeValueRawJson("""{"book": "sset1", "chapters": ["few", [1, 2, 3], [[1, 2, 3]]]}""")))), "JSON with multiple library entity attribute reference failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """{"book": this.library:name, "chapters": ["few", this.samples.library:chapter, [this.samples.library:chapter]]}"""))
+      }
+
+      // workspace library attribute references inside Array
+
+      assertResult(Map("sampleWithLibraryNamespaceAttribute" -> TrySuccess(Seq(AttributeString("string"), AttributeString("another string"), AttributeString("arbitrary")))), "array with single library entity attribute reference failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sampleWithLibraryNamespaceAttribute", """["string", "another string", this.library:book]"""))
+      }
+
+      val nestedArrayOutput1 = Seq(AttributeValueRawJson("""["string", "sset1", "number", [1, 2, 3]]"""))
+      assertResult(Map("sset1" -> TrySuccess(nestedArrayOutput1)), "nested array with multiple library entity attribute references failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """["string", this.library:name, "number", this.samples.library:chapter]"""))
+      }
+
+      val nestedArrayOutput2 = Seq(AttributeString("string"), AttributeString("sset1"), AttributeValueRawJson("""["chapters", [1, 2, 3]]"""))
+      assertResult(Map("sset1" -> TrySuccess(nestedArrayOutput2)), "nested array with multiple library entity attribute references failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """["string", this.library:name, ["chapters", this.samples.library:chapter]]"""))
+      }
+
+      val nestedArrayOutput3 = Seq(AttributeString("string"), AttributeString("sset1"), AttributeValueRawJson("""["chapters", ["numbers", 1, 2], [1, 2, 3]]"""))
+      assertResult(Map("sset1" -> TrySuccess(nestedArrayOutput3)), "nested array with multiple library entity attribute references failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """["string", this.library:name, ["chapters", ["numbers", 1, 2], this.samples.library:chapter]]"""))
+      }
+
+      val nestedArrayOutput4 = Seq(AttributeString("string"), AttributeString("sset1"), AttributeValueRawJson("""["chapters", ["numbers", 1, 2], [1, 2, 3]]"""), AttributeString("bool"), AttributeBoolean(false))
+      assertResult(Map("sset1" -> TrySuccess(nestedArrayOutput4)), "nested array with multiple library entity attribute references failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """["string", this.library:name, ["chapters", ["numbers", 1, 2], this.samples.library:chapter], "bool", false]"""))
+      }
     }
   }
 
@@ -290,6 +326,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       intercept[RawlsException] {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """this."foo""""))
       }
+
       intercept[RawlsException] {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """that."foo""""))
       }
@@ -301,6 +338,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       intercept[RawlsException] {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """unquoted"""))
       }
+
       intercept[RawlsException] {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """foo"bar""""))
       }
@@ -329,7 +367,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
     }
   }
 
-  test("array literals") {
+  test("raw array literals") {
     withTestWorkspace { workspaceContext =>
 
       assertResult(Map("sample1" ->TrySuccess(Seq())), "(empty array failed)") {
@@ -342,6 +380,10 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assertResult(Map("sample1" -> TrySuccess(Seq(AttributeNumber(1), AttributeBoolean(true), AttributeString("three"), AttributeNull))), "(heterogeneous value typed array failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """[1,true,"three", null]"""))
+      }
+
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeValueRawJson("""[1,true,["three", null]]""")))), "(nested heterogeneous typed array failed)") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """[1,true,["three", null]]"""))
       }
     }
   }
@@ -448,6 +490,57 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref."))
       }
+
+      // workspace library attribute references inside JSON
+
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeValueRawJson("""{"workspaceAttr": 10}""")))), "JSON with single workspace attribute reference failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """{"workspaceAttr": workspace.number}"""))
+      }
+
+      val nestedJsonExpr =
+        """
+          |{
+          |   "numberAttr": workspace.number,
+          |   "other" : {
+          |       "stringAttr": workspace.string,
+          |       "arrayOutputs": {
+          |           "values": workspace.values
+          |       }
+          |   }
+          |}
+        """.stripMargin
+      val nestedJsonEvaluatedOutput =
+        s"""
+           |{
+           |   "numberAttr": 10,
+           |   "other" : {
+           |       "stringAttr": "yep, it's a string",
+           |       "arrayOutputs": {
+           |           "values": ["another string", "true"]
+           |       }
+           |   }
+           |}
+        """.stripMargin
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeValueRawJson(s"""$nestedJsonEvaluatedOutput""")))), "nested JSON with multiple workspace attribute references failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", s"""$nestedJsonExpr"""))
+      }
+
+      // workspace library attribute references inside Array
+
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("string"), AttributeString("another string"), AttributeNumber(10)))), "array with single workspace attribute reference failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """["string", "another string", workspace.number]"""))
+      }
+
+      val nestedArrayOutput1 = Seq(AttributeValueRawJson("""["string", "yep, it's a string", "number", 10, true, ["values"], ["another string", "true"], false]"""))
+      assertResult(Map("sample1" -> TrySuccess(nestedArrayOutput1)), "nested array with multiple workspace attribute references failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """["string", workspace.string, "number", workspace.number, true, ["values"], workspace.values, false]"""))
+      }
+
+      val nestedArrayOutput2 = Seq(AttributeString("string"), AttributeString("yep, it's a string"), AttributeString("number"), AttributeNumber(10),
+        AttributeBoolean(true), AttributeValueRawJson("""["values", ["another string", "true"]]"""))
+      assertResult(Map("sample1" -> TrySuccess(nestedArrayOutput2)), "nested array with multiple workspace attribute references failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """["string", workspace.string, "number", workspace.number, true, ["values", workspace.values]]"""))
+      }
     }
   }
 
@@ -482,6 +575,65 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assertResult(Map("sample1" -> TrySuccess(Seq()))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:not_here"))
+      }
+
+      // workspace library attribute references inside JSON
+
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeValueRawJson("""{"author": "L. Ron Hubbard"}"""))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """{"author": workspace.library:author}"""))
+      }
+
+      val jsonExpr =
+        """
+          |{
+          |   "author": workspace.library:author,
+          |   "bookSeries": workspace.library:series
+          |}
+        """.stripMargin
+      val jsonEvaluatedOutput =
+        s"""
+           |{
+           |   "author": "L. Ron Hubbard",
+           |   "bookSeries":["The Fellowship of the Ring", "The Two Towers", "The Return of the King"]
+           |}
+        """.stripMargin
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeValueRawJson(s"""$jsonEvaluatedOutput"""))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", s"""$jsonExpr"""))
+      }
+
+      val nestedJsonExpr =
+        """
+          |{
+          |   "author": workspace.library:author,
+          |   "details" : {
+          |       "publication": "ABC Publication House",
+          |       "bookSeries": workspace.library:series
+          |   }
+          |}
+        """.stripMargin
+      val nestedJsonEvaluatedOutput =
+        s"""
+           |{
+           |   "author": "L. Ron Hubbard",
+           |   "details" : {
+           |       "publication": "ABC Publication House",
+           |       "bookSeries":["The Fellowship of the Ring", "The Two Towers", "The Return of the King"]
+           |   }
+           |}
+        """.stripMargin
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeValueRawJson(s"""$nestedJsonEvaluatedOutput"""))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", s"""$nestedJsonExpr"""))
+      }
+
+      // workspace library attribute references inside Array
+
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("book"), AttributeString("authorName"), AttributeString("L. Ron Hubbard")))), "array with single attribute reference failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """["book", "authorName", workspace.library:author]"""))
+      }
+
+      val nestedArrayOutput = Seq(AttributeValueRawJson("""["books", 3, "authorName", "L. Ron Hubbard", "series", ["The Fellowship of the Ring", "The Two Towers", "The Return of the King"]]"""))
+      assertResult(Map("sample1" -> TrySuccess(nestedArrayOutput)), "nested array with attribute references failed") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """["books", 3, "authorName", workspace.library:author, "series", workspace.library:series]"""))
       }
     }
   }

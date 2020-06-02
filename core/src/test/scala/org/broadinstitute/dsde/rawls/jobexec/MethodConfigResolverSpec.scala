@@ -138,6 +138,41 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         |}
       """.stripMargin)
 
+  val wdlStructInputWdl =
+    WdlSource("""
+      |version 1.0
+      |
+      |struct Participant {
+      |  Int id
+      |  String sample_name
+      |  Array[Int] samples
+      |}
+      |
+      |task do_something {
+      |  input {
+      |    Int id
+      |    String sample_name
+      |    Array[Int] samples
+      |  }
+      |
+      |  command {
+      |    echo "Hello participant ~{id} ~{sample_name} !"
+      |  }
+      |
+      |  runtime {
+      |    docker: "docker image"
+      |  }
+      |}
+      |
+      |workflow wdlStructWf {
+      |  input {
+      |    Participant obj
+      |  }
+      |
+      |  call do_something {input: id = obj.id, sample_name = obj.sample_name, samples = obj.samples}
+      |}
+    """.stripMargin)
+
   val badWdl = WdlSource("This is not a valid workflow [MethodConfigResolverSpec]")
 
   val littleWdlName = "w1"
@@ -155,6 +190,8 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val wdlVersionOneStringInputName = "s"
   val wdlVersionOneFileInputName = "f"
   val wdlVersionOneFileOutputName = "f2"
+  val wdlStructInput = "obj"
+  val wdlStructInputWithWfName = "wdlStructWf.obj"
 
   val littleWdlWorkflowDescriptionRequiredInput = makeToolInputParameter(intArgName, false, makeValueType("Int"), "Int")
   val littleWdlWorkflowDescriptionOptionalInput = makeToolInputParameter(intOptName, true, makeValueType("Int"), "Int?")
@@ -180,6 +217,9 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val wdlVersionOneWdlFileOutput  = makeToolOutputParameter(wdlVersionOneFileOutputName, makeValueType("File"), "File")
   val wdlVersionOneWdlWorkflowDescription = makeWorkflowDescription(wdlVersionOneWdlName, List(wdlVersionOneWdlStringInput, wdlVersionOneWdlFileInput), List(wdlVersionOneWdlFileOutput))
 
+  val requiredWdlStructWfInput = makeToolInputParameter(wdlStructInput, false, makeValueType("Object"), "Participant")
+  val wdlStructWfDescription = makeWorkflowDescription("wdlStructWf", List(requiredWdlStructWfInput), List.empty)
+
   mockCromwellSwaggerClient.workflowDescriptions += (littleWdl -> littleWdlWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl  -> requiredArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
@@ -187,6 +227,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl -> requiredTripleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (badWdl -> badWdlWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl -> wdlVersionOneWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (wdlStructInputWdl -> wdlStructWfDescription)
 
   val workspace = Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
@@ -219,6 +260,16 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
       sampleGood.toReference))))
 
+  val sampleForWdlStruct = Entity("sample3", "SampleSet",
+    Map(
+      AttributeName.withDefaultNS("participant_id") -> AttributeNumber(101),
+      AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
+        sampleGood.toReference,
+        sampleGood2.toReference
+      ))
+    )
+  )
+
   val dummyMethod = AgoraMethod("method_namespace", "test_method", 1)
 
   val configGood = MethodConfiguration("config_namespace", "configGood", Some("Sample"),
@@ -243,6 +294,12 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val configRawJsonTripleArray = MethodConfiguration("config_namespace", "configSample", Some("Sample"),
     None, Map(tripleIntArrayNameWithWfName -> AttributeString("this.samples.rawJsonDoubleArray")), Map.empty, dummyMethod)
 
+  val configArrayWithAttrRef = MethodConfiguration("config_namespace", "configSampleSet", Some("SampleSet"),
+    None, Map(doubleIntArrayNameWithWfName -> AttributeString("""[[10,11,12],this.samples.blah]""")), Map.empty, dummyMethod)
+
+  val configWdlStruct = MethodConfiguration("config_namespace", "configWdlStruct", Some("SampleSet"),
+    None, Map(wdlStructInputWithWfName -> AttributeString("""{"id":this.participant_id,"sample":"sample1","samples":this.samples.blah}""")), Map.empty, dummyMethod)
+
   class ConfigData extends TestData {
     override def save() = {
       DBIO.seq(
@@ -255,6 +312,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
             entityQuery.save(context, sampleSet),
             entityQuery.save(context, sampleSet2),
             entityQuery.save(context, sampleSet3),
+            entityQuery.save(context, sampleForWdlStruct),
             methodConfigurationQuery.create(context, configGood),
             methodConfigurationQuery.create(context, configMissingExpr),
             methodConfigurationQuery.create(context, configSampleSet)
@@ -341,6 +399,30 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
       wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
+    }
+
+    "unpack array input expression with attribute reference into WDL-arrays" in withConfigData {
+      val context = SlickWorkspaceContext(workspace)
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configArrayWithAttrRef, sampleSet2, doubleArrayWdl, this))
+      val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"w1.aint_array":[[10,11,12],[1,2]]}"""
+    }
+
+    "unpack wdl struct expression with attribute references into WDL Struct input" in withConfigData {
+      val context = SlickWorkspaceContext(workspace)
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configWdlStruct, sampleForWdlStruct, wdlStructInputWdl, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"id":101,"sample":"sample1","samples":[1,2]}}"""
     }
 
     "unpack AttributeValueRawJson into optional WDL-arrays" in withConfigData {

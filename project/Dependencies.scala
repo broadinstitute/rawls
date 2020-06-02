@@ -76,6 +76,7 @@ object Dependencies {
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
   val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
+  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
   val workbenchModelV  = "0.13-58c913d"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
@@ -204,6 +205,7 @@ object Dependencies {
     scalaCache,
     apacheCommonsIO,
     workspaceManager,
-    dataRepo
+    dataRepo,
+    antlrParser
   )
 }
