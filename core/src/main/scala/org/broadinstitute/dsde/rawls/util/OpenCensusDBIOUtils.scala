@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.util
 
+import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
-import io.opencensus.scala.Tracing._
 import slick.dbio.DBIO
 
 import scala.concurrent.ExecutionContext

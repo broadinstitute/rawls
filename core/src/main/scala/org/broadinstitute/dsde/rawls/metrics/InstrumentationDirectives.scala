@@ -3,11 +3,10 @@ package org.broadinstitute.dsde.rawls.metrics
 import java.util.concurrent.TimeUnit
 
 import akka.http.scaladsl.model.Uri
-import akka.http.scaladsl.server.{Directive0, PathMatcher, PathMatcher0}
-import akka.http.scaladsl.server.directives.BasicDirectives.mapResponse
-import akka.http.scaladsl.server.directives.BasicDirectives.extractRequest
-import akka.http.scaladsl.server.directives.PathDirectives._
 import akka.http.scaladsl.server.PathMatchers.Segment
+import akka.http.scaladsl.server.directives.BasicDirectives.{extractRequest, mapResponse}
+import akka.http.scaladsl.server.directives.PathDirectives._
+import akka.http.scaladsl.server.{Directive0, PathMatcher, PathMatcher0}
 
 trait InstrumentationDirectives extends RawlsInstrumented {
 

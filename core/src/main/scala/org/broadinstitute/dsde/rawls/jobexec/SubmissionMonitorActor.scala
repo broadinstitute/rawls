@@ -4,8 +4,8 @@ import java.util.UUID
 
 import akka.actor._
 import akka.pattern._
-import com.google.api.client.auth.oauth2.Credential
 import cats.implicits._
+import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException

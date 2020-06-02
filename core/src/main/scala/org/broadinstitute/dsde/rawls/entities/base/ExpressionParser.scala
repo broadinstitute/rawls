@@ -1,14 +1,13 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, AttributeString, ParsedMCExpressions}
-
-import scala.util.parsing.combinator.JavaTokenParsers
-import scala.language.higherKinds
-import scala.util.Try
-import scala.language.postfixOps
-import spray.json._
-import cats.syntax.functor._
 import cats.instances.try_._
+import cats.syntax.functor._
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, AttributeString, ParsedMCExpressions}
+import spray.json._
+
+import scala.language.{higherKinds, postfixOps}
+import scala.util.Try
+import scala.util.parsing.combinator.JavaTokenParsers
 
 /**
   *

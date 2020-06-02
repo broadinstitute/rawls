@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.metrics
 
 import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.Uri.Path.{Empty, Segment, Slash}
 import akka.http.scaladsl.server.PathMatcher
 import akka.http.scaladsl.server.PathMatcher.Matched
 import org.broadinstitute.dsde.rawls.metrics.Expansion.UriExpansion
 import org.broadinstitute.dsde.rawls.model.{RawlsEnumeration, WorkspaceName}
-import akka.http.scaladsl.model.Uri.Path.{Empty, Segment, Slash}
 
 import scala.annotation.tailrec
 

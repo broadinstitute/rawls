@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, Workspace, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, Workspace}
 
 import scala.concurrent.Future
 

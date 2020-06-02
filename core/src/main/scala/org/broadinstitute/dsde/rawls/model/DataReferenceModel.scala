@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
-import bio.terra.workspace.model.DataReferenceDescription
-import bio.terra.workspace.model.DataReferenceList
+import bio.terra.workspace.model.{DataReferenceDescription, DataReferenceList}
 import spray.json.DefaultJsonProtocol._
 
 import scala.collection.JavaConverters._

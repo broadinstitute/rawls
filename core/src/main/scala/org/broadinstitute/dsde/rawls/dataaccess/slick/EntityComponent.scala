@@ -3,12 +3,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 
-import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
+import org.broadinstitute.dsde.rawls.util.CollectionUtils
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
 import slick.jdbc.{GetResult, JdbcProfile}
-import akka.http.scaladsl.model.StatusCodes
 
 import scala.annotation.tailrec
 import scala.language.postfixOps

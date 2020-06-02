@@ -10,26 +10,26 @@ import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.model.{ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
-import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
+import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
 import org.broadinstitute.dsde.workbench.util.FutureSupport
-import spray.json._
 import spray.json.DefaultJsonProtocol._
+import spray.json._
 
 import scala.concurrent.duration.{FiniteDuration, _}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success}
-import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by mbemis on 10/17/19.

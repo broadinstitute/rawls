@@ -1,10 +1,10 @@
 package org.broadinstitute.dsde.rawls.util
 
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, _}
-import akka.http.scaladsl.model.StatusCodes
 
 import scala.collection.Set
 import scala.concurrent.Future

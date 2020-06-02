@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.util
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, Workspace}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
