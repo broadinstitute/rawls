@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
-import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
+import com.mysql.cj.jdbc.exceptions.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext

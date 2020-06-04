@@ -66,7 +66,7 @@ object Dependencies {
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats"                 % "0.9.0"
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
-  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
+  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.20"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "0.5.3"
