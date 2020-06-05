@@ -12,6 +12,10 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, U
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, TerraDataRepoSnapshotRequest}
+import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, TerraDataRepoSnapshotRequest}
+import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
 import spray.json._
 
 import scala.collection.JavaConverters._
@@ -60,14 +64,23 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     // get snapshot UUID from data reference name
-    // query data repo for snapshot schema
+    val snapshotId = lookupSnapshotForName(dataReferenceName)
+
+    // contact TDR to describe the snapshot
+    val snapshotModel = dataRepoDAO.getSnapshot(snapshotId, userInfo.accessToken)
+
     // extract table definition, with PK, from snapshot schema
-    // get pet service account key for this user
-    // determine project to be billed for the BQ job
-    // create BQ DAO instance
+    val tableModel = snapshotModel.getTables.asScala.find(_.getName == entityType) match {
+      case Some(table) => table
+      case None => throw new EntityTypeNotFoundException(entityType)
+    }
+
+    // get pet service account key for this user TODO: need Sam DAO for this?
+    // determine project to be billed for the BQ job TODO: need business logic from PO!
+    // create BQ DAO instance TODO: need new lib from broadinstitute/workbench-libs/pull/306
     // generate BQ SQL for this entity
     // execute BQ job
-    // return results
+    // return result
     throw new UnsupportedEntityOperationException("get entity not supported by this provider.")
   }
 
