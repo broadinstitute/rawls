@@ -491,7 +491,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       result <- dataSource.inTransaction({ dataAccess =>
 
         def workspaceSubmissionStatsFuture(): slick.ReadAction[Map[UUID, WorkspaceSubmissionStats]] = if (submissionStatsEnabled) {
-          dataAccess.workspaceQuery.listSubmissionSummaryStats(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
+          val resourceIds = accessLevelWorkspacePolicies.flatMap(p => Try(UUID.fromString(p.resourceId)).toOption)
+          dataAccess.workspaceQuery.listSubmissionSummaryStats(resourceIds.toSeq)
         } else {
           DBIO.from(Future(Map()))
         }
