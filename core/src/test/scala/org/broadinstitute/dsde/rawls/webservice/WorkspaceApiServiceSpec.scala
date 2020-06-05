@@ -513,6 +513,36 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "list workspaces even when a Sam resourceId has an invalid UUID" in withTestDataApiServicesMockitoSam { services =>
+
+      // override the call to Sam so that it returns non-uuid values in its resource id values
+      // note the second item in the set has a non-UUID as its resourceId. That policy should be ignored silently.
+      when(services.samDAO.getPoliciesForType(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[UserInfo]))
+          .thenReturn(
+            Future.successful(Set(
+              SamResourceIdWithPolicyName(testData.workspace.workspaceId, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
+              SamResourceIdWithPolicyName("invalid-uuid-" + testData.workspaceSubmittedSubmission.workspaceId, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
+              SamResourceIdWithPolicyName(testData.workspaceFailedSubmission.workspaceId, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+            ))
+          )
+
+      Get("/workspaces") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val dateTime = currentTime()
+        assertResult(Set(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testData.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 7)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testData.workspaceFailedSubmission.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+        )) {
+          responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+      }
+  }
+
   it should "return 404 Not Found on clone if the source workspace cannot be found" in withTestDataApiServices { services =>
     val cloneSrc = testData.workspace.copy(name = "test_nonexistent_1")
     val cloneDest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_nonexistent_2", Map.empty)
