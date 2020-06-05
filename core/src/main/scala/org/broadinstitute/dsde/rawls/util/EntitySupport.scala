@@ -84,4 +84,12 @@ trait EntitySupport {
       }
     }
   }
+
+  def withEntity[T](workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext.workspace.toWorkspaceName}")))
+      case Some(entity) => op(entity)
+    }
+  }
+
 }

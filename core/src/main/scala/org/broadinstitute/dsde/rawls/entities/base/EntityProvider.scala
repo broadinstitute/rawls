@@ -20,4 +20,5 @@ trait EntityProvider {
 
   def expressionValidator: ExpressionValidator
 
+  def getEntity(entityType: String, entityName: String): Future[Entity]
 }

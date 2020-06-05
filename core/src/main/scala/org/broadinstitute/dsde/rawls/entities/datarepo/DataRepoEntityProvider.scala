@@ -57,6 +57,20 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities not supported by this provider.")
 
+
+  override def getEntity(entityType: String, entityName: String): Future[Entity] = {
+    // get snapshot UUID from data reference name
+    // query data repo for snapshot schema
+    // extract table definition, with PK, from snapshot schema
+    // get pet service account key for this user
+    // determine project to be billed for the BQ job
+    // create BQ DAO instance
+    // generate BQ SQL for this entity
+    // execute BQ job
+    // return results
+    throw new UnsupportedEntityOperationException("get entity not supported by this provider.")
+  }
+
   // not marked as private to ease unit testing
   def lookupSnapshotForName(dataReferenceName: String): UUID = {
     // contact WSM to retrieve the data reference specified in the request

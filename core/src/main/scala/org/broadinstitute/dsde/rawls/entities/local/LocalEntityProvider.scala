@@ -64,7 +64,6 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]] = {
     dataSource.inTransaction { dataAccess =>
       withEntityRecsForExpressionEval(expressionEvaluationContext, workspace, dataAccess) { jobEntityRecs =>
@@ -155,4 +154,13 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
     SubmissionValidationValue(attr, None, inputName)
   }
+
+  override def getEntity(entityType: String, entityName: String): Future[Entity] = {
+    dataSource.inTransaction { dataAccess =>
+      withEntity(workspaceContext, entityType, entityName, dataAccess) {
+        entity => DBIO.successful(entity)
+      }
+    }
+  }
+
 }

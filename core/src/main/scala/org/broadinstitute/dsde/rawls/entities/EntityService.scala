@@ -4,7 +4,6 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DeleteEntitiesConflictException
@@ -252,19 +251,12 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     *
     * @param entity to update
     * @param operations sequence of operations
-    * @throws AttributeNotFoundException when removing from a list attribute that does not exist
+    * @throws org.broadinstitute.dsde.rawls.workspace.AttributeNotFoundException when removing from a list attribute that does not exist
     * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
     * @return the updated entity
     */
   def applyOperationsToEntity(entity: Entity, operations: Seq[AttributeUpdateOperation]): Entity = {
     entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
-  }
-
-  private def withEntity[T](workspaceContext: Workspace, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext.toWorkspaceName}")))
-      case Some(entity) => op(entity)
-    }
   }
 
 }
