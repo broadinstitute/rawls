@@ -37,7 +37,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   import dataSource.dataAccess.driver.api._
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
-  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) = getEntity(workspaceName, entityType, entityName)
+  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[String]) = getEntity(workspaceName, entityType, entityName, dataReference)
   def UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) = updateEntity(workspaceName, entityType, entityName, operations)
   def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference], dataReference: Option[String]) = deleteEntities(workspaceName, entities, dataReference)
   def RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) = renameEntity(workspaceName, entityType, entityName, newName)
@@ -57,13 +57,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[PerRequestMessage] =
+  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[String]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, entity))
-        }
-      }
+
+      // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
+      // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
+      // EntityService constructor, or other higher-level method
+      val entityRequestArguments = EntityRequestArguments(workspaceContext.workspace, userInfo, dataReference)
+
+      entityManager.resolveProvider(entityRequestArguments).getEntity(entityType, entityName)
+        .map { entity => PerRequest.RequestComplete(StatusCodes.OK, entity) }
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
