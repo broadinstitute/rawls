@@ -24,7 +24,7 @@ object SnapshotService {
 
 }
 
-class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, serviceAccountCreds: Credential, terraDataRepoUrl: String)(implicit protected val executionContext: ExecutionContext) extends FutureSupport with WorkspaceSupport {
+class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, serviceAccountCreds: Credential, terraDataRepoInstanceName: String)(implicit protected val executionContext: ExecutionContext) extends FutureSupport with WorkspaceSupport {
 
   def CreateSnapshot(workspaceName: WorkspaceName, dataRepoSnapshot: DataRepoSnapshot): Future[DataRepoSnapshotReference] = createSnapshot(workspaceName, dataRepoSnapshot)
   def GetSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotReference] = getSnapshot(workspaceName, snapshotId)
@@ -37,7 +37,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         workspaceManagerDAO.createWorkspace(workspaceContext.workspaceIdAsUUID, getServiceAccountAccessToken, userInfo.accessToken)
       }
 
-      val dataRepoReference = TerraDataRepoSnapshotRequest(terraDataRepoUrl, snapshot.snapshotId).toJson.compactPrint
+      val dataRepoReference = TerraDataRepoSnapshotRequest(terraDataRepoInstanceName, snapshot.snapshotId).toJson.compactPrint
       val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue, dataRepoReference, CloningInstructionsEnum.NOTHING.getValue, userInfo.accessToken)
 
       Future.successful(DataRepoSnapshotReference(ref))
