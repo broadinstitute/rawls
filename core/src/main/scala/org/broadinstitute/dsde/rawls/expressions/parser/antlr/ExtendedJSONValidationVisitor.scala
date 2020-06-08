@@ -2,11 +2,13 @@ package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import cats.instances.try_._
 import cats.syntax.functor._
-import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionParser
 
 import scala.util.{Failure, Success, Try}
 
-class ExtendedJSONValidationVisitor(allowRootEntity: Boolean, parser: SlickExpressionParser) extends ExtendedJSONBaseVisitor[Try[Unit]] {
+import scala.language.higherKinds
+
+class ExtendedJSONValidationVisitor[F[_], ExpressionContext, PipeType](allowRootEntity: Boolean, parser: ExpressionParser[F, ExpressionContext, PipeType]) extends ExtendedJSONBaseVisitor[Try[Unit]] {
 
   override def defaultResult() = Success(())
 

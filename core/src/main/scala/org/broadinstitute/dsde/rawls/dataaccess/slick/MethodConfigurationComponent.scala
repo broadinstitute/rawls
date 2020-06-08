@@ -4,8 +4,7 @@ import java.sql.Timestamp
 import java.util.{Date, UUID}
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.joda.time.DateTime
 import slick.jdbc.JdbcProfile
 
@@ -85,13 +84,13 @@ trait MethodConfigurationComponent {
      */
 
     //For readability in tests and whatnot.
-    def create(workspaceContext: SlickWorkspaceContext, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = upsert(workspaceContext, newMethodConfig)
+    def create(workspaceContext: Workspace, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = upsert(workspaceContext, newMethodConfig)
 
     //Looks for an existing method config with the same namespace and name.
     //If it exists, archives it.
     //In either case, saves the new method configuration.
-    def upsert(workspaceContext: SlickWorkspaceContext, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
-      uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceId, newMethodConfig.namespace, newMethodConfig.name)) flatMap {
+    def upsert(workspaceContext: Workspace, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
+      uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceIdAsUUID, newMethodConfig.namespace, newMethodConfig.name)) flatMap {
         //note that we ignore the version in newMethodConfig, as the version is defined by how many MCs have ever lived at the target location
         case None =>
           saveWithoutArchive(workspaceContext, newMethodConfig)
@@ -105,9 +104,9 @@ trait MethodConfigurationComponent {
     //It's like a rename and upsert all in one.
     //The MC at oldMethodConfig[name|namespace] MUST exist. It will be archived.
     //If there's a method config at the location specified in newMethodConfig that will be archived too.
-    def update(workspaceContext: SlickWorkspaceContext, oldMethodConfigNamespace: String, oldMethodConfigName: String, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
+    def update(workspaceContext: Workspace, oldMethodConfigNamespace: String, oldMethodConfigName: String, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
       //Look up the MC we're moving.
-      uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceId, oldMethodConfigNamespace, oldMethodConfigName)) flatMap {
+      uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceIdAsUUID, oldMethodConfigNamespace, oldMethodConfigName)) flatMap {
         case None => DBIO.failed(new RawlsException(s"Can't find method config $oldMethodConfigNamespace/$oldMethodConfigName."))
         case Some(currentMethodConfigRec) =>
           //if we're moving the MC to a new location, archive the one at the old location.
@@ -121,17 +120,17 @@ trait MethodConfigurationComponent {
       }
     } map { _ => newMethodConfig }
 
-    def archive(workspaceContext: SlickWorkspaceContext, methodConfigRec: MethodConfigurationRecord): ReadWriteAction[Int] = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+    def archive(workspaceContext: Workspace, methodConfigRec: MethodConfigurationRecord): ReadWriteAction[Int] = {
+      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         hideMethodConfigurationAction(methodConfigRec.id, methodConfigRec.name)
     }
 
     //Adds the new method configuration with the given version.
     //It's up to you to call archive on the previous one!
-    private def saveWithoutArchive(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, version: Int = 1) = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+    private def saveWithoutArchive(workspaceContext: Workspace, methodConfig: MethodConfiguration, version: Int = 1) = {
+      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=
-          marshalMethodConfig(workspaceContext.workspaceId, methodConfig.copy(methodConfigVersion=version))) flatMap { configId =>
+          marshalMethodConfig(workspaceContext.workspaceIdAsUUID, methodConfig.copy(methodConfigVersion=version))) flatMap { configId =>
             saveMaps(methodConfig, configId)
           }
     }
@@ -145,18 +144,18 @@ trait MethodConfigurationComponent {
         (methodConfigurationOutputQuery ++= outputs)
     }
 
-    def get(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadAction[Option[MethodConfiguration]] = {
-      loadMethodConfigurationByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)
+    def get(workspaceContext: Workspace, methodConfigurationNamespace: String, methodConfigurationName: String): ReadAction[Option[MethodConfiguration]] = {
+      loadMethodConfigurationByName(workspaceContext.workspaceIdAsUUID, methodConfigurationNamespace, methodConfigurationName)
     }
 
-    def get(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationId: Long): ReadAction[Option[MethodConfiguration]] = {
+    def get(workspaceContext: Workspace, methodConfigurationNamespace: String, methodConfigurationId: Long): ReadAction[Option[MethodConfiguration]] = {
       loadMethodConfigurationById(methodConfigurationId)
     }
 
     // Delete a method - actually just "hides" the method - used when deleting a method from a workspace
-    def delete(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadWriteAction[Boolean] = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
+    def delete(workspaceContext: Workspace, methodConfigurationNamespace: String, methodConfigurationName: String): ReadWriteAction[Boolean] = {
+      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
+        uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceIdAsUUID, methodConfigurationNamespace, methodConfigurationName)) flatMap {
           case None => DBIO.successful(false)
           case Some(methodConfigRec) => {
             hideMethodConfigurationAction(methodConfigRec.id, methodConfigurationName)
@@ -194,8 +193,8 @@ trait MethodConfigurationComponent {
     }
 
     // standard listing: does not include "deleted" MCs
-    def listActive(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[MethodConfigurationShort]] = {
-      findActiveByWorkspace(workspaceContext.workspaceId).result.map(recs => recs.map(rec => unmarshalMethodConfigToShort(rec)))
+    def listActive(workspaceContext: Workspace): ReadAction[Seq[MethodConfigurationShort]] = {
+      findActiveByWorkspace(workspaceContext.workspaceIdAsUUID).result.map(recs => recs.map(rec => unmarshalMethodConfigToShort(rec)))
     }
 
     /*

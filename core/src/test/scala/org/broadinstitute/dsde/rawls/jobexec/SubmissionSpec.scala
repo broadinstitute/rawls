@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverCompo
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -24,6 +24,7 @@ import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json._
 
@@ -61,6 +62,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
   val bigQueryDAO = new MockGoogleBigQueryDAO
   val mockSubmissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
   val workspaceManagerDAO = new MockWorkspaceManagerDAO
+  val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -333,6 +335,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         execServiceCluster,
         execServiceBatchSize,
         workspaceManagerDAO,
+        dataRepoDAO,
         methodConfigResolver,
         gcsDAO,
         samDAO,
@@ -457,7 +460,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       status
     }
 
-    runAndWait(entityQuery.hide(SlickWorkspaceContext(testData.workspace), Seq(testData.pair1.toReference)))
+    runAndWait(entityQuery.hide(testData.workspace, Seq(testData.pair1.toReference)))
 
     val monitorActor = waitForSubmissionActor(newSubmissionReport.submissionId)
     //not really necessary, failing to find the actor above will throw an exception and thus fail this test
@@ -470,7 +473,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
   it should "fail to submit when given an entity expression that evaluates to a deleted entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
 
-    runAndWait(entityQuery.hide(SlickWorkspaceContext(testData.workspace), Seq(testData.pair1.toReference)))
+    runAndWait(entityQuery.hide(testData.workspace, Seq(testData.pair1.toReference)))
 
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = "dsde",
@@ -495,7 +498,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         AttributeEntityReference("Sample", "sample5"),
         AttributeEntityReference("Sample", "sample6")))))
 
-    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
+    runAndWait(entityQuery.save(testData.workspace, sset))
 
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = "dsde",
@@ -556,11 +559,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       AttributeValueRawJson("""{"id":104,"sample_name":"sample4"}""")
     )
 
-    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sample1))
-    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sample2))
-    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sample3))
-    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sample4))
-    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
+    runAndWait(entityQuery.save(testData.workspace, sample1))
+    runAndWait(entityQuery.save(testData.workspace, sample2))
+    runAndWait(entityQuery.save(testData.workspace, sample3))
+    runAndWait(entityQuery.save(testData.workspace, sample4))
+    runAndWait(entityQuery.save(testData.workspace, sset))
 
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = "dsde",

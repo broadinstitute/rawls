@@ -3,8 +3,8 @@ package org.broadinstitute.dsde.rawls.jobexec.wdlparsing
 import cromwell.client.model.WorkflowDescription
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL}
 
-import scala.concurrent.ExecutionContext
 import scala.collection.JavaConverters._
+import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 

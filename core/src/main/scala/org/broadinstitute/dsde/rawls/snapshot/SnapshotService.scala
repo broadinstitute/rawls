@@ -5,11 +5,11 @@ import java.util.UUID
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
 import com.google.api.client.auth.oauth2.Credential
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamWorkspaceActions, TerraDataRepoSnapshotRequest, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -33,12 +33,12 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: DataRepoSnapshot): Future[DataRepoSnapshotReference] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
-      if(!workspaceStubExists(workspaceContext.workspaceId, userInfo)) {
-        workspaceManagerDAO.createWorkspace(workspaceContext.workspaceId, getServiceAccountAccessToken, userInfo.accessToken)
+      if(!workspaceStubExists(workspaceContext.workspaceIdAsUUID, userInfo)) {
+        workspaceManagerDAO.createWorkspace(workspaceContext.workspaceIdAsUUID, getServiceAccountAccessToken, userInfo.accessToken)
       }
 
       val dataRepoReference = TerraDataRepoSnapshotRequest(terraDataRepoUrl, snapshot.snapshotId).toJson.compactPrint
-      val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceId, snapshot.name, ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue, dataRepoReference, CloningInstructionsEnum.NOTHING.getValue, userInfo.accessToken)
+      val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue, dataRepoReference, CloningInstructionsEnum.NOTHING.getValue, userInfo.accessToken)
 
       Future.successful(DataRepoSnapshotReference(ref))
     }
@@ -46,21 +46,21 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
   def getSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotReference] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
-      val ref = workspaceManagerDAO.getDataReference(workspaceContext.workspaceId, UUID.fromString(snapshotId), userInfo.accessToken)
+      val ref = workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, UUID.fromString(snapshotId), userInfo.accessToken)
       Future.successful(DataRepoSnapshotReference(ref))
     }
   }
 
   def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[DataRepoSnapshotList] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
-      val ref = workspaceManagerDAO.enumerateDataReferences(workspaceContext.workspaceId, offset, limit, userInfo.accessToken)
+      val ref = workspaceManagerDAO.enumerateDataReferences(workspaceContext.workspaceIdAsUUID, offset, limit, userInfo.accessToken)
       DataRepoSnapshotList.from(ref)
     }
   }
 
   def deleteSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[Unit] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
-      workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceId, UUID.fromString(snapshotId), userInfo.accessToken)
+      workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, UUID.fromString(snapshotId), userInfo.accessToken)
     }
   }
 

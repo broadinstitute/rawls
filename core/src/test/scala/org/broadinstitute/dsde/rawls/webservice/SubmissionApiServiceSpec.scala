@@ -673,7 +673,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       deleteIntermediateOutputFiles = false
     )
 
-    runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
+    runAndWait(submissionQuery.create(testData.workspace, testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))
 
     withStatsD {
@@ -717,7 +717,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
       DBIO.seq(
         workspaceQuery.save(workspace),
-        entityQuery.save(SlickWorkspaceContext(workspace), lotsOfSamples :+ sampleSet)
+        entityQuery.save(workspace, lotsOfSamples :+ sampleSet)
       )
     }
   }

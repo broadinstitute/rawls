@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import _root_.slick.dbio.Effect.{Write, Read}
-import _root_.slick.dbio.{NoStream, DBIOAction}
+import _root_.slick.dbio.Effect.{Read, Write}
+import _root_.slick.dbio.{DBIOAction, NoStream}
 
 /**
  * Created by dvoet on 2/12/16.

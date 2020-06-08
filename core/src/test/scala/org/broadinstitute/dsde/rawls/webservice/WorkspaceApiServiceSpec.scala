@@ -386,7 +386,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // check that length of result is > 0:
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceId).length.result) > 0
+        runAndWait(entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID).length.result) > 0
       }
     }
     // delete the workspace
@@ -400,7 +400,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // now you should have no entities listed
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceId).length.result) == 0
+        runAndWait(entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID).length.result) == 0
       }
     }
   }
@@ -409,7 +409,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // check that length of result is > 0:
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace,
+        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, testData.agoraMethodConfig.namespace,
           testData.agoraMethodConfig.name).length.result) > 0
       }
     }
@@ -424,7 +424,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // now you should have no method configs listed
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace,
+        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, testData.agoraMethodConfig.namespace,
           testData.agoraMethodConfig.name).length.result) == 0
       }
     }
@@ -434,7 +434,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // check that length of result is > 0:
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(submissionQuery.findByWorkspaceId(workspaceContext.workspaceId).length.result) > 0
+        runAndWait(submissionQuery.findByWorkspaceId(workspaceContext.workspaceIdAsUUID).length.result) > 0
       }
     }
     // delete the workspace
@@ -448,7 +448,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // now you should have no submissions listed
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(submissionQuery.findByWorkspaceId(workspaceContext.workspaceId).length.result) == 0
+        runAndWait(submissionQuery.findByWorkspaceId(workspaceContext.workspaceIdAsUUID).length.result) == 0
       }
     }
   }

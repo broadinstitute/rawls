@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import org.antlr.v4.runtime.tree.ParseTree
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.model.{AttributeValue, Workspace}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrExtendedJSONParser, ReconstructExpressionVisitor, LookupNodeFinderVisitor}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson}
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsString, JsValue}
@@ -22,7 +22,7 @@ object ExpressionEvaluator {
     }
   }
 
-  def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: SlickWorkspaceContext, rootType: String, rootName: String)
+  def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: Workspace, rootType: String, rootName: String)
                                    (op: ExpressionEvaluator => ReadWriteAction[R])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
 
@@ -33,11 +33,10 @@ object ExpressionEvaluator {
 }
 
 class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEntities: Option[Seq[EntityRecord]]) {
-
   /**
-     These type aliases are to help differentiate between the Entity Name and the Lookup expressions in return types
+  These type aliases are to help differentiate between the Entity Name and the Lookup expressions in return types
      in below functions. Since both of them are String, it becomes difficult to understand what is being referenced where.
-   */
+    */
   private type EntityName = String
   private type LookupExpression = String // attribute reference expression
 
@@ -55,7 +54,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
   }
 
   /**
-    The overall approach is:
+  The overall approach is:
         - Parse the input expression using ANTLR Extended JSON parser
         - Visit the parsed tree to find all the look up nodes (i.e. attribute reference expressions)
         - If there are no look up nodes, evaluate the input expression using the JSONEvaluator
@@ -77,9 +76,8 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
           "102" -> Try(Seq(AttributeValueRawJson("{"exampleRef1":"gs://def", "exampleIndex":456}")))
         )
     )
-   */
-  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String)
-                        (implicit executionContext: ExecutionContext) : ReadWriteAction[Map[EntityName, Try[Iterable[AttributeValue]]]] = {
+    */
+  def evalFinalAttribute(workspaceContext: Workspace, expression: String)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
     import slickEvaluator.parser.driver.api._
 
     /*
@@ -288,7 +286,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
     else evaluateExpressionWithAttrRefs(parsedTree, lookupNodes)
   }
 
-  def evalFinalEntity(workspaceContext: SlickWorkspaceContext, expression:String): ReadWriteAction[Iterable[EntityRecord]] = {
+  def evalFinalEntity(workspaceContext: Workspace, expression:String): ReadWriteAction[Iterable[EntityRecord]] = {
     //entities have to be proper expressions, not JSON-y
     slickEvaluator.evalFinalEntity(workspaceContext, expression)
   }

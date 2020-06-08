@@ -8,7 +8,7 @@ import akka.util.ByteString
 import org.apache.commons.codec.binary.Base64
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
-import slick.jdbc.{GetResult, JdbcProfile, PositionedParameters, SQLActionBuilder, SetParameter}
+import slick.jdbc._
 
 import scala.concurrent.ExecutionContext
 

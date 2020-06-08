@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -107,6 +108,7 @@ case class Workspace(
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
+  lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],

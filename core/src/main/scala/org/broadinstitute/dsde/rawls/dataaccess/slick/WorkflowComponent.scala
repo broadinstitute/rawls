@@ -9,7 +9,7 @@ import cats.instances.map._
 import cats.syntax.foldable._
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceId, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.dataaccess.ExecutionServiceId
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -93,8 +93,8 @@ trait WorkflowComponent {
     type WorkflowQueryType = Query[WorkflowTable, WorkflowRecord, Seq]
     type WorkflowQueryWithInputResolutions = Query[(SubmissionValidationTable, SubmissionAttributeTable), (SubmissionValidationRecord, SubmissionAttributeRecord), Seq]
 
-    def get(workspaceContext: SlickWorkspaceContext, submissionId: String, entityType: String, entityName: String): ReadAction[Option[Workflow]] = {
-      loadWorkflow(findWorkflowByEntity(UUID.fromString(submissionId), workspaceContext.workspaceId, entityType, entityName))
+    def get(workspaceContext: Workspace, submissionId: String, entityType: String, entityName: String): ReadAction[Option[Workflow]] = {
+      loadWorkflow(findWorkflowByEntity(UUID.fromString(submissionId), workspaceContext.workspaceIdAsUUID, entityType, entityName))
     }
 
     def get(id: Long): ReadAction[Option[Workflow]] = {
@@ -116,7 +116,7 @@ trait WorkflowComponent {
       deleteWorkflowAction(id).map(_ > 0)
     }
 
-    def createWorkflows(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflows: Seq[Workflow])(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Seq[Workflow]] = {
+    def createWorkflows(workspaceContext: Workspace, submissionId: UUID, workflows: Seq[Workflow])(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Seq[Workflow]] = {
       def insertWorkflowRecs(submissionId: UUID, workflows: Seq[Workflow], entityRecs: Seq[EntityRecord]): ReadWriteAction[Map[Option[AttributeEntityReference], WorkflowRecord]] = {
         val entityRecsMap = entityRecs.map(e => e.toReference -> e.id).toMap
         val recsToInsert = workflows.map(workflow => marshalNewWorkflow(submissionId, workflow, workflow.workflowEntity.map(entityRecsMap(_))))
@@ -191,7 +191,7 @@ trait WorkflowComponent {
       }
 
       for {
-        entityRecs <- entityQuery.getEntityRecords(workspaceContext.workspaceId, workflows.flatMap(_.workflowEntity).toSet)
+        entityRecs <- entityQuery.getEntityRecords(workspaceContext.workspaceIdAsUUID, workflows.flatMap(_.workflowEntity).toSet)
         workflowRecsByEntity <- insertWorkflowRecs(submissionId, workflows, entityRecs)
         inputResolutionRecs <- insertInputResolutionRecs(submissionId, workflows, workflowRecsByEntity)
         _ <- insertInputResolutionAttributes(workflows, inputResolutionRecs)
@@ -267,15 +267,15 @@ trait WorkflowComponent {
         findWorkflowById(id).delete
     }
 
-    def findActiveWorkflowsWithoutExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
+    def findActiveWorkflowsWithoutExternalIds(workspaceContext: Workspace): ReadAction[Seq[WorkflowRecord]] = {
       findActiveWorkflows(workspaceContext).filter(!_.externalId.isDefined).result
     }
 
-    def findActiveWorkflowsWithExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
+    def findActiveWorkflowsWithExternalIds(workspaceContext: Workspace): ReadAction[Seq[WorkflowRecord]] = {
       findActiveWorkflows(workspaceContext).filter(_.externalId.isDefined).result
     }
 
-    def findActiveWorkflows(workspaceContext: SlickWorkspaceContext): WorkflowQueryType = {
+    def findActiveWorkflows(workspaceContext: Workspace): WorkflowQueryType = {
       findWorkflowsByWorkspace(workspaceContext).filter(_.status inSetBind((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses) map {_.toString}))
     }
 
@@ -494,9 +494,9 @@ trait WorkflowComponent {
       filter(rec => rec.submissionId === submissionId)
     }
 
-    def findWorkflowsByWorkspace(workspaceContext: SlickWorkspaceContext): WorkflowQueryType = {
+    def findWorkflowsByWorkspace(workspaceContext: Workspace): WorkflowQueryType = {
       for {
-        sub <- submissionQuery.findByWorkspaceId(workspaceContext.workspaceId)
+        sub <- submissionQuery.findByWorkspaceId(workspaceContext.workspaceIdAsUUID)
         wf <- filter(w => w.submissionId === sub.id)
       } yield wf
     }

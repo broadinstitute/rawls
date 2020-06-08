@@ -61,7 +61,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
             status
           }
           assertResult(expectedMethodConfig) {
-            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), inputMethodConfig.namespace, inputMethodConfig.name)).get
+            runAndWait(methodConfigurationQuery.get(testData.workspace, inputMethodConfig.namespace, inputMethodConfig.name)).get
           }
           // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
           assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(expectedMethodConfig.path(testData.wsName)))))) {
@@ -133,10 +133,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
         // all inputs and outputs are saved, regardless of parsing errors
         for ((key, value) <- inputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
         }
         for ((key, value) <- outputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
         }
       }
   }
@@ -168,10 +168,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
         // all inputs and outputs are saved, regardless of parsing errors
         for ((key, value) <- inputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
         }
         for ((key, value) <- outputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
         }
       }
   }
@@ -230,10 +230,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         }
         // all inputs and outputs are saved, regardless of parsing errors
         for ((key, value) <- inputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
         }
         for ((key, value) <- outputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
         }
       }
   }
@@ -300,10 +300,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
           status
         }
         assertResult(true) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, "testConfig2_changed")).isDefined
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.agoraMethodConfig.namespace, "testConfig2_changed")).isDefined
         }
         assertResult(None) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))
         }
       }
   }
@@ -379,10 +379,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
           status
         }
         assertResult(true) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).isDefined
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).isDefined
         }
         assertResult(None) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, "foox"))
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.agoraMethodConfig.namespace, "foox"))
         }
       }
   }
@@ -413,7 +413,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
           status
         }
         assertResult(None) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig3.namespace, testData.methodConfig3.name))
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.methodConfig3.namespace, testData.methodConfig3.name))
         }
       }
   }
@@ -450,10 +450,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         }
 
         assertResult(true) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).isDefined
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).isDefined
         }
         assertResult(None) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, "foox"))
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.agoraMethodConfig.namespace, "foox"))
         }
       }
   }
@@ -482,7 +482,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
             responseAs[ValidatedMethodConfiguration].methodConfiguration
           }
           assertResult(Option(AttributeString(s"foo$fooFactor"))) {
-            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), original.namespace, original.name)).get.inputs.get(s"param$fooFactor")
+            runAndWait(methodConfigurationQuery.get(testData.workspace, original.namespace, original.name)).get.inputs.get(s"param$fooFactor")
           }
         }
     }
@@ -547,10 +547,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
         // all inputs and outputs are saved, regardless of parsing errors
         for ((key, value) <- testData.goodAndBadMethodConfig.inputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.goodAndBadMethodConfig.namespace, testData.goodAndBadMethodConfig.name)).get.inputs.get(key)
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.goodAndBadMethodConfig.namespace, testData.goodAndBadMethodConfig.name)).get.inputs.get(key)
         }
         for ((key, value) <- testData.goodAndBadMethodConfig.outputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.goodAndBadMethodConfig.namespace, testData.goodAndBadMethodConfig.name)).get.outputs.get(key)
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.goodAndBadMethodConfig.namespace, testData.goodAndBadMethodConfig.name)).get.outputs.get(key)
         }
       }
   }
@@ -652,7 +652,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
     val mc = testData.goodAndBadMethodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs, prerequisites = Some(Map()))
 
-    runAndWait(methodConfigurationQuery.create(SlickWorkspaceContext(testData.workspace), mc))
+    runAndWait(methodConfigurationQuery.create(testData.workspace, mc))
 
     Get(s"${mc.path(testData.workspace)}/validate") ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -687,7 +687,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
           status
         }
         assertResult("testConfig1") {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.name
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.name
         }
       }
   }
@@ -700,7 +700,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
           status
         }
         assertResult("dockstore-config-name") {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.dockstoreMethodConfig.namespace, testData.dockstoreMethodConfig.name)).get.name
+          runAndWait(methodConfigurationQuery.get(testData.workspace, testData.dockstoreMethodConfig.namespace, testData.dockstoreMethodConfig.name)).get.name
         }
       }
   }
@@ -811,7 +811,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
             status
           }
           assertResult("testConfig1") {
-            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.name
+            runAndWait(methodConfigurationQuery.get(testData.workspace, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.name
           }
         }
     } { capturedMetrics =>
@@ -1003,7 +1003,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   }
 
   private def getConfigs(includeDockstore: Boolean) = {
-    val allConfigs = runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspace))).toSet
+    val allConfigs = runAndWait(methodConfigurationQuery.listActive(testData.workspace)).toSet
 
     // Protect against test data changing and silently invalidating tests
     assertResult(true) {
