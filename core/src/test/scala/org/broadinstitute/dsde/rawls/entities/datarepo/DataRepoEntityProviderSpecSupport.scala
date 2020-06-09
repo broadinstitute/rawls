@@ -19,7 +19,7 @@ trait DataRepoEntityProviderSpecSupport {
   // default values for some important attributes
   val wsId: UUID = UUID.randomUUID()
   val refId: UUID = UUID.randomUUID()
-  val dataRepoInstance: String = "mock-base-url"
+  val dataRepoInstanceName: String = "mock-instance-name"
   val snapshot: String = UUID.randomUUID().toString
 
   // default Workspace object, mostly irrelevant for DataRepoEntityProviderSpec but necessary to exist
@@ -51,14 +51,14 @@ trait DataRepoEntityProviderSpecSupport {
                                cloningInstructionsEnum: CloningInstructionsEnum = CloningInstructionsEnum.NOTHING,
                                credentialId: String = "",
                                workspaceId: UUID = wsId,
-                               refInstance: String = dataRepoInstance,
+                               refInstanceName: String = dataRepoInstanceName,
                                refSnapshot: String = snapshot,
                                refString: Option[String] = None
                               ): DataReferenceDescription = {
 
     val dataRepoReference = refString match {
       case Some(s) => s
-      case None =>  JsObject.apply(("instance", JsString(refInstance)), ("snapshot", JsString(refSnapshot))).compactPrint
+      case None =>  JsObject.apply(("instanceName", JsString(refInstanceName)), ("snapshot", JsString(refSnapshot))).compactPrint
     }
 
     new DataReferenceDescription()
@@ -108,7 +108,7 @@ trait DataRepoEntityProviderSpecSupport {
    * Mock for DataRepoDAO that allows the caller to specify behavior for the getSnapshot and getBaseURL methods.
    *  method.
    */
-  class SpecDataRepoDAO(getSnapshotResponse:Either[Throwable, SnapshotModel], baseURL: String = dataRepoInstance) extends MockDataRepoDAO {
+  class SpecDataRepoDAO(getSnapshotResponse:Either[Throwable, SnapshotModel], baseURL: String = dataRepoInstanceName) extends MockDataRepoDAO {
 
     override def getInstanceName: String = baseURL
 
