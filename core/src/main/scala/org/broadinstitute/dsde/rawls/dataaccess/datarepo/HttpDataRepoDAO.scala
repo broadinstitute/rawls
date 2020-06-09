@@ -7,11 +7,11 @@ import java.util.UUID
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.SnapshotModel
 
-class HttpDataRepoDAO(baseDataRepoUrl: String) extends DataRepoDAO {
+class HttpDataRepoDAO(dataRepoInstanceName: String) extends DataRepoDAO {
 
   private def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()
-    client.setBasePath(baseDataRepoUrl)
+    client.setBasePath(dataRepoInstanceName)
     client.setAccessToken(accessToken)
 
     client
@@ -21,7 +21,7 @@ class HttpDataRepoDAO(baseDataRepoUrl: String) extends DataRepoDAO {
     new RepositoryApi(getApiClient(accessToken.token))
   }
 
-  override def getBaseURL: String = baseDataRepoUrl
+  override def getInstanceName: String = dataRepoInstanceName
 
   override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel = {
     getRepositoryApi(accessToken).retrieveSnapshot(snapshotId.toString)

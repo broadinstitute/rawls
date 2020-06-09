@@ -110,7 +110,7 @@ trait DataRepoEntityProviderSpecSupport {
    */
   class SpecDataRepoDAO(getSnapshotResponse:Either[Throwable, SnapshotModel], baseURL: String = dataRepoInstance) extends MockDataRepoDAO {
 
-    override def getBaseURL: String = baseURL
+    override def getInstanceName: String = baseURL
 
     override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel = getSnapshotResponse match {
       case Left(t) => throw t

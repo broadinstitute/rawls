@@ -79,16 +79,16 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
     // verify the instance matches our target instance
     // TODO: AS-321 is this the right place to validate this? We could add a "validateInstanceURL" method to the DAO itself, for instance
-    if (!dataReference.instance.equalsIgnoreCase(dataRepoDAO.getBaseURL)) {
-      logger.error(s"expected instance ${dataRepoDAO.getBaseURL}, got $dataReference.instance")
-      throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected instance value")
+    if (!dataReference.instanceName.equalsIgnoreCase(dataRepoDAO.getInstanceName)) {
+      logger.error(s"expected instance name ${dataRepoDAO.getInstanceName}, got ${dataReference.instanceName}")
+      throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected instance name value")
     }
 
     // verify snapshotId value is a UUID
     Try(UUID.fromString(dataReference.snapshot)) match {
       case Success(uuid) => uuid
       case Failure(ex) =>
-        logger.error(s"invalid UUID for snapshotId in reference: $dataReference.snapshot")
+        logger.error(s"invalid UUID for snapshotId in reference: ${dataReference.snapshot}")
         throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected snapshot value", ex)
     }
 

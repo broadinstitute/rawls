@@ -311,7 +311,7 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.baseUrl"))
 
-      val dataRepoDAO = new HttpDataRepoDAO(conf.getString("dataRepo.terraInstance"))
+      val dataRepoDAO = new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"))
 
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
@@ -405,7 +405,7 @@ object Boot extends IOApp with LazyLogging {
         samDAO,
         workspaceManagerDAO,
         gcsDAO.getBucketServiceAccountCredential,
-        conf.getString("dataRepo.terraInstance")
+        conf.getString("dataRepo.terraInstanceName")
       )
 
       val service = new RawlsApiServiceImpl(

@@ -7,7 +7,7 @@ import bio.terra.datarepo.model.SnapshotModel
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 
 class MockDataRepoDAO extends DataRepoDAO {
-  override def getBaseURL: String = ???
+  override def getInstanceName: String = ???
 
   override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel = ???
 }
