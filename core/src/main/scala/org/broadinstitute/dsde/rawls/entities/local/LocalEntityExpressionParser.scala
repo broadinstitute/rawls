@@ -2,12 +2,17 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import java.sql.Timestamp
 
+import cats.instances.try_._
+import cats.syntax.functor._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionParser
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrExtendedJSONParser, ExtendedJSONValidationVisitor}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeString, Workspace}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.jdbc.MySQLProfile.api._
+
+import scala.util.Try
 
 case class LocalEntityExpressionContext(workspaceContext: Workspace, rootEntities: Option[Seq[EntityRecord]], transactionId: String) {
   def rootEntityNames(): Seq[String] = rootEntities match {
@@ -29,6 +34,157 @@ trait LocalEntityExpressionParser extends ExpressionParser[ReadAction, LocalEnti
     with EntityComponent
     with AttributeComponent =>
 
+  protected override def parseInputExpr(allowRootEntity: Boolean)(expression: String): Try[Unit] = {
+    // JSON expressions are valid inputs and do not need to be parsed
+    val extendedJsonParser = AntlrExtendedJSONParser.getParser(expression)
+    val visitor = new ExtendedJSONValidationVisitor(allowRootEntity, this)
+
+    /*
+      parse the expression using ANTLR parser for extended JSON expressions and walk the tree using `visit()` to examine
+      child nodes. During the walk, if any child node is a lookup expression, i.e. attribute expressions, it calls the
+      `slickParser.parseAttributeExpr()` for that expression and parses it
+     */
+    Try(extendedJsonParser.root()).flatMap(visitor.visit)
+  }
+
+  protected override def parseOutputExpr(allowRootEntity: Boolean)(expression: String): Try[Unit] = {
+    parseOutputAttributeExpr(expression, allowRootEntity).void
+  }
+
+  /** Parser definitions **/
+  // Entity expressions take the general form entity.ref.ref.attribute.
+  // For now, we expect the initial entity to be the special token "this", which is bound at evaluation time to a root entity.
+
+  //Parser for expressions ending in an attribute value (not an entity reference)
+  private def attributeExpression(allowRootEntity: Boolean): Parser[PipelineQuery] = {
+
+    // the basic case: this.(ref.)*attribute
+    val entityExpr = entityRootDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
+      case root ~ Nil ~ last => PipelineQuery(Option(root), List.empty, last)
+      case root ~ ref ~ last => PipelineQuery(Option(root), ref, last)
+    }
+
+    // attributes at the end of a reference chain starting at a workspace: workspace.ref.(ref.)*attribute
+    val workspaceExpr = workspaceEntityRefDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
+      case workspace ~ Nil ~ last => PipelineQuery(Option(workspace), List.empty, last)
+      case workspace ~ ref ~ last => PipelineQuery(Option(workspace), ref, last)
+    } |
+      // attributes directly on a workspace: workspace.attribute
+      workspaceAttribute ^^ {
+        case workspace => PipelineQuery(None, List.empty, workspace)
+      }
+
+    if(allowRootEntity) {
+      entityExpr | workspaceExpr
+    } else {
+      workspaceExpr
+    }
+  }
+
+  //Parser for output expressions: this.attribute or workspace.attribute (no entity references in the middle)
+  private def outputAttributeExpression(allowRootEntity: Boolean): Parser[PipelineQuery] = {
+    // this.attribute
+    val entityOutput = entityRootDot ~ valueAttribute ^^ {
+      case root ~ attr => PipelineQuery(Option(root), List.empty, attr)
+    }
+    // workspace.attribute
+    val workspaceOutput = workspaceAttribute ^^ {
+      case workspace => PipelineQuery(None, List.empty, workspace)
+    }
+
+    if(allowRootEntity) {
+      entityOutput | workspaceOutput
+    } else {
+      workspaceOutput
+    }
+  }
+
+  //Parser for expressions ending in an attribute that's a reference to another entity
+  private def entityExpression: Parser[PipelineQuery] = {
+    // reference IS the entity: this
+    entityRoot ^^ {
+      case root => PipelineQuery(Option(root), List.empty, entityFinalFunc _)
+    } |
+      // reference chain starting with an entity: this.(ref.)*ref
+      entityRootDot ~ rep(entityRefDot) ~ entityRef ^^ {
+        case root ~ Nil ~ last => PipelineQuery(Option(root), List(last), entityFinalFunc)
+        case root ~ ref ~ last => PipelineQuery(Option(root), ref :+ last, entityFinalFunc)
+      } |
+      // reference chain starting with the workspace: workspace.(ref.)*ref
+      workspaceEntityRefDot ~ rep(entityRefDot) ~ entityRef ^^ {
+        case workspace ~ Nil ~ last => PipelineQuery(Option(workspace), List(last), entityFinalFunc)
+        case workspace ~ ref ~ last => PipelineQuery(Option(workspace), ref :+ last, entityFinalFunc)
+      } |
+      // reference directly off the workspace: workspace.ref
+      workspaceEntityRef ^^ {
+        case workspace => PipelineQuery(None, List.empty, workspace)
+      }
+  }
+
+  // just root by itself with no refs or attributes
+  private def entityRoot: Parser[RootFunc] =
+    "this$".r ^^ { _ => entityRootFunc}
+
+  // root followed by dot meaning it is to be followed by refs or attributes
+  private def entityRootDot: Parser[RootFunc] =
+    "this." ^^ { _ => entityRootFunc}
+
+  // matches some_attr_namespace:attr_name or attr_name
+  private val attributeIdent: Parser[AttributeName] = opt(ident ~ ":") ~ ident ^^ {
+    case Some(namespace ~ ":") ~ name => AttributeName(namespace, name)
+    case _ ~ name => AttributeName.withDefaultNS(name)
+  }
+
+  // workspace.attribute, note that this is a FinalFunc - because workspaces are not entities they can be piped the same way
+  private def workspaceAttribute: Parser[FinalFunc] =
+    "workspace." ~> attributeIdent ^^ {
+      case attrName =>
+        if (Attributable.reservedAttributeNames.contains(attrName.name)) workspaceReservedAttributeFinalFunc(attrName.name)
+        else workspaceAttributeFinalFunc(attrName)
+    }
+
+  // an entity reference as the final attribute in an expression
+  private def entityRef: Parser[PipeFunc] =
+    attributeIdent ^^ { case entityRef => entityNameAttributePipeFunc(entityRef)}
+
+  // an entity reference in the middle of an expression
+  private def entityRefDot: Parser[PipeFunc] =
+    attributeIdent <~ "." ^^ { case entityRef => entityNameAttributePipeFunc(entityRef)}
+
+  // an entity reference after the workspace, this can be a RootFunc because it resolves to an entity query that can be piped
+  private def workspaceEntityRefDot: Parser[RootFunc] =
+    "workspace." ~> attributeIdent <~ "." ^^ { case entityRef => workspaceEntityRefRootFunc(entityRef)}
+
+  // an entity reference after the workspace, note that this is a FinalFunc - because workspaces are not entities they can be piped the same way
+  private def workspaceEntityRef: Parser[FinalFunc] =
+    "workspace." ~> attributeIdent ^^ { case entityRef => workspaceEntityFinalFunc(entityRef)}
+
+  // the last attribute has no dot after it
+  private def valueAttribute: Parser[FinalFunc] =
+    attributeIdent ^^ {
+      case attrName =>
+        if (Attributable.reservedAttributeNames.contains(attrName.name)) entityReservedAttributeFinalFunc(attrName.name)
+        else entityAttributeFinalFunc(attrName)
+    }
+
+  def parseAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery] = {
+    parse(expression, attributeExpression(allowRootEntity))
+  }
+
+  def parseOutputAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery] = {
+    parse(expression, outputAttributeExpression(allowRootEntity))
+  }
+
+  def parseEntityExpr(expression: String): Try[PipelineQuery] = {
+    parse(expression, entityExpression)
+  }
+
+  private def parse(expression: String, parser: Parser[PipelineQuery] ) = {
+    parseAll(parser, expression) match {
+      case Success(result, _) => scala.util.Success(result)
+      case NoSuccess(msg, next) => scala.util.Failure(new RuntimeException("Failed at line %s, column %s: %s".format(next.pos.line, next.pos.column, msg)))
+    }
+  }
   /** functions against pipes **/
 
   // the root function starts the pipeline at some root entity type in the workspace

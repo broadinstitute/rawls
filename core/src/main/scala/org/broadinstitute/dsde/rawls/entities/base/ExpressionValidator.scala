@@ -37,6 +37,7 @@ trait ExpressionValidator {
     }
   }
 
+  /** this could probably use an explanatory comment */
   protected def internalValidateMCExpressions(methodConfiguration: MethodConfiguration,
                                               gatherInputsResult: GatherInputsResult,
                                               allowRootEntity: Boolean,
