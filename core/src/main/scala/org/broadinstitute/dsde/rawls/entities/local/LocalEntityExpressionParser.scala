@@ -167,7 +167,7 @@ trait LocalEntityExpressionParser extends ExpressionParser[ReadAction, LocalEnti
         else entityAttributeFinalFunc(attrName)
     }
 
-  def parseAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery] = {
+  override def parseAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery] = {
     parse(expression, attributeExpression(allowRootEntity))
   }
 

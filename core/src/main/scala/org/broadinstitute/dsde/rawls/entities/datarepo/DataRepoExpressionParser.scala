@@ -21,6 +21,8 @@ class DataRepoExpressionParser extends ExpressionParser[Future, DataRepoExpressi
 
   override protected def parseOutputExpr(allowRootEntity: Boolean)(expression: String): Try[Unit] = ???
 
+  override def parseAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery] = ???
+
   // todo: do we still need the following functions if we're overriding these functions further up the chain?
   /** my answer to this question is yes, I believe we'll still need these functions in order to generate the BQ queries
     * needed to evaluate the expressions and grab the intended value */

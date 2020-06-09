@@ -57,6 +57,8 @@ trait ExpressionParser[F[_], ExpressionContext, PipeType] extends JavaTokenParse
 
   protected def parseOutputExpr(allowRootEntity: Boolean)(expression: String): Try[Unit]
 
+  def parseAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery]
+
   /** functions against pipes **/
 
   // the root function starts the pipeline at some root entity type in the workspace
