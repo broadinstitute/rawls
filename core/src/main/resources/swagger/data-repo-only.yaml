@@ -5,211 +5,323 @@
 # so, this file should only contain the swagger additions to support data repo integration.
 
 paths:
-  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities':
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities:
     get:
       parameters:
-        - $ref: '#/parameters/workspaceNamespacePathParam'
-        - $ref: '#/parameters/workspaceNamePathParam'
-        - $ref: '#/parameters/dataReferenceQueryParam'
-        - $ref: '#/parameters/billingProjectQueryParam'
-
-  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete':
-    post:
-      parameters:
-        - $ref: '#/parameters/workspaceNamespacePathParam'
-        - $ref: '#/parameters/workspaceNamePathParam'
-        - in: body
-          description: Set of entities to delete
-          name: entities
+        - name: workspaceNamespace
+          in: path
+          description: The workspace namespace
           required: true
           schema:
-            type: array
-            items:
-              $ref: '#/definitions/AttributeEntityReference'
-        - $ref: '#/parameters/dataReferenceQueryParam'
-        - $ref: '#/parameters/billingProjectQueryParam'
-  '/api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots':
-    post:
-      responses:
-        '201':
-          description: Created
-          schema:
-            $ref: '#/definitions/DataRepoSnapshotReference'
-        '404':
-          description: Workspace or snapshot not found
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: "Add a reference to a snapshot in the Terra Data Repo"
-      tags:
-        - snapshots
-      summary: Create a snapshot
-      operationId: createDataRepoSnapshot
-      parameters:
-        - $ref: '#/parameters/workspaceNamespacePathParam'
-        - $ref: '#/parameters/workspaceNamePathParam'
-        - in: body
-          description: Reference to the Data Repo snapshot
-          name: dataRepoSnapshot
+            type: string
+        - name: workspaceName
+          in: path
+          description: The workspace name
           required: true
           schema:
-            $ref: '#/definitions/DataRepoSnapshot'
+            type: string
+        - name: dataReference
+          in: query
+          description: Data reference name to query for entity metadata
+          schema:
+            type: string
+        - name: billingProject
+          in: query
+          description: Billing project to use for queries to the data reference
+          schema:
+            type: string
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete:
+    post:
+      parameters:
+        - name: workspaceNamespace
+          in: path
+          description: The workspace namespace
+          required: true
+          schema:
+            type: string
+        - name: workspaceName
+          in: path
+          description: The workspace name
+          required: true
+          schema:
+            type: string
+        - name: dataReference
+          in: query
+          description: Data reference name to query for entity metadata
+          schema:
+            type: string
+        - name: billingProject
+          in: query
+          description: Billing project to use for queries to the data reference
+          schema:
+            type: string
+      requestBody:
+        description: Set of entities to delete
+        content:
+          '*/*':
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/AttributeEntityReference'
+        required: true
+      x-codegen-request-body-name: entities
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots:
     get:
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/DataRepoSnapshotList'
-        '404':
-          description: Workspace not found or user lacks permissions
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: "Enumerate references to snapshots in the Terra Data Repo"
       tags:
         - snapshots
       summary: List snapshots
+      description: Enumerate references to snapshots in the Terra Data Repo
       operationId: enumerateDataRepoSnapshot
       parameters:
-        - $ref: '#/parameters/workspaceNamespacePathParam'
-        - $ref: '#/parameters/workspaceNamePathParam'
-        - in: query
-          name: offset
-          description: The number of items to skip before starting to collect the result set.
-          type: int
+        - name: workspaceNamespace
+          in: path
+          description: The workspace namespace
           required: true
-        - in: query
-          name: limit
+          schema:
+            type: string
+        - name: workspaceName
+          in: path
+          description: The workspace name
+          required: true
+          schema:
+            type: string
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+            set.
+          required: true
+          schema: {}
+        - name: limit
+          in: query
           description: The number of items to return.
-          type: int
           required: true
-    security:
-      - authorization:
-          - openid
-          - email
-          - profile
-
-  '/api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}':
-    get:
+          schema: {}
       responses:
-        '200':
+        200:
           description: OK
-          schema:
-            $ref: '#/definitions/DataRepoSnapshotReference'
-        '404':
-          description: Workspace or snapshot not found
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotList'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
           description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    post:
+      tags:
+        - snapshots
+      summary: Create a snapshot
+      description: Add a reference to a snapshot in the Terra Data Repo
+      operationId: createDataRepoSnapshot
+      parameters:
+        - name: workspaceNamespace
+          in: path
+          description: The workspace namespace
+          required: true
           schema:
-            $ref: '#/definitions/ErrorReport'
-      description: "Get a reference to a snapshot in the Terra Data Repo"
+            type: string
+        - name: workspaceName
+          in: path
+          description: The workspace name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          '*/*':
+            schema:
+              $ref: '#/components/schemas/DataRepoSnapshot'
+        required: true
+      responses:
+        201:
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotReference'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+      x-codegen-request-body-name: dataRepoSnapshot
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
+    get:
       tags:
         - snapshots
       summary: Get a snapshot
+      description: Get a reference to a snapshot in the Terra Data Repo
       operationId: getDataRepoSnapshot
       parameters:
-        - $ref: '#/parameters/workspaceNamespacePathParam'
-        - $ref: '#/parameters/workspaceNamePathParam'
-        - $ref: '#/parameters/snapshotIdPathParam'
-    delete:
+        - name: workspaceNamespace
+          in: path
+          description: The workspace namespace
+          required: true
+          schema:
+            type: string
+        - name: workspaceName
+          in: path
+          description: The workspace name
+          required: true
+          schema:
+            type: string
+        - name: snapshotId
+          in: path
+          description: The snapshot ID
+          required: true
+          schema:
+            type: string
       responses:
-        '204':
-          description: Successful Request
-        '404':
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotReference'
+        404:
           description: Workspace or snapshot not found
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
           description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: "Delete a workspace's reference to a snapshot in the Terra Data Repo"
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
       tags:
         - snapshots
       summary: Delete a snapshot
+      description: Delete a workspace's reference to a snapshot in the Terra Data
+        Repo
       operationId: deleteDataRepoSnapshot
       parameters:
-        - $ref: '#/parameters/workspaceNamespacePathParam'
-        - $ref: '#/parameters/workspaceNamePathParam'
-        - $ref: '#/parameters/snapshotIdPathParam'
+        - name: workspaceNamespace
+          in: path
+          description: The workspace namespace
+          required: true
+          schema:
+            type: string
+        - name: workspaceName
+          in: path
+          description: The workspace name
+          required: true
+          schema:
+            type: string
+        - name: snapshotId
+          in: path
+          description: The snapshot ID
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Successful Request
+          content: {}
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
       security:
         - authorization:
             - openid
             - email
             - profile
-
-parameters:
-  billingProjectQueryParam:
-    in: query
-    description: Billing project to use for queries to the data reference
-    name: billingProject
-    required: false
-    type: string
-  dataReferenceQueryParam:
-    in: query
-    description: Data reference name to query for entity metadata
-    name: dataReference
-    required: false
-    type: string
-  snapshotIdPathParam:
-    in: path
-    description: The snapshot ID
-    name: snapshotId
-    required: true
-    type: string
-  workspaceNamespacePathParam:
-    in: path
-    description: The workspace namespace
-    name: workspaceNamespace
-    required: true
-    type: string
-  workspaceNamePathParam:
-    in: path
-    description: The workspace name
-    name: workspaceName
-    required: true
-    type: string
-
-definitions:
-  DataRepoSnapshot:
-    description: A Data Repo snapshot
-    properties:
-      snapshotId:
+components:
+  schemas:
+    DataRepoSnapshot:
+      type: object
+      properties:
+        snapshotId:
+          type: string
+          description: The ID of the snapshot in Terra Data Repo
+        name:
+          type: string
+          description: The name of the snapshot
+      description: A Data Repo snapshot
+    DataRepoSnapshotReference:
+      type: object
+      properties:
+        referenceId:
+          type: string
+        name:
+          type: string
+        workspaceId:
+          type: string
+        referenceType:
+          type: string
+        reference:
+          type: object
+          properties: {}
+        cloningInstructions:
+          type: string
+      description: A Data Reference definition from Workspace Manager
+    DataRepoSnapshotReferenceList:
+      type: object
+      properties:
+        resources:
+          type: array
+          description: A list of Data Reference definitions from Workspace Manager
+          items:
+            $ref: '#/components/schemas/DataRepoSnapshotReferences'
+      description: A list of DataRepoSnapshotReferences
+  parameters:
+    billingProjectQueryParam:
+      name: billingProject
+      in: query
+      description: Billing project to use for queries to the data reference
+      schema:
         type: string
-        description: The ID of the snapshot in Terra Data Repo
-      name:
+    dataReferenceQueryParam:
+      name: dataReference
+      in: query
+      description: Data reference name to query for entity metadata
+      schema:
         type: string
-        description: The name of the snapshot
-
-  DataRepoSnapshotReference:
-    description: A Data Reference definition from Workspace Manager
-    properties:
-      referenceId:
+    snapshotIdPathParam:
+      name: snapshotId
+      in: path
+      description: The snapshot ID
+      required: true
+      schema:
         type: string
-      name:
+    workspaceNamespacePathParam:
+      name: workspaceNamespace
+      in: path
+      description: The workspace namespace
+      required: true
+      schema:
         type: string
-      workspaceId:
+    workspaceNamePathParam:
+      name: workspaceName
+      in: path
+      description: The workspace name
+      required: true
+      schema:
         type: string
-      referenceType:
-        type: string
-      reference:
-        type: object
-      cloningInstructions:
-        type: string
-
-  DataRepoSnapshotReferenceList:
-    description: A list of DataRepoSnapshotReferences
-    properties:
-      resources:
-        description: A list of Data Reference definitions from Workspace Manager
-        type: array
-        items:
-          $ref: '#/definitions/DataRepoSnapshotReferences'
