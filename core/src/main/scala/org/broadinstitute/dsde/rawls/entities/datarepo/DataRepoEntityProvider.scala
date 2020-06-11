@@ -38,12 +38,13 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     // reformat TDR's response into the expected response structure
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
       val attrs: Seq[String] = table.getColumns.asScala.map(_.getName)
-      // Is there a better way to describe the primary key if null or more than one PK, if TDR ever supports this.
-      // currently, TDR returns null for PKs in snapshots, and this is expected according to the TDR team,
-      // with no concrete plans to change.
-      val primaryKey = Option(table.getPrimaryKey).getOrElse(new java.util.ArrayList()).asScala.mkString(",")
-      // TODO: AS-321 once DR-1003 is implemented, add the actual row counts
-      (table.getName, EntityTypeMetadata(-1, primaryKey, attrs))
+      // If data repo returns one and only one primary key, use it.
+      // If data repo returns null or a compound PK, use the built-in rowid for pk instead.
+      val primaryKey = Option(table.getPrimaryKey) match {
+        case Some(pk) if pk.size() == 1 => pk.asScala.head
+        case _ => "datarepo_row_id" // default data repo value
+      }
+      (table.getName, EntityTypeMetadata(table.getRowCount, primaryKey, attrs))
     }.toMap
 
     Future.successful(entityTypesResponse)

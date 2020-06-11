@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import java.util.UUID
 
+import bio.terra.datarepo.model.TableModel
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.EntityTypeMetadata
@@ -13,36 +14,31 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   behavior of "DataEntityProvider.entityTypeMetadata()"
 
   it should "return entity type metadata in the golden path" in {
+    // N.B. due to the DataRepoEntityProviderSpecSupport.defaultTables fixture data, this test also asserts on:
+    // - empty list returned for columns on a table
+    // - null PK returned for table, defaults to datarepo_row_id
+    // - compound PK returned for table, defaults to datarepo_row_id
+    // - single PK returned for table is honored
+    // - row counts returned for table are honored
+
     val provider = createTestProvider()
 
     provider.entityTypeMetadata() map { metadata: Map[String, EntityTypeMetadata] =>
       // this is the default expected value, should it move to the support trait?
       val expected = Map(
-        ("table1", EntityTypeMetadata(-1, "", Seq("col1.1", "col1.2"))),
-        ("table2", EntityTypeMetadata(-1, "", Seq("col2.1", "col2.2"))))
+        ("table1", EntityTypeMetadata(0, "datarepo_row_id", Seq())),
+        ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2.1", "col2.2"))),
+        ("table3", EntityTypeMetadata(456, "datarepo_row_id", Seq("col3.1", "col3.2"))))
       assertResult(expected) { metadata }
     }
   }
 
   it should "return an empty Map if data repo snapshot has no tables" in {
     val provider = createTestProvider(
-      dataRepoDAO = new SpecDataRepoDAO(Right( createSnapshotModel( List.empty[(String, List[String])] ) )))
+      dataRepoDAO = new SpecDataRepoDAO(Right( createSnapshotModel( List.empty[TableModel] ) )))
 
     provider.entityTypeMetadata() map { metadata: Map[String, EntityTypeMetadata] =>
       assert(metadata.isEmpty, "expected response data to be the empty map")
-    }
-  }
-
-  it should "return empty columns if data repo snapshot tables but no columns" in {
-    val provider = createTestProvider(
-      dataRepoDAO = new SpecDataRepoDAO(Right( createSnapshotModel( List( ("foo", List.empty[String]), ("bar", List("one", "two")) ) ) )))
-
-    val expected = Map(
-      ("foo", EntityTypeMetadata(-1, "", Seq.empty[String])),
-      ("bar", EntityTypeMetadata(-1, "", Seq("one", "two"))))
-
-    provider.entityTypeMetadata() map { metadata: Map[String, EntityTypeMetadata] =>
-      assertResult(expected) { metadata }
     }
   }
 

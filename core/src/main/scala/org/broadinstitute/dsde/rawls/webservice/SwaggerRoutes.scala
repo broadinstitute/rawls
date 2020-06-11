@@ -1,26 +1,24 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.stream.scaladsl.Flow
 import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.config.SwaggerConfig
-import io.circe._
-import io.circe.yaml
 import io.circe.yaml.syntax._
+import io.circe.{yaml, _}
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.config.SwaggerConfig
 
-import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 /**
   * Created by dvoet on 7/18/17.
   */
 trait SwaggerRoutes extends LazyLogging {
-  private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/2.2.5"
+  private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/3.25.0"
 
   val swaggerConfig: SwaggerConfig
 
@@ -41,12 +39,7 @@ trait SwaggerRoutes extends LazyLogging {
   val swaggerRoutes: server.Route = {
     path("") {
       get {
-        parameter("url") {urlparam =>
-          extractUri {uri =>
-            redirect(uri.withRawQueryString(""), StatusCodes.MovedPermanently)
-          }
-        } ~
-          serveIndex()
+        serveIndex()
       }
     } ~
       path("api-docs.yaml") {
@@ -57,9 +50,8 @@ trait SwaggerRoutes extends LazyLogging {
       // We have to be explicit about the paths here since we're matching at the root URL and we don't
       // want to catch all paths lest we circumvent Spray's not-found and method-not-allowed error
       // messages.
-      (pathSuffixTest("o2c.html") | pathSuffixTest("swagger-ui.js")
-        | pathPrefixTest("css" /) | pathPrefixTest("fonts" /) | pathPrefixTest("images" /)
-        | pathPrefixTest("lang" /) | pathPrefixTest("lib" /)) {
+      (pathPrefixTest("swagger-ui") | pathPrefixTest("oauth2") | pathSuffixTest("js")
+        | pathSuffixTest("css") | pathPrefixTest("favicon")) {
         get {
           getFromResourceDirectory(swaggerUiPath)
         }
@@ -71,21 +63,27 @@ trait SwaggerRoutes extends LazyLogging {
       """
         |        validatorUrl: null,
         |        apisSorter: "alpha",
-        |        operationsSorter: "alpha",
+        |        operationsSorter: "alpha"
       """.stripMargin
 
     mapResponseEntity { entityFromJar =>
       entityFromJar.transformDataBytes(Flow.fromFunction[ByteString, ByteString] { original: ByteString =>
         ByteString(original.utf8String
-          .replace("your-client-id", swaggerConfig.googleClientId)
-          .replace("your-realms", swaggerConfig.realm)
-          .replace("your-app-name", swaggerConfig.realm)
-          .replace("scopeSeparator: \",\"", "scopeSeparator: \" \"")
-          .replace("jsonEditor: false,", "jsonEditor: false," + swaggerOptions)
-          .replace("url = \"http://petstore.swagger.io/v2/swagger.json\";", "url = '/api-docs.yaml';")
+          .replace("""url: "https://petstore.swagger.io/v2/swagger.json"""", "url: '/api-docs.yaml'")
+          .replace("""layout: "StandaloneLayout"""", s"""layout: "StandaloneLayout", $swaggerOptions""")
+          .replace("window.ui = ui", s"""ui.initOAuth({
+                                        |        clientId: "${swaggerConfig.googleClientId}",
+                                        |        clientSecret: "${swaggerConfig.realm}",
+                                        |        realm: "${swaggerConfig.realm}",
+                                        |        appName: "rawls",
+                                        |        scopeSeparator: " ",
+                                        |        additionalQueryStringParams: {}
+                                        |      })
+                                        |      window.ui = ui
+                                        |      """.stripMargin)
         )})
     } {
-      getFromResource(swaggerUiPath + "/index.html")
+      getFromResource(s"$swaggerUiPath/index.html")
     }
   }
 

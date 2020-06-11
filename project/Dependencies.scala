@@ -61,7 +61,7 @@ object Dependencies {
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.3.0"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
-  val swaggerUI: ModuleID =       "org.webjars"                   % "swagger-ui"            % "2.2.5"
+  val swaggerUI: ModuleID =       "org.webjars"                   % "swagger-ui"            % "3.25.0"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats"                 % "0.9.0"
@@ -95,7 +95,7 @@ object Dependencies {
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
   val workspaceManager = excludeGuavaJDK5("bio.terra" % "terra-workspace-manager-client" % "0.0.3-SNAPSHOT")
-  val dataRepo = excludeGuavaJDK5("bio.terra" % "datarepo-client" % "1.0.1-SNAPSHOT").exclude("javax.ws.rs","javax.ws.rs-api")
+  val dataRepo = excludeGuavaJDK5("bio.terra" % "datarepo-client" % "1.0.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.0-M2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.0-M2"

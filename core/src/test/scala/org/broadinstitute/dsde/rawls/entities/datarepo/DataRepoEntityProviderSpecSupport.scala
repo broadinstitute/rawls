@@ -71,23 +71,19 @@ trait DataRepoEntityProviderSpecSupport {
       .workspaceId(workspaceId)
   }
 
-  // default values for snapshot model in response
-  val defaultTablesAndColumns: List[(String, List[String])] = List(
-    ("table1", List("col1.1", "col1.2")),
-    ("table2", List("col2.1", "col2.2")),
+  val defaultTables: List[TableModel] = List(
+    new TableModel().name("table1").primaryKey(null).rowCount(0)
+      .columns(List().map(new ColumnModel().name(_)).asJava),
+    new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
+      .columns(List("col2.1", "col2.2").map(new ColumnModel().name(_)).asJava),
+    new TableModel().name("table3").primaryKey(List("compound","pk").asJava).rowCount(456)
+      .columns(List("col3.1", "col3.2").map(new ColumnModel().name(_)).asJava)
   )
 
   /* A "factory" method to create SnapshotModel objects, with default.
    */
-  def createSnapshotModel( tablesAndColumns: List[(String, List[String])] = defaultTablesAndColumns): SnapshotModel = {
-    val tables: List[TableModel] = tablesAndColumns.map { t =>
-      new TableModel()
-        .name(t._1)
-        .primaryKey(null)
-        .columns(t._2.map(new ColumnModel().name(_)).asJava)
-    }
+  def createSnapshotModel( tables: List[TableModel] = defaultTables): SnapshotModel =
     new SnapshotModel().tables(tables.asJava)
-  }
 
   /**
    * Mock for WorkspaceManagerDAO that allows the caller to specify behavior for the getDataReferenceByName method.
