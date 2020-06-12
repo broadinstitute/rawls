@@ -8,57 +8,21 @@ paths:
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities:
     get:
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: The workspace namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: The workspace name
-          required: true
-          schema:
-            type: string
-        - name: dataReference
-          in: query
-          description: Data reference name to query for entity metadata
-          schema:
-            type: string
-        - name: billingProject
-          in: query
-          description: Billing project to use for queries to the data reference
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete:
     post:
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: The workspace namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: The workspace name
-          required: true
-          schema:
-            type: string
-        - name: dataReference
-          in: query
-          description: Data reference name to query for entity metadata
-          schema:
-            type: string
-        - name: billingProject
-          in: query
-          description: Billing project to use for queries to the data reference
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       requestBody:
         description: Set of entities to delete
         content:
-          '*/*':
+          'application/json':
             schema:
               type: array
               items:
@@ -73,18 +37,8 @@ paths:
       description: Enumerate references to snapshots in the Terra Data Repo
       operationId: enumerateDataRepoSnapshot
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: The workspace namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: The workspace name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: offset
           in: query
           description: The number of items to skip before starting to collect the result
@@ -102,7 +56,7 @@ paths:
           content:
             '*/*':
               schema:
-                $ref: '#/components/schemas/DataRepoSnapshotList'
+                $ref: '#/components/schemas/DataRepoSnapshotReferenceList'
         404:
           description: Workspace not found or user lacks permissions
           content:
@@ -115,6 +69,11 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     post:
       tags:
         - snapshots
@@ -122,22 +81,12 @@ paths:
       description: Add a reference to a snapshot in the Terra Data Repo
       operationId: createDataRepoSnapshot
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: The workspace namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: The workspace name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Reference to the Data Repo snapshot
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/DataRepoSnapshot'
         required: true
@@ -161,6 +110,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       x-codegen-request-body-name: dataRepoSnapshot
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
     get:
       tags:
@@ -169,24 +123,9 @@ paths:
       description: Get a reference to a snapshot in the Terra Data Repo
       operationId: getDataRepoSnapshot
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: The workspace namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: The workspace name
-          required: true
-          schema:
-            type: string
-        - name: snapshotId
-          in: path
-          description: The snapshot ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/snapshotIdPathParam'
       responses:
         200:
           description: OK
@@ -206,6 +145,11 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     delete:
       tags:
         - snapshots
@@ -214,24 +158,9 @@ paths:
         Repo
       operationId: deleteDataRepoSnapshot
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: The workspace namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: The workspace name
-          required: true
-          schema:
-            type: string
-        - name: snapshotId
-          in: path
-          description: The snapshot ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/snapshotIdPathParam'
       responses:
         204:
           description: Successful Request
@@ -289,7 +218,7 @@ components:
           type: array
           description: A list of Data Reference definitions from Workspace Manager
           items:
-            $ref: '#/components/schemas/DataRepoSnapshotReferences'
+            $ref: '#/components/schemas/DataRepoSnapshotReference'
       description: A list of DataRepoSnapshotReferences
   parameters:
     billingProjectQueryParam:
@@ -307,7 +236,7 @@ components:
     snapshotIdPathParam:
       name: snapshotId
       in: path
-      description: The snapshot ID
+      description: The snapshot's referenceId
       required: true
       schema:
         type: string
