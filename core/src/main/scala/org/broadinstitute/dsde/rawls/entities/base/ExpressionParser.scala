@@ -5,7 +5,7 @@ import cats.syntax.functor._
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrExtendedJSONParser, ExtendedJSONValidationVisitor}
 import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, AttributeString, ParsedMCExpressions}
 
-import scala.language.{higherKinds, postfixOps}
+import scala.language.higherKinds
 import scala.util.Try
 import scala.util.parsing.combinator.JavaTokenParsers
 
@@ -73,8 +73,8 @@ trait ExpressionParser[F[_], ExpressionContext, PipeType] extends JavaTokenParse
     * want to check that the expression in ParsedExpression has a length <= 2
     */
   def parseMCExpressions(expressions: Map[String, AttributeString]): Map[String, ParsedExpression] = {
-    expressions.map {
-      case (key, attr) => (key, parseExpression(attr.value))
+    expressions.mapValues { attr =>
+      parseExpression(attr.value)
     }
   }
 
