@@ -5,6 +5,7 @@ object Merging {
     case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.discard
     case x if x.endsWith("Resource$AuthenticationType.class") => MergeStrategy.first
     case x if x.endsWith("module-info.class") => MergeStrategy.discard
+    case x if x.endsWith("field_mask.proto") => MergeStrategy.first
     case PathList("org", "apache", xs @ _*) => MergeStrategy.last
     case PathList("com", "typesafe", xs @ _*) => MergeStrategy.last
     case PathList("com", "google", "auto", "value", xs @ _*) => MergeStrategy.last
