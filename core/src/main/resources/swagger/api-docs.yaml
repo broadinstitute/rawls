@@ -44,7 +44,7 @@ paths:
         200:
           description: Version information of this application
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ApplicationVersion'
   /status:
@@ -61,7 +61,7 @@ paths:
         500:
           description: Problem with one or more systems. See response for details.
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/SystemStatus'
   /version/executionEngine:
@@ -75,7 +75,7 @@ paths:
         200:
           description: The currently running version of the execution engine
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ExecutionEngineVersion'
   /api/billing:
@@ -88,7 +88,7 @@ paths:
       requestBody:
         description: create project request
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/CreateRawlsBillingProjectFullRequest'
         required: true
@@ -99,14 +99,14 @@ paths:
         400:
           description: firecloud billing user must be a user of the billing account
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: You must be a user of the google billing account and have permissions
             on the service perimeter if one is specified
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
@@ -115,7 +115,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -143,7 +143,7 @@ paths:
         200:
           description: Success
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -151,13 +151,13 @@ paths:
         403:
           description: You must be a project owner to view the members of a project
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -201,19 +201,19 @@ paths:
         403:
           description: You must be a project owner to add a user to a billing project
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: User not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -256,19 +256,19 @@ paths:
         403:
           description: You must be a project owner to add a user to a billing project
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: User not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -311,19 +311,19 @@ paths:
         403:
           description: You must be a project owner granting a role on the whitelist
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: User not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -365,19 +365,19 @@ paths:
         403:
           description: You must be a project owner removing a role on the whitelist
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: User not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -394,7 +394,7 @@ paths:
       requestBody:
         description: create project request
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/RawlsBillingProjectTransfer'
         required: true
@@ -432,7 +432,7 @@ paths:
             type: string
       requestBody:
         content:
-          '*/*':
+          'application/json':
             schema:
               required:
                 - newOwnerEmail
@@ -477,7 +477,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -485,19 +485,19 @@ paths:
         403:
           description: You must be an admin to list active submissions
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         502:
           description: Trouble talking to Google
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -539,19 +539,19 @@ paths:
         403:
           description: You must be an admin to abort a submission
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         502:
           description: Trouble talking to Google or Cromwell
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -581,7 +581,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -610,7 +610,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -651,7 +651,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -659,13 +659,13 @@ paths:
         403:
           description: You must be an admin to list workspaces
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -694,7 +694,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -763,19 +763,19 @@ paths:
         200:
           description: Successful request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkflowQueueStatusByUserResponse'
         403:
           description: You must be an admin
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -813,25 +813,25 @@ paths:
         400:
           description: Project is already in perimeter or is not in 'Ready' state
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: Project does not exist or you do not have access
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Service Perimeter does not exist or you do not have access
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -863,7 +863,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -871,13 +871,13 @@ paths:
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -907,7 +907,7 @@ paths:
       requestBody:
         description: Description of a submission.
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/SubmissionRequest'
         required: true
@@ -915,32 +915,32 @@ paths:
         201:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/SubmissionReport'
         400:
           description: Expression evaluation failed or entities are not of type required
             by method config
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace, Method Configuration or Entity not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         502:
           description: Trouble talking to Agora
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -974,20 +974,20 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: object
                 description: Map[String,Int]
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1018,7 +1018,7 @@ paths:
       requestBody:
         description: Description of a submission.
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/SubmissionRequest'
         required: true
@@ -1026,32 +1026,32 @@ paths:
         200:
           description: Validation Response
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/SubmissionValidationReport'
         400:
           description: Expression evaluation failed or entities are not of type required
             by method config
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace, Method Configuration or Entity not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         502:
           description: Trouble talking to Agora
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1090,19 +1090,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/Submission'
         404:
           description: Workspace or submission not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1142,19 +1142,19 @@ paths:
         404:
           description: Workspace or submission not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         502:
           description: Unable to abort all workflows in this submission
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1198,19 +1198,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkflowCost'
         404:
           description: Workspace, Submission or Workflow not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1254,25 +1254,25 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkflowOutputs'
         404:
           description: Workspace, Submission or Workflow not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         502:
           description: Unable to retrieve outputs or logs from Cromwell
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1346,13 +1346,13 @@ paths:
         404:
           description: Workspace, Submission or Workflow not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1371,13 +1371,13 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkflowQueueStatusResponse'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1497,7 +1497,7 @@ paths:
       requestBody:
         description: New entity name
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/EntityName'
         required: true
@@ -1508,19 +1508,19 @@ paths:
         404:
           description: Workspace or Entity not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: New name for entity already exists in workspace
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1564,7 +1564,7 @@ paths:
       requestBody:
         description: Expression
         content:
-          '*/*':
+          'application/json':
             schema:
               type: string
         required: true
@@ -1575,19 +1575,19 @@ paths:
         400:
           description: Invalid entity expression
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace or Entity not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1621,20 +1621,20 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: object
                 description: Map[String,EntityTypeMetadata]
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1664,7 +1664,7 @@ paths:
       requestBody:
         description: Entity data
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/Entity'
         required: true
@@ -1677,31 +1677,31 @@ paths:
               schema:
                 type: string
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/Entity'
         403:
           description: User does not have permission to update attributes in the namespace
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: Entity already exists
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1740,7 +1740,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -1748,13 +1748,13 @@ paths:
         404:
           description: Workspace or entityType not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1798,19 +1798,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/Entity'
         404:
           description: Workspace or Entity not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1852,7 +1852,7 @@ paths:
       requestBody:
         description: Update operations for attributes
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/AttributeUpdateOperationArray'
         required: false
@@ -1860,31 +1860,31 @@ paths:
         200:
           description: Entity updated
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/Entity'
         400:
           description: Attribute does not exist
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: User does not have permission to update attributes in the namespace
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace or Entity not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1916,7 +1916,7 @@ paths:
       requestBody:
         description: Set of entities to delete
         content:
-          '*/*':
+          'application/json':
             schema:
               type: array
               items:
@@ -1929,14 +1929,14 @@ paths:
         400:
           description: Not all Entities exist
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: Cannot create dangling references when deleting Entities -
             must specify whole set
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -1944,7 +1944,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -1971,7 +1971,7 @@ paths:
       requestBody:
         description: Source and destination for entities
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/EntityCopyDefinition'
         required: true
@@ -1979,13 +1979,13 @@ paths:
         201:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/EntityCopyResponse'
         404:
           description: Source workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
@@ -1993,20 +1993,20 @@ paths:
             paramater linkExistingEntities=true to link all soft conflicts to the
             entities that already exist in your workspace.
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/EntityCopyResponse'
         422:
           description: Destination workspace must match source's authorization domain,
             if the source has one
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2039,7 +2039,7 @@ paths:
       requestBody:
         description: Entity update definitions
         content:
-          '*/*':
+          'application/json':
             schema:
               type: array
               items:
@@ -2052,25 +2052,25 @@ paths:
         400:
           description: Invalid attribute update operation
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: User does not have permission to update attributes in the namespace
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2103,7 +2103,7 @@ paths:
       requestBody:
         description: Entity update definitions
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/EntityUpdateDefinition'
         required: true
@@ -2114,25 +2114,25 @@ paths:
         400:
           description: Invalid attribute update operation
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: User does not have permission to update attributes in the namespace
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2195,7 +2195,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -2203,13 +2203,13 @@ paths:
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2271,7 +2271,7 @@ paths:
       requestBody:
         description: Method Configuration contents
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/MethodConfiguration'
         required: true
@@ -2284,31 +2284,31 @@ paths:
               schema:
                 type: string
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ValidatedMethodConfiguration'
         403:
           description: Invalid attribute namespace(s) in outputs
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: MethodConfiguration already exists
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2353,19 +2353,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ValidatedMethodConfiguration'
         404:
           description: Workspace or Method Configuration not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2409,19 +2409,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/MethodConfiguration'
         404:
           description: Workspace or Method Configuration not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2465,7 +2465,7 @@ paths:
       requestBody:
         description: New Method Configuration contents
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/MethodConfiguration'
         required: true
@@ -2473,26 +2473,26 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ValidatedMethodConfiguration'
         400:
           description: Method configuration name and namespace in URI do not match
             those in JSON body
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: Invalid attribute namespace(s) in outputs
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2540,7 +2540,7 @@ paths:
       requestBody:
         description: New Method Configuration contents
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/MethodConfiguration'
         required: true
@@ -2548,31 +2548,31 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ValidatedMethodConfiguration'
         403:
           description: Invalid attribute namespace(s) in outputs
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace or method configuration not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: Method config with the new name already exists in workspace
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2619,13 +2619,13 @@ paths:
         404:
           description: Workspace or Method Configuration not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2671,7 +2671,7 @@ paths:
       requestBody:
         description: New Method Configuration Name
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/MethodConfigurationName'
         required: true
@@ -2682,25 +2682,25 @@ paths:
         400:
           description: Workspace details in payload don't match the URI
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace or Method Configuration not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: Method config with the new name already exists in workspace
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2719,7 +2719,7 @@ paths:
       requestBody:
         description: Source and destination method configuration names
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/MethodConfigurationNamePair'
         required: true
@@ -2732,31 +2732,31 @@ paths:
               schema:
                 type: string
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/MethodConfiguration'
         403:
           description: Invalid attribute namespace(s) in outputs
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Source workspace or method configuration not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: Destination method configuration by that name already exists
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2775,7 +2775,7 @@ paths:
       requestBody:
         description: Import from Method Repository
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/MethodRepoConfigurationImport'
         required: true
@@ -2788,37 +2788,37 @@ paths:
               schema:
                 type: string
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/MethodConfiguration'
         403:
           description: Invalid attribute namespace(s) in outputs
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Source method configuration not found in method repo
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: Destination method configuration by that name already exists
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         422:
           description: Error parsing source method configuration
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2837,7 +2837,7 @@ paths:
       requestBody:
         description: Export to Method Repository
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/MethodRepoConfigurationExport'
         required: true
@@ -2845,19 +2845,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/AgoraEntity'
         404:
           description: Source method configuration not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2878,7 +2878,7 @@ paths:
       requestBody:
         description: name of method to use for template
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/MethodRepoMethod'
         required: true
@@ -2886,19 +2886,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/MethodConfiguration'
         400:
           description: Method WDL can't be parsed
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: No such method
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2917,7 +2917,7 @@ paths:
       requestBody:
         description: name of method to use for template
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/MethodRepoMethod'
         required: true
@@ -2925,19 +2925,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/MethodInputsOutputs'
         400:
           description: Method WDL can't be parsed
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: No such method
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -2973,19 +2973,19 @@ paths:
         403:
           description: Insufficient permissions to access workspace bucket
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace Not Found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3031,7 +3031,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3066,25 +3066,25 @@ paths:
         403:
           description: Insufficient permissions to lock workspace (must be owner)
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace Not Found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: Workspace cannot be locked due to running submissions
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3119,19 +3119,19 @@ paths:
         403:
           description: Insufficient permissions to lock workspace (must be owner)
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace Not Found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3163,25 +3163,25 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceACL'
         403:
           description: Insufficient permissions to get workspace ACLs (must be owner)
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3218,7 +3218,7 @@ paths:
       requestBody:
         description: Series of ACL updates for workspace
         content:
-          '*/*':
+          'application/json':
             schema:
               type: array
               items:
@@ -3228,32 +3228,32 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceACLUpdateResponseList'
         400:
           description: Attempting to change access controls you can't (your own, or
             public-access group)
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: Insufficient permissions to edit workspace ACLs (must be owner)
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace, user or group not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3286,19 +3286,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceBucketOptions'
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3331,7 +3331,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -3339,13 +3339,13 @@ paths:
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3375,7 +3375,7 @@ paths:
       requestBody:
         description: Series of Catalog updates for workspace
         content:
-          '*/*':
+          'application/json':
             schema:
               type: array
               items:
@@ -3385,19 +3385,19 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceCatalogUpdateResponseList'
         404:
           description: Workspace, user or group not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3429,7 +3429,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -3437,13 +3437,13 @@ paths:
         400:
           description: Unrecognized query parameters
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3460,7 +3460,7 @@ paths:
       requestBody:
         description: Workspace contents
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/WorkspaceRequest'
         required: true
@@ -3473,32 +3473,32 @@ paths:
               schema:
                 type: string
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceDetails'
         400:
           description: Workspace namespace is not ready
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: User does not have access to create workspace in namespace
             or user does not have permission to set attributes in the namespace
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: Workspace by that name already exists
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3542,25 +3542,25 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceResponse'
         400:
           description: Unrecognized query parameters
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3595,19 +3595,19 @@ paths:
         403:
           description: Insufficient permissions to delete workspace (must be owner)
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3637,7 +3637,7 @@ paths:
       requestBody:
         description: Update operations
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/AttributeUpdateOperationArray'
         required: true
@@ -3645,31 +3645,31 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceDetails'
         400:
           description: Attribute does not exist or is of an unexpected type
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: Insufficient permissions to edit workspace attributes
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3701,7 +3701,7 @@ paths:
       requestBody:
         description: Request for new workspace
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/WorkspaceRequestClone'
         required: true
@@ -3714,45 +3714,45 @@ paths:
               schema:
                 type: string
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/WorkspaceDetails'
         400:
           description: Workspace namespace is not ready
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: User does not have access to create workspace in namespace
             or user does not have permission to set attributes in the namespace
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Source workspace not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
           description: Destination workspace already exists
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         422:
           description: Destination workspace must match source's authorization domain,
             if the dest has one
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3785,7 +3785,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/BucketUsageResponse'
       security:
@@ -3810,7 +3810,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 description: list of all tags used in FireCloud and their associated
@@ -3820,7 +3820,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3857,19 +3857,19 @@ paths:
           description: Insufficient permissions to enable Requester Pays for workspace.
             Writer and higher permissions required on workspace.
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: Workspace Not Found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3906,7 +3906,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3942,13 +3942,13 @@ paths:
         404:
           description: workflow or jobId not found or no access
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3966,7 +3966,7 @@ paths:
       requestBody:
         description: refresh token
         content:
-          '*/*':
+          'application/json':
             schema:
               $ref: '#/components/schemas/UserRefreshToken'
         required: true
@@ -3977,7 +3977,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -3997,25 +3997,25 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/UserRefreshTokenDate'
         400:
           description: Token for the user is invalid
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
           description: There is no refresh token for the user
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -4040,7 +4040,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -4065,7 +4065,7 @@ paths:
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -4085,7 +4085,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 description: list of billing projects for this user
@@ -4094,13 +4094,13 @@ paths:
         404:
           description: User not found
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -4127,7 +4127,7 @@ paths:
         200:
           description: OK
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/RawlsBillingProjectStatus'
         404:
@@ -4162,19 +4162,19 @@ paths:
         400:
           description: Project cannot be deleted because it contains workspaces.
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
           description: You must be a project owner to delete billing project
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -4194,7 +4194,7 @@ paths:
         200:
           description: Successful Request
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 description: list of billing accounts for this user
@@ -4204,13 +4204,13 @@ paths:
           description: Forbidden. You probably missed a scope; more details in the
             ErrorReport's message field
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           description: Rawls Internal Error
           content:
-            '*/*':
+            'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       security:
@@ -4242,7 +4242,7 @@ paths:
         200:
           description: Success
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -4275,7 +4275,7 @@ paths:
         200:
           description: Success
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
@@ -4323,7 +4323,7 @@ paths:
         200:
           description: Success
           content:
-            '*/*':
+            'application/json':
               schema:
                 type: array
                 items:
