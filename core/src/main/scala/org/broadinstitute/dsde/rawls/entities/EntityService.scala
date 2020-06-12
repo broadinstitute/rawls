@@ -63,7 +63,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
       // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
       // EntityService constructor, or other higher-level method
-      val entityRequestArguments = EntityRequestArguments(workspaceContext.workspace, userInfo, dataReference)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
 
       entityManager.resolveProvider(entityRequestArguments).getEntity(entityType, entityName)
         .map { entity => PerRequest.RequestComplete(StatusCodes.OK, entity) }
