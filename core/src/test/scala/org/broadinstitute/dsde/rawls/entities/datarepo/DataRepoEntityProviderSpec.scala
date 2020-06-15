@@ -102,7 +102,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   }
 
   // warning: test could fail if spray-json changes the wording of their error messages
-  it should "error if workspace manager reference json does not contain `instance` key" in  {
+  it should "error if workspace manager reference json does not contain `instanceName` key" in  {
     // we have to drop to raw JsObjects to test malformed responses, since these shouldn't happen normally
     // given type safety
     val badRefPayload = JsObject.apply(("snapshot", JsString(snapshot)))
@@ -112,14 +112,14 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     )
 
     val ex = intercept[DataEntityException] { provider.lookupSnapshotForName("foo") }
-    assertResult("Could not parse reference value for foo: Object is missing required member 'instance'") { ex.getMessage }
+    assertResult("Could not parse reference value for foo: Object is missing required member 'instanceName'") { ex.getMessage }
   }
 
   // warning: test could fail if spray-json changes the wording of their error messages
-  it should "error if workspace manager reference json `instance` key is not a string" in  {
+  it should "error if workspace manager reference json `instanceName` key is not a string" in  {
     // we have to drop to raw JsObjects to test malformed responses, since these shouldn't happen normally
     // given type safety
-    val badRefPayload = JsObject.apply(("instance", JsArray(JsNumber(1), JsNumber(2))), ("snapshot", JsString(snapshot)))
+    val badRefPayload = JsObject.apply(("instanceName", JsArray(JsNumber(1), JsNumber(2))), ("snapshot", JsString(snapshot)))
 
     val provider = createTestProvider(
       workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refString = Some(badRefPayload.compactPrint))))
@@ -133,7 +133,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   it should "error if workspace manager reference json does not contain `snapshot` key" in  {
     // we have to drop to raw JsObjects to test malformed responses, since these shouldn't happen normally
     // given type safety
-    val badRefPayload = JsObject.apply(("instance", JsString(dataRepoInstance)))
+    val badRefPayload = JsObject.apply(("instanceName", JsString(dataRepoInstanceName)))
 
     val provider = createTestProvider(
       workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refString = Some(badRefPayload.compactPrint))))
@@ -147,7 +147,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   it should "error if workspace manager reference json `snapshot` key is not a string" in {
     // we have to drop to raw JsObjects to test malformed responses, since these shouldn't happen normally
     // given type safety
-    val badRefPayload = JsObject.apply(("instance", JsString(dataRepoInstance)), ("snapshot", JsArray(JsNumber(1), JsNumber(2))))
+    val badRefPayload = JsObject.apply(("instanceName", JsString(dataRepoInstanceName)), ("snapshot", JsArray(JsNumber(1), JsNumber(2))))
 
     val provider = createTestProvider(
       workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refString = Some(badRefPayload.compactPrint))))
@@ -157,13 +157,13 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     assertResult("Could not parse reference value for foo: Expected String as JsString, but got [1,2]") { ex.getMessage }
   }
 
-  it should "error if workspace manager reference json `instance` value does not match DataRepoDAO's base url" in {
+  it should "error if workspace manager reference json `instanceName` value does not match DataRepoDAO's base url" in {
     val provider = createTestProvider(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refInstance = "this is wrong")))
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refInstanceName = "this is wrong")))
     )
 
     val ex = intercept[DataEntityException] { provider.lookupSnapshotForName("foo") }
-    assertResult("Reference value for foo contains an unexpected instance value") { ex.getMessage }
+    assertResult("Reference value for foo contains an unexpected instance name value") { ex.getMessage }
   }
 
   it should "error if workspace manager reference json `snapshot` value is not a valid UUID" in {
