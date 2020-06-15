@@ -19,16 +19,15 @@ object Dependencies {
   val excludeAkkaActor =        ExclusionRule(organization = "com.typesafe.akka", name = "akka-actor_2.12")
   val excludeAkkaStream =       ExclusionRule(organization = "com.typesafe.akka", name = "akka-stream_2.12")
   val excludeWorkbenchModel =   ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-model_2.12")
-  val excludeWorkbenchUtil =   ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-util_2.12")
+  val excludeWorkbenchUtil =    ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-util_2.12")
 
-  val excludeSundrCodegen =     ExclusionRule(organization = "io.sundr", name = s"sundr-codegen")
-  val excludeBouncyCastleExt = ExclusionRule(organization = "org.bouncycastle", name = s"bcprov-jdk15on")
-  val excludeProtobufJavalite =  ExclusionRule(organization = "com.google.protobuf", name = "protobuf-javalite")
+  val excludeBouncyCastle =     ExclusionRule(organization = "org.bouncycastle", name = s"bcprov-jdk15on")
+  val excludeProtobufJavalite = ExclusionRule(organization = "com.google.protobuf", name = "protobuf-javalite")
 
   def workbenchGoogleExcludes(m: ModuleID): ModuleID = m.excludeAll(
     excludeWorkbenchModel, excludeWorkbenchUtil,
-    excludeSundrCodegen,
-    excludeBouncyCastleExt, excludeProtobufJavalite)
+    excludeBouncyCastle,
+    excludeProtobufJavalite)
 
   val akkaActor: ModuleID =         "com.typesafe.akka"   %%  "akka-actor"           % akkaV
   val akkaStream: ModuleID =        "com.typesafe.akka"   %%  "akka-stream"          % akkaV

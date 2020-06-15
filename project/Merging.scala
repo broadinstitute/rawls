@@ -8,6 +8,7 @@ object Merging {
     case PathList("org", "apache", xs @ _*) => MergeStrategy.last
     case PathList("com", "typesafe", xs @ _*) => MergeStrategy.last
     case PathList("com", "google", "auto", "value", xs @ _*) => MergeStrategy.last
+    case PathList("io", "sundr", xs @ _*) => MergeStrategy.last
     case "application.conf" => MergeStrategy.first
     case "version.conf" => MergeStrategy.concat
     case "logback.xml" => MergeStrategy.first
