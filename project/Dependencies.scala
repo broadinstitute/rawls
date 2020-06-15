@@ -21,14 +21,13 @@ object Dependencies {
   val excludeWorkbenchModel =   ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-model_2.12")
   val excludeWorkbenchUtil =   ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-util_2.12")
 
-  val excludeSundrCore =     ExclusionRule(organization = "io.sundr", name = s"sundr-core")
   val excludeSundrCodegen =     ExclusionRule(organization = "io.sundr", name = s"sundr-codegen")
   val excludeBouncyCastleExt = ExclusionRule(organization = "org.bouncycastle", name = s"bcprov-jdk15on")
   val excludeProtobufJavalite =  ExclusionRule(organization = "com.google.protobuf", name = "protobuf-javalite")
 
   def workbenchGoogleExcludes(m: ModuleID): ModuleID = m.excludeAll(
     excludeWorkbenchModel, excludeWorkbenchUtil,
-    excludeSundrCore, excludeSundrCodegen,
+    excludeSundrCodegen,
     excludeBouncyCastleExt, excludeProtobufJavalite)
 
   val akkaActor: ModuleID =         "com.typesafe.akka"   %%  "akka-actor"           % akkaV
