@@ -3,8 +3,6 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DeleteEntitiesConflictException
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
@@ -23,11 +21,13 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object EntityService {
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, workspaceManagerDAO: WorkspaceManagerDAO, dataRepoDAO: DataRepoDAO)
+  // TODO: constructor should accept userInfo, dataReferenceName, billingProject, anything else needed to resolve provider
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, entityManager: EntityManager)
                  (userInfo: UserInfo)
-                 (implicit executionContext: ExecutionContext) = {
+                 (implicit executionContext: ExecutionContext): EntityService = {
 
-    new EntityService(userInfo, dataSource, samDAO, EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO), workbenchMetricBaseName)
+    // TODO: resolve the provider here, pass to EntityService so implementations never have to resolve
+    new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName)
   }
 }
 
