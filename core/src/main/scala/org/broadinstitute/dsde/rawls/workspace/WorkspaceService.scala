@@ -60,7 +60,7 @@ object WorkspaceService {
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext) = {
 
-    new WorkspaceService(userInfo, dataSource, EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO), methodRepoDAO, cromiamDAO,
+    new WorkspaceService(userInfo, dataSource, EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO), methodRepoDAO, cromiamDAO,
       executionServiceCluster, execServiceBatchSize, workspaceManagerDAO,
       methodConfigResolver, gcsDAO, samDAO,
       notificationDAO, userServiceConstructor,

@@ -4,12 +4,16 @@ import java.util.UUID
 
 import bio.terra.datarepo.model.TableModel
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
+import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.EntityTypeMetadata
 import org.scalatest.{AsyncFlatSpec, Matchers}
 import spray.json.{JsArray, JsNumber, JsObject, JsString}
 
-class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with Matchers {
+class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
+
+  override implicit val executionContext = TestExecutionContext.testExecutionContext
 
   behavior of "DataEntityProvider.entityTypeMetadata()"
 

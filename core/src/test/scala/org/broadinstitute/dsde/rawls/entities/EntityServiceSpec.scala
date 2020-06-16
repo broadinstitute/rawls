@@ -65,7 +65,7 @@ class EntityServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers w
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
-      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO())
+      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO(), samDAO)
     )_
   }
 

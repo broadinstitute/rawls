@@ -393,7 +393,7 @@ object Boot extends IOApp with LazyLogging {
       )
 
       // create the entity manager.
-      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO)
+      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO)
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
         slickDataSource,

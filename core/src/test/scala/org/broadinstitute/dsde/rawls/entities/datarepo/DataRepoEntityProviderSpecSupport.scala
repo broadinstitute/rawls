@@ -6,15 +6,21 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{ColumnModel, SnapshotModel, TableModel}
 import bio.terra.workspace.model.DataReferenceDescription
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockWorkspaceManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.model.{UserInfo, Workspace}
 import org.joda.time.DateTime
 import spray.json.{JsObject, JsString}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.ExecutionContext
 
 trait DataRepoEntityProviderSpecSupport {
+
+  val slickDataSource: SlickDataSource
+  val userInfo: UserInfo
+  implicit val executionContext: ExecutionContext
 
   // default values for some important attributes
   val wsId: UUID = UUID.randomUUID()
@@ -26,18 +32,15 @@ trait DataRepoEntityProviderSpecSupport {
   val workspace = new Workspace("namespace", "name", wsId.toString, "bucketName", None,
     DateTime.now(), DateTime.now(), "createdBy", Map.empty, false)
 
-  // default UserInfo object, mostly irrelevant for DataRepoEntityProviderSpec but necessary to exist
-  val userInfo = UserInfo(RawlsUserEmail("email"), OAuth2BearerToken(""), 123L, RawlsUserSubjectId("456"))
-
-
   /* A "factory" method to create a DataRepoEntityProvider, with defaults.
    * Individual unit tests should call this to reduce boilerplate.
    */
   def createTestProvider(workspaceManagerDAO: SpecWorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription())),
                          dataRepoDAO: SpecDataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel())),
+                         samDAO: SamDAO = new MockSamDAO(slickDataSource),
                          entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some("referenceName"))
                         ): DataRepoEntityProvider = {
-    new DataRepoEntityProvider(entityRequestArguments, workspaceManagerDAO, dataRepoDAO)
+    new DataRepoEntityProvider(entityRequestArguments, workspaceManagerDAO, dataRepoDAO, samDAO)
   }
 
 
