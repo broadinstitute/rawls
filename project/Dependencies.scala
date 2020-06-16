@@ -56,7 +56,11 @@ object Dependencies {
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev17-" + googleV)
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2beta-rev20181207-1.28.0")
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
-  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.24.0"
+
+  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.30.0"
+  val googleRpcNettyShaded: ModuleID =    "io.grpc" % "grpc-netty-shaded" % "1.30.0"
+  val googleCloudCoreGrpc: ModuleID =     "com.google.cloud" % "google-cloud-core-grpc" % "1.93.6"
+
   val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
@@ -154,6 +158,15 @@ object Dependencies {
     googleGuava
   )
 
+  // google2 lib requires specific versions of rpc libs:
+  val google2Dependencies = Seq(
+    workbenchGoogle2,
+    googleCloudCoreGrpc,
+    googleRpc,
+    googleRpcNettyShaded,
+    workbenchGoogle2Tests
+  )
+
   val utilDependencies = Seq(
     scalaLogging,
     akkaActor,
@@ -180,7 +193,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
     typesafeConfig,
     parserCombinators,
     sentryLogback,
@@ -200,12 +213,9 @@ object Dependencies {
     akkaHttpTestKit,
     mockserverNetty,
     mockito,
-    googleRpc,
     log4cats,
     workbenchModel,
     workbenchGoogle,
-    workbenchGoogle2,
-    workbenchGoogle2Tests,
     googleStorageLocal,
     workbenchGoogleMocks,
     workbenchUtil,

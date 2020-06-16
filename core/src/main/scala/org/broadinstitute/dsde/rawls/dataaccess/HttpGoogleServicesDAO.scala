@@ -188,7 +188,7 @@ class HttpGoogleServicesDAO(
       _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
-//      _ <- topicAdmin.createWithPublisherMembers(hammCromwellMetadata.topicName, List(projectServiceAccount), Some(traceId))
+      _ <- topicAdmin.createWithPublisherMembers(hammCromwellMetadata.topicName, List(projectServiceAccount), Some(traceId))
       _ <- Stream.eval(googleServiceHttp.createNotification(hammCromwellMetadata.topicName, hammCromwellMetadata.bucketName, Filters(List(NotificationEventTypes.ObjectFinalize), None), Some(traceId)))
     } yield ()
     // unsafeRunSync is not desired, but return type for initBuckets dictates execution has to happen immediately when the method is called.

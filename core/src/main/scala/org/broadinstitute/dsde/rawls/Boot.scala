@@ -517,8 +517,8 @@ object Boot extends IOApp with LazyLogging {
       googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, blocker, None, Option(serviceProject))
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
-//      topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
-    } yield AppDependencies[F](googleStorage, googleServiceHttp, null)
+      topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
+    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin)
   }
 }
 
