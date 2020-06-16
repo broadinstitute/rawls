@@ -38,22 +38,63 @@ trait ExpressionParser[F[_], ExpressionContext, PipeType] extends JavaTokenParse
 
   // Syntax checker
   def parseMCExpressions(inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], allowRootEntity: Boolean): ParsedMCExpressions = {
-    val noEntityAllowedErrorMsg = "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."
-    def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[Unit] ) = {
-      val parsed = m map { case (key, attr) => (key, parseFunc(attr.value)) }
-      ( parsed collect { case (key, scala.util.Success(_)) => key } toSet,
-        parsed collect { case (key, scala.util.Failure(regret)) =>
-          if (!allowRootEntity && m.get(key).isDefined && m.get(key).get.value.startsWith("this."))
-            (key, noEntityAllowedErrorMsg)
-          else
-            (key, regret.getMessage)}
-      )
+    val parsedInputResults: Map[String, Try[Unit]] = inputs.map {
+      case (key, attr) => (key, parseInputExpr(allowRootEntity)(attr.value))
+    }
+    val parsedOutputResults: Map[String, Try[Unit]] = outputs.map {
+      case (key, attr) => (key, parseOutputExpr(allowRootEntity)(attr.value))
     }
 
-    val (successInputs, failedInputs)   = parseAndPartition(inputs, parseInputExpr(allowRootEntity) )
-    val (successOutputs, failedOutputs) = parseAndPartition(outputs, parseOutputExpr(allowRootEntity) )
+    val (successInputs, failedInputs)   = partitionParsedResults(inputs, parsedInputResults, allowRootEntity)
+    val (successOutputs, failedOutputs) = partitionParsedResults(outputs, parsedOutputResults, allowRootEntity)
 
     ParsedMCExpressions(successInputs, failedInputs, successOutputs, failedOutputs)
+  }
+
+  private def partitionParsedResults(m: Map[String, AttributeString], parsed: Map[String, Try[Unit]], allowRootEntity: Boolean): (Set[String], Map[String, String]) = {
+    val successes = parsed.collect { case (key, scala.util.Success(_)) => key }.toSet
+    val failures = parsed.collect { case (key, scala.util.Failure(regret)) =>
+      if (!allowRootEntity && m.get(key).isDefined && m.get(key).get.value.startsWith("this.")) {
+        key -> "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."
+      } else {
+        key -> regret.getMessage
+      }
+    }
+
+    (successes, failures)
+  }
+
+  /** not distinguishing b/w inputs and outputs here bc difference doesn't matter for parsing it's a question for the validator to determine
+    *
+    * for example, suppose we parse an expression that has a couple of entity references in the middle. We can handle that
+    * and we return Map(key -> ParsedExpression(expression=List('this', 'ref', 'ref', 'attribute'), expressionType=Entity))
+    * This function shouldn't have to care about whether or not that expression is an input or output, we just return the ParsedExpression.
+    * Whatever calls this function can in turn do some additional validation. If the above example was an output, the validator might
+    * want to check that the expression in ParsedExpression has a length <= 2
+    */
+  def parseMCExpressions(expressions: Map[String, AttributeString]): Map[String, ParsedExpression] = {
+    expressions.map {
+      case (key, attr) => (key, parseExpression(attr.value))
+    }
+  }
+
+  // todo: need to do json parsing probably in this function or possibly earlier somehow
+  private def parseExpression(expression: String): ParsedExpression = {
+    val splitExpression = expression.split('.').toList
+
+    val expressionType = splitExpression match {
+      case "this" :: _ => ExpressionTypes.Entity
+      case "workspace" :: _ => ExpressionTypes.Workspace
+      case _ => ExpressionTypes.Invalid
+    }
+
+    val errorMessage = if (expressionType == ExpressionTypes.Invalid) {
+      Some("Expressions that are not json or string literals must start with 'this' or 'workspace'")
+    } else {
+      None
+    }
+
+    ParsedExpression(splitExpression, expressionType, errorMessage)
   }
 
   private def parseInputExpr(allowRootEntity: Boolean)(expression: String): Try[Unit] = {
