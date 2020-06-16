@@ -509,6 +509,8 @@ object Boot extends IOApp with LazyLogging {
     val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
     val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
+    implicit val logger = Slf4jLogger.getLogger[F]
+
     for {
       blockingEc <- ExecutionContexts.fixedThreadPool[F](256) //scala.concurrent.blocking has default max extra thread number 256, so use this number to start with
       blocker = Blocker.liftExecutionContext(blockingEc)

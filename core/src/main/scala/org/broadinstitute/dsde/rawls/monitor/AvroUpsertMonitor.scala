@@ -342,7 +342,8 @@ class AvroUpsertMonitorActor(
     logger.info(s"reading ${if (decompress) "compressed " else ""}object $blobName from bucket $bucketName ...")
     val compiled = googleStorage.getBlobBody(bucketName, blobName).compile
 
-    compiled.to[Array].unsafeToFuture().map { byteArray =>
+    compiled.toList.unsafeToFuture().map { byteList =>
+      val byteArray = byteList.toArray
       val bytes = if (decompress) decompressGzip(byteArray) else byteArray
       logger.info(s"successfully read $blobName from bucket $bucketName; parsing ...")
       val obj = bytes.map(_.toChar).mkString.parseJson.convertTo[T]

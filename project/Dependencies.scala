@@ -7,7 +7,7 @@ object Dependencies {
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
-  val workbenchGoogle2V = "0.6-4df42ca"
+  val workbenchGoogle2V = "0.10-bd284e7"
 
   val cromwellVersion = "40-2754783"
 
@@ -19,7 +19,15 @@ object Dependencies {
   val excludeAkkaActor =        ExclusionRule(organization = "com.typesafe.akka", name = "akka-actor_2.12")
   val excludeAkkaStream =       ExclusionRule(organization = "com.typesafe.akka", name = "akka-stream_2.12")
   val excludeWorkbenchModel =   ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-model_2.12")
-  val excludeWorkbenchUtil =   ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-util_2.12")
+  val excludeWorkbenchUtil =    ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-util_2.12")
+
+  val excludeBouncyCastle =     ExclusionRule(organization = "org.bouncycastle", name = s"bcprov-jdk15on")
+  val excludeProtobufJavalite = ExclusionRule(organization = "com.google.protobuf", name = "protobuf-javalite")
+
+  def workbenchGoogleExcludes(m: ModuleID): ModuleID = m.excludeAll(
+    excludeWorkbenchModel, excludeWorkbenchUtil,
+    excludeBouncyCastle,
+    excludeProtobufJavalite)
 
   val akkaActor: ModuleID =         "com.typesafe.akka"   %%  "akka-actor"           % akkaV
   val akkaStream: ModuleID =        "com.typesafe.akka"   %%  "akka-stream"          % akkaV
@@ -48,7 +56,11 @@ object Dependencies {
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev17-" + googleV)
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2beta-rev20181207-1.28.0")
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
-  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.24.0"
+
+  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.30.0"
+  val googleRpcNettyShaded: ModuleID =    "io.grpc" % "grpc-netty-shaded" % "1.30.0"
+  val googleCloudCoreGrpc: ModuleID =     "com.google.cloud" % "google-cloud-core-grpc" % "1.93.6"
+
   val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
@@ -81,10 +93,10 @@ object Dependencies {
   val workbenchModelV  = "0.13-58c913d"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogleV = "0.21-890a74f"
-  val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
-  val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
-  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
-  val workbenchGoogle2Tests: ModuleID =    "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests" excludeAll(excludeWorkbenchUtil, excludeWorkbenchModel)
+  val workbenchGoogle: ModuleID =       workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV)
+  val workbenchGoogleMocks: ModuleID =  workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests")
+  val workbenchGoogle2: ModuleID =      workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V)
+  val workbenchGoogle2Tests: ModuleID = workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests")
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.111.0-alpha" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
@@ -99,7 +111,7 @@ object Dependencies {
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.0-M2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.0-M2"
-  val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.23.0"
+  val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.23.0" excludeAll(excludeProtobufJavalite)
   val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.23.0"
 
   val openCensusDependencies = Seq(
@@ -146,6 +158,15 @@ object Dependencies {
     googleGuava
   )
 
+  // google2 lib requires specific versions of rpc libs:
+  val google2Dependencies = Seq(
+    workbenchGoogle2,
+    googleCloudCoreGrpc,
+    googleRpc,
+    googleRpcNettyShaded,
+    workbenchGoogle2Tests
+  )
+
   val utilDependencies = Seq(
     scalaLogging,
     akkaActor,
@@ -172,7 +193,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
     typesafeConfig,
     parserCombinators,
     sentryLogback,
@@ -192,12 +213,9 @@ object Dependencies {
     akkaHttpTestKit,
     mockserverNetty,
     mockito,
-    googleRpc,
     log4cats,
     workbenchModel,
     workbenchGoogle,
-    workbenchGoogle2,
-    workbenchGoogle2Tests,
     googleStorageLocal,
     workbenchGoogleMocks,
     workbenchUtil,
