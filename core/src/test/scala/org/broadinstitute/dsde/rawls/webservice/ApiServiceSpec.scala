@@ -31,6 +31,7 @@ import spray.json._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
+import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -121,6 +122,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
 
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
+
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactory[IO] = MockBigQueryServiceFactory.ioFactory
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
@@ -221,7 +224,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
-      EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO)
+      EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory)
     )_
 
     def cleanupSupervisor = {

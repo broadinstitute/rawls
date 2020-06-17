@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import java.util.UUID
 
+import bio.terra.datarepo.model.TableModel
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
@@ -15,15 +16,15 @@ import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDa
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, TerraDataRepoSnapshotRequest}
 import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, TerraDataRepoSnapshotRequest}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
 import spray.json._
 
 import scala.collection.JavaConverters._
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspaceManagerDAO: WorkspaceManagerDAO, dataRepoDAO: DataRepoDAO, samDAO: SamDAO)
+                            (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with LazyLogging {
 
   val workspace = requestArguments.workspace
@@ -43,12 +44,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     // reformat TDR's response into the expected response structure
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
       val attrs: Seq[String] = table.getColumns.asScala.map(_.getName)
-      // If data repo returns one and only one primary key, use it.
-      // If data repo returns null or a compound PK, use the built-in rowid for pk instead.
-      val primaryKey = Option(table.getPrimaryKey) match {
-        case Some(pk) if pk.size() == 1 => pk.asScala.head
-        case _ => "datarepo_row_id" // default data repo value
-      }
+      val primaryKey = pkFromSnapshotTable(table)
       (table.getName, EntityTypeMetadata(table.getRowCount, primaryKey, attrs))
     }.toMap
 
@@ -76,12 +72,26 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
       case None => throw new EntityTypeNotFoundException(entityType)
     }
 
-    // get pet service account key for this user TODO: need Sam DAO for this?
     // determine project to be billed for the BQ job TODO: need business logic from PO!
-    // create BQ DAO instance TODO: need new lib from broadinstitute/workbench-libs/pull/306
-    // generate BQ SQL for this entity
-    // execute BQ job
-    // return result
+    val googleProject: String = requestArguments.billingProject match {
+      case Some(billing) => billing.projectName.value
+      case None => workspace.namespace
+    }
+
+    // get pet service account key for this user
+    samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail) map { petKey =>
+      // create BQ DAO instance TODO: need new lib from broadinstitute/workbench-libs/pull/306
+
+      // generate BQ SQL for this entity
+      val pk = pkFromSnapshotTable(tableModel)
+
+      // pseudocode:
+      // s"select * from ${tableModel.getName} where $pk = $entityName"
+
+      // execute BQ job
+      // return result
+    }
+
     throw new UnsupportedEntityOperationException("get entity not supported by this provider.")
   }
 
@@ -122,6 +132,16 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     }
 
   }
+
+  private def pkFromSnapshotTable(tableModel: TableModel): String = {
+    // If data repo returns one and only one primary key, use it.
+    // If data repo returns null or a compound PK, use the built-in rowid for pk instead.
+    Option(tableModel.getPrimaryKey) match {
+      case Some(pk) if pk.size() == 1 => pk.asScala.head
+      case _ => "datarepo_row_id" // default data repo value
+    }
+  }
+
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]] =
     throw new UnsupportedEntityOperationException("evaluateExpressions not supported by this provider.")

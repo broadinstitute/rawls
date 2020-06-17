@@ -370,6 +370,9 @@ object Boot extends IOApp with LazyLogging {
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
       val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
+      // create the entity manager.
+      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO, appDependencies.bigQueryServiceFactory)
+
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
@@ -389,11 +392,9 @@ object Boot extends IOApp with LazyLogging {
         workbenchMetricBaseName = metricsPrefix,
         submissionCostService,
         workspaceServiceConfig,
-        requesterPaysSetupService
+        requesterPaysSetupService,
+        entityManager
       )
-
-      // create the entity manager.
-      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO)
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
         slickDataSource,
@@ -520,7 +521,8 @@ object Boot extends IOApp with LazyLogging {
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
-    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin)
+      bqServiceFactory = new GoogleBigQueryServiceFactory(blocker)
+    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory)
   }
 }
 
@@ -528,4 +530,5 @@ object Boot extends IOApp with LazyLogging {
 final case class AppDependencies[F[_]](
   googleStorageService: GoogleStorageService[F],
   googleServiceHttp: GoogleServiceHttp[F],
-  topicAdmin: GoogleTopicAdmin[F])
+  topicAdmin: GoogleTopicAdmin[F],
+  bigQueryServiceFactory: GoogleBigQueryServiceFactory[F])

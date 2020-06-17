@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities
 
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import cats.effect.IO
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProviderBuilder}
@@ -60,12 +61,14 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
 }
 
 object EntityManager {
-  def defaultEntityManager(dataSource: SlickDataSource, workspaceManagerDAO: WorkspaceManagerDAO, dataRepoDAO: DataRepoDAO, samDAO: SamDAO)(implicit ec: ExecutionContext): EntityManager = {
+  def defaultEntityManager(dataSource: SlickDataSource, workspaceManagerDAO: WorkspaceManagerDAO,
+                           dataRepoDAO: DataRepoDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory[IO])
+                          (implicit ec: ExecutionContext): EntityManager = {
     // create the EntityManager along with its associated provider-builders. Since entities are only accessed
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
     // and execution context for the rawls entity provider that the entity service uses.
     val defaultEntityProviderBuilder = new LocalEntityProviderBuilder(dataSource) // implicit executionContext
-    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO)
+    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory) // implicit executionContext
 
     new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))
   }

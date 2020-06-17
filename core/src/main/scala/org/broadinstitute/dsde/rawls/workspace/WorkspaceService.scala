@@ -56,11 +56,12 @@ object WorkspaceService {
                   notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
-                  config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)
+                  config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
+                  entityManager: EntityManager = new EntityManager(Set()))
                  (userInfo: UserInfo)
-                 (implicit executionContext: ExecutionContext) = {
+                 (implicit executionContext: ExecutionContext): WorkspaceService = {
 
-    new WorkspaceService(userInfo, dataSource, EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO), methodRepoDAO, cromiamDAO,
+    new WorkspaceService(userInfo, dataSource, entityManager, methodRepoDAO, cromiamDAO,
       executionServiceCluster, execServiceBatchSize, workspaceManagerDAO,
       methodConfigResolver, gcsDAO, samDAO,
       notificationDAO, userServiceConstructor,

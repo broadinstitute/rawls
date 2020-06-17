@@ -179,6 +179,48 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     assertResult("Reference value for foo contains an unexpected snapshot value") { ex.getMessage }
   }
 
+  behavior of "DataEntityProvider.getEntity()"
+
+  ignore should "return exactly one entity if all OK" in {
+    fail("not implemented")
+  }
+
+  ignore should "bubble up error if workspace manager errors (includes reference not found?)" in {
+    fail("not implemented")
+  }
+
+  ignore should "fail if data reference not found in workspace manager" in {
+    fail("not implemented")
+  }
+
+  ignore should "fail if user is a workspace Reader but did not specify a billing project (canCompute?)" in {
+    fail("not implemented")
+  }
+
+  ignore should "bubble up error if data repo errors (includes snapshot not found/not allowed?)" in {
+    fail("not implemented")
+  }
+
+  ignore should "fail if snapshot not found in data repo" in {
+    fail("not implemented")
+  }
+
+  ignore should "fail if snapshot has no tables in data repo" in {
+    fail("not implemented")
+  }
+
+  ignore should "fail if snapshot table not found in data repo's response" in {
+    fail("not implemented")
+  }
+
+  ignore should "bubble up error if BigQuery errors" in {
+    fail("not implemented")
+  }
+
+  ignore should "fail if BigQuery returns zero rows" in {
+    fail("not implemented")
+  }
+
 
 }
 
