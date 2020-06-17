@@ -39,7 +39,10 @@ trait StringValidationUtils {
     if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name)) ||
       AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix).equalsIgnoreCase(an)) {
 
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Attribute name ${an.name} is reserved", statusCode = StatusCodes.BadRequest))
+      throw new RawlsFatalExceptionWithErrorReport(errorReport = ErrorReport(
+        message = s"Attribute name ${an.name} is reserved",
+        statusCode = StatusCodes.BadRequest
+      ))
     }
   }
 }

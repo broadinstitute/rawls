@@ -32,7 +32,7 @@ import scala.language.postfixOps
 //noinspection ScalaUnnecessaryParentheses,JavaAccessorEmptyParenCall,ScalaUnusedSymbol
 class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
   with CleanUp with RandomUtil with Retry
-  with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures with RawlsTestSuite {
+  with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures with RawlsTestSuite with MethodFixtures {
 
   // We only want to see the users' workspaces so we can't be Project Owners
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
@@ -648,6 +648,135 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
             parseWorkflowStatusFromMetadata(notRunningMetadata) should be("Succeeded")
             parseWorkflowOutputFromMetadata(notRunningMetadata, "test_count_variants.count") should be("123997")
+          }
+        }
+      }
+    }
+
+    "should fail and not infinitely run a submission with an invalid output expression" in {
+      implicit val token: AuthToken = ownerAuthToken
+
+      withCleanBillingProject(owner) { projectName =>
+        withWorkspace(projectName, "rawls-wdl-struct") { workspaceName =>
+          withMethod("RawlsApiSpec_invalidOutputs", MethodData.SimpleMethod) { methodName =>
+            withCleanUp {
+              /*
+              https://broadinstitute.atlassian.net/browse/GAWB-3386
+              https://broadworkbench.atlassian.net/browse/WA-223
+
+              Submitting a workflow with a known bad output expression. It isn't caught currently in validation,
+              so make sure we at least fail the workflow with a message that the user can see.
+
+              Cromwell's workflow status should be Succeeded...
+              Later Rawls should show its workflow status as Failed AND include a message why.
+
+              This test will probably need to be refactored/moved during
+              https://broadworkbench.atlassian.net/browse/WA-238
+               */
+              val invalidOutputs = SimpleMethodConfig.outputs map {
+                case (key, _) => key -> s"this.${SimpleMethodConfig.rootEntityType}_id"
+              }
+              val expectedCromwellWorkflowStatus = "Succeeded"
+              val expectedRawlsWorkflowStatus = "Failed"
+              val expectedRawlsWorkflowMessage = "org.broadinstitute.dsde.rawls.RawlsFatalExceptionWithErrorReport: " +
+                "ErrorReport(" +
+                "rawls," +
+                "Attribute name participant_id is reserved," +
+                "Some(400 Bad Request)," +
+                "List()," +
+                "List()," +
+                "None)"
+
+              Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+                wsNs = projectName,
+                wsName = workspaceName,
+                method = MethodData.SimpleMethod.copy(methodName = methodName),
+                configNamespace = SimpleMethodConfig.configNamespace,
+                configName = SimpleMethodConfig.configName,
+                methodConfigVersion = SimpleMethodConfig.snapshotId,
+                inputs = SimpleMethodConfig.inputs,
+                outputs = invalidOutputs,
+                rootEntityType = SimpleMethodConfig.rootEntityType,
+              )
+
+              Orchestration.importMetaData(
+                ns = projectName,
+                wsName = workspaceName,
+                fileName = "entities",
+                fileContent = SingleParticipant.participantEntity,
+              )
+
+              // It currently takes ~ 5 min for google bucket read permissions to propagate.
+              // We can't launch a workflow until this happens.
+              // See https://github.com/broadinstitute/workbench-libs/pull/61
+              // and https://broadinstitute.atlassian.net/browse/GAWB-3327
+
+              Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+              val submissionId = Rawls.submissions.launchWorkflow(
+                billingProject = projectName,
+                workspaceName = workspaceName,
+                methodConfigurationNamespace = SimpleMethodConfig.configNamespace,
+                methodConfigurationName = SimpleMethodConfig.configName,
+                entityType = SimpleMethodConfig.rootEntityType,
+                entityName = SingleParticipant.entityId,
+                expression = "this",
+                useCallCache = false,
+                deleteIntermediateOutputFiles = false,
+              )
+
+              // Fun fact, if this test does get wedged due to GAWB-3386 / WA-223, abort requests are ignored.
+              // But give it a shot just in case something else went wrong.
+              register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+
+              val submissionPatience = PatienceConfig(
+                timeout = scaled(Span(16, Minutes)),
+                interval = scaled(Span(30, Seconds)),
+              )
+              implicit val patienceConfig: PatienceConfig = submissionPatience
+
+              val workflowId = eventually {
+                val (status, workflows) =
+                  Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+                val clue =
+                  s"queue status: ${getQueueStatus()}, " +
+                    s"submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}"
+                withClue(clue) {
+                  workflows should not be (empty)
+                  workflows.head
+                }
+              }
+
+              val notRunningMetadata = eventually {
+                val metadata =
+                  Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)
+                val status = parseWorkflowStatusFromMetadata(metadata)
+                status should not be ("Submitted")
+                status should not be ("Running")
+                metadata
+              }
+
+              parseWorkflowStatusFromMetadata(notRunningMetadata) should be(expectedCromwellWorkflowStatus)
+
+              eventually {
+                val (submissionStatus, _) =
+                  Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+                submissionStatus should be("Done")
+              }
+
+              val submissionResponse = getSubmissionResponse(projectName, workspaceName, submissionId)
+              withClue(s"submission status: $submissionResponse") {
+                val submissionResponseObject = submissionResponse.parseJson.asJsObject
+                val workflowsArray = submissionResponseObject.fields("workflows").asInstanceOf[JsArray]
+                val workflowsFirst = workflowsArray.elements.head.asJsObject
+                val workflowMessagesArray = workflowsFirst.fields("messages").asInstanceOf[JsArray]
+                val workflowMessages = workflowMessagesArray.elements.map(_.asInstanceOf[JsString]).map(_.value)
+                val workflowStatus = workflowsFirst.fields("status").asInstanceOf[JsString].value
+
+                workflowMessages should contain only(expectedRawlsWorkflowMessage)
+                workflowStatus should be(expectedRawlsWorkflowStatus)
+              }
+            }
           }
         }
       }

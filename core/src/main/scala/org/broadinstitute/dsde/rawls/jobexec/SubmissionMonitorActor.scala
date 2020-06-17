@@ -8,7 +8,7 @@ import cats.implicits._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -344,6 +344,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
     datasource.inTransaction { dataAccess =>
       handleOutputs(workflowsWithOutputs, dataAccess)
+    } recoverWith {
+      // If there is something fatally wrong handling outputs, mark the workflows as failed
+      case fatal: RawlsFatalExceptionWithErrorReport =>
+        datasource.inTransaction { dataAccess =>
+          DBIO.sequence(workflowsWithStatuses map { workflowRecord =>
+            dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
+              dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
+          })
+        }
     } flatMap { _ =>
       // NEW TXN! Update statuses for workflows and submission.
       datasource.inTransaction { dataAccess =>
