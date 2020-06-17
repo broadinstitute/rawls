@@ -198,6 +198,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
+    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory)
+
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
@@ -217,14 +219,15 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       workbenchMetricBaseName,
       submissionCostService,
       workspaceServiceConfig,
-      requesterPaysSetupService
+      requesterPaysSetupService,
+      entityManager
     )_
 
     override val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
-      EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory)
+      entityManager
     )_
 
     def cleanupSupervisor = {

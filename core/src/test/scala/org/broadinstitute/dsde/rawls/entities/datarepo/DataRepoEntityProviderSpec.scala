@@ -213,6 +213,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     fail("not implemented")
   }
 
+  ignore should "fail if pet credentials not available from Sam" in {
+    fail("not implemented")
+  }
+
   ignore should "bubble up error if BigQuery errors" in {
     fail("not implemented")
   }
