@@ -1,9 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-//import cats.effect.{Blocker, ContextShift, IO, Resource, Sync, Timer}
-//import cats.effect.{Blocker, ContextShift, IO, Resource, Sync, Timer}
 import cats.effect._
-// import cats.implicits._
 import com.google.cloud.bigquery.{BigQuery, JobId, QueryJobConfiguration, TableResult}
 import io.chrisdavenport.log4cats.StructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -15,10 +12,10 @@ import scala.language.higherKinds
 object MockBigQueryServiceFactory {
 
   def ioFactory: MockBigQueryServiceFactory[IO] = {
-    implicit val logger: StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
-    implicit val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(TestExecutionContext.testExecutionContext)
-    implicit val timer: Timer[IO] = cats.effect.IO.timer(TestExecutionContext.testExecutionContext)
-    val blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)
+    implicit lazy val logger: _root_.io.chrisdavenport.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+    implicit lazy val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(TestExecutionContext.testExecutionContext)
+    implicit lazy val timer: Timer[IO] = cats.effect.IO.timer(TestExecutionContext.testExecutionContext)
+    lazy val blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)
 
     new MockBigQueryServiceFactory[IO](blocker)
   }
