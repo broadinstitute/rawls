@@ -998,7 +998,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val entityProvider = getEntityProviderForMethodConfig(workspaceContext, methodConfiguration)
     for {
       gatherInputsResult <- gatherMethodConfigInputs(methodConfiguration)
-      vmc <- entityProvider.expressionValidator.validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity = methodConfiguration.rootEntityType.isDefined)
+      vmc <- entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity = methodConfiguration.rootEntityType.isDefined)
     } yield vmc
   }
 

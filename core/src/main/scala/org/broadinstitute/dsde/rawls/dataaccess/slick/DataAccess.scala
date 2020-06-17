@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import javax.naming.NameNotFoundException
 import javax.naming.directory.DirContext
-import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionParser
+import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
 import slick.jdbc.JdbcProfile
 
 import scala.util.Try
@@ -18,7 +18,7 @@ trait DataAccess
   with WorkflowComponent
   with ExprEvalComponent
   with WorkspaceRequesterPaysComponent
-  with LocalEntityExpressionParser {
+  with LocalEntityExpressionQueries {
 
 
   this: DriverComponent =>

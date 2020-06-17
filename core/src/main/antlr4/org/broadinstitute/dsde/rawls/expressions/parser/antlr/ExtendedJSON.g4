@@ -17,7 +17,23 @@ pair: STRING ':' value;
 
 arr: '[' value (',' value)* ']' | '[' ']';
 
-lookup: SYMBOL ('.' SYMBOL | ':' SYMBOL)+;
+attributeName: (namespace ':')? name;
+
+namespace: SYMBOL;
+
+name: SYMBOL;
+
+relation: attributeName '.';
+
+workspaceAttributeLookup: 'workspace.' attributeName;
+
+workspaceEntity: relation;
+
+workspaceEntityLookup: 'workspace.' workspaceEntity (relation)* attributeName;
+
+entityLookup: 'this' ('.' (relation)* attributeName)?;
+
+lookup: workspaceAttributeLookup | workspaceEntityLookup | entityLookup;
 
 value: literal | obj | arr | lookup;
 

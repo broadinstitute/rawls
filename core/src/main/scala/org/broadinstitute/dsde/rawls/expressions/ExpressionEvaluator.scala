@@ -2,13 +2,12 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import org.antlr.v4.runtime.tree.ParseTree
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.model.{AttributeValue, Workspace}
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrExtendedJSONParser, ReconstructExpressionVisitor, LookupNodeFinderVisitor}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrExtendedJSONParser, LocalEvaluateToEntityVisitor, LocalEvaluateToAttributeVisitor, ReconstructExpressionVisitor}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, Workspace}
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsString, JsValue}
 
 import scala.concurrent.ExecutionContext
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 // a thin abstraction layer over SlickExpressionEvaluator
 
@@ -78,26 +77,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
     )
     */
   def evalFinalAttribute(workspaceContext: Workspace, expression: String)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
-    import slickEvaluator.parser.driver.api._
-
-    /*
-      Evaluate each attribute reference expression using the Slick Evaluator. It returns sequence of tuples of
-      attribute reference expressions and their slick evaluated value wrapped in a single DBIO action
-      For our example:
-        input: Set(this.bam, this.index)
-        output: ReadWriteAction(Seq(
-          ("this.bam", Map("101" -> Try(Seq(AttributeString("gs://abc"))), "102" -> Try(Seq(AttributeString("gs://def"))))),
-          ("this.index", Map("101" -> Try(Seq(AttributeNumber(123))), "102" -> Try(Seq(AttributeNumber(456)))))
-        ))
-     */
-    def evaluateAttributeReferences(attrRefs: Set[LookupExpression]): ReadWriteAction[Seq[(LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])]] = {
-      val evaluatedLookupSeq: Seq[ReadWriteAction[(LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])]] = attrRefs.toSeq.map { attrRef =>
-        slickEvaluator.evalFinalAttribute(workspaceContext, attrRef).map((attrRef, _))
-      }
-
-      // sequence Set[ReadWriteAction[T]] into single ReadWriteAction[Seq[T]]
-      DBIO.sequence(evaluatedLookupSeq)
-    }
+    import slickEvaluator.dataAccess.driver.api._
 
     /*
       Unpack the evaluated value for each lookup expression and convert it into JsValue. It also converts the
@@ -194,7 +174,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
      */
     def reconstructInputExprForEachEntity(mapOfEntityToEvaluatedExprMap: Map[EntityName, Try[Map[LookupExpression, JsValue]]],
                                           parsedTree: ParseTree): Map[EntityName, Try[JsValue]] = {
-      mapOfEntityToEvaluatedExprMap.map{
+      mapOfEntityToEvaluatedExprMap.map {
         case (entityName, evaluatedLookupMapTry) =>
           val inputExprWithEvaluatedRef = evaluatedLookupMapTry.flatMap { lookupMap =>
             val visitor = new ReconstructExpressionVisitor(lookupMap)
@@ -227,7 +207,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
       val mapOfEntityToSeqOfEvaluatedExpr: Map[EntityName, Seq[(LookupExpression, Try[JsValue])]] = groupByEntityName(seqOfEntityToLookupExprAndValue)
 
       // convert the values in the Map, which are sequence of expr and their value to a Map
-      val mapOfEntityToEvaluatedExprMap: Map[EntityName, Try[Map[LookupExpression, JsValue]]] =  convertEvaluatedExprSeqToMap(mapOfEntityToSeqOfEvaluatedExpr)
+      val mapOfEntityToEvaluatedExprMap: Map[EntityName, Try[Map[LookupExpression, JsValue]]] = convertEvaluatedExprSeqToMap(mapOfEntityToSeqOfEvaluatedExpr)
 
       // replace the value for evaluated attribute references in the input expression for each entity name
       val mapOfEntityToInputExpr: Map[EntityName, Try[JsValue]] = reconstructInputExprForEachEntity(mapOfEntityToEvaluatedExprMap, parsedTree)
@@ -263,31 +243,38 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
       })
     }
 
-    def evaluateExpressionWithAttrRefs(parsedTree: ParseTree,
-                                       lookupNodes: Set[LookupExpression]): ReadWriteAction[Map[EntityName, Try[Iterable[AttributeValue]]]] = {
-      evaluateAttributeReferences(lookupNodes) map {transformAndParseExpr(_, parsedTree)}
-    }
-
 
     // parse expression using ANTLR ExtendedJSON parser
     val extendedJsonParser = AntlrExtendedJSONParser.getParser(expression)
-    val lookupNodeFinderVisitor = new LookupNodeFinderVisitor()
+    val localFinalAttributeEvaluationVisitor = new LocalEvaluateToAttributeVisitor(workspaceContext, slickEvaluator)
 
-    val parsedTree: ParseTree = extendedJsonParser.root()
+    Try(extendedJsonParser.root()) match {
+      case Success(parsedTree) =>
+        /*
+          Evaluate all attribute reference expressions if any.
+          For our example:
+            lookupNodes = Set("this.bam", "this.index")
+        */
 
-    /*
-       Find all attribute reference expressions if any.
-       For our example:
-          lookupNodes = Set("this.bam", "this.index")
-     */
-    val lookupNodes: Set[LookupExpression] = lookupNodeFinderVisitor.visit(parsedTree)
+        localFinalAttributeEvaluationVisitor.visit(parsedTree).flatMap {
+          case Seq() => evaluateLiteralExpression()
+          case result => DBIO.successful(transformAndParseExpr(result, parsedTree))
+        }
 
-    if (lookupNodes.isEmpty) evaluateLiteralExpression()
-    else evaluateExpressionWithAttrRefs(parsedTree, lookupNodes)
+      case Failure(regrets) => DBIO.failed(regrets)
+    }
   }
 
-  def evalFinalEntity(workspaceContext: Workspace, expression:String): ReadWriteAction[Iterable[EntityRecord]] = {
-    //entities have to be proper expressions, not JSON-y
-    slickEvaluator.evalFinalEntity(workspaceContext, expression)
+  def evalFinalEntity(workspaceContext: Workspace, expression: String)
+                     (implicit executionContext: ExecutionContext): ReadWriteAction[Iterable[EntityRecord]] = {
+    import slickEvaluator.dataAccess.driver.api._
+
+    val extendedJSONParser = AntlrExtendedJSONParser.getParser(expression)
+    val localFinalEntityEvaluationVisitor = new LocalEvaluateToEntityVisitor(workspaceContext, slickEvaluator)
+
+    Try(extendedJSONParser.root()) match {
+      case Success(parsedTree) => localFinalEntityEvaluationVisitor.visit(parsedTree)
+      case Failure(regrets) => DBIO.failed(regrets)
+    }
   }
 }

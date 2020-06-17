@@ -409,7 +409,7 @@ case class ValidatedMethodConfiguration(
                                          validOutputs: Set[String],
                                          invalidOutputs: Map[String,String])
 
-case class ParsedMCExpressions(
+case class ValidatedMCExpressions(
                                          validInputs: Set[String],
                                          invalidInputs: Map[String,String],
                                          validOutputs: Set[String],

@@ -8,18 +8,9 @@ Is this expression in the right format, given the context? e.g.
 * JSON input with attribute reference expressions is valid. So for example ```{"exampleRef":this.validRef}``` is valid
 * Attribute references are valid inside an array input
 
-Parsing
-
-Can this (Validated) expression be parsed into a query path?
-* this..is.not.valid because it has empty elements
-* foo.bar doesn't have a valid root: must be JSON, this, or workspace
-* this.#@$#$ uses illegal characters
-* If the input was a JSON or an array that contained attribute references, each attribute reference is checked to 
-see if it can be converted into query path or not
-
 Evaluation
 
-Resolve zero or more Attributes or Entities from a (Parsed) expression's query path
+Resolve zero or more Attributes or Entities from an expression's query path
 * workspace.reference_index -> select this Workspace's Attribute **reference_index**
 * this.pairs.tumor -> traverse the starting PairSet, selecting each Pair's Sample referenced by its **tumor** Attribute
 * If the input was a JSON (or an array) that contained attribute references, then after successfully validating and parsing each attribute reference 
