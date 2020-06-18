@@ -18,6 +18,6 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
   override def builds: TypeTag[DataRepoEntityProvider] = typeTag[DataRepoEntityProvider]
 
   override def build(requestArguments: EntityRequestArguments): DataRepoEntityProvider = {
-    new DataRepoEntityProvider(requestArguments, workspaceManagerDAO, dataRepoDAO, samDAO)
+    new DataRepoEntityProvider(requestArguments, workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory)
   }
 }

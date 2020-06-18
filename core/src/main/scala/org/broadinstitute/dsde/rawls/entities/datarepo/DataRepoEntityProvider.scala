@@ -4,26 +4,27 @@ import java.util.UUID
 
 import bio.terra.datarepo.model.TableModel
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
+import cats.effect.{IO, Resource}
+import com.google.cloud.bigquery.{QueryJobConfiguration, TableResult}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, TerraDataRepoSnapshotRequest}
-import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeString, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, TerraDataRepoSnapshotRequest}
 import spray.json._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspaceManagerDAO: WorkspaceManagerDAO, dataRepoDAO: DataRepoDAO, samDAO: SamDAO)
+class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspaceManagerDAO: WorkspaceManagerDAO,
+                             dataRepoDAO: DataRepoDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory[IO])
                             (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with LazyLogging {
 
@@ -78,21 +79,51 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
       case None => workspace.namespace
     }
 
+    // generate BQ SQL for this entity
+
+    //  determine pk column
+    val pk = pkFromSnapshotTable(tableModel)
+    // determine data project
+    val dataProject = snapshotModel.getDataProject
+    // determine view name
+    val viewName = snapshotModel.getName
+
+    // TODO: use named params!
+    val query = s"SELECT * FROM `${dataProject}.${viewName}.${entityType}` WHERE $pk = '$entityName';"
+
+    val queryConfig = QueryJobConfiguration.newBuilder(query).build
+
     // get pet service account key for this user
     samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail) map { petKey =>
-      // create BQ DAO instance TODO: need new lib from broadinstitute/workbench-libs/pull/306
 
-      // generate BQ SQL for this entity
-      val pk = pkFromSnapshotTable(tableModel)
+      val foo: Resource[IO, TableResult] = for {
+        bqService <- bqServiceFactory.getServiceForPet(petKey)
+        queryResults <- Resource.liftF(bqService.query(queryConfig))
+      } yield queryResults
 
-      // pseudocode:
-      // s"select * from ${tableModel.getName} where $pk = $entityName"
+      foo.use {
+        case queryResults:TableResult =>
+          queryResults.getTotalRows match {
+            case 1 =>
+              val fieldValues = queryResults.iterateAll().asScala.head
 
-      // execute BQ job
-      // return result
+              val fieldNames:List[String] = queryResults.getSchema.getFields.iterator().asScala.toList.map(_.getName)
+
+              val attrs:AttributeMap = fieldNames.map { fieldName =>
+                val fv = fieldValues.get(fieldName)
+                AttributeName.withDefaultNS(fieldName) -> AttributeString(fv.getValue.toString)
+              }.toMap
+
+              IO.pure(Entity(entityName, entityType, attrs))
+            case 0 =>
+              throw new DataEntityException("BQ succeeded, but returned zero rows") // error not found
+            case _ =>
+              throw new DataEntityException(s"BQ succeeded, but returned ${queryResults.getTotalRows} rows") // unexpected error: too many found
+          }
+      }.unsafeRunSync()
+
     }
 
-    throw new UnsupportedEntityOperationException("get entity not supported by this provider.")
   }
 
   // not marked as private to ease unit testing
