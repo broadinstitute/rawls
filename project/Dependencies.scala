@@ -106,7 +106,7 @@ object Dependencies {
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
-  val workspaceManager = excludeGuavaJDK5("bio.terra" % "terra-workspace-manager-client" % "0.0.3-SNAPSHOT")
+  val workspaceManager = excludeGuavaJDK5("bio.terra" % "terra-workspace-manager-client" % "0.0.2-SNAPSHOT")
   val dataRepo = excludeGuavaJDK5("bio.terra" % "datarepo-client" % "1.0.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.0-M2"
