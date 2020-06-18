@@ -15,6 +15,9 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
 
   private def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()
+    // ignore any ServerConfigurations that pre-exist in the client by setting serverIndex to null
+    client.setServerIndex(null)
+    // and instead, rely solely on the basePath, which we read from env-specific Rawls config
     client.setBasePath(baseWorkspaceManagerUrl)
     client.setBearerToken(accessToken)
 
