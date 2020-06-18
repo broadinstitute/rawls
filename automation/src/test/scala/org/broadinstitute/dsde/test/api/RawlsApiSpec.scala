@@ -681,11 +681,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
               val expectedRawlsWorkflowMessage = "org.broadinstitute.dsde.rawls.RawlsFatalExceptionWithErrorReport: " +
                 "ErrorReport(" +
                 "rawls," +
-                "Attribute name participant_id is reserved," +
+                "Attribute name participant_id is reserved and cannot be overwritten," +
                 "Some(400 Bad Request)," +
                 "List()," +
                 "List()," +
-                "None)"
+                "None" +
+                ")"
 
               Orchestration.methodConfigurations.createMethodConfigInWorkspace(
                 wsNs = projectName,

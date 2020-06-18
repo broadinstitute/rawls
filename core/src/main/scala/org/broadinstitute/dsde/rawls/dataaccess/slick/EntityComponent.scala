@@ -810,7 +810,7 @@ trait EntityComponent {
     private def validateEntity(entity: Entity): Unit = {
       if (entity.entityType.equalsIgnoreCase(Attributable.workspaceEntityType)) {
         throw new RawlsFatalExceptionWithErrorReport(errorReport = ErrorReport(
-          message = s"Entity type ${Attributable.workspaceEntityType} is reserved",
+          message = s"Entity type ${Attributable.workspaceEntityType} is reserved and cannot be overwritten",
           statusCode = StatusCodes.BadRequest
         ))
       }

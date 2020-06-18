@@ -673,7 +673,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       assert(workflowRecAfterBad.status == WorkflowStatuses.Failed.toString)
 
       val errorMessage = "org.broadinstitute.dsde.rawls.RawlsFatalExceptionWithErrorReport: " +
-        "ErrorReport(rawls,Attribute name individual_id is reserved,Some(400 Bad Request),List(),List(),None)"
+        "ErrorReport(" +
+        "rawls," +
+        "Attribute name individual_id is reserved and cannot be overwritten," +
+        "Some(400 Bad Request)," +
+        "List()," +
+        "List()," +
+        "None" +
+        ")"
       assertResult(Seq(AttributeString(errorMessage))) {
         getWorkflowMessages(workflowRecAfterBad)
       }

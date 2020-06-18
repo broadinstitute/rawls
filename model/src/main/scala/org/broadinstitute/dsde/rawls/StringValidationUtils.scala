@@ -40,7 +40,7 @@ trait StringValidationUtils {
       AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix).equalsIgnoreCase(an)) {
 
       throw new RawlsFatalExceptionWithErrorReport(errorReport = ErrorReport(
-        message = s"Attribute name ${an.name} is reserved",
+        message = s"Attribute name ${an.name} is reserved and cannot be overwritten",
         statusCode = StatusCodes.BadRequest
       ))
     }
