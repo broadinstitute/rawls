@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
 import slick.jdbc.{GetResult, JdbcProfile}
 
 import scala.annotation.tailrec
@@ -809,7 +809,10 @@ trait EntityComponent {
 
     private def validateEntity(entity: Entity): Unit = {
       if (entity.entityType.equalsIgnoreCase(Attributable.workspaceEntityType)) {
-        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Entity type ${Attributable.workspaceEntityType} is reserved", statusCode = StatusCodes.BadRequest))
+        throw new RawlsFatalExceptionWithErrorReport(errorReport = ErrorReport(
+          message = s"Entity type ${Attributable.workspaceEntityType} is reserved and cannot be overwritten",
+          statusCode = StatusCodes.BadRequest
+        ))
       }
       validateUserDefinedString(entity.entityType)
       validateEntityName(entity.name)

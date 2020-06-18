@@ -631,6 +631,66 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  it should "handleStatusResponses and fail workflows that have invalid output expressions" in {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      runAndWait {
+        withWorkspaceContext(testData.workspace) { context =>
+          submissionQuery.create(context, testData.submissionUpdateEntityReservedOutput)
+        }
+      }
+
+      def getWorkflowRec: WorkflowRecord = {
+        runAndWait(
+          workflowQuery.findWorkflowByExternalIdAndSubmissionId(
+            testData.submissionUpdateEntityReservedOutput.workflows.head.workflowId.get,
+            UUID.fromString(testData.submissionUpdateEntityReservedOutput.submissionId)).result).head
+      }
+
+      def getWorkflowMessages(workflowRecord: WorkflowRecord): Seq[AttributeString] = {
+        runAndWait(
+          workflowQuery.loadWorkflowMessages(workflowRecord.id)
+        )
+      }
+
+      val workflowRecBefore = getWorkflowRec
+      val monitor = createSubmissionMonitor(
+        dataSource = dataSource,
+        samDAO = mockSamDAO,
+        googleServicesDAO = mockGoogleServicesDAO,
+        submission = testData.submissionUpdateEntityReservedOutput,
+        wsName = testData.wsName,
+        execSvcDAO = new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+      )
+
+      val outputs = Map("o1" -> Left(AttributeString("result")))
+      val executionServiceOutputs = ExecutionServiceOutputs(workflowRecBefore.externalId.get, outputs)
+      val executionServiceStatusResponse =
+        ExecutionServiceStatusResponse(Seq(Try(Option(workflowRecBefore -> Option(executionServiceOutputs)))))
+
+      Await.result(monitor.handleStatusResponses(executionServiceStatusResponse), Duration.Inf)
+
+      val workflowRecAfterBad = getWorkflowRec
+      assert(workflowRecAfterBad.status == WorkflowStatuses.Failed.toString)
+
+      val errorMessage = "org.broadinstitute.dsde.rawls.RawlsFatalExceptionWithErrorReport: " +
+        "ErrorReport(" +
+        "rawls," +
+        "Attribute name individual_id is reserved and cannot be overwritten," +
+        "Some(400 Bad Request)," +
+        "List()," +
+        "List()," +
+        "None" +
+        ")"
+      assertResult(Seq(AttributeString(errorMessage))) {
+        getWorkflowMessages(workflowRecAfterBad)
+      }
+
+      assertResult(SubmissionStatuses.Done) {
+        runAndWait(submissionQuery.get(testData.workspace, testData.submissionUpdateEntityReservedOutput.submissionId)).get.status
+      }
+    }
+  }
+
   it should "handleStatusResponses and fail workflows that are missing outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     runAndWait {
       withWorkspaceContext(testData.workspace) { context =>

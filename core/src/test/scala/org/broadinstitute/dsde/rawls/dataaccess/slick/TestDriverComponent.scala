@@ -98,8 +98,20 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            rawlsUserEmail: WorkbenchEmail,
                            workflowEntities: Seq[Entity],
                            inputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
-                           failedWorkflowEntities: Seq[Entity],
-                           failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
+                           /*
+                           See https://broadinstitute.atlassian.net/browse/GAWB-645
+                           That PR (and review) removed the test that was using these variables, but left the variables.
+
+                           File a new ticket if you have opinions, that could include:
+                           - Restoring the deleted test from GAWB-645
+                           - Removing the variables and ignoring the deleted test
+                           - other?
+
+                           As is, these extra variables are ignored and passing the remaining tests by the 30+ callers
+                           to this function.
+                            */
+                           thisValueDoesNothingSinceGawb645: Seq[Entity] = Nil,
+                           thisValueIsAlsoNotUsed: Map[Entity, Seq[SubmissionValidationValue]] = Map.empty,
                            status: WorkflowStatus = WorkflowStatuses.Submitted,
                            useCallCache: Boolean = false,
                            deleteIntermediateOutputFiles: Boolean = false,
@@ -414,6 +426,23 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       AgoraMethod("dsde", "wdl_struct_wf", 1)
     )
 
+    val methodConfigEntityUpdateReservedOutput = MethodConfiguration(
+      namespace = "ns",
+      name = "testConfigWithReservedOutput",
+      rootEntityType = Option("Sample"),
+      prerequisites = None,
+      inputs = Map(),
+      /*
+      this.individual_id is a reserved and will always throw an exception when trying to attach an output to an
+      individual.
+
+      - https://broadinstitute.atlassian.net/browse/GAWB-3386
+      - https://broadworkbench.atlassian.net/browse/WA-223
+       */
+      outputs = Map("o1" -> AttributeString("this.individual_id")),
+      methodRepoMethod = AgoraMethod("ns-config", "meth1", 1)
+    )
+
     val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
     val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
     val missingOutputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
@@ -443,6 +472,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     //NOTE: This is deliberately not saved in the list of active submissions!
     val submissionMissingOutputs = createTestSubmission(workspace, methodConfigMissingOutputs, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(indiv1), Map(indiv1 -> missingOutputResolutions), Seq(), Map())
+
+    //NOTE: This is deliberately not saved in the list of active submissions!
+    val submissionUpdateEntityReservedOutput = createTestSubmission(
+      workspace = workspace,
+      methodConfig = methodConfigEntityUpdateReservedOutput,
+      submissionEntity = indiv1,
+      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
+      workflowEntities = Seq(indiv1),
+      inputResolutions = Map(indiv1 -> inputResolutions),
+    )
 
     //NOTE: This is deliberately not saved in the list of active submissions!
     val submissionNoRootEntity = Submission(
@@ -808,6 +847,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 methodConfigurationQuery.create(context, methodConfigWorkspaceLibraryUpdate),
                 methodConfigurationQuery.create(context, methodConfigMissingOutputs),
                 methodConfigurationQuery.create(context, methodConfigForWdlStruct),
+                methodConfigurationQuery.create(context, methodConfigEntityUpdateReservedOutput),
                 //HANDY HINT: if you're adding a new method configuration, don't reuse the name!
                 //If you do, methodConfigurationQuery.create() will archive the old query and update it to point to the new one!
 
