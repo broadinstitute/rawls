@@ -57,7 +57,7 @@ object WorkspaceService {
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
-                  entityManager: EntityManager = new EntityManager(Set()))
+                  entityManager: EntityManager)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): WorkspaceService = {
 
