@@ -669,6 +669,55 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       }
   }
 
+  it should "get syntax validation information when using a reserved output attribute" in {
+    withTestDataApiServices { services =>
+      val entityType = "some_type_of_entity"
+
+      val theInputs = Map(
+        "goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"),
+        "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse")
+      )
+      val theOutputs = Map(
+        "goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),
+        "goodAndBad.goodAndBadTask.bad_out" -> AttributeString(s"this.${entityType}_id"),
+        "goodAndBad.goodAndBadTask.empty_out" -> AttributeString(""),
+      )
+
+      val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
+      val expectedFailureInputs = Map(
+        "goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: 'workspace.' expected but 'd' found"
+      )
+      val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.empty_out")
+      val expectedFailureOutputs = Map(
+        "goodAndBad.goodAndBadTask.bad_out" -> s"Attribute name ${entityType}_id is reserved and cannot be overwritten"
+      )
+
+      val mc = testData.goodAndBadMethodConfig.copy(
+        name = "blah",
+        inputs = theInputs,
+        outputs = theOutputs,
+        prerequisites = Option(Map()),
+        rootEntityType = Option(entityType)
+      )
+
+      runAndWait(methodConfigurationQuery.create(testData.workspace, mc))
+
+      Get(s"${mc.path(testData.workspace)}/validate") ~>
+        sealRoute(services.methodConfigRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          val validated = responseAs[ValidatedMethodConfiguration]
+          assertResult(mc) { validated.methodConfiguration }
+          assertSameElements(expectedSuccessInputs, validated.validInputs)
+          assertSameElements(expectedFailureInputs, validated.invalidInputs)
+          assertSameElements(expectedSuccessOutputs, validated.validOutputs)
+          assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
+        }
+    }
+  }
+
   it should "return 404 on update method configuration" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/methodconfigs/update}", httpJson(testData.agoraMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
