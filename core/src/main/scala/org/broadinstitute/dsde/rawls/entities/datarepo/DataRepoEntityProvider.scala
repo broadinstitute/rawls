@@ -2,10 +2,9 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import java.util.UUID
 
-import bio.terra.datarepo.model.TableModel
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import cats.effect.{IO, Resource}
-import com.google.cloud.bigquery.{QueryJobConfiguration, TableResult}
+import com.google.cloud.bigquery.{QueryJobConfiguration, QueryParameterValue, TableResult}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -14,9 +13,8 @@ import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeString, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, TerraDataRepoSnapshotRequest}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, TerraDataRepoSnapshotRequest}
 import spray.json._
 
 import scala.collection.JavaConverters._
@@ -26,7 +24,7 @@ import scala.util.{Failure, Success, Try}
 class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspaceManagerDAO: WorkspaceManagerDAO,
                              dataRepoDAO: DataRepoDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory[IO])
                             (implicit protected val executionContext: ExecutionContext)
-  extends EntityProvider with LazyLogging {
+  extends EntityProvider with DataRepoBigQuerySupport with LazyLogging {
 
   val workspace = requestArguments.workspace
   val userInfo = requestArguments.userInfo
@@ -88,42 +86,24 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     // determine view name
     val viewName = snapshotModel.getName
 
-    // TODO: use named params!
-    val query = s"SELECT * FROM `${dataProject}.${viewName}.${entityType}` WHERE $pk = '$entityName';"
-
-    val queryConfig = QueryJobConfiguration.newBuilder(query).build
+    val query = s"SELECT * FROM `${dataProject}.${viewName}.${entityType}` WHERE $pk = @pkvalue;"
+    val queryConfig = QueryJobConfiguration.newBuilder(query)
+      .addNamedParameter("pkvalue", QueryParameterValue.string(entityName))
+      .build
 
     // get pet service account key for this user
     samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail) map { petKey =>
 
-      val foo: Resource[IO, TableResult] = for {
+      val queryResource: Resource[IO, TableResult] = for {
         bqService <- bqServiceFactory.getServiceForPet(petKey)
         queryResults <- Resource.liftF(bqService.query(queryConfig))
       } yield queryResults
 
-      foo.use {
-        case queryResults:TableResult =>
-          queryResults.getTotalRows match {
-            case 1 =>
-              val fieldValues = queryResults.iterateAll().asScala.head
-
-              val fieldNames:List[String] = queryResults.getSchema.getFields.iterator().asScala.toList.map(_.getName)
-
-              val attrs:AttributeMap = fieldNames.map { fieldName =>
-                val fv = fieldValues.get(fieldName)
-                AttributeName.withDefaultNS(fieldName) -> AttributeString(fv.getValue.toString)
-              }.toMap
-
-              IO.pure(Entity(entityName, entityType, attrs))
-            case 0 =>
-              throw new DataEntityException("BQ succeeded, but returned zero rows") // error not found
-            case _ =>
-              throw new DataEntityException(s"BQ succeeded, but returned ${queryResults.getTotalRows} rows") // unexpected error: too many found
-          }
+      queryResource.use { queryResults: TableResult =>
+        IO.pure(queryResultsToEntity(queryResults, entityType, entityName))
       }.unsafeRunSync()
 
     }
-
   }
 
   // not marked as private to ease unit testing
@@ -164,14 +144,6 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
   }
 
-  private def pkFromSnapshotTable(tableModel: TableModel): String = {
-    // If data repo returns one and only one primary key, use it.
-    // If data repo returns null or a compound PK, use the built-in rowid for pk instead.
-    Option(tableModel.getPrimaryKey) match {
-      case Some(pk) if pk.size() == 1 => pk.asScala.head
-      case _ => "datarepo_row_id" // default data repo value
-    }
-  }
 
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]] =

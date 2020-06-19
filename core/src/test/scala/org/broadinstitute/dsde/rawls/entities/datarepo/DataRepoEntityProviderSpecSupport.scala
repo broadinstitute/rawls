@@ -6,7 +6,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{ColumnModel, SnapshotModel, TableModel}
 import bio.terra.workspace.model.DataReferenceDescription
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{UserInfo, Workspace}
@@ -32,6 +32,8 @@ trait DataRepoEntityProviderSpecSupport {
   val workspace = new Workspace("namespace", "name", wsId.toString, "bucketName", None,
     DateTime.now(), DateTime.now(), "createdBy", Map.empty, false)
 
+  val bqFactory = MockBigQueryServiceFactory.ioFactory
+
   /* A "factory" method to create a DataRepoEntityProvider, with defaults.
    * Individual unit tests should call this to reduce boilerplate.
    */
@@ -40,7 +42,7 @@ trait DataRepoEntityProviderSpecSupport {
                          samDAO: SamDAO = new MockSamDAO(slickDataSource),
                          entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some("referenceName"))
                         ): DataRepoEntityProvider = {
-    new DataRepoEntityProvider(entityRequestArguments, workspaceManagerDAO, dataRepoDAO, samDAO)
+    new DataRepoEntityProvider(entityRequestArguments, workspaceManagerDAO, dataRepoDAO, samDAO, bqFactory)
   }
 
 
