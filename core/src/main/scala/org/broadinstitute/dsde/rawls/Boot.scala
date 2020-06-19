@@ -311,7 +311,7 @@ object Boot extends IOApp with LazyLogging {
 
       val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.baseUrl"))
 
-      val dataRepoDAO = new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"))
+      val dataRepoDAO = new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"), conf.getString("dataRepo.terraInstance"))
 
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
