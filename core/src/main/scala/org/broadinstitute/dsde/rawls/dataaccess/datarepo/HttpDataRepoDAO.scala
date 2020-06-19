@@ -7,11 +7,11 @@ import java.util.UUID
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.SnapshotModel
 
-class HttpDataRepoDAO(dataRepoInstanceName: String) extends DataRepoDAO {
+class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) extends DataRepoDAO {
 
   private def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()
-    client.setBasePath(dataRepoInstanceName)
+    client.setBasePath(dataRepoInstanceBasePath)
     client.setAccessToken(accessToken)
 
     client
