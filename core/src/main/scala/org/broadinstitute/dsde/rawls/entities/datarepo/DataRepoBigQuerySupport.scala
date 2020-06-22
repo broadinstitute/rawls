@@ -28,6 +28,7 @@ trait DataRepoBigQuerySupport {
       case LegacySQLTypeName.STRING =>
         AttributeString(fv.getStringValue)
       case _ =>
+        // TODO: handle null case
         // DATE, DATETIME, TIME, TIMESTAMP
         // BYTES
         // GEOGRAPHY
@@ -58,14 +59,19 @@ trait DataRepoBigQuerySupport {
   }
 
   def queryResultsToEntities(queryResults:TableResult, entityType: String, entityName: String): List[Entity] = {
-    val fieldDefs:List[Field] = queryResults.getSchema.getFields.iterator().asScala.toList
-
-    queryResults.iterateAll().asScala.map { row =>
-      val attrs = fieldDefs.map { field => fieldToAttribute(field, row) }.toMap
-      Entity(entityName, entityType, attrs)
-    }.toList
+    // short-circuit if query results is empty
+    if (queryResults.getTotalRows == 0) {
+      List.empty[Entity]
+    } else {
+      val fieldDefs:List[Field] = queryResults.getSchema.getFields.iterator().asScala.toList
+      queryResults.iterateAll().asScala.map { row =>
+        val attrs = fieldDefs.map { field => fieldToAttribute(field, row) }.toMap
+        Entity(entityName, entityType, attrs)
+      }.toList
+    }
   }
 
+  // TODO: no need to include entityName here!
   def queryResultsToEntity(queryResults:TableResult, entityType: String, entityName: String): Entity = {
     queryResults.getTotalRows match {
       case 1 =>
