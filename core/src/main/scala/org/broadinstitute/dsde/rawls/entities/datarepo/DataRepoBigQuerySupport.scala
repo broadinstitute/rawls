@@ -4,7 +4,7 @@ import bio.terra.datarepo.model.TableModel
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
-import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeStringifier, AttributeValue, AttributeValueEmptyList, AttributeValueList, Entity}
+import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
@@ -30,12 +30,13 @@ trait DataRepoBigQuerySupport {
         AttributeBoolean(fv.getBooleanValue)
       case LegacySQLTypeName.STRING =>
         AttributeString(fv.getStringValue)
+      case LegacySQLTypeName.RECORD =>
+        // TODO: unclear what to do with RECORD types; they don't translate cleanly to the entity model
+        AttributeString(fv.getValue.toString)
       case _ =>
-        // DATE, DATETIME, TIME, TIMESTAMP
-        // BYTES
-        // GEOGRAPHY
-        // RECORD
-        // we don't necessarily support these data types, but we'll try:
+        // DATE, DATETIME, TIME, TIMESTAMP, BYTES, GEOGRAPHY
+        // these types don't have strongly-typed equivalents in the entity model, so we treat them
+        // as string values, relying on the caller to parse the string
         AttributeString(fv.getValue.toString)
     }
   }
@@ -108,10 +109,10 @@ trait DataRepoBigQuerySupport {
 
   // create comma-delimited string of field names for use in error messages.
   // list is sorted alphabetically for determinism in unit tests
-  private def asDelimitedString(fieldList: FieldList): String = {
+  def asDelimitedString(fieldList: FieldList): String = {
     fieldList.asScala.toList.map(_.getName).sorted.mkString(",")
   }
-  private def asDelimitedString(fieldValueList: FieldValueList): String = {
+  def asDelimitedString(fieldValueList: FieldValueList): String = {
     fieldValueList.asScala.toList.map(_.toString).sorted.mkString(",")
   }
 
