@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.entities
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SlickDataSource}
@@ -60,7 +59,7 @@ class EntityServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers w
     def actorRefFactory = system
     val samDAO = new MockSamDAO(dataSource)
 
-    val bigQueryServiceFactory: GoogleBigQueryServiceFactory[IO] = MockBigQueryServiceFactory.ioFactory
+    val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
 
     val testConf = ConfigFactory.load()
 

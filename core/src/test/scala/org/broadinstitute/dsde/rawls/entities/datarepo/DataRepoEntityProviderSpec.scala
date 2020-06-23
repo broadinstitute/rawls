@@ -4,12 +4,18 @@ import java.util.UUID
 
 import bio.terra.datarepo.model.TableModel
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
+import com.google.cloud.PageImpl
+import com.google.cloud.bigquery.{FieldValueList, TableResult}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
+import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{results, schema}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.model.EntityTypeMetadata
+import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{AsyncFlatSpec, Matchers}
 import spray.json.{JsArray, JsNumber, JsObject, JsString}
+
+import scala.collection.JavaConverters._
 
 class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
 
@@ -181,8 +187,23 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
   behavior of "DataEntityProvider.getEntity()"
 
-  ignore should "return exactly one entity if all OK" in {
-    fail("not implemented")
+  it should "return exactly one entity if all OK" in {
+
+    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.take(1).asJava)
+    val tableResult: TableResult = new TableResult(schema, 1, page)
+
+    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
+
+    provider.getEntity("table1", "the first row") map { entity: Entity =>
+      // this is the default expected value, should it move to the support trait?
+      val expected = Entity("the first row", "table1", Map(
+        AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("the first row"),
+        AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
+        AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
+        AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
+      ))
+      assertResult(expected) { entity }
+    }
   }
 
   ignore should "bubble up error if workspace manager errors (includes reference not found?)" in {

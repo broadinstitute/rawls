@@ -521,7 +521,7 @@ object Boot extends IOApp with LazyLogging {
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
-      bqServiceFactory = new GoogleBigQueryServiceFactory(blocker)
+      bqServiceFactory = new GoogleBigQueryServiceFactory(blocker)(executionContext)
     } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory)
   }
 }
@@ -531,4 +531,4 @@ final case class AppDependencies[F[_]](
   googleStorageService: GoogleStorageService[F],
   googleServiceHttp: GoogleServiceHttp[F],
   topicAdmin: GoogleTopicAdmin[F],
-  bigQueryServiceFactory: GoogleBigQueryServiceFactory[F])
+  bigQueryServiceFactory: GoogleBigQueryServiceFactory)
