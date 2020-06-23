@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import java.util.UUID
 
+import bio.terra.datarepo.model.TableModel
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import cats.effect.{IO, Resource}
 import com.google.cloud.bigquery.{QueryJobConfiguration, QueryParameterValue, TableResult}
@@ -77,16 +78,15 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
       case None => workspace.namespace
     }
 
-    // generate BQ SQL for this entity
-
     //  determine pk column
     val pk = pkFromSnapshotTable(tableModel)
     // determine data project
     val dataProject = snapshotModel.getDataProject
     // determine view name
     val viewName = snapshotModel.getName
-
+    // generate BQ SQL for this entity
     val query = s"SELECT * FROM `${dataProject}.${viewName}.${entityType}` WHERE $pk = @pkvalue;"
+    // generate query config, with named param for primary key
     val queryConfig = QueryJobConfiguration.newBuilder(query)
       .addNamedParameter("pkvalue", QueryParameterValue.string(entityName))
       .build
@@ -94,11 +94,13 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     // get pet service account key for this user
     samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail) map { petKey =>
 
+      // get a BQ service (i.e. dao) instance, and use it to execute the query against BQ
       val queryResource: Resource[IO, TableResult] = for {
         bqService <- bqServiceFactory.getServiceForPet(petKey)
         queryResults <- Resource.liftF(bqService.query(queryConfig))
       } yield queryResults
 
+      // translate the BQ results into a single Rawls Entity
       queryResource.use { queryResults: TableResult =>
         IO.pure(queryResultsToEntity(queryResults, entityType, pk))
       }.unsafeRunSync()
@@ -144,14 +146,19 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
   }
 
-
+  def pkFromSnapshotTable(tableModel: TableModel): String = {
+    // If data repo returns one and only one primary key, use it.
+    // If data repo returns null or a compound PK, use the built-in rowid for pk instead.
+    scala.Option(tableModel.getPrimaryKey) match {
+      case Some(pk) if pk.size() == 1 => pk.asScala.head
+      case _ => "datarepo_row_id" // default data repo value
+    }
+  }
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]] =
     throw new UnsupportedEntityOperationException("evaluateExpressions not supported by this provider.")
 
   override def expressionValidator: ExpressionValidator =
     throw new UnsupportedEntityOperationException("expressionEvaluator not supported by this provider.")
-
-
 
 }

@@ -11,6 +11,16 @@ import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 
+/*
+ * Mocks for GoogleBigQueryServiceFactory and GoogleBigQueryService for use in unit tests.
+ *
+ * These mocks allow unit-test callers to specify the BigQuery result payload, and/or
+ * specify that the query() method throws an exception.
+ *
+ * This file also contains the default fixture data returned by MockGoogleBigQueryService.query()
+ * in the case where a caller did not override that result.
+ */
+
 object MockBigQueryServiceFactory {
 
   // default fixture data returned by the underlying MockGoogleBigQueryService, unless a caller overrides it

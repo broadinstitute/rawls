@@ -9,35 +9,9 @@ import org.scalatest.FreeSpec
 
 import scala.collection.JavaConverters._
 
+/* see also the unit tests in DataRepoEntityProviderSpec
+ */
 class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport {
-
-  "DataRepoBigQuerySupport, when finding the primary key for a table, should" - {
-
-    "use primary key of `datarepo_row_id` if snapshot has null primary key" in {
-      val input = new TableModel()
-      input.setPrimaryKey(null)
-      assertResult("datarepo_row_id") { pkFromSnapshotTable(input) }
-    }
-
-    "use primary key of `datarepo_row_id` if snapshot has empty-array primary key" in {
-      val input = new TableModel()
-      input.setPrimaryKey(List.empty[String].asJava)
-      assertResult("datarepo_row_id") { pkFromSnapshotTable(input) }
-    }
-
-    "use primary key of `datarepo_row_id` if snapshot has multiple primary keys" in {
-      val input = new TableModel()
-      input.setPrimaryKey(List("one", "two", "three").asJava)
-      assertResult("datarepo_row_id") { pkFromSnapshotTable(input) }
-    }
-
-    "use primary key from snapshot if one and only one returned" in {
-      val input = new TableModel()
-      input.setPrimaryKey(List("singlekey").asJava)
-      assertResult("singlekey") { pkFromSnapshotTable(input) }
-    }
-
-  }
 
   "DataRepoBigQuerySupport, when translating BQ results to Terra entities, should" - {
 

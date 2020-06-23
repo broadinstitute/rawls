@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import bio.terra.datarepo.model.TableModel
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
@@ -9,17 +8,18 @@ import org.broadinstitute.dsde.rawls.model._
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
+/**
+ * contains helper methods for working with BigQuery from an EntityProvider.
+ */
 trait DataRepoBigQuerySupport {
 
-  def pkFromSnapshotTable(tableModel: TableModel): String = {
-    // If data repo returns one and only one primary key, use it.
-    // If data repo returns null or a compound PK, use the built-in rowid for pk instead.
-    scala.Option(tableModel.getPrimaryKey) match {
-      case Some(pk) if pk.size() == 1 => pk.asScala.head
-      case _ => "datarepo_row_id" // default data repo value
-    }
-  }
-
+  /**
+   * translate a single BigQuery FieldValue to a single Rawls AttributeValue
+   *
+   * @param field the BQ schema's field definition
+   * @param fv the BQ field value
+   * @return the Rawls attribute value, post-translation
+   */
   def fieldValueToAttributeValue(field: Field, fv: FieldValue): AttributeValue = {
     field.getType match {
       case x if fv.isNull =>
@@ -34,13 +34,22 @@ trait DataRepoBigQuerySupport {
         // TODO: unclear what to do with RECORD types; they don't translate cleanly to the entity model
         AttributeString(fv.getValue.toString)
       case _ =>
+        // "else" case that covers LegacySQLTypeNames of:
         // DATE, DATETIME, TIME, TIMESTAMP, BYTES, GEOGRAPHY
         // these types don't have strongly-typed equivalents in the entity model, so we treat them
-        // as string values, relying on the caller to parse the string
+        // as string values, and rely on the caller to parse the string
         AttributeString(fv.getValue.toString)
     }
   }
 
+  /**
+   * Given a BigQuery row and one named field from the BQ schema, return a Rawls AttributeName->Attribute pair
+   * representing that field's value(s) inside the row.
+   *
+   * @param field the BQ schema's field definition
+   * @param row all field values for a single BQ row
+   * @return the Rawls attributename->attribute pair, post-translation
+   */
   def fieldToAttribute(field: Field, row: FieldValueList): (AttributeName, Attribute) = {
     val attrName = field.getName
     val fv = Try(row.get(attrName)) match {
@@ -64,6 +73,14 @@ trait DataRepoBigQuerySupport {
     (AttributeName.withDefaultNS(attrName), attribute)
   }
 
+  /**
+   * Translates a BigQuery result set into a list of Rawls Entities. Returns an empty list if BigQuery returned zero rows.
+   *
+   * @param queryResults the BigQuery result set
+   * @param entityType name of a BigQuery table in the result set, used as the Rawls entity type.
+   * @param primaryKey what Rawls believes is the identifying column in the BigQuery table, used to generate entity names.
+   * @return list of Rawls Entities
+   */
   def queryResultsToEntities(queryResults:TableResult, entityType: String, primaryKey: String): List[Entity] = {
     // short-circuit if query results is empty
     if (queryResults.getTotalRows == 0) {
@@ -96,6 +113,15 @@ trait DataRepoBigQuerySupport {
     }
   }
 
+  /**
+   * Translates a BigQuery result set into a single Rawls Entity. Expects one and only one row from BigQuery
+   * and will throw exceptions if less than or more than one row exists.
+   *
+   * @param queryResults the BigQuery result set
+   * @param entityType name of a BigQuery table in the result set, used as the Rawls entity type.
+   * @param primaryKey what Rawls believes is the identifying column in the BigQuery table, used to generate entity names.
+   * @return a single Rawls Entity
+   */
   def queryResultsToEntity(queryResults:TableResult, entityType: String, primaryKey: String): Entity = {
     queryResults.getTotalRows match {
       case 1 =>
@@ -108,7 +134,7 @@ trait DataRepoBigQuerySupport {
   }
 
   // create comma-delimited string of field names for use in error messages.
-  // list is sorted alphabetically for determinism in unit tests
+  // list is sorted alphabetically for determinism in unit tests.
   def asDelimitedString(fieldList: FieldList): String = {
     fieldList.asScala.toList.map(_.getName).sorted.mkString(",")
   }

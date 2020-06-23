@@ -61,6 +61,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
+      // we haven't done this yet because we don't know the business logic around which billing project to use for each user.
       // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
       // EntityService constructor, or other higher-level method
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)

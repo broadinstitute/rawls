@@ -68,9 +68,31 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     assertResult("whoops 2") { ex.getMessage }
   }
 
-  // to-do: tests for different primary key values returned by data repo, if TDR ever supports this.
-  // currently, TDR returns null for PKs in snapshots, and this is expected according to the TDR team,
-  // with no concrete plans to change.
+  behavior of "DataRepoBigQuerySupport, when finding the primary key for a table"
+
+  it should "use primary key of `datarepo_row_id` if snapshot has null primary key" in {
+    val input = new TableModel()
+    input.setPrimaryKey(null)
+    assertResult("datarepo_row_id") { createTestProvider().pkFromSnapshotTable(input) }
+  }
+
+  it should "use primary key of `datarepo_row_id` if snapshot has empty-array primary key" in {
+    val input = new TableModel()
+    input.setPrimaryKey(List.empty[String].asJava)
+    assertResult("datarepo_row_id") { createTestProvider().pkFromSnapshotTable(input) }
+  }
+
+  it should "use primary key of `datarepo_row_id` if snapshot has multiple primary keys" in {
+    val input = new TableModel()
+    input.setPrimaryKey(List("one", "two", "three").asJava)
+    assertResult("datarepo_row_id") { createTestProvider().pkFromSnapshotTable(input) }
+  }
+
+  it should "use primary key from snapshot if one and only one returned" in {
+    val input = new TableModel()
+    input.setPrimaryKey(List("singlekey").asJava)
+    assertResult("singlekey") { createTestProvider().pkFromSnapshotTable(input) }
+  }
 
   // to-do: tests for entity/row counts returned by data repo, once TDR supports this (see DR-1003)
 
@@ -189,9 +211,9 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
   it should "return exactly one entity if all OK" in {
 
+    // set up a provider with a mock that returns exactly one BQ row
     val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.take(1).asJava)
     val tableResult: TableResult = new TableResult(schema, 1, page)
-
     val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
 
     provider.getEntity("table1", "the first row") map { entity: Entity =>
@@ -229,6 +251,8 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   }
 
   ignore should "fail if user is a workspace Reader but did not specify a billing project (canCompute?)" in {
+    // we haven't implemented the runtime logic for this because we don't have PO input,
+    // so we don't know exactly what to unit test
     fail("not implemented in runtime code yet")
   }
 

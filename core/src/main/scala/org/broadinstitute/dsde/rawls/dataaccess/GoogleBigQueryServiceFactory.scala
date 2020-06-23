@@ -11,6 +11,14 @@ import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 
 import scala.concurrent.ExecutionContext
 
+/**
+ * DataRepoEntityProvider, and potential future callers of this class, need to create a new
+ * GoogleBigQueryService for every request. They do this because they need to set different
+ * user credentials for each request.
+ *
+ * This factory class contains boilerplate and allows callers to easily and quickly get
+ * a new service instance for each user's credentials.
+ */
 class GoogleBigQueryServiceFactory(blocker: Blocker)(implicit executionContext: ExecutionContext) {
 
   implicit lazy val logger: _root_.io.chrisdavenport.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
