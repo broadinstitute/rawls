@@ -100,7 +100,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
       } yield queryResults
 
       queryResource.use { queryResults: TableResult =>
-        IO.pure(queryResultsToEntity(queryResults, entityType, entityName))
+        IO.pure(queryResultsToEntity(queryResults, entityType, pk))
       }.unsafeRunSync()
 
     }

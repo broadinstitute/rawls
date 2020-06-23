@@ -4,7 +4,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.exceptions.DeleteEntitiesConflictException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DeleteEntitiesConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -67,6 +67,10 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
       entityManager.resolveProvider(entityRequestArguments).getEntity(entityType, entityName)
         .map { entity => PerRequest.RequestComplete(StatusCodes.OK, entity) }
+        .recover {
+          case _:EntityNotFoundException => RequestComplete(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName")
+          case ex => RequestComplete(StatusCodes.InternalServerError, ex)
+        }
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =

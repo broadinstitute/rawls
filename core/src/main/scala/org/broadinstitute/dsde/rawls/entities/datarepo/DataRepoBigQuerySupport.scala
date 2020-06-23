@@ -3,10 +3,11 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import bio.terra.datarepo.model.TableModel
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery._
-import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValue, AttributeValueEmptyList, AttributeValueList, Entity}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeStringifier, AttributeValue, AttributeValueEmptyList, AttributeValueList, Entity}
 
 import scala.collection.JavaConverters._
+import scala.util.{Failure, Success, Try}
 
 trait DataRepoBigQuerySupport {
 
@@ -21,6 +22,8 @@ trait DataRepoBigQuerySupport {
 
   def fieldValueToAttributeValue(field: Field, fv: FieldValue): AttributeValue = {
     field.getType match {
+      case x if fv.isNull =>
+        AttributeNull
       case LegacySQLTypeName.FLOAT | LegacySQLTypeName.INTEGER | LegacySQLTypeName.NUMERIC =>
         AttributeNumber(fv.getNumericValue)
       case LegacySQLTypeName.BOOLEAN =>
@@ -28,7 +31,6 @@ trait DataRepoBigQuerySupport {
       case LegacySQLTypeName.STRING =>
         AttributeString(fv.getStringValue)
       case _ =>
-        // TODO: handle null case
         // DATE, DATETIME, TIME, TIMESTAMP
         // BYTES
         // GEOGRAPHY
@@ -40,15 +42,18 @@ trait DataRepoBigQuerySupport {
 
   def fieldToAttribute(field: Field, row: FieldValueList): (AttributeName, Attribute) = {
     val attrName = field.getName
-    // TODO: catch exceptions retrieving values from queryResults
-    val fv = row.get(attrName)
+    val fv = Try(row.get(attrName)) match {
+      case Success(fieldValue) => fieldValue
+      case Failure(ex) =>
+        throw new DataEntityException(s"field ${field.getName} not found in row ${asDelimitedString(row)}")
+    }
 
     val attribute = field.getMode match {
       case Mode.REPEATED =>
         fv.getRepeatedValue.asScala.toList match {
           case x if x.isEmpty => AttributeValueEmptyList
           case members =>
-            // TODO: can a list itself contain a list? Recursion here is difficult because of the Attribute/AttributeValue hierarchy
+            // can a list itself contain a list? Recursion here is difficult because of the Attribute/AttributeValue hierarchy
             val attrValues = members.map { member => fieldValueToAttributeValue(field, member) }
             AttributeValueList(attrValues)
         }
@@ -58,31 +63,56 @@ trait DataRepoBigQuerySupport {
     (AttributeName.withDefaultNS(attrName), attribute)
   }
 
-  def queryResultsToEntities(queryResults:TableResult, entityType: String, entityName: String): List[Entity] = {
+  def queryResultsToEntities(queryResults:TableResult, entityType: String, primaryKey: String): List[Entity] = {
     // short-circuit if query results is empty
     if (queryResults.getTotalRows == 0) {
       List.empty[Entity]
     } else {
-      val fieldDefs:List[Field] = queryResults.getSchema.getFields.iterator().asScala.toList
-      queryResults.iterateAll().asScala.map { row =>
-        val attrs = fieldDefs.map { field => fieldToAttribute(field, row) }.toMap
-        Entity(entityName, entityType, attrs)
-      }.toList
+
+      val schemaFields = queryResults.getSchema.getFields
+
+      // does primary key exist in the results?
+      if (Try(schemaFields.getIndex(primaryKey)).isFailure) {
+        throw new DataEntityException(s"could not find primary key column '$primaryKey' in query results: ${asDelimitedString(schemaFields)}")
+      }
+
+      // short-circuit if query results is empty
+      if (queryResults.getTotalRows == 0) {
+        List.empty[Entity]
+      } else {
+        val fieldDefs:List[Field] = schemaFields.iterator().asScala.toList
+        queryResults.iterateAll().asScala.map { row =>
+          val attrs = fieldDefs.map { field => fieldToAttribute(field, row) }.toMap
+          val entityName = attrs.find(_._1.name == primaryKey) match {
+            case Some((_, a: Attribute)) => AttributeStringifier.apply(a)
+            case None =>
+              // this shouldn't happen, since we validated the pk against the schema
+              throw new DataEntityException(s"could not find primary key column '$primaryKey' on record: ${asDelimitedString(schemaFields)}")
+          }
+          Entity(entityName, entityType, attrs)
+        }.toList
+      }
     }
   }
 
-  // TODO: no need to include entityName here!
-  def queryResultsToEntity(queryResults:TableResult, entityType: String, entityName: String): Entity = {
+  def queryResultsToEntity(queryResults:TableResult, entityType: String, primaryKey: String): Entity = {
     queryResults.getTotalRows match {
       case 1 =>
-        queryResultsToEntities(queryResults, entityType, entityName).head
+        queryResultsToEntities(queryResults, entityType, primaryKey).head
       case 0 =>
-        // TODO: better error messages
-        throw new DataEntityException("BQ succeeded, but returned zero rows") // error not found
+        throw new EntityNotFoundException("Entity not found.")
       case _ =>
-        // TODO: better error messages
-        throw new DataEntityException(s"BQ succeeded, but returned ${queryResults.getTotalRows} rows") // unexpected error: too many found
+        throw new DataEntityException(s"Query succeeded, but returned ${queryResults.getTotalRows} rows; expected one row.")
     }
+  }
+
+  // create comma-delimited string of field names for use in error messages.
+  // list is sorted alphabetically for determinism in unit tests
+  private def asDelimitedString(fieldList: FieldList): String = {
+    fieldList.asScala.toList.map(_.getName).sorted.mkString(",")
+  }
+  private def asDelimitedString(fieldValueList: FieldValueList): String = {
+    fieldValueList.asScala.toList.map(_.toString).sorted.mkString(",")
   }
 
 }

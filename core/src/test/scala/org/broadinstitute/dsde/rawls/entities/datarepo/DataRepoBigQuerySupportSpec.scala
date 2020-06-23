@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import bio.terra.datarepo.model.TableModel
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Field, FieldList, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
-import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, Entity}
 import org.scalatest.FlatSpec
 
@@ -161,11 +161,11 @@ class DataRepoBigQuerySupportSpec extends FlatSpec with DataRepoBigQuerySupport 
     val page:PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row).asJava)
     val tableResult:TableResult = new TableResult(schema, 0, page)
 
-    val ex = intercept[DataEntityException] {
+    val ex = intercept[EntityNotFoundException] {
       queryResultsToEntity(tableResult, "entityType", "entityName")
     }
 
-    assertResult("BQ succeeded, but returned zero rows") { ex.getMessage }
+    assertResult("Entity not found.") { ex.getMessage }
   }
 
   it should "throw error if queryResultsToEntity is given more than one row" in {
@@ -179,7 +179,7 @@ class DataRepoBigQuerySupportSpec extends FlatSpec with DataRepoBigQuerySupport 
       queryResultsToEntity(tableResult, "entityType", "entityName")
     }
 
-    assertResult("BQ succeeded, but returned 2 rows") { ex.getMessage }
+    assertResult("Query succeeded, but returned 2 rows; expected one row.") { ex.getMessage }
   }
 
   it should "return the Entity if queryResultsToEntity is given one and only one row" in {
@@ -189,14 +189,35 @@ class DataRepoBigQuerySupportSpec extends FlatSpec with DataRepoBigQuerySupport 
     val page:PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row).asJava)
     val tableResult:TableResult = new TableResult(schema, 1, page)
 
-    val expected = Entity("entityName", "entityType", Map(
+    val expected = Entity("hello world", "entityType", Map(
         AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
         AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
         AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
         AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
       ))
 
-    assertResult (expected) { queryResultsToEntity(tableResult, "entityType", "entityName") }
+    assertResult (expected) { queryResultsToEntity(tableResult, "entityType", "string-field") }
+  }
+
+  it should "throw error if requested primary key does not exist in query results" in {
+    val schema:Schema = Schema.of(F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
+    val row:FieldValueList = FieldValueList.of(List(FV_INTEGER, FV_BOOLEAN, FV_STRING, FV_TIMESTAMP).asJava,
+      F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
+    val page:PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row).asJava)
+    val tableResult:TableResult = new TableResult(schema, 1, page)
+
+    val expected = Entity("hello world", "entityType", Map(
+      AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
+      AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
+      AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
+      AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
+    ))
+
+    val ex = intercept[DataEntityException] {
+      queryResultsToEntity(tableResult, "entityType", "invalid-pk")
+    }
+
+    assertResult("could not find primary key column 'invalid-pk' in query results: boolean-field,integer-field,string-field,timestamp-field") { ex.getMessage }
   }
 
   it should "return empty array if queryResultsToEntities is given zero rows" in {
@@ -205,7 +226,7 @@ class DataRepoBigQuerySupportSpec extends FlatSpec with DataRepoBigQuerySupport 
     val page:PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row).asJava)
     val tableResult:TableResult = new TableResult(schema, 0, page)
 
-    assertResult(List()) { queryResultsToEntities(tableResult, "entityType", "entityName") }
+    assertResult(List()) { queryResultsToEntities(tableResult, "entityType", "irrelevant") }
   }
 
   it should "return one-element array if queryResultsToEntities is given one row" in {
@@ -215,14 +236,14 @@ class DataRepoBigQuerySupportSpec extends FlatSpec with DataRepoBigQuerySupport 
     val page:PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row).asJava)
     val tableResult:TableResult = new TableResult(schema, 1, page)
 
-    val expected = Entity("entityName", "entityType", Map(
+    val expected = Entity("hello world", "entityType", Map(
       AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
       AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
       AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
       AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
     ))
 
-    assertResult (List(expected)) { queryResultsToEntities(tableResult, "entityType", "entityName") }
+    assertResult (List(expected)) { queryResultsToEntities(tableResult, "entityType", "string-field") }
   }
 
   it should "return multiple-element array if queryResultsToEntities is given more than one row" in {
@@ -232,7 +253,7 @@ class DataRepoBigQuerySupportSpec extends FlatSpec with DataRepoBigQuerySupport 
     val page:PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row, row, row).asJava)
     val tableResult:TableResult = new TableResult(schema, 3, page)
 
-    val expected = Entity("entityName", "entityType", Map(
+    val expected = Entity("hello world", "entityType", Map(
       AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
       AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
       AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
@@ -240,7 +261,10 @@ class DataRepoBigQuerySupportSpec extends FlatSpec with DataRepoBigQuerySupport 
     ))
 
     // TODO: use different values for each record!
-    assertResult (List(expected, expected, expected)) { queryResultsToEntities(tableResult, "entityType", "entityName") }
+    assertResult (List(expected, expected, expected)) { queryResultsToEntities(tableResult, "entityType", "string-field") }
   }
+
+  // TODO: test for null value
+  // TODO: test for fieldToAttribute looking for field not in values
 
 }
