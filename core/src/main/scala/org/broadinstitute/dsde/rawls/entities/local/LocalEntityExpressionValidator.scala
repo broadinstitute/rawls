@@ -21,7 +21,12 @@ class LocalEntityExpressionValidator(dataSource: SlickDataSource)(implicit prote
       val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.getName, AttributeString(mi.expression)) }
       val (emptyOutputs, outputsToParse) = methodConfiguration.outputs.partition { case (_, expr) => expr.value.isEmpty }
 
-      val parsed = parser.parseMCExpressions(inputsToParse.toMap, outputsToParse, allowRootEntity)
+      val parsed = parser.parseMCExpressions(
+        inputs = inputsToParse.toMap,
+        outputs = outputsToParse,
+        allowRootEntity = allowRootEntity,
+        rootEntityTypeOption = methodConfiguration.rootEntityType
+      )
 
       // empty output expressions are also valid
       val validatedOutputs = emptyOutputs.keys.toSet ++ parsed.validOutputs

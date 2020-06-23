@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
-import cats.instances.try_._
-import cats.syntax.functor._
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.expressions.OutputExpression
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrExtendedJSONParser, ExtendedJSONValidationVisitor}
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, AttributeString, ParsedMCExpressions}
+import org.broadinstitute.dsde.rawls.model._
 
 import scala.language.{higherKinds, postfixOps}
 import scala.util.Try
@@ -32,24 +32,34 @@ trait ExpressionParser[F[_], ExpressionContext, PipeType] extends JavaTokenParse
   // PipeType may be None when there is no pipeline (e.g. workspace attributes)
   // Returns a map of entity names to an iterable of the expression result
   type FinalFunc = (ExpressionContext, Option[PipeType]) => ExpressionOutputType
-  
+
   type ExpressionOutputType = F[Map[String, Iterable[Any]]]
 
-  def parseMCExpressions(inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], allowRootEntity: Boolean): ParsedMCExpressions = {
+  def parseMCExpressions(inputs: Map[String, AttributeString],
+                         outputs: Map[String, AttributeString],
+                         allowRootEntity: Boolean,
+                         rootEntityTypeOption: Option[String]
+                        ): ParsedMCExpressions = {
     val noEntityAllowedErrorMsg = "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."
     def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[Unit] ) = {
       val parsed = m map { case (key, attr) => (key, parseFunc(attr.value)) }
       ( parsed collect { case (key, scala.util.Success(_)) => key } toSet,
         parsed collect { case (key, scala.util.Failure(regret)) =>
-          if (!allowRootEntity && m.get(key).isDefined && m.get(key).get.value.startsWith("this."))
-            (key, noEntityAllowedErrorMsg)
-          else
-            (key, regret.getMessage)}
+          regret match {
+            case _ if (!allowRootEntity && m.contains(key) && m(key).value.startsWith("this.")) =>
+              (key, noEntityAllowedErrorMsg)
+            case reported: RawlsExceptionWithErrorReport => (key, reported.errorReport.message)
+            case _ => (key, regret.getMessage)
+          }
+        }
       )
     }
 
     val (successInputs, failedInputs)   = parseAndPartition(inputs, parseInputExpr(allowRootEntity) )
-    val (successOutputs, failedOutputs) = parseAndPartition(outputs, parseOutputExpr(allowRootEntity) )
+    val (successOutputs, failedOutputs) = parseAndPartition(
+      m = outputs,
+      parseFunc = parseOutputExpr(allowRootEntity, rootEntityTypeOption)
+    )
 
     ParsedMCExpressions(successInputs, failedInputs, successOutputs, failedOutputs)
   }
@@ -67,8 +77,12 @@ trait ExpressionParser[F[_], ExpressionContext, PipeType] extends JavaTokenParse
     Try(extendedJsonParser.root()).flatMap(visitor.visit)
   }
 
-  private def parseOutputExpr(allowRootEntity: Boolean)(expression: String): Try[Unit] = {
-    parseOutputAttributeExpr(expression, allowRootEntity).void
+  private def parseOutputExpr(allowRootEntity: Boolean,
+                              rootEntityTypeOption: Option[String])
+                             (expression: String): Try[Unit] = {
+    parseOutputAttributeExpr(expression, allowRootEntity).flatMap(_ =>
+      OutputExpression.validate(expression, rootEntityTypeOption)
+    )
   }
 
   /** Parser definitions **/
