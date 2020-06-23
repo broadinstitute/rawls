@@ -622,7 +622,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             val submissionPatience = PatienceConfig(
-              timeout = scaled(Span(16, Minutes)),
+              timeout = scaled(Span(36, Minutes)),
               interval = scaled(Span(30, Seconds)),
             )
             implicit val patienceConfig: PatienceConfig = submissionPatience
