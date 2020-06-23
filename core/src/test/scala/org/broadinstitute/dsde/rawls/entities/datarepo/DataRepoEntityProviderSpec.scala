@@ -5,12 +5,12 @@ import java.util.UUID
 import bio.terra.datarepo.model.TableModel
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery.{FieldValueList, TableResult}
+import com.google.cloud.bigquery.{BigQueryException, Field, FieldValueList, Schema, TableResult}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{results, schema}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException}
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{AsyncFlatSpec, Matchers}
 import spray.json.{JsArray, JsNumber, JsObject, JsString}
@@ -206,46 +206,97 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     }
   }
 
-  ignore should "bubble up error if workspace manager errors (includes reference not found?)" in {
-    fail("not implemented")
+  it should "bubble up error if workspace manager errors (includes reference not found)" in {
+    val provider = createTestProvider(
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Left(new bio.terra.workspace.client.ApiException("whoops 1"))))
+
+    val ex = intercept[bio.terra.workspace.client.ApiException] {
+      provider.getEntity("table1", "the first row")
+    }
+    assertResult("whoops 1") { ex.getMessage }
   }
 
-  ignore should "fail if data reference not found in workspace manager" in {
-    fail("not implemented")
+  it should "fail if pet credentials not available from Sam" in {
+    val provider = createTestProvider(
+      samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
+
+    val futureEx = recoverToExceptionIf[Exception] {
+      provider.getEntity("table1", "the first row")
+    }
+    futureEx map { ex =>
+      assertResult("sam error") { ex.getMessage }
+    }
   }
 
   ignore should "fail if user is a workspace Reader but did not specify a billing project (canCompute?)" in {
-    fail("not implemented")
+    fail("not implemented in runtime code yet")
   }
 
-  ignore should "bubble up error if data repo errors (includes snapshot not found/not allowed?)" in {
-    fail("not implemented")
+  it should "bubble up error if data repo errors (includes snapshot not found/not allowed)" in {
+    val provider = createTestProvider(
+      dataRepoDAO = new SpecDataRepoDAO(Left(new bio.terra.datarepo.client.ApiException("whoops 2"))))
+
+    val ex = intercept[bio.terra.datarepo.client.ApiException] {
+      provider.getEntity("table1", "the first row")
+    }
+    assertResult("whoops 2") { ex.getMessage }
   }
 
-  ignore should "fail if snapshot not found in data repo" in {
-    fail("not implemented")
+  it should "fail if snapshot has no tables in data repo" in {
+    val provider = createTestProvider(
+      dataRepoDAO = new SpecDataRepoDAO(Right( createSnapshotModel( List.empty[TableModel] ) )))
+
+    val ex = intercept[EntityTypeNotFoundException] {
+      provider.getEntity("table1", "the first row")
+    }
+    assertResult("table1") { ex.requestedType }
   }
 
-  ignore should "fail if snapshot has no tables in data repo" in {
-    fail("not implemented")
+  it should "fail if snapshot table not found in data repo's response" in {
+    val provider = createTestProvider() // default behavior returns three rows
+
+    val ex = intercept[EntityTypeNotFoundException] {
+      provider.getEntity("this_table_is_unknown", "the first row")
+    }
+    assertResult("this_table_is_unknown") { ex.requestedType }
   }
 
-  ignore should "fail if snapshot table not found in data repo's response" in {
-    fail("not implemented")
+  it should "bubble up error if BigQuery errors" in {
+    val provider = createTestProvider(
+      bqFactory = MockBigQueryServiceFactory.ioFactory(Left(new BigQueryException(555, "unit test exception message"))))
+
+    val futureEx = recoverToExceptionIf[BigQueryException] {
+      provider.getEntity("table1", "the first row")
+    }
+    futureEx map { ex =>
+      assertResult("unit test exception message") { ex.getMessage }
+    }
   }
 
-  ignore should "fail if pet credentials not available from Sam" in {
-    fail("not implemented")
+  it should "fail if BigQuery returns zero rows" in {
+    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List.empty[FieldValueList].asJava)
+    val tableResult: TableResult = new TableResult(Schema.of(List.empty[Field].asJava), 0, page)
+
+    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
+
+    val futureEx = recoverToExceptionIf[EntityNotFoundException] {
+      provider.getEntity("table1", "the first row")
+    }
+    futureEx map { ex =>
+      assertResult("Entity not found.") { ex.getMessage }
+    }
   }
 
-  ignore should "bubble up error if BigQuery errors" in {
-    fail("not implemented")
-  }
+  it should "fail if BigQuery returns more than one" in {
+    val provider = createTestProvider() // default behavior returns three rows
 
-  ignore should "fail if BigQuery returns zero rows" in {
-    fail("not implemented")
+    val futureEx = recoverToExceptionIf[DataEntityException] {
+      provider.getEntity("table1", "the first row")
+    }
+    futureEx map { ex =>
+      assertResult("Query succeeded, but returned 3 rows; expected one row.") { ex.getMessage }
+    }
   }
-
 
 }
 

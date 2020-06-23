@@ -9,12 +9,12 @@ import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEn
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace}
 import org.joda.time.DateTime
 import spray.json.{JsObject, JsString}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 trait DataRepoEntityProviderSpecSupport {
 
@@ -115,6 +115,20 @@ trait DataRepoEntityProviderSpecSupport {
     override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel = getSnapshotResponse match {
       case Left(t) => throw t
       case Right(snap) => snap
+    }
+  }
+
+  /**
+   * Mock for DataRepoDAO that allows the caller to specify behavior for the getSnapshot and getBaseURL methods.
+   *  method.
+   */
+  class SpecSamDAO(dataSource: SlickDataSource = slickDataSource,
+                   petKeyForUserResponse: Either[Throwable, String]) extends MockSamDAO(dataSource) {
+    override def getPetServiceAccountKeyForUser(googleProject: String, userEmail: RawlsUserEmail): Future[String] = {
+      petKeyForUserResponse match {
+        case Left(t) => Future.failed(t)
+        case Right(key) => Future.successful(key)
+      }
     }
   }
 
