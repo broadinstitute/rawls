@@ -12,20 +12,20 @@ import scala.util.{Failure, Success, Try}
 // a thin abstraction layer over SlickExpressionEvaluator
 
 object ExpressionEvaluator {
-  def withNewExpressionEvaluator[R](parser: DataAccess, rootEntities: Option[Seq[EntityRecord]])
+  def withNewExpressionEvaluator[R](dataAccess: DataAccess, rootEntities: Option[Seq[EntityRecord]])
                                    (op: ExpressionEvaluator => ReadWriteAction[R])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
 
-    SlickExpressionEvaluator.withNewExpressionEvaluator(parser, rootEntities) { slickEvaluator =>
+    SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, rootEntities) { slickEvaluator =>
       op(new ExpressionEvaluator(slickEvaluator, slickEvaluator.rootEntities))
     }
   }
 
-  def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: Workspace, rootType: String, rootName: String)
+  def withNewExpressionEvaluator[R](dataAccess: DataAccess, workspaceContext: Workspace, rootType: String, rootName: String)
                                    (op: ExpressionEvaluator => ReadWriteAction[R])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
 
-    SlickExpressionEvaluator.withNewExpressionEvaluator(parser, workspaceContext, rootType, rootName) { slickEvaluator =>
+    SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, rootType, rootName) { slickEvaluator =>
       op(new ExpressionEvaluator(slickEvaluator, slickEvaluator.rootEntities))
     }
   }

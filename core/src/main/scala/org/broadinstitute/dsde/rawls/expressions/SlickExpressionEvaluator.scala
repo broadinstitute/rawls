@@ -15,30 +15,30 @@ import scala.util.{Failure, Success, Try}
 // accessible only via ExpressionEvaluator
 
 private[expressions] object SlickExpressionEvaluator {
-  def withNewExpressionEvaluator[R](parser: DataAccess, rootEntities: Option[Seq[EntityRecord]])
+  def withNewExpressionEvaluator[R](dataAccess: DataAccess, rootEntities: Option[Seq[EntityRecord]])
                                    (op: SlickExpressionEvaluator => ReadWriteAction[R])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
-    val evaluator = new SlickExpressionEvaluator(parser, rootEntities)
+    val evaluator = new SlickExpressionEvaluator(dataAccess, rootEntities)
 
     evaluator.populateExprEvalScratchTable() andThen
       op(evaluator) andFinally
       evaluator.clearExprEvalScratchTable()
   }
 
-  def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: Workspace, rootType: String, rootName: String)
+  def withNewExpressionEvaluator[R](dataAccess: DataAccess, workspaceContext: Workspace, rootType: String, rootName: String)
                                    (op: SlickExpressionEvaluator => ReadWriteAction[R])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
-    import parser.driver.api._
+    import dataAccess.driver.api._
 
     //Find the root entity for the expression
-    val dbRootEntityRec = parser.entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, rootType, rootName).result
+    val dbRootEntityRec = dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, rootType, rootName).result
 
     //Sanity check that we've only got one, and then pass upwards
     dbRootEntityRec flatMap { rootEntityRec =>
       if(rootEntityRec.size != 1) {
         DBIO.failed(new RawlsException(s"Expected 1 root entity type, found ${rootEntityRec.size} when searching for $rootType/$rootName"))
       } else {
-        withNewExpressionEvaluator(parser, Some(rootEntityRec))(op)
+        withNewExpressionEvaluator(dataAccess, Some(rootEntityRec))(op)
       }
     }
   }
@@ -76,6 +76,7 @@ private[expressions] class SlickExpressionEvaluator protected(val dataAccess: Da
   // Returns a map of entity names to an iterable of the expression result
   type FinalFunc = (LocalEntityExpressionContext, Option[dataAccess.PipelineStepQuery]) => ExpressionOutputType
 
+  // key is the entity name, value is the result of the expression for said entity
   type ExpressionOutputType = ReadAction[Map[String, Iterable[Any]]]
 
   /** Final attribute lookup functions */
@@ -112,7 +113,7 @@ private[expressions] class SlickExpressionEvaluator protected(val dataAccess: Da
 
   /** PipelineQuery build functions for various lookups */
 
-  private def buildAttributeQueryForEntity(context: EntityLookupContext): Try[ExpressionEvaluationPipeline] = {
+  private def buildAttributeQueryForEntity(context: EntityLookupContext): ExpressionEvaluationPipeline = {
     buildPipelineQueryForRelations(
       Option(dataAccess.entityExpressionQuery.entityRootQuery),
       context.relation,
@@ -120,7 +121,7 @@ private[expressions] class SlickExpressionEvaluator protected(val dataAccess: Da
     )
   }
 
-  private def buildAttributeQueryForWorkspaceEntity(context: WorkspaceEntityLookupContext): Try[ExpressionEvaluationPipeline] = {
+  private def buildAttributeQueryForWorkspaceEntity(context: WorkspaceEntityLookupContext): ExpressionEvaluationPipeline = {
     buildPipelineQueryForRelations(
       Option(dataAccess.entityExpressionQuery.workspaceEntityRefRootQuery(toAttributeName(context.workspaceEntity.relation.attributeName()))),
       context.relation(),
@@ -128,11 +129,11 @@ private[expressions] class SlickExpressionEvaluator protected(val dataAccess: Da
     )
   }
 
-  private def buildAttributeQueryForWorkspaceAttribute(context: WorkspaceAttributeLookupContext): Try[ExpressionEvaluationPipeline] = {
-    Success(ExpressionEvaluationPipeline(None, List.empty, workspaceAttributeFinalFunc(context.attributeName())))
+  private def buildAttributeQueryForWorkspaceAttribute(context: WorkspaceAttributeLookupContext): ExpressionEvaluationPipeline = {
+    ExpressionEvaluationPipeline(None, List.empty, workspaceAttributeFinalFunc(context.attributeName()))
   }
 
-  private def buildEntityReferenceQueryForEntity(context: EntityLookupContext): Try[ExpressionEvaluationPipeline] = {
+  private def buildEntityReferenceQueryForEntity(context: EntityLookupContext): ExpressionEvaluationPipeline = {
     buildPipelineQueryForRelations(
       Option(dataAccess.entityExpressionQuery.entityRootQuery),
       context.relation,
@@ -141,7 +142,7 @@ private[expressions] class SlickExpressionEvaluator protected(val dataAccess: Da
     )
   }
 
-  private def buildEntityReferenceQueryForWorkspaceEntity(context: WorkspaceEntityLookupContext): Try[ExpressionEvaluationPipeline] = {
+  private def buildEntityReferenceQueryForWorkspaceEntity(context: WorkspaceEntityLookupContext): ExpressionEvaluationPipeline = {
     buildPipelineQueryForRelations(
       Option(dataAccess.entityExpressionQuery.workspaceEntityRefRootQuery(toAttributeName(context.workspaceEntity.relation.attributeName()))),
       context.relation,
@@ -150,18 +151,18 @@ private[expressions] class SlickExpressionEvaluator protected(val dataAccess: Da
     )
   }
 
-  private def buildEntityReferenceQueryForWorkspaceAttribute(context: WorkspaceAttributeLookupContext): Try[ExpressionEvaluationPipeline] = {
-    Success(ExpressionEvaluationPipeline(None, List.empty, dataAccess.entityExpressionQuery.workspaceEntityFinalQuery(toAttributeName(context.attributeName))))
+  private def buildEntityReferenceQueryForWorkspaceAttribute(context: WorkspaceAttributeLookupContext): ExpressionEvaluationPipeline = {
+    ExpressionEvaluationPipeline(None, List.empty, dataAccess.entityExpressionQuery.workspaceEntityFinalQuery(toAttributeName(context.attributeName)))
   }
 
-  private def buildPipelineQueryForRelations(rootStep: Option[RootFunc], relations: java.util.List[RelationContext], finalStep: FinalFunc, finalEntityOpt: Option[AttributeNameContext] = None): Try[ExpressionEvaluationPipeline] = {
+  private def buildPipelineQueryForRelations(rootStep: Option[RootFunc], relations: java.util.List[RelationContext], finalStep: FinalFunc, finalEntityOpt: Option[AttributeNameContext] = None): ExpressionEvaluationPipeline = {
     import scala.collection.JavaConverters._
 
     val steps: List[RelationFunc] = (relations.asScala.toList.map(_.attributeName) ++ finalEntityOpt).map { attributeNameCtx =>
       dataAccess.entityExpressionQuery.entityNameAttributeRelationQuery(toAttributeName(attributeNameCtx)) _
     }
 
-    Success(ExpressionEvaluationPipeline(rootStep, steps, finalStep))
+    ExpressionEvaluationPipeline(rootStep, steps, finalStep)
   }
 
   /** Helper functions */
@@ -193,54 +194,44 @@ private[expressions] class SlickExpressionEvaluator protected(val dataAccess: Da
 
   /** Functions that run given PipelineQuery and return resulting AttributeValue or EntityRecord */
 
-  private def evalFinalAttribute(workspaceContext: Workspace, pipeline: Try[ExpressionEvaluationPipeline]): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
-    pipeline match {
-      case Failure(regret) => DBIO.failed(new RawlsException(regret.getMessage))
-      case Success(expr) =>
-        runPipe(LocalEntityExpressionContext(workspaceContext, rootEntities, transactionId), expr) map { exprResults =>
-          val results = exprResults map { case (key, attrVals) =>
-            key -> Try(attrVals.collect {
-              case AttributeNull => Seq.empty
-              case AttributeValueEmptyList => Seq.empty
-              case av: AttributeValue => Seq(av)
-              case avl: AttributeValueList => avl.list
-              case ae: AttributeEntityReference => throw new RawlsException("Attribute expression returned a reference to an entity.")
-              case ael: AttributeEntityReferenceList => throw new RawlsException("Attribute expression returned a list of entities.")
-              case AttributeEntityReferenceEmptyList => throw new RawlsException("Attribute expression returned a list of entities.")
-              case badType =>
-                val message = s"unsupported type resulting from attribute expression: $badType: ${badType.getClass}"
-                val MAX_ERROR_SIZE = 997
-                val trimmed = if (message.length > MAX_ERROR_SIZE) {
-                  message.take(MAX_ERROR_SIZE) + "..."
-                } else {
-                  message
-                }
-                throw new RawlsException(trimmed)
-            }.flatten)
-          }
-          //add any missing entities (i.e. those missing the attribute) back into the result map
-          results ++ rootEntities.getOrElse(Seq.empty[EntityRecord]).map(_.name).filterNot(results.keySet.contains).map { missingKey => missingKey -> Success(Seq()) }
-        }
+  private def evalFinalAttribute(workspaceContext: Workspace, pipeline: ExpressionEvaluationPipeline): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
+    runPipe(LocalEntityExpressionContext(workspaceContext, rootEntities, transactionId), pipeline) map { exprResults =>
+      val results = exprResults map { case (key, attrVals) =>
+        key -> Try(attrVals.collect {
+          case AttributeNull => Seq.empty
+          case AttributeValueEmptyList => Seq.empty
+          case av: AttributeValue => Seq(av)
+          case avl: AttributeValueList => avl.list
+          case ae: AttributeEntityReference => throw new RawlsException("Attribute expression returned a reference to an entity.")
+          case ael: AttributeEntityReferenceList => throw new RawlsException("Attribute expression returned a list of entities.")
+          case AttributeEntityReferenceEmptyList => throw new RawlsException("Attribute expression returned a list of entities.")
+          case badType =>
+            val message = s"unsupported type resulting from attribute expression: $badType: ${badType.getClass}"
+            val MAX_ERROR_SIZE = 997
+            val trimmed = if (message.length > MAX_ERROR_SIZE) {
+              message.take(MAX_ERROR_SIZE) + "..."
+            } else {
+              message
+            }
+            throw new RawlsException(trimmed)
+        }.flatten)
+      }
+      //add any missing entities (i.e. those missing the attribute) back into the result map
+      results ++ rootEntities.getOrElse(Seq.empty[EntityRecord]).map(_.name).filterNot(results.keySet.contains).map { missingKey => missingKey -> Success(Seq()) }
     }
   }
 
-  //This is boiling away the Try associated with attempting to parse the expression. Is this OK?
-  private def evalFinalEntity(workspaceContext: Workspace, pipelineQuery: Try[ExpressionEvaluationPipeline]): ReadWriteAction[Iterable[EntityRecord]] = {
+  private def evalFinalEntity(workspaceContext: Workspace, pipelineQuery: ExpressionEvaluationPipeline): ReadWriteAction[Iterable[EntityRecord]] = {
     if( rootEntities.isEmpty || rootEntities.get.isEmpty ) {
       DBIO.failed(new RawlsException(s"ExpressionEvaluator has no entities passed to evalFinalEntity")) // todo: move these checks elsewhere?
     } else if( rootEntities.get.size > 1 ) {
       DBIO.failed(new RawlsException(s"ExpressionEvaluator has been set up with ${rootEntities.get.size} entities for evalFinalEntity, can only accept 1."))
     } else {
-      pipelineQuery match {
-        //fail out if we couldn't parse the expression
-        case Failure(regret) => DBIO.failed(regret)
-        case Success(expr) =>
-          //If parsing succeeded, evaluate the expression using the given root entities and retype back to EntityRecord
-          runPipe(LocalEntityExpressionContext(workspaceContext, rootEntities, transactionId), expr).map { resultMap =>
-            //NOTE: As per the DBIO.failed a few lines up, resultMap should only have one key, the same root elem.
-            val (rootElem, elems) = resultMap.head
-            elems.collect { case e: EntityRecord => e }
-          }
+      //If parsing succeeded, evaluate the expression using the given root entities and retype back to EntityRecord
+      runPipe(LocalEntityExpressionContext(workspaceContext, rootEntities, transactionId), pipelineQuery).map { resultMap =>
+        //NOTE: As per the DBIO.failed a few lines up, resultMap should only have one key, the same root elem.
+        val (rootElem, elems) = resultMap.head
+        elems.collect { case e: EntityRecord => e }
       }
     }
   }
