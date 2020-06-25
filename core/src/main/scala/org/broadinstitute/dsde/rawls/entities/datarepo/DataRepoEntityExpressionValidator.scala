@@ -1,15 +1,16 @@
-package org.broadinstitute.dsde.rawls.entities.local
+package org.broadinstitute.dsde.rawls.entities.datarepo
 
+import bio.terra.datarepo.model.SnapshotModel
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
 import org.broadinstitute.dsde.rawls.expressions.OutputExpression
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, LocalInputExpressionValidationVisitor, LocalOutputExpressionValidationVisitor}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoInputExpressionValidationVisitor, LocalOutputExpressionValidationVisitor}
 
 import scala.util.Try
 
-class LocalEntityExpressionValidator extends ExpressionValidator {
-  override protected def validateInputExpr(allowRootEntity: Boolean, rootEntityTypeOption: Option[String] = None)(expression: String): Try[Unit] = {
+class DataRepoEntityExpressionValidator(snapshotModel: SnapshotModel) extends ExpressionValidator {
+  override protected def validateInputExpr(allowRootEntity: Boolean, rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
-    val visitor = new LocalInputExpressionValidationVisitor(allowRootEntity)
+    val visitor = new DataRepoInputExpressionValidationVisitor(allowRootEntity, rootEntityTypeOption, snapshotModel)
 
     /*
       parse the expression using ANTLR parser for local input expressions and walk the tree using `visit()` to examine
