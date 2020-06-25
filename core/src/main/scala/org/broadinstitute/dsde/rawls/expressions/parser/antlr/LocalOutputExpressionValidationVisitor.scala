@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser.{ArrContext, LiteralContext, ObjContext, RelationContext}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{ArrContext, LiteralContext, ObjContext, RelationContext}
 
 import scala.util.{Failure, Try}
 

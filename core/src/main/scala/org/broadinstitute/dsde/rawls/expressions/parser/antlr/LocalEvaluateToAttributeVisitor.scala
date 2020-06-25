@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionEvaluator
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser.{EntityLookupContext, WorkspaceAttributeLookupContext, WorkspaceEntityLookupContext}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{EntityLookupContext, WorkspaceAttributeLookupContext, WorkspaceEntityLookupContext}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.LocalEvaluateToAttributeVisitor.ExpressionAndResult
 import org.broadinstitute.dsde.rawls.model.{AttributeValue, Workspace}
 
@@ -11,7 +11,7 @@ import scala.util.Try
 
 class LocalEvaluateToAttributeVisitor(workspace: Workspace, slickEvaluator: SlickExpressionEvaluator)
                                      (implicit executionContext: ExecutionContext)
-  extends ExtendedJSONBaseVisitor[ReadWriteAction[Seq[ExpressionAndResult]]] {
+  extends TerraExpressionBaseVisitor[ReadWriteAction[Seq[ExpressionAndResult]]] {
 
   override def defaultResult(): ReadWriteAction[Seq[ExpressionAndResult]] = {
     import slickEvaluator.dataAccess.driver.api._

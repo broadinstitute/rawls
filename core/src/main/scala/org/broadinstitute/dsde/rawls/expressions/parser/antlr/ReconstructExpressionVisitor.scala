@@ -1,19 +1,19 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser.{PairContext, ValueContext}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{PairContext, ValueContext}
 import spray.json._
 
 import scala.collection.JavaConverters._
 
-class ReconstructExpressionVisitor(lookupMap: Map[String, JsValue]) extends ExtendedJSONBaseVisitor[JsValue] {
+class ReconstructExpressionVisitor(lookupMap: Map[String, JsValue]) extends TerraExpressionBaseVisitor[JsValue] {
 
-  override def visitRoot(ctx: ExtendedJSONParser.RootContext): JsValue = {
+  override def visitRoot(ctx: TerraExpressionParser.RootContext): JsValue = {
     // ROOT rule always has 1 child
     visit(ctx.getChild(0))
   }
 
-  override def visitObj(ctx: ExtendedJSONParser.ObjContext): JsValue = {
+  override def visitObj(ctx: TerraExpressionParser.ObjContext): JsValue = {
     ctx.getRuleContexts(classOf[PairContext]).asScala // get all children that are pairs
       .map(visit) // visitPair returns each pair as JsObject
       .map(_.asJsObject.fields)
@@ -26,7 +26,7 @@ class ReconstructExpressionVisitor(lookupMap: Map[String, JsValue]) extends Exte
     * Visit the VALUE node child of a PAIR node, and return the results back as a JsObject to make it easier
     * to combine pairs while visiting OBJ node
     */
-  override def visitPair(ctx: ExtendedJSONParser.PairContext): JsValue = {
+  override def visitPair(ctx: TerraExpressionParser.PairContext): JsValue = {
     // PAIR has 3 children: STRING, COLON and VALUE
     val childKey = ctx.getChild(0) // STRING
     val childValue = visit(ctx.getChild(2)) // VALUE
@@ -49,16 +49,16 @@ class ReconstructExpressionVisitor(lookupMap: Map[String, JsValue]) extends Exte
     JsObject(unquotedKeyString -> childValue)
   }
 
-  override def visitArr(ctx: ExtendedJSONParser.ArrContext): JsValue = {
+  override def visitArr(ctx: TerraExpressionParser.ArrContext): JsValue = {
     JsArray(ctx.getRuleContexts(classOf[ValueContext]).asScala.map(visit).toVector)
   }
 
-  override def visitLookup(ctx: ExtendedJSONParser.LookupContext): JsValue = lookupMap(ctx.getText)
+  override def visitLookup(ctx: TerraExpressionParser.LookupContext): JsValue = lookupMap(ctx.getText)
 
-  override def visitValue(ctx: ExtendedJSONParser.ValueContext): JsValue = {
+  override def visitValue(ctx: TerraExpressionParser.ValueContext): JsValue = {
     // VALUE rule always has 1 child
     visit(ctx.getChild(0))
   }
 
-  override def visitLiteral(ctx: ExtendedJSONParser.LiteralContext): JsValue = ctx.getText.parseJson
+  override def visitLiteral(ctx: TerraExpressionParser.LiteralContext): JsValue = ctx.getText.parseJson
 }

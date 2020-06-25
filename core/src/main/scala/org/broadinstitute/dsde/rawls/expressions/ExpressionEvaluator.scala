@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import org.antlr.v4.runtime.tree.ParseTree
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrExtendedJSONParser, LocalEvaluateToEntityVisitor, LocalEvaluateToAttributeVisitor, ReconstructExpressionVisitor}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, LocalEvaluateToEntityVisitor, LocalEvaluateToAttributeVisitor, ReconstructExpressionVisitor}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, Workspace}
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsString, JsValue}
 
@@ -227,8 +227,8 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
 
     }
 
-    // parse expression using ANTLR ExtendedJSON parser
-    val extendedJsonParser = AntlrExtendedJSONParser.getParser(expression)
+    // parse expression using ANTLR TerraExpression parser
+    val extendedJsonParser = AntlrTerraExpressionParser.getParser(expression)
     val localFinalAttributeEvaluationVisitor = new LocalEvaluateToAttributeVisitor(workspaceContext, slickEvaluator)
 
     Try(extendedJsonParser.root()) match {
@@ -249,7 +249,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
 
   def evalFinalEntity(workspaceContext: Workspace, expression: String)
                      (implicit executionContext: ExecutionContext): ReadWriteAction[Iterable[EntityRecord]] = {
-    val extendedJSONParser = AntlrExtendedJSONParser.getParser(expression)
+    val extendedJSONParser = AntlrTerraExpressionParser.getParser(expression)
     val localFinalEntityEvaluationVisitor = new LocalEvaluateToEntityVisitor(workspaceContext, slickEvaluator)
 
     Try(extendedJSONParser.root()) match {

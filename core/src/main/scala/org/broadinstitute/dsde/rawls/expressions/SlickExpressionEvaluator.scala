@@ -6,7 +6,7 @@ import _root_.slick.dbio
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, _}
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionContext
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser.{AttributeNameContext, EntityLookupContext, RelationContext, WorkspaceAttributeLookupContext, WorkspaceEntityLookupContext}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{AttributeNameContext, EntityLookupContext, RelationContext, WorkspaceAttributeLookupContext, WorkspaceEntityLookupContext}
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.concurrent.ExecutionContext

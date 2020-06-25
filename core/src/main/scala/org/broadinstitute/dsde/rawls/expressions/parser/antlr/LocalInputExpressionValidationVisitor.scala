@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser.EntityLookupContext
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.EntityLookupContext
 
 import scala.util.{Failure, Success, Try}
 
-class LocalInputExpressionValidationVisitor(allowRootEntity: Boolean) extends ExtendedJSONBaseVisitor[Try[Unit]] {
+class LocalInputExpressionValidationVisitor(allowRootEntity: Boolean) extends TerraExpressionBaseVisitor[Try[Unit]] {
 
   override def defaultResult() = Success(())
 

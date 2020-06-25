@@ -26,7 +26,7 @@ object CodeGeneration {
     /*
     Put the generated code in a sibling to `main`. Otherwise the default, a nested directory `main/antlr4`, trips up
     IntelliJ. It will try to compile the generated source code twice, once under `main`, and again under `main/antlr4`,
-    resulting in cryptic errors like "ExtendedJSONBaseVisitor is already defined as class ExtendedJSONBaseVisitor"
+    resulting in cryptic errors like "TerraExpressionBaseVisitor is already defined as class TerraExpressionBaseVisitor"
      */
     javaSource in Antlr4 := new File((sourceManaged in Compile).value + "_antlr4")
   )

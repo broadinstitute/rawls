@@ -2,14 +2,14 @@ package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionEvaluator
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser.{EntityLookupContext, WorkspaceAttributeLookupContext, WorkspaceEntityLookupContext}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{EntityLookupContext, WorkspaceAttributeLookupContext, WorkspaceEntityLookupContext}
 import org.broadinstitute.dsde.rawls.model.Workspace
 
 import scala.concurrent.ExecutionContext
 
 class LocalEvaluateToEntityVisitor(workspace: Workspace, slickEvaluator: SlickExpressionEvaluator)
                                   (implicit executionContext: ExecutionContext)
-  extends ExtendedJSONBaseVisitor[ReadWriteAction[Iterable[EntityRecord]]]{
+  extends TerraExpressionBaseVisitor[ReadWriteAction[Iterable[EntityRecord]]]{
 
   override def defaultResult(): ReadWriteAction[Iterable[EntityRecord]] = {
     import slickEvaluator.dataAccess.driver.api._

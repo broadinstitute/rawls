@@ -2,18 +2,18 @@ package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.antlr.v4.runtime.{CharStreams, CodePointCharStream, CommonTokenStream}
 
-object AntlrExtendedJSONParser {
+object AntlrTerraExpressionParser {
 
-  def getParser(expression: String): ExtendedJSONParser = {
+  def getParser(expression: String): TerraExpressionParser = {
     val errorThrowingListener = new ErrorThrowingListener()
     val inputStream: CodePointCharStream = CharStreams.fromString(expression)
 
-    val lexer: ExtendedJSONLexer = new ExtendedJSONLexer(inputStream)
+    val lexer: TerraExpressionLexer = new TerraExpressionLexer(inputStream)
     lexer.removeErrorListeners()
     lexer.addErrorListener(errorThrowingListener)
 
     val tokenStream = new CommonTokenStream(lexer)
-    val parser: ExtendedJSONParser = new ExtendedJSONParser(tokenStream)
+    val parser: TerraExpressionParser = new TerraExpressionParser(tokenStream)
     parser.removeErrorListeners()
     parser.addErrorListener(errorThrowingListener)
 
