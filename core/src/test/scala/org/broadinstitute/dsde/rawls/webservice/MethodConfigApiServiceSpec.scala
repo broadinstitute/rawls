@@ -114,9 +114,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
-    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: 'workspace.' expected but 'd' found")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'does' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}")
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
-    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Failed at line 1, column 1: 'workspace.' expected but 'a' found")
+    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'also' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}")
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -149,7 +149,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
-    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 4. Error: mismatched input '<EOF>' expecting {':', '.'}")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'blah' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}")
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
     val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
 
@@ -529,9 +529,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
   def checkValidAttributeSyntax(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
-    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: 'workspace.' expected but 'd' found")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'does' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}")
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
-    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Failed at line 1, column 1: 'workspace.' expected but 'a' found")
+    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'also' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}")
 
     httpMethod(testData.goodAndBadMethodConfig.path(testData.workspace), httpJson(testData.goodAndBadMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -646,9 +646,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     val theOutputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "goodAndBad.goodAndBadTask.empty_out" -> AttributeString(""))
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
-    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: 'workspace.' expected but 'd' found")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'does' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}")
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.empty_out")
-    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Failed at line 1, column 1: 'workspace.' expected but 'a' found")
+    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'also' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}")
 
     val mc = testData.goodAndBadMethodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs, prerequisites = Some(Map()))
 
@@ -685,7 +685,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
 
       val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
       val expectedFailureInputs = Map(
-        "goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: 'workspace.' expected but 'd' found"
+        "goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'does' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}"
       )
       val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.empty_out")
       val expectedFailureOutputs = Map(

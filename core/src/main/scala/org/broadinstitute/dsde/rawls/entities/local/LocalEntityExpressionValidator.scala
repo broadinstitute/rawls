@@ -2,26 +2,27 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
+import org.broadinstitute.dsde.rawls.expressions.OutputExpression
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, LocalInputExpressionValidationVisitor, LocalOutputExpressionValidationVisitor}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeString, ErrorReport, MethodConfiguration, ValidatedMethodConfiguration}
-import slick.dbio.DBIOAction
+import org.broadinstitute.dsde.rawls.model.{AttributeString, ErrorReport, MethodConfiguration, ValidatedMCExpressions, ValidatedMethodConfiguration}
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 import scala.util.Try
 
-class LocalEntityExpressionValidator(dataSource: SlickDataSource)(implicit protected val executionContext: ExecutionContext) extends ExpressionValidator {
+class LocalEntityExpressionValidator(implicit protected val executionContext: ExecutionContext) extends ExpressionValidator {
   // validate a MC, skipping optional empty inputs, and return a ValidatedMethodConfiguration
-  def validateAndParseMCExpressions(methodConfiguration: MethodConfiguration,
-                                    gatherInputsResult: GatherInputsResult,
-                                    allowRootEntity: Boolean): Future[ValidatedMethodConfiguration] = {
+  def validateMCExpressions(methodConfiguration: MethodConfiguration,
+                            gatherInputsResult: GatherInputsResult,
+                            allowRootEntity: Boolean): Future[ValidatedMethodConfiguration] = {
 
-    dataSource.inTransaction { parser =>
+    Future {
       val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.getName, AttributeString(mi.expression)) }
       val (emptyOutputs, outputsToParse) = methodConfiguration.outputs.partition { case (_, expr) => expr.value.isEmpty }
 
-      val parsed = parser.parseMCExpressions(
+      val validated = validateMCExpressionsInternal(
         inputs = inputsToParse.toMap,
         outputs = outputsToParse,
         allowRootEntity = allowRootEntity,
@@ -29,14 +30,14 @@ class LocalEntityExpressionValidator(dataSource: SlickDataSource)(implicit prote
       )
 
       // empty output expressions are also valid
-      val validatedOutputs = emptyOutputs.keys.toSet ++ parsed.validOutputs
+      val validatedOutputs = emptyOutputs.keys.toSet ++ validated.validOutputs
 
       // a MethodInput which is both optional and empty is already valid
       val emptyOptionalInputs = gatherInputsResult.emptyOptionalInputs map {
         _.workflowInput.getName
       }
 
-      DBIOAction.successful(ValidatedMethodConfiguration(methodConfiguration, parsed.validInputs ++ emptyOptionalInputs, parsed.invalidInputs, gatherInputsResult.missingInputs, gatherInputsResult.extraInputs, validatedOutputs, parsed.invalidOutputs))
+      ValidatedMethodConfiguration(methodConfiguration, validated.validInputs ++ emptyOptionalInputs, validated.invalidInputs, gatherInputsResult.missingInputs, gatherInputsResult.extraInputs, validatedOutputs, validated.invalidOutputs)
     }
   }
 
@@ -45,7 +46,7 @@ class LocalEntityExpressionValidator(dataSource: SlickDataSource)(implicit prote
                                        gatherInputsResult: GatherInputsResult,
                                        allowRootEntity: Boolean): Future[Try[ValidatedMethodConfiguration]] = {
 
-    validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity).map { validated =>
+    validateMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity).map { validated =>
 
       Try {
         if (validated.invalidInputs.nonEmpty || validated.missingInputs.nonEmpty || validated.extraInputs.nonEmpty || validated.invalidOutputs.nonEmpty) {
@@ -59,5 +60,51 @@ class LocalEntityExpressionValidator(dataSource: SlickDataSource)(implicit prote
         validated
       }
     }
+  }
+
+  private[local] def validateMCExpressionsInternal(inputs: Map[String, AttributeString],
+                                                   outputs: Map[String, AttributeString],
+                                                   allowRootEntity: Boolean,
+                                                   rootEntityTypeOption: Option[String]): ValidatedMCExpressions = {
+    def validateAndPartition(m: Map[String, AttributeString], validateFunc: String => Try[Unit] ) = {
+      val validated = m map { case (key, attr) => (key, validateFunc(attr.value)) }
+      (
+        validated collect { case (key, scala.util.Success(_)) => key } toSet,
+        validated collect { case (key, scala.util.Failure(regret)) =>
+          regret match {
+            case reported: RawlsExceptionWithErrorReport => (key, reported.errorReport.message)
+            case _ => (key, regret.getMessage)
+          }
+        }
+      )
+    }
+
+    val (successInputs, failedInputs)   = validateAndPartition(inputs, validateInputExpr(allowRootEntity))
+    val (successOutputs, failedOutputs) = validateAndPartition(outputs, validateOutputExpr(allowRootEntity, rootEntityTypeOption))
+
+    ValidatedMCExpressions(successInputs, failedInputs, successOutputs, failedOutputs)
+  }
+
+  private def validateInputExpr(allowRootEntity: Boolean)(expression: String): Try[Unit] = {
+    val extendedJsonParser = AntlrTerraExpressionParser.getParser(expression)
+    val visitor = new LocalInputExpressionValidationVisitor(allowRootEntity)
+
+    /*
+      parse the expression using ANTLR parser for local input expressions and walk the tree using `visit()` to examine
+      child nodes. If it finds an entityLookup node at any point, it fails unless allowRootEntity is true since
+      entity expressions are only allowed when running with the workspace data model
+     */
+    Try(extendedJsonParser.root()).flatMap(visitor.visit)
+  }
+
+  private[local] def validateOutputExpr(allowRootEntity: Boolean, rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+    val extendedJsonParser = AntlrTerraExpressionParser.getParser(expression)
+    val visitor = new LocalOutputExpressionValidationVisitor(allowRootEntity)
+
+    for {
+      parseTree <- Try(extendedJsonParser.root())
+      _ <- visitor.visit(parseTree)
+      _ <- OutputExpression.validate(expression, rootEntityTypeOption)
+    } yield ()
   }
 }

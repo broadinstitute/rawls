@@ -77,7 +77,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator(dataSource)
+  override def expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator
 
 
   protected[local] def evaluateExpressionsInternal(workspaceContext: Workspace, inputs: Set[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
