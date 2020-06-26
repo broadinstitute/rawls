@@ -66,7 +66,7 @@ trait EntityApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           get {
-            complete { entityServiceConstructor(userInfo).GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName) }
+            complete { entityServiceConstructor(userInfo).GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, dataReference) }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>

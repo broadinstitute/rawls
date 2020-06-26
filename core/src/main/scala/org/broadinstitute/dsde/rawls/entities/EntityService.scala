@@ -3,11 +3,8 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.exceptions.DeleteEntitiesConflictException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DeleteEntitiesConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -24,11 +21,13 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object EntityService {
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, workspaceManagerDAO: WorkspaceManagerDAO, dataRepoDAO: DataRepoDAO)
+  // TODO: constructor should accept userInfo, dataReferenceName, billingProject, anything else needed to resolve provider
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, entityManager: EntityManager)
                  (userInfo: UserInfo)
-                 (implicit executionContext: ExecutionContext) = {
+                 (implicit executionContext: ExecutionContext): EntityService = {
 
-    new EntityService(userInfo, dataSource, samDAO, EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO), workbenchMetricBaseName)
+    // TODO: resolve the provider here, pass to EntityService so implementations never have to resolve
+    new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName)
   }
 }
 
@@ -38,7 +37,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   import dataSource.dataAccess.driver.api._
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
-  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) = getEntity(workspaceName, entityType, entityName)
+  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[String]) = getEntity(workspaceName, entityType, entityName, dataReference)
   def UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) = updateEntity(workspaceName, entityType, entityName, operations)
   def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference], dataReference: Option[String]) = deleteEntities(workspaceName, entities, dataReference)
   def RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) = renameEntity(workspaceName, entityType, entityName, newName)
@@ -58,13 +57,21 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[PerRequestMessage] =
+  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[String]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, entity))
+
+      // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
+      // we haven't done this yet because we don't know the business logic around which billing project to use for each user.
+      // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
+      // EntityService constructor, or other higher-level method
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
+
+      entityManager.resolveProvider(entityRequestArguments).getEntity(entityType, entityName)
+        .map { entity => PerRequest.RequestComplete(StatusCodes.OK, entity) }
+        .recover {
+          case _:EntityNotFoundException => RequestComplete(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName")
+          case ex => RequestComplete(StatusCodes.InternalServerError, ex)
         }
-      }
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
@@ -252,19 +259,12 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     *
     * @param entity to update
     * @param operations sequence of operations
-    * @throws AttributeNotFoundException when removing from a list attribute that does not exist
+    * @throws org.broadinstitute.dsde.rawls.workspace.AttributeNotFoundException when removing from a list attribute that does not exist
     * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
     * @return the updated entity
     */
   def applyOperationsToEntity(entity: Entity, operations: Seq[AttributeUpdateOperation]): Entity = {
     entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
-  }
-
-  private def withEntity[T](workspaceContext: Workspace, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext.toWorkspaceName}")))
-      case Some(entity) => op(entity)
-    }
   }
 
 }

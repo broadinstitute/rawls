@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceMa
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
-import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -370,6 +370,9 @@ object Boot extends IOApp with LazyLogging {
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
       val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
+      // create the entity manager.
+      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO, appDependencies.bigQueryServiceFactory)
+
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
@@ -389,15 +392,15 @@ object Boot extends IOApp with LazyLogging {
         workbenchMetricBaseName = metricsPrefix,
         submissionCostService,
         workspaceServiceConfig,
-        requesterPaysSetupService
+        requesterPaysSetupService,
+        entityManager
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
         slickDataSource,
         samDAO,
         workbenchMetricBaseName = metricsPrefix,
-        workspaceManagerDAO,
-        dataRepoDAO
+        entityManager
       )
 
       val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(
@@ -518,7 +521,8 @@ object Boot extends IOApp with LazyLogging {
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
-    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin)
+      bqServiceFactory = new GoogleBigQueryServiceFactory(blocker)(executionContext)
+    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory)
   }
 }
 
@@ -526,4 +530,5 @@ object Boot extends IOApp with LazyLogging {
 final case class AppDependencies[F[_]](
   googleStorageService: GoogleStorageService[F],
   googleServiceHttp: GoogleServiceHttp[F],
-  topicAdmin: GoogleTopicAdmin[F])
+  topicAdmin: GoogleTopicAdmin[F],
+  bigQueryServiceFactory: GoogleBigQueryServiceFactory)
