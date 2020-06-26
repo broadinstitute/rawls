@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.JavaConverters._
@@ -105,7 +106,7 @@ trait DataRepoBigQuerySupport {
             case Some((_, a: Attribute)) => AttributeStringifier.apply(a)
             case None =>
               // this shouldn't happen, since we validated the pk against the schema
-              throw new DataEntityException(s"could not find primary key column '$primaryKey' on record: ${asDelimitedString(schemaFields)}")
+              throw new DataEntityException(s"could not find primary key column '$primaryKey' in entity attributes: ${asDelimitedString(attrs)}")
           }
           Entity(entityName, entityType, attrs)
         }.toList
@@ -141,5 +142,7 @@ trait DataRepoBigQuerySupport {
   def asDelimitedString(fieldValueList: FieldValueList): String = {
     fieldValueList.asScala.toList.map(_.toString).sorted.mkString(",")
   }
-
+  def asDelimitedString(attributeMap: AttributeMap): String = {
+    attributeMap.keySet.map(_.name).toList.sorted.mkString(",")
+  }
 }
