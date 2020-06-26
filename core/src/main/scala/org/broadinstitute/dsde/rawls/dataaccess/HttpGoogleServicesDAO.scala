@@ -38,8 +38,6 @@ import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
-import com.google.cloud.storage.BucketInfo.LifecycleRule
-import com.google.cloud.storage.BucketInfo.LifecycleRule.LifecycleAction
 import fs2.Stream
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -117,7 +115,6 @@ class HttpGoogleServicesDAO(
   billingProbeEmail: String,
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
-  hammCromwellMetadata: HammCromwellMetadata,
   googleStorageService: GoogleStorageService[IO],
   googleServiceHttp: GoogleServiceHttp[IO],
   topicAdmin: GoogleTopicAdmin[IO],
@@ -178,22 +175,6 @@ class HttpGoogleServicesDAO(
         val insertTokenBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, tokenBucket)
         executeGoogleRequest(insertTokenBucket)
     }
-
-    val lifecyleRule = new LifecycleRule(
-      LifecycleAction.newDeleteAction(), LifecycleRule.LifecycleCondition.newBuilder().setAge(30).build())
-
-    val result = for{
-      traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
-      _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
-      _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
-      projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
-      _ <- topicAdmin.createWithPublisherMembers(hammCromwellMetadata.topicName, List(projectServiceAccount), Some(traceId))
-      _ <- Stream.eval(googleServiceHttp.createNotification(hammCromwellMetadata.topicName, hammCromwellMetadata.bucketName, Filters(List(NotificationEventTypes.ObjectFinalize), None), Some(traceId)))
-    } yield ()
-    // unsafeRunSync is not desired, but return type for initBuckets dictates execution has to happen immediately when the method is called.
-    // Changing initBuckets's signature requires larger effort which doesn't seem to worth it
-    result.compile.drain.unsafeRunSync()
   }
 
   def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
@@ -504,11 +485,6 @@ class HttpGoogleServicesDAO(
         None
       }
     }
-  }
-
-  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): Stream[IO, Unit] = {
-    val gzipped = (body through fs2.compress.gzip[fs2.Pure](2048)).compile.toList.toArray //after fs2 1.0.4, we can `to[Array]` directly
-    googleStorageService.storeObject(hammCromwellMetadata.bucketName, objectName, gzipped, "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {
