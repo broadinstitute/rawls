@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
 import org.broadinstitute.dsde.rawls.expressions.OutputExpression
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, LocalInputExpressionValidationVisitor, LocalOutputExpressionValidationVisitor}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, LocalInputExpressionValidationVisitor}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ErrorReport, MethodConfiguration, ValidatedMCExpressions, ValidatedMethodConfiguration}
 
@@ -92,13 +92,6 @@ class LocalEntityExpressionValidator(implicit protected val executionContext: Ex
   }
 
   private[local] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
-    val extendedJsonParser = AntlrTerraExpressionParser.getParser(expression)
-    val visitor = new LocalOutputExpressionValidationVisitor(rootEntityTypeOption.isDefined)
-
-    for {
-      parseTree <- Try(extendedJsonParser.root())
-      _ <- visitor.visit(parseTree)
-      _ <- OutputExpression.validate(expression, rootEntityTypeOption)
-    } yield ()
+    OutputExpression.validate(expression, rootEntityTypeOption)
   }
 }

@@ -532,12 +532,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val outputExpressions = Map("unbound" -> unboundExprStr, "bound" ->  boundExprStr)
     val execOutputs = Map("unbound" -> Left(unboundAttr), "bound" ->  Left(boundAttr))
 
-    val expectedAttributeUpdate = OutputExpression.build(boundExprStr.value, boundAttr) match {
+    val rootEntityTypeOpt = Some("Sample")
+    val expectedAttributeUpdate = OutputExpression.build(boundExprStr.value, boundAttr, rootEntityTypeOpt) match {
       case scala.util.Success(BoundOutputExpression(_, attrName, attr)) => attrName -> attr
       case _ => fail
     }
 
-    val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", Some("Sample"), None, Map(), outputExpressions, AgoraMethod("ns-config", "meth1", 1))
+    val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", rootEntityTypeOpt, None, Map(), outputExpressions, AgoraMethod("ns-config", "meth1", 1))
 
     val subUnboundExpr = createTestSubmission(testData.workspace, mcUnboundExpr, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),

@@ -7,6 +7,7 @@ trait ExpressionFixture {
 
   val parseableInputExpressionsWithNoRoot: Seq[String] = Seq(
     "workspace.gvcf",
+    "workspace.with-dash",
     "workspace.library:cohort",
     "workspace.arbitrary:whatever",
     "workspace.yes.we.can",
@@ -24,6 +25,7 @@ trait ExpressionFixture {
 
   val parseableInputExpressionsWithRoot: Seq[String] = Seq(
     "this.gvcf",
+    "this.with-dash",
     "this.library:cohort",
     "this.library:cohort1",
     "this.arbitrary:whatever",
@@ -51,10 +53,6 @@ trait ExpressionFixture {
     "*",
     """["foo","bar", notValid]""",
     """{"city": Boston}""",
-
-    // oops, it isn't.  GAWB-2598
-    "this.hyphen-is-not-allowed",
-    "this.-",
   )
 
   val unparseableInputExpressionsWithNoRoot: Seq[String] = unparseableInputExpressions ++ parseableInputExpressionsWithRoot
@@ -69,7 +67,8 @@ trait ExpressionFixture {
     "this.gvcf",
     "this.library:cohort",
     "this.arbitrary:whatever",
-    "this.underscores_are_ok"
+    "this.underscores_are_ok",
+    "this.with-dash"
   )
 
   val parseableOutputExpressions: Seq[String] = parseableOutputExpressionsWithNoRoot ++ parseableOutputExpressionsWithRoot
@@ -93,9 +92,6 @@ trait ExpressionFixture {
     "[1,2,3]",
     """{"key":"value"}""",
     """["a",{"more":{"elaborate":"example"}}]""",
-
-    // oops, it isn't.  GAWB-2598
-    "this.hyphen-is-allowed"
   )
 
   val unparseableOutputExpressionsWithNoRoot: Seq[String] = unparseableOutputExpressions ++ parseableOutputExpressionsWithRoot

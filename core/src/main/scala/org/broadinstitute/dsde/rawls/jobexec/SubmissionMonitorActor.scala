@@ -478,7 +478,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         outputs.get(outputName) match {
           case None => Failure(new RawlsException(s"output named ${outputName} does not exist"))
           case Some(Right(uot: UnsupportedOutputType)) => Failure(new RawlsException(s"output named ${outputName} is not a supported type, received json u${uot.json.compactPrint}"))
-          case Some(Left(output)) => OutputExpression.build(outputExprStr, output)
+          case Some(Left(output)) =>
+            val entityTypeOpt = workflowRecord.workflowEntityId.flatMap(entitiesById.get).map(_.entityType)
+            OutputExpression.build(outputExprStr, output, entityTypeOpt)
         }
       }
 

@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsR
 import org.broadinstitute.dsde.rawls.model.{AgoraMethod, Attributable, AttributeString, MethodConfiguration}
 import org.scalatest.FlatSpec
 import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.time.{Seconds, Span}
 
 class LocalEntityExpressionValidatorSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils with ScalaFutures  {
 
@@ -59,7 +60,7 @@ class LocalEntityExpressionValidatorSpec extends FlatSpec with TestDriverCompone
   val expressionValidator = new LocalEntityExpressionValidator()
 
   it should "validateAndParseMCExpressions" in {
-
+    implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
     val actualValid = expressionValidator.validateMCExpressions(allValid, toGatherInputs(allValid.inputs)).futureValue
     assertSameElements(parseableInputExpressions, actualValid.validInputs)
     assertSameElements(parseableOutputExpressions, actualValid.validOutputs)
@@ -135,7 +136,7 @@ class LocalEntityExpressionValidatorSpec extends FlatSpec with TestDriverCompone
   }
 
   it should "parse method config expressions" in {
-    val actualParseable = expressionValidator.validateMCExpressionsInternal(toExpressionMap(parseableInputExpressions), toExpressionMap(parseableOutputExpressions), None)
+    val actualParseable = expressionValidator.validateMCExpressionsInternal(toExpressionMap(parseableInputExpressions), toExpressionMap(parseableOutputExpressions), defaultRootEntity)
     assertSameElements(parseableInputExpressions, actualParseable.validInputs)
     assertSameElements(parseableOutputExpressions, actualParseable.validOutputs)
     actualParseable.invalidInputs shouldBe 'empty
@@ -147,7 +148,7 @@ class LocalEntityExpressionValidatorSpec extends FlatSpec with TestDriverCompone
     actualParseableWithNoRoot.invalidInputs shouldBe 'empty
     actualParseableWithNoRoot.invalidOutputs shouldBe 'empty
 
-    val actualUnparseable = expressionValidator.validateMCExpressionsInternal(toExpressionMap(unparseableInputExpressions), toExpressionMap(unparseableOutputExpressions), None)
+    val actualUnparseable = expressionValidator.validateMCExpressionsInternal(toExpressionMap(unparseableInputExpressions), toExpressionMap(unparseableOutputExpressions), defaultRootEntity)
     actualUnparseable.validInputs shouldBe 'empty
     actualUnparseable.validOutputs shouldBe 'empty
     actualUnparseable.invalidInputs should have size unparseableInputExpressions.size
