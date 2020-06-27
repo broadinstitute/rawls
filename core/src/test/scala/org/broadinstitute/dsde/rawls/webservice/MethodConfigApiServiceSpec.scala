@@ -151,7 +151,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
     val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'blah' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}")
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
-    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
+    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Output expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>

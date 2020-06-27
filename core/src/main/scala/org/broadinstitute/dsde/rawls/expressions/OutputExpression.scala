@@ -30,7 +30,7 @@ object OutputExpression {
       for {
         parseTree <- Try(extendedJsonParser.root()).recoverWith {
           case regrets: RawlsException =>
-            Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Invalid output expression: $expr", regrets)))
+            Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, regrets)))
         }
         boundExprFunc <- visitor.visit(parseTree)
       } yield boundExprFunc(attribute)
