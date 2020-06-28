@@ -122,6 +122,6 @@ class OutputExpressionSpec extends FlatSpec with Matchers {
 
     intercept[RawlsExceptionWithErrorReport] {
       OutputExpression.validate("foo.bar", None).get
-    }.errorReport.message should be("Invalid output expression: foo.bar")
+    }.errorReport.message should be("Error while parsing the expression. Offending symbol is on line 1 at position 0. Error: mismatched input 'foo' expecting {'{', '[', 'workspace.', 'this', 'true', 'false', 'null', STRING, NUMBER}")
   }
 }
