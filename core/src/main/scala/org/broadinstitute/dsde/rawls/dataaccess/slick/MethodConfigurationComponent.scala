@@ -16,7 +16,8 @@ case class MethodConfigurationRecord(id: Long,
                                      methodUri: String,
                                      methodConfigVersion: Int,
                                      deleted: Boolean,
-                                     deletedDate: Option[Timestamp])
+                                     deletedDate: Option[Timestamp],
+                                     dataReferenceName: Option[String])
 
 case class MethodConfigurationInputRecord(methodConfigId: Long, id: Long, key: String, value: String)
 
@@ -39,8 +40,9 @@ trait MethodConfigurationComponent {
     def methodConfigVersion = column[Int]("METHOD_CONFIG_VERSION")
     def deleted = column[Boolean]("DELETED")
     def deletedDate = column[Option[Timestamp]]("deleted_date")
+    def dataReferenceName = column[Option[String]]("DATA_REFERENCE_NAME")
 
-    def * = (id, namespace, name, workspaceId, rootEntityType, methodUri, methodConfigVersion, deleted, deletedDate) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
+    def * = (id, namespace, name, workspaceId, rootEntityType, methodUri, methodConfigVersion, deleted, deletedDate, dataReferenceName) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
 
     def workspace = foreignKey("FK_MC_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def namespaceNameIdx = index("IDX_CONFIG", (workspaceId, namespace, name, methodConfigVersion), unique = true)
@@ -258,11 +260,11 @@ trait MethodConfigurationComponent {
      */
 
     private def marshalMethodConfig(workspaceId: UUID, methodConfig: MethodConfiguration) = {
-      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodUri, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)))
+      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodUri, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)), methodConfig.dataReferenceName.map(_.value))
     }
 
     def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString]): MethodConfiguration = {
-      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, Some(Map.empty[String, AttributeString]), inputs, outputs, MethodRepoMethod.fromUri(methodConfigRec.methodUri), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
+      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, Some(Map.empty[String, AttributeString]), inputs, outputs, MethodRepoMethod.fromUri(methodConfigRec.methodUri), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)), methodConfigRec.dataReferenceName.map(DataReferenceName))
     }
 
     private def unmarshalMethodConfigToShort(methodConfigRec: MethodConfigurationRecord): MethodConfigurationShort = {

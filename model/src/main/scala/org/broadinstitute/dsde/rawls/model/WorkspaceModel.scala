@@ -377,7 +377,8 @@ case class MethodConfiguration(
                    methodRepoMethod: MethodRepoMethod,
                    methodConfigVersion: Int = 1,
                    deleted: Boolean = false,
-                   deletedDate: Option[DateTime] = None
+                   deletedDate: Option[DateTime] = None,
+                   dataReferenceName: Option[DataReferenceName] = None
                    ) {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ): String = workspaceName.path+s"/methodconfigs/${namespace}/${name}"
@@ -621,6 +622,7 @@ case class WorkspaceTag(tag: String, count: Int)
 class WorkspaceJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
   import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
+  import DataReferenceModelJsonSupport.DataReferenceNameFormat
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
     override def write(dir: SortDirection): JsValue = JsString(SortDirections.toString(dir))
@@ -708,7 +710,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   }
 
-  implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
+  implicit val MethodConfigurationFormat = jsonFormat11(MethodConfiguration)
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
 
