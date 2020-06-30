@@ -55,6 +55,6 @@ fragment INT: '0' | [1-9] [0-9]*;
 
 fragment EXP: [Ee] [+\-]? INT;
 
-SYMBOL: [a-zA-Z0-9_]+;
+SYMBOL: [a-zA-Z0-9_-]+;
 
 WS: [ \t\n\r] + -> skip;

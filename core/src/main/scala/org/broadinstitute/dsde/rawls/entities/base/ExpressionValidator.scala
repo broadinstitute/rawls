@@ -8,12 +8,8 @@ import scala.util.Try
 
 trait ExpressionValidator {
   /** validate a MC, skipping optional empty inputs, and return a ValidatedMethodConfiguration */
-  def validateMCExpressions(methodConfiguration: MethodConfiguration,
-                            gatherInputsResult: GatherInputsResult,
-                            allowRootEntity: Boolean): Future[ValidatedMethodConfiguration]
+  def validateMCExpressions(methodConfiguration: MethodConfiguration, gatherInputsResult: GatherInputsResult): Future[ValidatedMethodConfiguration]
 
   /** validate a MC, skipping optional empty inputs, and return failure when any inputs/outputs are invalid */
-  def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration,
-                                       gatherInputsResult: GatherInputsResult,
-                                       allowRootEntity: Boolean): Future[Try[ValidatedMethodConfiguration]]
+  def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration, gatherInputsResult: GatherInputsResult): Future[Try[ValidatedMethodConfiguration]]
 }

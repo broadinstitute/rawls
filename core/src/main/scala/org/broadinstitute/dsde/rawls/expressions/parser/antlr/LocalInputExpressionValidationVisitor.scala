@@ -17,7 +17,7 @@ class LocalInputExpressionValidationVisitor(allowRootEntity: Boolean) extends Te
       // We don't want to short circuit here as child classes may want to validate all child nodes are valid
       visitChildren(ctx.getRuleContext)
     } else {
-      Failure(new RawlsException("Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."))
+      Failure(new RawlsException("Input expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."))
     }
   }
 }

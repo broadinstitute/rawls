@@ -999,7 +999,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val entityProvider = getEntityProviderForMethodConfig(workspaceContext, methodConfiguration)
     for {
       gatherInputsResult <- gatherMethodConfigInputs(methodConfiguration)
-      vmc <- entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity = methodConfiguration.rootEntityType.isDefined)
+      vmc <- entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult)
     } yield vmc
   }
 
@@ -1320,8 +1320,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
 
       entityProvider = getEntityProviderForMethodConfig(workspaceContext, methodConfig)
-      validationResult <- entityProvider.expressionValidator.validateExpressionsForSubmission(
-        methodConfig, gatherInputsResult, allowRootEntity = submissionRequest.entityName.isDefined)
+      validationResult <- entityProvider.expressionValidator.validateExpressionsForSubmission(methodConfig, gatherInputsResult)
 
       // calling .get on the Try will throw the validation error
       _ = validationResult.get

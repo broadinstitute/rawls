@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.antlr.v4.runtime.{CharStreams, CodePointCharStream, CommonTokenStream}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.AttributeNameContext
+import org.broadinstitute.dsde.rawls.model.AttributeName
 
 object AntlrTerraExpressionParser {
 
@@ -18,5 +20,13 @@ object AntlrTerraExpressionParser {
     parser.addErrorListener(errorThrowingListener)
 
     parser
+  }
+
+  /**
+    * Convert AttributeNameContext to AttributeName
+    */
+  def toAttributeName(ctx: AttributeNameContext): AttributeName = {
+    val namespace = Option(ctx.namespace()).map(_.getText).getOrElse(AttributeName.defaultNamespace)
+    AttributeName(namespace, ctx.name().getText)
   }
 }

@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
 import org.broadinstitute.dsde.rawls.expressions.OutputExpression
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, LocalInputExpressionValidationVisitor, LocalOutputExpressionValidationVisitor}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, LocalInputExpressionValidationVisitor}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ErrorReport, MethodConfiguration, ValidatedMCExpressions, ValidatedMethodConfiguration}
 
@@ -14,9 +14,7 @@ import scala.util.Try
 
 class LocalEntityExpressionValidator(implicit protected val executionContext: ExecutionContext) extends ExpressionValidator {
   // validate a MC, skipping optional empty inputs, and return a ValidatedMethodConfiguration
-  def validateMCExpressions(methodConfiguration: MethodConfiguration,
-                            gatherInputsResult: GatherInputsResult,
-                            allowRootEntity: Boolean): Future[ValidatedMethodConfiguration] = {
+  def validateMCExpressions(methodConfiguration: MethodConfiguration, gatherInputsResult: GatherInputsResult): Future[ValidatedMethodConfiguration] = {
 
     Future {
       val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.getName, AttributeString(mi.expression)) }
@@ -25,7 +23,6 @@ class LocalEntityExpressionValidator(implicit protected val executionContext: Ex
       val validated = validateMCExpressionsInternal(
         inputs = inputsToParse.toMap,
         outputs = outputsToParse,
-        allowRootEntity = allowRootEntity,
         rootEntityTypeOption = methodConfiguration.rootEntityType
       )
 
@@ -42,11 +39,9 @@ class LocalEntityExpressionValidator(implicit protected val executionContext: Ex
   }
 
   // validate a MC, skipping optional empty inputs, and return failure when any inputs/outputs are invalid
-  def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration,
-                                       gatherInputsResult: GatherInputsResult,
-                                       allowRootEntity: Boolean): Future[Try[ValidatedMethodConfiguration]] = {
+  def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration, gatherInputsResult: GatherInputsResult): Future[Try[ValidatedMethodConfiguration]] = {
 
-    validateMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity).map { validated =>
+    validateMCExpressions(methodConfiguration, gatherInputsResult).map { validated =>
 
       Try {
         if (validated.invalidInputs.nonEmpty || validated.missingInputs.nonEmpty || validated.extraInputs.nonEmpty || validated.invalidOutputs.nonEmpty) {
@@ -64,7 +59,6 @@ class LocalEntityExpressionValidator(implicit protected val executionContext: Ex
 
   private[local] def validateMCExpressionsInternal(inputs: Map[String, AttributeString],
                                                    outputs: Map[String, AttributeString],
-                                                   allowRootEntity: Boolean,
                                                    rootEntityTypeOption: Option[String]): ValidatedMCExpressions = {
     def validateAndPartition(m: Map[String, AttributeString], validateFunc: String => Try[Unit] ) = {
       val validated = m map { case (key, attr) => (key, validateFunc(attr.value)) }
@@ -79,15 +73,15 @@ class LocalEntityExpressionValidator(implicit protected val executionContext: Ex
       )
     }
 
-    val (successInputs, failedInputs)   = validateAndPartition(inputs, validateInputExpr(allowRootEntity))
-    val (successOutputs, failedOutputs) = validateAndPartition(outputs, validateOutputExpr(allowRootEntity, rootEntityTypeOption))
+    val (successInputs, failedInputs)   = validateAndPartition(inputs, validateInputExpr(rootEntityTypeOption))
+    val (successOutputs, failedOutputs) = validateAndPartition(outputs, validateOutputExpr(rootEntityTypeOption))
 
     ValidatedMCExpressions(successInputs, failedInputs, successOutputs, failedOutputs)
   }
 
-  private def validateInputExpr(allowRootEntity: Boolean)(expression: String): Try[Unit] = {
+  private def validateInputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val extendedJsonParser = AntlrTerraExpressionParser.getParser(expression)
-    val visitor = new LocalInputExpressionValidationVisitor(allowRootEntity)
+    val visitor = new LocalInputExpressionValidationVisitor(rootEntityTypeOption.isDefined)
 
     /*
       parse the expression using ANTLR parser for local input expressions and walk the tree using `visit()` to examine
@@ -97,14 +91,7 @@ class LocalEntityExpressionValidator(implicit protected val executionContext: Ex
     Try(extendedJsonParser.root()).flatMap(visitor.visit)
   }
 
-  private[local] def validateOutputExpr(allowRootEntity: Boolean, rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
-    val extendedJsonParser = AntlrTerraExpressionParser.getParser(expression)
-    val visitor = new LocalOutputExpressionValidationVisitor(allowRootEntity)
-
-    for {
-      parseTree <- Try(extendedJsonParser.root())
-      _ <- visitor.visit(parseTree)
-      _ <- OutputExpression.validate(expression, rootEntityTypeOption)
-    } yield ()
+  private[local] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+    OutputExpression.validate(expression, rootEntityTypeOption)
   }
 }
