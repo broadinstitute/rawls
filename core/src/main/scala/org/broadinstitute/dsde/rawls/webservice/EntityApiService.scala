@@ -27,7 +27,8 @@ trait EntityApiService extends UserInfoDirectives {
   val entityServiceConstructor: UserInfo => EntityService
 
   val entityRoutes: server.Route = requireUserInfo() { userInfo =>
-    parameters("dataReference".?, "billingProject".?) { (dataReference, billingProject) =>
+    parameters("dataReference".?, "billingProject".?) { (dataReferenceString, billingProject) =>
+      val dataReference = dataReferenceString.map(DataReferenceName)
       path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
         get {
           parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>

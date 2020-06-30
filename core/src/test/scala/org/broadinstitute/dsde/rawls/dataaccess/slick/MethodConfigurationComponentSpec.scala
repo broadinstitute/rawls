@@ -19,7 +19,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       None, //nuked prereq expressions
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
-      AgoraMethod("ns-config", "meth2", 2)
+      AgoraMethod("ns-config", "meth2", 2),
+      dataReferenceName = Option(DataReferenceName("foo"))
     )
 
     val expectedMC = methodConfig2.copy(prerequisites = Some(Map()))

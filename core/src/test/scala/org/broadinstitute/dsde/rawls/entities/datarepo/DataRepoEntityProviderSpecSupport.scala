@@ -9,7 +9,7 @@ import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEn
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, RawlsUserEmail, UserInfo, Workspace}
 import org.joda.time.DateTime
 import spray.json.{JsObject, JsString}
 
@@ -39,7 +39,7 @@ trait DataRepoEntityProviderSpecSupport {
                          dataRepoDAO: SpecDataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel())),
                          samDAO: SamDAO = new MockSamDAO(slickDataSource),
                          bqFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
-                         entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some("referenceName"))
+                         entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName")))
                         ): DataRepoEntityProvider = {
     new DataRepoEntityProvider(entityRequestArguments, workspaceManagerDAO, dataRepoDAO, samDAO, bqFactory)
   }
@@ -93,7 +93,7 @@ trait DataRepoEntityProviderSpecSupport {
    * Mock for WorkspaceManagerDAO that allows the caller to specify behavior for the getDataReferenceByName method.
    */
   class SpecWorkspaceManagerDAO(refByNameResponse:Either[Throwable, DataReferenceDescription]) extends MockWorkspaceManagerDAO {
-    override def getDataReferenceByName(workspaceId: UUID, refType: String, refName: String, accessToken: OAuth2BearerToken): DataReferenceDescription =
+    override def getDataReferenceByName(workspaceId: UUID, refType: String, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataReferenceDescription =
       refByNameResponse match {
         case Left(t) => throw t
         case Right(ref) =>

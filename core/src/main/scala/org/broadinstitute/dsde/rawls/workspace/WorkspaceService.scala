@@ -1004,8 +1004,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def getEntityProviderForMethodConfig(workspaceContext: Workspace, methodConfiguration: MethodConfiguration) = {
-    // TODO: user method config root entity to figure this out
-    entityManager.resolveProvider(EntityRequestArguments(workspaceContext, userInfo, None, None))
+    entityManager.resolveProvider(EntityRequestArguments(workspaceContext, userInfo, methodConfiguration.dataReferenceName, None))
   }
 
   def getAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] = {

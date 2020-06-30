@@ -37,12 +37,12 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   import dataSource.dataAccess.driver.api._
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
-  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[String]) = getEntity(workspaceName, entityType, entityName, dataReference)
+  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName]) = getEntity(workspaceName, entityType, entityName, dataReference)
   def UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) = updateEntity(workspaceName, entityType, entityName, operations)
-  def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference], dataReference: Option[String]) = deleteEntities(workspaceName, entities, dataReference)
+  def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName]) = deleteEntities(workspaceName, entities, dataReference)
   def RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) = renameEntity(workspaceName, entityType, entityName, newName)
   def EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) = evaluateExpression(workspaceName, entityType, entityName, expression)
-  def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[String]) = entityTypeMetadata(workspaceName, dataReference)
+  def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName]) = entityTypeMetadata(workspaceName, dataReference)
   def ListEntities(workspaceName: WorkspaceName, entityType: String) = listEntities(workspaceName, entityType)
   def QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) = queryEntities(workspaceName, entityType, query)
   def CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri, linkExistingEntities: Boolean) = copyEntities(entityCopyDefinition, uri, linkExistingEntities)
@@ -57,7 +57,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[String]): Future[PerRequestMessage] =
+  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
@@ -94,7 +94,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[String]): Future[PerRequestMessage] =
+  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
@@ -149,7 +149,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[String]): Future[PerRequestMessage] =
+  def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       // TODO: AS-321 insert the billing project, if present. May want to use EntityRequestArguments or other container class.

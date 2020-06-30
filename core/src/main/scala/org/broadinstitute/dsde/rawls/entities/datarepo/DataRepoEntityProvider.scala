@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, TerraDataRepoSnapshotRequest}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, DataReferenceName, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, TerraDataRepoSnapshotRequest}
 import spray.json._
 
 import scala.collection.JavaConverters._
@@ -109,7 +109,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
   }
 
   // not marked as private to ease unit testing
-  def lookupSnapshotForName(dataReferenceName: String): UUID = {
+  def lookupSnapshotForName(dataReferenceName: DataReferenceName): UUID = {
     // contact WSM to retrieve the data reference specified in the request
     val dataRef = workspaceManagerDAO.getDataReferenceByName(UUID.fromString(workspace.workspaceId),
       ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue,

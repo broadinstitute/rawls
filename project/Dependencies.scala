@@ -190,6 +190,7 @@ object Dependencies {
     httpClient,
     googleApiClient,
     scalaUri,
+    workspaceManager,
     scalatest
   )
 
