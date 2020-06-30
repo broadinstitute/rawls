@@ -8,9 +8,9 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpress
 import scala.util.Try
 
 class DataRepoEntityExpressionValidator(snapshotModel: SnapshotModel) extends ExpressionValidator {
-  override protected def validateInputExpr(allowRootEntity: Boolean, rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected def validateInputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
-    val visitor = new DataRepoInputExpressionValidationVisitor(allowRootEntity, rootEntityTypeOption, snapshotModel)
+    val visitor = new DataRepoInputExpressionValidationVisitor(rootEntityTypeOption, snapshotModel)
 
     /*
       parse the expression using ANTLR parser for local input expressions and walk the tree using `visit()` to examine
@@ -20,9 +20,9 @@ class DataRepoEntityExpressionValidator(snapshotModel: SnapshotModel) extends Ex
     Try(terraExpressionParser.root()).flatMap(visitor.visit)
   }
 
-  override protected def validateOutputExpr(allowRootEntity: Boolean, rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
-    val visitor = new LocalOutputExpressionValidationVisitor(allowRootEntity)
+    val visitor = new LocalOutputExpressionValidationVisitor(rootEntityTypeOption)
 
     for {
       parseTree <- Try(terraExpressionParser.root())

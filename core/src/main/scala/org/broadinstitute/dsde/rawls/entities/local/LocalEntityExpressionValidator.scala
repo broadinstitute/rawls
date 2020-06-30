@@ -19,9 +19,9 @@ class LocalEntityExpressionValidator extends ExpressionValidator {
     Try(terraExpressionParser.root()).flatMap(visitor.visit)
   }
 
-  private[local] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  protected override def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val extendedJsonParser = AntlrTerraExpressionParser.getParser(expression)
-    val visitor = new LocalOutputExpressionValidationVisitor(rootEntityTypeOption.isDefined)
+    val visitor = new LocalOutputExpressionValidationVisitor(rootEntityTypeOption)
 
     for {
       parseTree <- Try(extendedJsonParser.root())

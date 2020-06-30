@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import java.util.UUID
 
-import bio.terra.datarepo.model.TableModel
+import bio.terra.datarepo.model.{SnapshotModel, TableModel}
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import cats.effect.{IO, Resource}
 import com.google.cloud.bigquery.{QueryJobConfiguration, QueryParameterValue, TableResult}
@@ -35,11 +35,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
     // TODO: AS-321 auto-switch to see if the ref supplied in argument is a UUID or a name?? Use separate query params? Never allow ID?
 
-    // get snapshotId from reference name
-    val snapshotId = lookupSnapshotForName(dataReferenceName)
-
-    // contact TDR to describe the snapshot
-    val snapshotModel = dataRepoDAO.getSnapshot(snapshotId, userInfo.accessToken)
+    val snapshotModel: SnapshotModel = getSnapshotModel
 
     // reformat TDR's response into the expected response structure
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
@@ -60,11 +56,7 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
-    // get snapshot UUID from data reference name
-    val snapshotId = lookupSnapshotForName(dataReferenceName)
-
-    // contact TDR to describe the snapshot
-    val snapshotModel = dataRepoDAO.getSnapshot(snapshotId, userInfo.accessToken)
+    val snapshotModel: SnapshotModel = getSnapshotModel
 
     // extract table definition, with PK, from snapshot schema
     val tableModel = snapshotModel.getTables.asScala.find(_.getName == entityType) match {
@@ -106,6 +98,15 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
       }.unsafeRunSync()
 
     }
+  }
+
+  // TODO: can we lazy load SnapshotModel
+  private def getSnapshotModel = {
+    // get snapshot UUID from data reference name
+    val snapshotId = lookupSnapshotForName(dataReferenceName)
+
+    // contact TDR to describe the snapshot
+    dataRepoDAO.getSnapshot(snapshotId, userInfo.accessToken)
   }
 
   // not marked as private to ease unit testing
@@ -158,6 +159,6 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]] =
     throw new UnsupportedEntityOperationException("evaluateExpressions not supported by this provider.")
 
-  override def expressionValidator: ExpressionValidator = new DataRepoEntityExpressionValidator
+  override def expressionValidator: ExpressionValidator = new DataRepoEntityExpressionValidator(getSnapshotModel)
 
 }

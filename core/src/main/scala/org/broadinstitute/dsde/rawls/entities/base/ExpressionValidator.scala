@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ErrorReport, MethodConfiguration, ValidatedMCExpressions, ValidatedMethodConfiguration}
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 import scala.util.Try
 
 trait ExpressionValidator {
@@ -57,9 +58,9 @@ trait ExpressionValidator {
     }
   }
 
-  private[local] def validateMCExpressionsInternal(inputs: Map[String, AttributeString],
-                                                   outputs: Map[String, AttributeString],
-                                                   rootEntityTypeOption: Option[String]): ValidatedMCExpressions = {
+  private def validateMCExpressionsInternal(inputs: Map[String, AttributeString],
+                                            outputs: Map[String, AttributeString],
+                                            rootEntityTypeOption: Option[String]): ValidatedMCExpressions = {
     def validateAndPartition(m: Map[String, AttributeString], validateFunc: String => Try[Unit] ) = {
       val validated = m map { case (key, attr) => (key, validateFunc(attr.value)) }
       (
