@@ -1,22 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import cats.effect.IO
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
-import com.google.pubsub.v1.ProjectTopicName
 import com.typesafe.config.Config
-import fs2.Stream
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import spray.json.JsObject
 
@@ -102,8 +97,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
 
   def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]]
-
-  def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): Stream[IO, Unit]
 
   def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]]
 
@@ -301,7 +294,6 @@ case class OperationId(apiType: GoogleApiTypes.GoogleApiType, operationId: Strin
 case class OperationStatus(done: Boolean, errorMessage: Option[String])
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
 case class ProjectTemplate(owners: Seq[String], editors: Seq[String])
-final case class HammCromwellMetadata(bucketName: GcsBucketName, topicName: ProjectTopicName)
 
 case object ProjectTemplate {
   def from(projectTemplateConfig: Config): ProjectTemplate = {

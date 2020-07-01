@@ -4,7 +4,6 @@ import java.util.UUID
 
 import akka.actor._
 import akka.pattern._
-import cats.implicits._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
@@ -21,7 +20,6 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, addJitter}
-import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -277,39 +275,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   private def execServiceOutputs(workflowRec: WorkflowRecord, petUser: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
     WorkflowStatuses.withName(workflowRec.status) match {
       case status if (WorkflowStatuses.terminalStatuses.contains(status)) =>
-        // asynchronously upload metadata to GCS.
-        // Currently, this is only used for hamm, and may potentially be removed from RAWLS if design changes
-        workflowRec.externalId.traverse{
-          workflowId =>
-            uploadMetadataToGCS(workflowRec.submissionId.toString, workflowId, petUser).recover {
-              case e =>
-                logger.error(s"Failed to upload metadata for ${workflowRec.submissionId}/${workflowId}", e)
-            }
-        }
-
         if(status == WorkflowStatuses.Succeeded)
           executionServiceCluster.outputs(workflowRec, petUser).map(outputs => Option((workflowRec, Option(outputs))))
         else
           Future.successful(Some((workflowRec, None)))
       case _ => Future.successful(Some((workflowRec, None)))
     }
-  }
-
-  private def uploadMetadataToGCS(submissionId: String, workflowId: String, petUser: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
-    for{
-      execIdOpt <- datasource.inTransaction {
-        dataAccess =>
-            dataAccess.workflowQuery.getExecutionServiceIdByExternalId(workflowId, submissionId)
-      }
-      _ <- execIdOpt.traverse {
-        execId =>
-          for {
-            metadata <- executionServiceCluster.callLevelMetadataForCostCalculation(submissionId, workflowId, Some(ExecutionServiceId(execId)), petUser)
-            // Rawls only monitor root level workflow
-            _ <- googleServicesDAO.storeCromwellMetadata(GcsBlobName(workflowId), fs2.Stream.emits(metadata.compactPrint.getBytes("UTF-8"))).compile.drain.unsafeToFuture()
-          } yield ()
-      }
-    } yield ()
   }
 
   /**

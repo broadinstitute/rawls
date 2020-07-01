@@ -1,20 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import cats.effect.IO
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
-import fs2.Stream
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import spray.json._
@@ -122,8 +119,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = Future.successful(List.empty)
-
-  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): Stream[IO, Unit] = Stream.empty
 
   override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]] = Future.successful(None)
 

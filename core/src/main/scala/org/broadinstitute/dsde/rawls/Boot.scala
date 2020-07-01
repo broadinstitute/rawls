@@ -12,7 +12,6 @@ import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.pubsub.v1.ProjectTopicName
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
@@ -43,7 +42,7 @@ import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServi
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.util.ExecutionContexts
 import org.http4s.Uri
 import org.http4s.client.blaze.BlazeClientBuilder
@@ -118,15 +117,9 @@ object Boot extends IOApp with LazyLogging {
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
 
-    val hammCromwellMetadataConfig = gcsConfig.getConfig("hamm-cromwell-metadata")
     val serviceProject = gcsConfig.getString("serviceProject")
     val appName = gcsConfig.getString("appName")
     val pathToPem = gcsConfig.getString("pathToPem")
-
-    val hammCromwellMetadata = HammCromwellMetadata(
-      GcsBucketName(hammCromwellMetadataConfig.getString("bucket-name")),
-      ProjectTopicName.of(serviceProject, hammCromwellMetadataConfig.getString("topic-name "))
-    )
 
     //Sanity check deployment manager template path.
     val dmConfig = DeploymentManagerConfig(gcsConfig.getConfig("deploymentManager"))
@@ -161,7 +154,6 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getStringList("billingGroupEmailAliases").asScala.toList,
         dmConfig.billingProbeEmail,
         gcsConfig.getInt("bucketLogsMaxAge"),
-        hammCromwellMetadata = hammCromwellMetadata,
         googleStorageService = appDependencies.googleStorageService,
         googleServiceHttp = appDependencies.googleServiceHttp,
         topicAdmin = appDependencies.topicAdmin,
