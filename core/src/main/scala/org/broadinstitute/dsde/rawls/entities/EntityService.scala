@@ -4,12 +4,12 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DeleteEntitiesConflictException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityCopyDefinition, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, ErrorReport, SamResourceTypeNames, SamWorkspaceActions, UserInfo, WorkspaceName, _}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityCopyDefinition, EntityQuery, ErrorReport, SamResourceTypeNames, SamWorkspaceActions, UserInfo, WorkspaceName, _}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
@@ -44,7 +44,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) = evaluateExpression(workspaceName, entityType, entityName, expression)
   def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName]) = entityTypeMetadata(workspaceName, dataReference)
   def ListEntities(workspaceName: WorkspaceName, entityType: String) = listEntities(workspaceName, entityType)
-  def QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) = queryEntities(workspaceName, entityType, query)
+  def QueryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery) = queryEntities(workspaceName, dataReference, entityType, query)
   def CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri, linkExistingEntities: Boolean) = copyEntities(entityCopyDefinition, uri, linkExistingEntities)
   def BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) = batchUpdateEntities(workspaceName, entityUpdates, true)
   def BatchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) = batchUpdateEntities(workspaceName, entityUpdates, false)
@@ -180,25 +180,17 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def queryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
+  def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query) map { case (unfilteredCount, filteredCount, entities) =>
-          createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq).get
+
+      val requestArgs = EntityRequestArguments(workspaceContext, userInfo, dataReference)
+
+      entityManager.resolveProvider(requestArgs).queryEntities(entityType, query)
+        .map { response => RequestComplete(StatusCodes.OK, response) }
+        .recover {
+          case dee:DataEntityException => RequestComplete(dee.code, dee.getMessage)
+          case ex => RequestComplete(StatusCodes.InternalServerError, ex)
         }
-      }
-    }
-  }
-
-  def createEntityQueryResponse(query: EntityQuery, unfilteredCount: Int, filteredCount: Int, page: Seq[Entity]): Try[RequestComplete[(StatusCodes.Success, EntityQueryResponse)]] = {
-    val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-    if (filteredCount > 0 && query.page > pageCount) {
-      Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page} is greater than the number of pages $pageCount")))
-
-    } else {
-      val response = EntityQueryResponse(query, EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount), page)
-
-      Success(RequestComplete(StatusCodes.OK, response))
     }
   }
 

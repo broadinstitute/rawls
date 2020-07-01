@@ -8,16 +8,12 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeNull, AttributeValue, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson, Entity, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeNull, AttributeValue, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
 import org.broadinstitute.dsde.rawls.util.{CollectionUtils, EntitySupport}
 import spray.json.JsArray
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
-import org.broadinstitute.dsde.rawls.entities.exceptions.DeleteEntitiesConflictException
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, ErrorReport, Workspace}
-import org.broadinstitute.dsde.rawls.util.EntitySupport
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -160,6 +156,23 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       withEntity(workspaceContext, entityType, entityName, dataAccess) {
         entity => DBIO.successful(entity)
       }
+    }
+  }
+
+  override def queryEntities(entityType: String, query: EntityQuery): Future[EntityQueryResponse] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query) map { case (unfilteredCount, filteredCount, entities) =>
+        createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq)
+      }
+    }
+  }
+
+  def createEntityQueryResponse(query: EntityQuery, unfilteredCount: Int, filteredCount: Int, page: Seq[Entity]): EntityQueryResponse = {
+    val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+    if (filteredCount > 0 && query.page > pageCount) {
+      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${query.page} is greater than the number of pages $pageCount")
+    } else {
+      EntityQueryResponse(query, EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount), page)
     }
   }
 

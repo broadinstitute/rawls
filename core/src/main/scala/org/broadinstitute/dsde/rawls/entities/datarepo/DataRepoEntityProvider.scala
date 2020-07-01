@@ -10,6 +10,9 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityTypeNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, DataReferenceName, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, SubmissionValidationEntityInputs, TerraDataRepoSnapshotRequest}
+import spray.json._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
