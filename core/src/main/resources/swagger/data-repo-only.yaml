@@ -38,6 +38,48 @@ paths:
         - $ref: '#/components/parameters/entityNamePathParam'
         - $ref: '#/components/parameters/dataReferenceQueryParam'
         - $ref: '#/components/parameters/billingProjectQueryParam'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityQuery/{entityType}:
+    get:
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - name: page
+          in: query
+          description: Page number, 1-indexed (default 1)
+          schema:
+            minimum: 1
+            type: number
+            default: 1
+        - name: pageSize
+          in: query
+          description: Page size (default 10)
+          schema:
+            minimum: 1
+            type: number
+            default: 10
+        - name: sortField
+          in: query
+          description: Sort field (default "name")
+          schema:
+            type: string
+            default: name
+        - name: sortDirection
+          in: query
+          description: Sort direction (asc or desc, default asc)
+          schema:
+            type: string
+            default: asc
+            enum:
+              - asc
+              - desc
+        - name: filterTerms
+          in: query
+          description: Filter terms
+          schema:
+            type: string
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots:
     get:
       tags:
