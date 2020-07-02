@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
-import bio.terra.datarepo.model.{SnapshotModel, TableModel}
+import bio.terra.datarepo.model.{RelationshipModel, RelationshipTermModel, SnapshotModel, TableModel}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser.AttributeNameContext
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.EntityLookupContext
@@ -41,24 +41,23 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
   }
 
   private def checkForAttributeOnTable(tableModel: TableModel, attributeNameContext: TerraExpressionParser.AttributeNameContext): Try[Unit] = {
-    // TODO: get the last table pointed to from the final relation and check the following
-    val finalTableColumns = tableModel.getColumns.asScala.toList
-    val finalAttributeName = attributeNameContext.getText
-    if (finalTableColumns.exists(_.getName == finalAttributeName)) {
+    val tableColumns = tableModel.getColumns.asScala.toList
+    val attributeName = attributeNameContext.getText
+    if (tableColumns.exists(_.getName == attributeName)) {
       Success()
     } else {
-      Failure(new RawlsException(s"Missing attribute `${finalAttributeName}` on table `${tableModel.getName}`"))
+      Failure(new RawlsException(s"Missing attribute `${attributeName}` on table `${tableModel.getName}`"))
     }
   }
 
   @tailrec
   private def traverseRelationsAndGetFinalTable(currentTableModel: TableModel, relations: List[TerraExpressionParser.RelationContext]): Try[TableModel] = {
     relations match {
-      case relationContext :: remainingRelations => {
-        val relationName = relationContext.getText
-        maybeGetNextTableFromRelation(currentTableModel, relationName) match {
+      case nextRelationContext :: remainingRelations => {
+        val nextRelationName = nextRelationContext.getText
+        maybeGetNextTableFromRelation(currentTableModel, nextRelationName) match {
           case Some(nextTableModel) => traverseRelationsAndGetFinalTable(nextTableModel, remainingRelations)
-          case None => Failure(new RawlsException(s"Invalid relationship `${relationName}` from table `${currentTableModel}`"))
+          case None => Failure(new RawlsException(s"Relationship with name `${nextRelationName}` and from table `${currentTableModel}` could not be found"))
         }
       }
       case Nil => Success(currentTableModel)
