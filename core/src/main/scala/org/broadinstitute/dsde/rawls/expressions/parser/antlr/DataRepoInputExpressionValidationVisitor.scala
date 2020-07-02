@@ -34,7 +34,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     maybeFindTableInSnapshotModel(rootTableName) match {
       case Some(rootTableModel) => {
         val relations = entityLookupContext.relation().asScala.toList
-        traverseRelationsToTable(rootTableModel, relations).map(checkForAttributeOnTable(_, entityLookupContext.attributeName()))
+        traverseRelationsAndGetFinalTable(rootTableModel, relations).map(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
       }
       case None => Failure(new RawlsException(s"DataRepo Snapshot must include a table with same name as Root Entity Type: ${rootTableName}"))
     }
@@ -51,15 +51,13 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     }
   }
 
-  // Starting with currentTableModel, recursively traverse each of the `relations` to get the final "TO" table at the end of
-  // the chain of relationships
   @tailrec
-  private def traverseRelationsToTable(currentTableModel: TableModel, relations: List[TerraExpressionParser.RelationContext]): Try[TableModel] = {
+  private def traverseRelationsAndGetFinalTable(currentTableModel: TableModel, relations: List[TerraExpressionParser.RelationContext]): Try[TableModel] = {
     relations match {
       case relationContext :: remainingRelations => {
         val relationName = relationContext.getText
         maybeGetNextTableFromRelation(currentTableModel, relationName) match {
-          case Some(nextTableModel) => traverseRelationsToTable(nextTableModel, remainingRelations)
+          case Some(nextTableModel) => traverseRelationsAndGetFinalTable(nextTableModel, remainingRelations)
           case None => Failure(new RawlsException(s"Invalid relationship `${relationName}` from table `${currentTableModel}`"))
         }
       }
