@@ -33,7 +33,6 @@ object BootMonitors extends LazyLogging {
                    samDAO: SamDAO,
                    pubSubDAO: GooglePubSubDAO,
                    importServicePubSubDAO: GooglePubSubDAO,
-                   arrowPubSubDAO: GooglePubSubDAO,  // remove when cutting over to import service
                    importServiceDAO: HttpImportServiceDAO,
                    googleStorage: GoogleStorageService[IO],
                    methodRepoDAO: MethodRepoDAO,
@@ -81,9 +80,6 @@ object BootMonitors extends LazyLogging {
     val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollJitter")),
-      conf.getString("avroUpsertMonitor.arrowPubSubTopic"), // remove when cutting over to import service
-      conf.getString("avroUpsertMonitor.arrowPubSubSubscription"), // remove when cutting over to import service
-      conf.getString("avroUpsertMonitor.arrowBucketName"), // remove when cutting over to import service
       conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
       conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
       conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),
@@ -94,7 +90,7 @@ object BootMonitors extends LazyLogging {
 
     //Boot the avro upsert monitor to read and process messages in the specified PubSub topic
     startAvroUpsertMonitor(system, entityService, gcsDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO,
-      arrowPubSubDAO, importServiceDAO, avroUpsertMonitorConfig)
+      importServiceDAO, avroUpsertMonitorConfig)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -192,7 +188,7 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, arrowPubSubDao: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO]) = {
+  private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO]) = {
     system.actorOf(
       AvroUpsertMonitorSupervisor.props(
         entityService,
@@ -201,7 +197,6 @@ object BootMonitors extends LazyLogging {
         googleStorage,
         googlePubSubDAO,
         importServicePubSubDAO,
-        arrowPubSubDao,
         importServiceDAO,
         avroUpsertMonitorConfig
       ))

@@ -175,15 +175,6 @@ object Boot extends IOApp with LazyLogging {
         workbenchMetricBaseName = metricsPrefix
       )
 
-      // Avro upsert uses a different project for its pubsub topics
-      // remove when cutting over to import service
-      val arrowPubSubDAO = new HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
-        appName,
-        conf.getString("avroUpsertMonitor.arrowPubSubProject"),
-        workbenchMetricBaseName = metricsPrefix
-      )
       // Import service uses a different project for its pubsub topic
       val importServicePubSubDAO = new HttpGooglePubSubDAO(
         clientEmail,
@@ -214,7 +205,7 @@ object Boot extends IOApp with LazyLogging {
       }
 
       val executionServiceConfig = conf.getConfig("executionservice")
-      val submissionTimeout = util.toScalaDuration(
+      val submissionTimeout = org.broadinstitute.dsde.rawls.util.toScalaDuration(
         executionServiceConfig.getDuration("workflowSubmissionTimeout")
       )
 
@@ -435,7 +426,6 @@ object Boot extends IOApp with LazyLogging {
           samDAO,
           pubSubDAO,
           importServicePubSubDAO,
-          arrowPubSubDAO, // remove when cutting over to import service
           importServiceDAO,
           appDependencies.googleStorageService,
           methodRepoDAO,
