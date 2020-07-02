@@ -1,9 +1,12 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
-import bio.terra.datarepo.model.SnapshotModel
+import bio.terra.datarepo.model.{SnapshotModel, TableModel}
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser.AttributeNameContext
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.EntityLookupContext
 
+import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
 /** rootEntityType is required to deal with TDR, but it's passed in as an option because enforcing this is a question
@@ -17,14 +20,70 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
 
   override def aggregateResult(aggregate: Try[Unit], nextResult: Try[Unit]): Try[Unit] = aggregate.flatMap(_ => nextResult)
 
-  // Entity lookup nodes are only allowed if allowRootEntity is true
+  // Entity lookup nodes are only allowed if a rootEntityType is specified
   override def visitEntityLookup(ctx: EntityLookupContext): Try[Unit] = {
     rootEntityType match {
-      case Some(_) => /** TODO: grab the base table name within rootEntityType, then compare that table name, the relations and the
-                      * attribute name to the snapshotModel */
-                      ???
+      case Some(rootTableName) => validateEntityLookup(rootTableName, ctx)
       case None => Failure(new RawlsException("Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."))
     }
   }
 
+  // Valid DataRepo EntityLookups mean that each of the relationships exist and the final attribute exists as a column
+  // on the final table
+  private def validateEntityLookup(rootTableName: String, entityLookupContext: EntityLookupContext): Try[Unit] = {
+    maybeFindTableInSnapshotModel(rootTableName) match {
+      case Some(rootTableModel) => {
+        val relations = entityLookupContext.relation().asScala.toList
+        traverseRelationsToTable(rootTableModel, relations).map(checkForAttributeOnTable(_, entityLookupContext.attributeName()))
+      }
+      case None => Failure(new RawlsException(s"DataRepo Snapshot must include a table with same name as Root Entity Type: ${rootTableName}"))
+    }
+  }
+
+  private def checkForAttributeOnTable(tableModel: TableModel, attributeNameContext: TerraExpressionParser.AttributeNameContext): Try[Unit] = {
+    // TODO: get the last table pointed to from the final relation and check the following
+    val finalTableColumns = tableModel.getColumns.asScala.toList
+    val finalAttributeName = attributeNameContext.getText
+    if (finalTableColumns.exists(_.getName == finalAttributeName)) {
+      Success()
+    } else {
+      Failure(new RawlsException(s"Missing attribute `${finalAttributeName}` on table `${tableModel.getName}`"))
+    }
+  }
+
+  // Starting with currentTableModel, recursively traverse each of the `relations` to get the final "TO" table at the end of
+  // the chain of relationships
+  @tailrec
+  private def traverseRelationsToTable(currentTableModel: TableModel, relations: List[TerraExpressionParser.RelationContext]): Try[TableModel] = {
+    relations match {
+      case relationContext :: remainingRelations => {
+        val relationName = relationContext.getText
+        maybeGetNextTableFromRelation(currentTableModel, relationName) match {
+          case Some(nextTableModel) => traverseRelationsToTable(nextTableModel, remainingRelations)
+          case None => Failure(new RawlsException(s"Invalid relationship `${relationName}` from table `${currentTableModel}`"))
+        }
+      }
+      case Nil => Success(currentTableModel)
+    }
+  }
+
+  // TODO: this is checking that the `fromTable` exists and that the relationship exists in one spot.  Not sure if we need a separate check for the table and another for the relationship
+  // Maybe we don't need to do all that though...it feels like we're getting into the territory of validating the TDR
+  // "relationship" schema at some point.  Maybe it's ok to just say, "If a relationship is defined with name X and
+  // from_table FOO, then we're going to assume that the RelationshipModel object is valid for this SnapshotModel."
+  private def maybeGetNextTableFromRelation(fromTable: TableModel, relationName: String): Option[TableModel] = {
+    maybeFindTableInSnapshotModel(fromTable.getName).map { tableModel =>
+      // TODO: Asked TDR team, they are currently implementing the logic for how to get List<RelationshipModel>
+      // if (relationship exists with name `relationName` with from_table `fromTable`) then
+      //     return Option(getRelationship(relationName).to_table())
+      // else
+      //     None
+      ???
+    }
+  }
+
+  private def maybeFindTableInSnapshotModel(tableName: String): Option[TableModel] = {
+    val snapshotTables = snapshotModel.getTables.asScala.toList
+    snapshotTables.find(_.getName == tableName)
+  }
 }
