@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{ColumnModel, SnapshotModel, TableModel}
 import bio.terra.workspace.model.DataReferenceDescription
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
+import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
@@ -33,23 +34,29 @@ trait DataRepoEntityProviderSpecSupport {
   val workspace = new Workspace("namespace", "name", wsId.toString, "bucketName", None,
     DateTime.now(), DateTime.now(), "createdBy", Map.empty, false)
 
+  // defaults for DataRepoEntityProviderConfig
+  val maxInputsPerSubmission: Int = 1000
+  val maxRowsPerQuery: Int = 500
+
   /* A "factory" method to create a DataRepoEntityProvider, with defaults.
    * Individual unit tests should call this to reduce boilerplate.
    */
   def createTestProvider(snapshotModel: SnapshotModel = createSnapshotModel(),
                          samDAO: SamDAO = new MockSamDAO(slickDataSource),
                          bqFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
-                         entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName")))
+                         entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName"))),
+                         config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxRowsPerQuery)
                         ): DataRepoEntityProvider = {
-    new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory)
+    new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory, config)
   }
 
   def createTestBuilder(workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription())),
                         dataRepoDAO: SpecDataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel())),
                         samDAO: SamDAO = new MockSamDAO(slickDataSource),
-                        bqServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+                        bqServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
+                        config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxRowsPerQuery)
                        ): DataRepoEntityProviderBuilder = {
-    new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory)
+    new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, config)
   }
 
 
@@ -86,7 +93,7 @@ trait DataRepoEntityProviderSpecSupport {
     new TableModel().name("table1").primaryKey(null).rowCount(0)
       .columns(List("datarepo_row_id", "integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
     new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
-      .columns(List("col2.1", "col2.2").map(new ColumnModel().name(_)).asJava),
+      .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava),
     new TableModel().name("table3").primaryKey(List("compound","pk").asJava).rowCount(456)
       .columns(List("col3.1", "col3.2").map(new ColumnModel().name(_)).asJava)
   )

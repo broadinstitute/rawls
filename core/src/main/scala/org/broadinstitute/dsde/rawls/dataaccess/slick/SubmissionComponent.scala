@@ -27,7 +27,9 @@ case class SubmissionRecord(id: UUID,
                             status: String,
                             useCallCache: Boolean,
                             deleteIntermediateOutputFiles: Boolean,
-                            workflowFailureMode: Option[String]
+                            workflowFailureMode: Option[String],
+                            entityStoreId: Option[String],
+                            rootEntityType: Option[String]
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -60,6 +62,8 @@ trait SubmissionComponent {
     def useCallCache = column[Boolean]("USE_CALL_CACHE")
     def deleteIntermediateOutputFiles = column[Boolean]("DELETE_INTERMEDIATE_OUTPUT_FILES")
     def workflowFailureMode = column[Option[String]]("WORKFLOW_FAILURE_MODE", O.Length(32))
+    def entityStoreId = column[Option[String]]("ENTITY_STORE_ID")
+    def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")
 
     def * = (
       id,
@@ -71,7 +75,9 @@ trait SubmissionComponent {
       status,
       useCallCache,
       deleteIntermediateOutputFiles,
-      workflowFailureMode
+      workflowFailureMode,
+      entityStoreId,
+      rootEntityType
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -165,7 +171,7 @@ trait SubmissionComponent {
     def create(workspaceContext: Workspace, submission: Submission)(implicit submissionStatusCounter: SubmissionStatus => Counter, wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Submission] = {
 
       def saveSubmissionWorkflows(workflows: Seq[Workflow]) = {
-        workflowQuery.createWorkflows(workspaceContext, UUID.fromString(submission.submissionId), workflows)
+        workflowQuery.createWorkflows(workspaceContext, UUID.fromString(submission.submissionId), workflows, submission.externalEntityInfo)
       }
 
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submission.submissionId))) flatMap {
@@ -268,7 +274,7 @@ trait SubmissionComponent {
           for {
             config <- methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId)
             workflows <- loadSubmissionWorkflows(submissionRec.id)
-            entity <- DBIO.sequenceOption(submissionRec.submissionEntityId.map(loadSubmissionEntity))
+            entity <- DBIO.sequenceOption(submissionRec.submissionEntityId.map(loadEntity))
           } yield Option(unmarshalSubmission(submissionRec, config.get, entity, workflows))
       }
     }
@@ -278,7 +284,7 @@ trait SubmissionComponent {
         for {
           config <- methodConfigurationQuery.loadMethodConfigurationById(rec.get.methodConfigurationId)
           workflows <- loadSubmissionWorkflows(rec.get.id)
-          entity <- DBIO.sequenceOption(rec.get.submissionEntityId.map(loadSubmissionEntity))
+          entity <- DBIO.sequenceOption(rec.get.submissionEntityId.map(loadEntity))
           workspace <- workspaceQuery.findById(rec.get.workspaceId.toString)
         } yield unmarshalActiveSubmission(rec.get, workspace.get, config.get, entity, workflows)
       }
@@ -309,6 +315,7 @@ trait SubmissionComponent {
             // for each of them.
             val wr: WorkflowRecord = record.head.workflowRecord // first in the record
             val er: Option[EntityRecord] = record.head.entityRecord // second in the record
+            val externalEntity: Option[AttributeEntityReference] = record.head.externalEntity
 
             // but, the workflow messages are all different - and may not exist (i.e. be None) due to the outer join.
             // translate any/all messages that exist into a Seq[AttributeString]
@@ -327,10 +334,11 @@ trait SubmissionComponent {
             }.getOrElse(Seq.empty)
 
             // create the Workflow object, now that we've processed all records for this workflow.
+            val entityRef = (er.map(_.toReference) ++ externalEntity).headOption
             (wr.id, Workflow(wr.externalId,
               WorkflowStatuses.withName(wr.status),
               new DateTime(wr.statusLastChangedDate.getTime),
-              er.map(_.toReference),
+              entityRef,
               workflowResolutions.sortBy(_.inputName), //enforce consistent sorting
               messages
             ))
@@ -343,7 +351,7 @@ trait SubmissionComponent {
       loadSubmissionWorkflowsWithIds(submissionId) map( _ map { case (workflowId, workflow) => workflow } )
     }
 
-    def loadSubmissionEntity(entityId: Long): ReadAction[AttributeEntityReference] = {
+    def loadEntity(entityId: Long): ReadAction[AttributeEntityReference] = {
       uniqueResult[EntityRecord](entityQuery.findEntityById(entityId)).map { rec =>
         unmarshalEntity(rec.getOrElse(throw new RawlsException(s"entity with id $entityId does not exist")))
       }
@@ -390,7 +398,10 @@ trait SubmissionComponent {
         submission.status.toString,
         submission.useCallCache,
         submission.deleteIntermediateOutputFiles,
-        submission.workflowFailureMode.map(_.toString))
+        submission.workflowFailureMode.map(_.toString),
+        submission.externalEntityInfo.map(_.dataStoreId),
+        submission.externalEntityInfo.map(_.rootEntityType)
+      )
     }
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: Option[AttributeEntityReference], workflows: Seq[Workflow]): Submission = {
@@ -405,7 +416,11 @@ trait SubmissionComponent {
         SubmissionStatuses.withName(submissionRec.status),
         submissionRec.useCallCache,
         submissionRec.deleteIntermediateOutputFiles,
-        WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+        WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode),
+        externalEntityInfo = for {
+          entityStoreId <- submissionRec.entityStoreId
+          rootEntityType <- submissionRec.rootEntityType
+        } yield ExternalEntityInfo(entityStoreId, rootEntityType))
     }
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: Option[AttributeEntityReference], workflows: Seq[Workflow]): ActiveSubmission = {
@@ -421,22 +436,30 @@ trait SubmissionComponent {
 
     private object WorkflowAndMessagesRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = SubmissionComponent.this.driver
-      case class WorkflowMessagesListResult(workflowRecord: WorkflowRecord, entityRecord: Option[EntityRecord], messageRecord: Option[WorkflowMessageRecord])
+      case class WorkflowMessagesListResult(workflowRecord: WorkflowRecord, entityRecord: Option[EntityRecord], messageRecord: Option[WorkflowMessageRecord], externalEntity: Option[AttributeEntityReference])
 
       implicit val getWorkflowMessagesListResult = GetResult { r =>
-        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+        val rootEntityTypeOption: Option[String] = r.<<
         val entityRec = workflowRec.workflowEntityId.map(EntityRecord(_, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val messageOption: Option[String] = r.<<
 
-        WorkflowMessagesListResult(workflowRec, entityRec, messageOption.map(WorkflowMessageRecord(workflowRec.id, _)))
+        val externalEntityOption = for {
+          rootEntityType <- rootEntityTypeOption
+          entityName <- workflowRec.externalEntityId
+        } yield AttributeEntityReference(rootEntityType, entityName)
+
+        WorkflowMessagesListResult(workflowRec, entityRec, messageOption.map(WorkflowMessageRecord(workflowRec.id, _)), externalEntityOption)
       }
 
       def action(submissionId: UUID) = {
-        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY,
+        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, w.EXTERNAL_ENTITY_ID,
+        s.ROOT_ENTITY_TYPE,
         e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
         m.MESSAGE
         from WORKFLOW w
+        join SUBMISSION s on w.submission_id = s.id
         left outer join ENTITY e on w.ENTITY_ID = e.id
         left outer join WORKFLOW_MESSAGE m on m.workflow_id = w.id
         where w.submission_id = ${submissionId}""".as[WorkflowMessagesListResult]
@@ -448,7 +471,7 @@ trait SubmissionComponent {
       case class WorkflowInputResolutionListResult(workflowRecord: WorkflowRecord, submissionValidationRec: Option[SubmissionValidationRecord], submissionAttributeRec: Option[SubmissionAttributeRecord])
 
       implicit val getWorkflowInputResolutionListResult = GetResult { r =>
-        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val (submissionValidation, attribute) = r.nextLongOption() match {
           case Some(submissionValidationId) =>
             ( Option(SubmissionValidationRecord(submissionValidationId, workflowRec.id, r.<<, r.<<)),
@@ -459,7 +482,7 @@ trait SubmissionComponent {
       }
 
       def action(submissionId: UUID) = {
-        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY,
+        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, w.EXTERNAL_ENTITY_ID,
               sv.id, sv.ERROR_TEXT, sv.INPUT_NAME,
               sa.id, sa.namespace, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_json, sa.value_entity_ref, sa.list_index, sa.list_length, sa.deleted, sa.deleted_date
         from WORKFLOW w

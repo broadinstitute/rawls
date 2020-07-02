@@ -74,7 +74,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
       val row: FieldValueList = FieldValueList.of(List(FV_FLOAT).asJava, F_FLOAT)
       val expected = (AttributeName.withDefaultNS("float-field"), AttributeNumber(123.456))
       assertResult(expected) {
-        fieldToAttribute(F_FLOAT, row)
+        fieldToAttributeName(F_FLOAT) -> fieldToAttribute(F_FLOAT, row)
       }
     }
 
@@ -82,21 +82,21 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
       val row: FieldValueList = FieldValueList.of(List(FV_INTEGER).asJava, F_INTEGER)
       val expected = (AttributeName.withDefaultNS("integer-field"), AttributeNumber(42))
       assertResult(expected) {
-        fieldToAttribute(F_INTEGER, row)
+        fieldToAttributeName(F_INTEGER) -> fieldToAttribute(F_INTEGER, row)
       }
     }
     "translate BQ Numeric to AttributeNumber" in {
       val row: FieldValueList = FieldValueList.of(List(FV_NUMERIC).asJava, F_NUMERIC)
       val expected = (AttributeName.withDefaultNS("numeric-field"), AttributeNumber(3.14))
       assertResult(expected) {
-        fieldToAttribute(F_NUMERIC, row)
+        fieldToAttributeName(F_NUMERIC) -> fieldToAttribute(F_NUMERIC, row)
       }
     }
     "translate BQ Boolean to AttributeBoolean" in {
       val row: FieldValueList = FieldValueList.of(List(FV_BOOLEAN).asJava, F_BOOLEAN)
       val expected = (AttributeName.withDefaultNS("boolean-field"), AttributeBoolean(true))
       assertResult(expected) {
-        fieldToAttribute(F_BOOLEAN, row)
+        fieldToAttributeName(F_BOOLEAN) -> fieldToAttribute(F_BOOLEAN, row)
       }
     }
 
@@ -104,7 +104,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
       val row: FieldValueList = FieldValueList.of(List(FV_STRING).asJava, F_STRING)
       val expected = (AttributeName.withDefaultNS("string-field"), AttributeString("hello world"))
       assertResult(expected) {
-        fieldToAttribute(F_STRING, row)
+        fieldToAttributeName(F_STRING) -> fieldToAttribute(F_STRING, row)
       }
     }
 
@@ -112,7 +112,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
       val row: FieldValueList = FieldValueList.of(List(FV_DATE).asJava, F_DATE)
       val expected = (AttributeName.withDefaultNS("date-field"), AttributeString(dateNow.toString))
       assertResult(expected) {
-        fieldToAttribute(F_DATE, row)
+        fieldToAttributeName(F_DATE) -> fieldToAttribute(F_DATE, row)
       }
     }
 
@@ -120,7 +120,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
       val row: FieldValueList = FieldValueList.of(List(FV_DATETIME).asJava, F_DATETIME)
       val expected = (AttributeName.withDefaultNS("datetime-field"), AttributeString(dateNow.toString))
       assertResult(expected) {
-        fieldToAttribute(F_DATETIME, row)
+        fieldToAttributeName(F_DATETIME) -> fieldToAttribute(F_DATETIME, row)
       }
     }
 
@@ -128,7 +128,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
       val row: FieldValueList = FieldValueList.of(List(FV_TIME).asJava, F_TIME)
       val expected = (AttributeName.withDefaultNS("time-field"), AttributeString(timeNow.toString))
       assertResult(expected) {
-        fieldToAttribute(F_TIME, row)
+        fieldToAttributeName(F_TIME) -> fieldToAttribute(F_TIME, row)
       }
     }
 
@@ -136,7 +136,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
       val row: FieldValueList = FieldValueList.of(List(FV_TIMESTAMP).asJava, F_TIMESTAMP)
       val expected = (AttributeName.withDefaultNS("timestamp-field"), AttributeString("1408452095.22"))
       assertResult(expected) {
-        fieldToAttribute(F_TIMESTAMP, row)
+        fieldToAttributeName(F_TIMESTAMP) -> fieldToAttribute(F_TIMESTAMP, row)
       }
     }
 
@@ -144,7 +144,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
       val row: FieldValueList = FieldValueList.of(List(FV_BYTES).asJava, F_BYTES)
       val expected = (AttributeName.withDefaultNS("bytes-field"), AttributeString(byteArray.toString))
       assertResult(expected) {
-        fieldToAttribute(F_BYTES, row)
+        fieldToAttributeName(F_BYTES) -> fieldToAttribute(F_BYTES, row)
       }
     }
 
@@ -152,7 +152,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
       val row: FieldValueList = FieldValueList.of(List(FV_GEOGRAPHY).asJava, F_GEOGRAPHY)
       val expected = (AttributeName.withDefaultNS("geography-field"), AttributeString("[-54, 32]"))
       assertResult(expected) {
-        fieldToAttribute(F_GEOGRAPHY, row)
+        fieldToAttributeName(F_GEOGRAPHY) -> fieldToAttribute(F_GEOGRAPHY, row)
       }
     }
 
@@ -169,7 +169,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
         ).asJava, fld)
 
         assertResult((AttributeName.withDefaultNS(s"${typename.toString}-field"), AttributeNull)) {
-          fieldToAttribute(fld, row)
+          fieldToAttributeName(fld) -> fieldToAttribute(fld, row)
         }
       }
     }

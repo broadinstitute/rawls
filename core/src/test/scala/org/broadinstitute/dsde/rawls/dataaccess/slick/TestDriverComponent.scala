@@ -116,7 +116,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            useCallCache: Boolean = false,
                            deleteIntermediateOutputFiles: Boolean = false,
                            workflowFailureMode: Option[WorkflowFailureMode] = None,
-                           individualWorkflowCost: Option[Float] = None
+                           individualWorkflowCost: Option[Float] = None,
+                           externalEntityInfo: Option[ExternalEntityInfo] = None
                           ): Submission = {
 
     val workflows = workflowEntities map { ref =>
@@ -136,7 +137,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       useCallCache = useCallCache,
       deleteIntermediateOutputFiles = deleteIntermediateOutputFiles,
       workflowFailureMode = workflowFailureMode,
-      cost = individualWorkflowCost.map(_ * workflows.length)
+      cost = individualWorkflowCost.map(_ * workflows.length),
+      externalEntityInfo
     )
   }
 

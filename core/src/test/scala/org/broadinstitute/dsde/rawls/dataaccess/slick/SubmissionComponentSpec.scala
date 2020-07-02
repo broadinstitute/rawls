@@ -41,6 +41,24 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       testData.sample5 -> testData.inputResolutions2,
       testData.sample6 -> testData.inputResolutions2))
 
+  val submissionExternalEntities = Submission(
+    submissionId = UUID.randomUUID.toString,
+    submissionDate = testDate,
+    submitter = WorkbenchEmail(testData.userOwner.userEmail.value),
+    methodConfigurationNamespace = testData.methodConfig2.namespace,
+    methodConfigurationName = testData.methodConfig2.name,
+    submissionEntity = None,
+    workflows = Seq(
+      Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Running, testDate, Option(AttributeEntityReference("external", "e1")), Seq(SubmissionValidationValue(Option(AttributeString("value1a")), Option("message1a"), "test_input_name"))),
+      Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Succeeded, testDate, Option(AttributeEntityReference("external", "e2")), Seq(SubmissionValidationValue(Option(AttributeString("value2a")), Option("message2a"), "test_input_name"))),
+      Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Failed, testDate, Option(AttributeEntityReference("external", "e3")), Seq(SubmissionValidationValue(Option(AttributeString("value3a")), Option("message3a"), "test_input_name")))
+    ),
+    status = SubmissionStatuses.Submitted,
+    useCallCache = true,
+    externalEntityInfo = Option(ExternalEntityInfo(UUID.randomUUID().toString, "external")),
+    deleteIntermediateOutputFiles = true
+  )
+
   val inputResolutionsList = Seq(SubmissionValidationValue(Option(
     AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
   private val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, WorkbenchEmail(testData.userOwner.userEmail.value),
@@ -76,6 +94,20 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
 
     assert(!runAndWait(submissionQuery.list(workspaceContext)).toSet.contains(submission3))
+  }
+
+  it should "save, get and list a submission with external entities" in withDefaultTestDatabase {
+    val workspaceContext = testData.workspace
+
+    assert(submissionExternalEntities.externalEntityInfo.isDefined)
+
+    runAndWait(submissionQuery.create(workspaceContext, submissionExternalEntities))
+
+    assertResult(Some(submissionExternalEntities)) {
+      runAndWait(submissionQuery.get(workspaceContext, submissionExternalEntities.submissionId))
+    }
+
+    assert(runAndWait(submissionQuery.list(workspaceContext)).toSet.contains(submissionExternalEntities))
   }
 
   it should "save, get, list, and delete two submission statuses" in withDefaultTestDatabase {
@@ -406,5 +438,20 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     assert(workflowsPerActiveUser == SummaryStatistics(6.0,6.0,6.0,0.0))
     val workflowRunTimes = runAndWait(workflowQuery.WorkflowStatisticsQueries.workflowRunTimeQuery("2010-01-01", "2100-01-01"))
     assert(workflowRunTimes == SummaryStatistics(0.0,0.0,0.0,0.0))
+  }
+
+  it should "load workflow with extern entities" in withDefaultTestDatabase {
+    val workspaceContext = testData.workspace
+
+    assert(submissionExternalEntities.externalEntityInfo.isDefined)
+
+    runAndWait(submissionQuery.create(workspaceContext, submissionExternalEntities))
+
+    val workflow = submissionExternalEntities.workflows.head
+
+    assertResult(Some(workflow)) {
+      runAndWait(workflowQuery.getByExternalId(workflow.workflowId.get, submissionExternalEntities.submissionId))
+    }
+
   }
 }

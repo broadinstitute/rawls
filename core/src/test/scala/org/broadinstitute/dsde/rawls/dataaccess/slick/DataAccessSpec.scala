@@ -4,7 +4,6 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.model.{Workflow, WorkflowStatuses}
 import org.scalatest.concurrent.PatienceConfiguration.Interval
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Seconds, Span}
@@ -49,19 +48,18 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
 
     withCustomTestDatabaseInternal(altDataSource, testData) {
       withWorkspaceContext(testData.workspace) { context =>
-        val testSubmission = testData.submissionUpdateEntity
 
         // needs to be >> than thread count
         val roundtripCheckActions = (1 to 100).map { _ =>
-          val wfid = UUID.randomUUID().toString
-          val workflow = Workflow(Option(wfid), WorkflowStatuses.Queued, testDate, testSubmission.submissionEntity, testData.inputResolutions)
+          val submissionId = UUID.randomUUID().toString
+          val testSubmission = testData.submissionUpdateEntity.copy(submissionId = submissionId)
 
           for {
-            insert <- workflowQuery.createWorkflows(context, UUID.fromString(testSubmission.submissionId), Seq(workflow))
-            select <- workflowQuery.getByExternalId(wfid, testSubmission.submissionId)
+            insert <- submissionQuery.create(context, testSubmission)
+            select <- submissionQuery.get(context, submissionId)
           } yield {
-            insert shouldBe Seq(workflow)
-            select shouldBe Some(workflow)
+            insert shouldBe testSubmission
+            select shouldBe Some(testSubmission)
           }
         }
 
