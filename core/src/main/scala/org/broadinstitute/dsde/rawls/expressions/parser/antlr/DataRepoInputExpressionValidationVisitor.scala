@@ -1,9 +1,8 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
-import bio.terra.datarepo.model.{RelationshipModel, RelationshipTermModel, SnapshotModel, TableModel}
+import bio.terra.datarepo.model.{SnapshotModel, TableModel}
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser.AttributeNameContext
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.EntityLookupContext
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{AttributeNameContext, EntityLookupContext, RelationContext}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -40,7 +39,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     }
   }
 
-  private def checkForAttributeOnTable(tableModel: TableModel, attributeNameContext: TerraExpressionParser.AttributeNameContext): Try[Unit] = {
+  private def checkForAttributeOnTable(tableModel: TableModel, attributeNameContext: AttributeNameContext): Try[Unit] = {
     val tableColumns = tableModel.getColumns.asScala.toList
     val attributeName = attributeNameContext.getText
     if (tableColumns.exists(_.getName == attributeName)) {
@@ -51,7 +50,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
   }
 
   @tailrec
-  private def traverseRelationsAndGetFinalTable(currentTableModel: TableModel, relations: List[TerraExpressionParser.RelationContext]): Try[TableModel] = {
+  private def traverseRelationsAndGetFinalTable(currentTableModel: TableModel, relations: List[RelationContext]): Try[TableModel] = {
     relations match {
       case nextRelationContext :: remainingRelations => {
         val nextRelationName = nextRelationContext.getText
@@ -69,14 +68,14 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
   // "relationship" schema at some point.  Maybe it's ok to just say, "If a relationship is defined with name X and
   // from_table FOO, then we're going to assume that the RelationshipModel object is valid for this SnapshotModel."
   private def maybeGetNextTableFromRelation(fromTable: TableModel, relationName: String): Option[TableModel] = {
-    maybeFindTableInSnapshotModel(fromTable.getName).map { tableModel =>
+    maybeFindTableInSnapshotModel(fromTable.getName)
+//      .map { tableModel =>
       // TODO: Asked TDR team, they are currently implementing the logic for how to get List<RelationshipModel>
       // if (relationship exists with name `relationName` with from_table `fromTable`) then
       //     return Option(getRelationship(relationName).to_table())
       // else
       //     None
-      ???
-    }
+//      }
   }
 
   private def maybeFindTableInSnapshotModel(tableName: String): Option[TableModel] = {

@@ -228,10 +228,10 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
     }
 
     // parse expression using ANTLR TerraExpression parser
-    val extendedJsonParser = AntlrTerraExpressionParser.getParser(expression)
+    val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val localFinalAttributeEvaluationVisitor = new LocalEvaluateToAttributeVisitor(workspaceContext, slickEvaluator)
 
-    Try(extendedJsonParser.root()) match {
+    Try(terraExpressionParser.root()) match {
       case Success(parsedTree) =>
         /*
           Evaluate all attribute reference expressions if any.
@@ -249,10 +249,10 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
 
   def evalFinalEntity(workspaceContext: Workspace, expression: String)
                      (implicit executionContext: ExecutionContext): ReadWriteAction[Iterable[EntityRecord]] = {
-    val extendedJSONParser = AntlrTerraExpressionParser.getParser(expression)
+    val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val localFinalEntityEvaluationVisitor = new LocalEvaluateToEntityVisitor(workspaceContext, slickEvaluator)
 
-    Try(extendedJSONParser.root()) match {
+    Try(terraExpressionParser.root()) match {
       case Success(parsedTree) => localFinalEntityEvaluationVisitor.visit(parsedTree)
       case Failure(regrets) => slickEvaluator.dataAccess.driver.api.DBIO.failed(regrets)
     }
