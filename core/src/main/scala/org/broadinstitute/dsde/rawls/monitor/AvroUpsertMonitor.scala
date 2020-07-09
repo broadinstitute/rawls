@@ -41,9 +41,6 @@ object AvroUpsertMonitorSupervisor {
 
   final case class AvroUpsertMonitorConfig(pollInterval: FiniteDuration,
                                            pollIntervalJitter: FiniteDuration,
-                                           arrowPubSubTopic: String,        // remove when cutting over to import service
-                                           arrowPubSubSubscription: String, // remove when cutting over to import service
-                                           arrowBucketName: String,         // remove when cutting over to import service
                                            importRequestPubSubTopic: String,
                                            importRequestPubSubSubscription: String,
                                            updateImportStatusPubSubTopic: String,
@@ -57,7 +54,6 @@ object AvroUpsertMonitorSupervisor {
             googleStorage: GoogleStorageService[IO],
             pubSubDAO: GooglePubSubDAO,
             importServicePubSubDAO: GooglePubSubDAO,
-            arrowPubSubDAO: GooglePubSubDAO, // remove when cutting over to import service
             importServiceDAO: ImportServiceDAO,
             avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
     Props(
@@ -68,7 +64,6 @@ object AvroUpsertMonitorSupervisor {
         googleStorage,
         pubSubDAO,
         importServicePubSubDAO,
-        arrowPubSubDAO, // remove when cutting over to import service
         importServiceDAO,
         avroUpsertMonitorConfig))
 
@@ -90,7 +85,6 @@ class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDAO: GooglePubSubDAO,
                                   importServicePubSubDAO: GooglePubSubDAO,
-                                  arrowPubSubDAO: GooglePubSubDAO, // remove when cutting over to import service
                                   importServiceDAO: ImportServiceDAO,
                                   avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO])
   extends Actor
@@ -108,15 +102,13 @@ class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
 
   def init =
     for {
-      _ <- arrowPubSubDAO.createTopic(avroUpsertMonitorConfig.arrowPubSubTopic)
-      _ <- arrowPubSubDAO.createSubscription(avroUpsertMonitorConfig.arrowPubSubTopic, avroUpsertMonitorConfig.arrowPubSubSubscription, Some(avroUpsertMonitorConfig.ackDeadlineSeconds)) // remove when cutting over to import service
       _ <- pubSubDAO.createTopic(avroUpsertMonitorConfig.importRequestPubSubTopic)
       _ <- pubSubDAO.createSubscription(avroUpsertMonitorConfig.importRequestPubSubTopic, avroUpsertMonitorConfig.importRequestPubSubSubscription, Some(avroUpsertMonitorConfig.ackDeadlineSeconds))
     } yield Start
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO, arrowPubSubDAO, avroUpsertMonitorConfig.arrowPubSubSubscription, avroUpsertMonitorConfig.arrowBucketName, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
+    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
   }
 
   override val supervisorStrategy =
@@ -145,14 +137,11 @@ object AvroUpsertMonitor {
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
              importServicePubSubDAO: GooglePubSubDAO,
-             arrowPubSubDAO: GooglePubSubDAO,     // remove when cutting over to import service
-             arrowPubSubSubscriptionName: String, // remove when cutting over to import service
-             arrowUpsertBucketName: String,       // remove when cutting over to import service
              pubSubSubscriptionName: String,
              importStatusPubSubTopic: String,
              importServiceDAO: ImportServiceDAO,
              batchSize: Int)(implicit cs: ContextShift[IO]): Props =
-    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO, arrowPubSubDAO, arrowPubSubSubscriptionName, arrowUpsertBucketName,
+    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO,
       pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize))
 }
 
@@ -165,9 +154,6 @@ class AvroUpsertMonitorActor(
                               googleStorage: GoogleStorageService[IO],
                               pubSubDao: GooglePubSubDAO,
                               importServicePubSubDAO: GooglePubSubDAO,
-                              arrowPubSubDAO: GooglePubSubDAO,     // remove when cutting over to import service
-                              arrowPubSubSubscriptionName: String, // remove when cutting over to import service
-                              arrowUpsertBucketName: String,       // remove when cutting over to import service
                               pubSubSubscriptionName: String,
                               importStatusPubSubTopic: String,
                               importServiceDAO: ImportServiceDAO,
@@ -192,8 +178,6 @@ class AvroUpsertMonitorActor(
     durations.max
   }
 
-  var pullArrow = true
-
   /* Note there is a (rare) possibility for data overwrite as follows:
    * 1. Pub/Sub double-delivers an import request to Rawls. Rawls processes the first request and sends a message to
    *    import service to update the import job status.
@@ -209,24 +193,13 @@ class AvroUpsertMonitorActor(
    * message at the same time as Rawls receives another user request modifying the same entities. */
   override def receive = {
     case StartMonitorPass =>
-      pullArrow = !pullArrow
       // start the process by pulling a message and sending it back to self
-      if (pullArrow)
-        arrowPubSubDAO.pullMessages(arrowPubSubSubscriptionName, 1).map(_.headOption) pipeTo self
-      else
-        pubSubDao.pullMessages(pubSubSubscriptionName, 1).map(_.headOption) pipeTo self
+      pubSubDao.pullMessages(pubSubSubscriptionName, 1).map(_.headOption) pipeTo self
 
     case Some(message: PubSubMessage) =>
       // we received a message, so we will parse it and try to upsert it
       logger.info(s"received async upsert message: $message")
-
-      // We decide whether to go down the CF path or the import service path based on whether the attributes contain a jobId.
-      // The CF solution has the metadata in the message body, while the import service has the metadata as attributes on the message
-      if (message.attributes.contains("jobId")) {
-        importEntities(message)
-      } else {
-        arrowImportEntities(message)  // remove when cutting over to import service
-      }
+      importEntities(message)
 
     case None =>
       // there was no message so wait and try again
@@ -369,70 +342,4 @@ class AvroUpsertMonitorActor(
       }
     }
 
-
-  //----------------------------  remove when cutting over to import service ---------------------------
-
-  private def arrowImportEntities(message: PubSubMessage) = {
-    val (jobId, file) = arrowParseMessage(message)
-    file match {
-      case "upsert.json" =>
-        logger.info(s"processing $file message for job $jobId with ackId ${message.ackId} in message: $message")
-        toFutureTry(initAvroUpsert(jobId, message.ackId)) map {
-          case Success(_) => writeResult(s"$jobId/success.json", resultString("import successful")).map(_ => ImportComplete) pipeTo self
-          case Failure(t) => writeResult(s"$jobId/error.json", resultString(t.getMessage)).map(_ => ImportComplete) pipeTo self
-        }
-      case _ =>
-        logger.info(s"found ignorable file $file message for job $jobId with ackId ${message.ackId} in message: $message")
-        arrowAcknowledgeMessage(message.ackId).map(_ => ImportComplete) pipeTo self //some other file (i.e. success/failure log, metadata.json)
-    }
-  }
-
-  private def writeResult(path: String, message: String): Future[Unit] = {
-    logger.info(s"writing import result to $path")
-    googleStorage.createBlob(GcsBucketName(arrowUpsertBucketName), GcsBlobName(path), message.getBytes).compile.drain.unsafeToFuture()
-  }
-
-  private def resultString(message: String) = s"""{\"message\":\"${message}\"}"""
-
-  private def arrowParseMessage(message: PubSubMessage) = {
-    message.contents.parseJson.asJsObject.getFields("name").head.compactPrint match {
-      case objectIdPattern(jobId, file) => (jobId, file)
-      case m => throw new Exception(s"unable to parse message $m")
-    }
-  }
-
-  private def arrowAcknowledgeMessage(ackId: String) = {
-    logger.info(s"acking message with ackId $ackId")
-    arrowPubSubDAO.acknowledgeMessagesById(arrowPubSubSubscriptionName, Seq(ackId))
-  }
-
-  private def arrowReadMetadataObject(blobName: String): Future[AvroMetadataJson] = {
-    readObject[AvroMetadataJson](GcsBucketName(arrowUpsertBucketName), GcsBlobName(blobName))
-  }
-
-  private def arrowReadUpsertObject(blobName: String): Future[Seq[EntityUpdateDefinition]] = {
-    readObject[Seq[EntityUpdateDefinition]](GcsBucketName(arrowUpsertBucketName), GcsBlobName(blobName), decompress = true)
-  }
-
-  private def initAvroUpsert(jobId: String, ackId: String): Future[Unit] = {
-    for {
-      avroMetadataJson <- arrowReadMetadataObject(s"$jobId/metadata.json")
-      //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the uspert is lost
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroMetadataJson.namespace, RawlsUserEmail(avroMetadataJson.userEmail))
-      petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-      avroUpsertJson <- arrowReadUpsertObject(s"$jobId/upsert.json")
-      ackResponse <- arrowAcknowledgeMessage(ackId)
-      upsertResults <-
-        avroUpsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
-          logger.info(s"starting upsert for $jobId with ${upsertBatch.size} entities ...")
-          IO.fromFuture(IO(entityService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
-        }.unsafeToFuture
-    } yield {
-      logger.info(s"completed Avro upsert job ${avroMetadataJson.jobId} for user: ${avroMetadataJson.userEmail} with ${avroUpsertJson.size} entities")
-      ()
-    }
-  }
-
-
-  //------------------------------------------------------------------------------------------------
 }
