@@ -69,13 +69,13 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
   // from_table FOO, then we're going to assume that the RelationshipModel object is valid for this SnapshotModel."
   private def maybeGetNextTableFromRelation(fromTable: TableModel, relationName: String): Option[TableModel] = {
     maybeFindTableInSnapshotModel(fromTable.getName)
-//      .map { tableModel =>
-      // TODO: Asked TDR team, they are currently implementing the logic for how to get List<RelationshipModel>
+      // TODO: CA-939 implement relationship validation
+      // .map { tableModel =>
       // if (relationship exists with name `relationName` with from_table `fromTable`) then
       //     return Option(getRelationship(relationName).to_table())
       // else
       //     None
-//      }
+      // }
   }
 
   private def maybeFindTableInSnapshotModel(tableName: String): Option[TableModel] = {

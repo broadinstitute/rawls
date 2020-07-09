@@ -36,8 +36,6 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
     // TODO: AS-321 auto-switch to see if the ref supplied in argument is a UUID or a name?? Use separate query params? Never allow ID?
 
-//    val snapshotModel: SnapshotModel = getSnapshotModel
-
     // reformat TDR's response into the expected response structure
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
       val attrs: Seq[String] = table.getColumns.asScala.map(_.getName)
@@ -57,8 +55,6 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
 
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
-//    val snapshotModel: SnapshotModel = getSnapshotModel
-
     // extract table definition, with PK, from snapshot schema
     val tableModel = snapshotModel.getTables.asScala.find(_.getName == entityType) match {
       case Some(table) => table
@@ -101,7 +97,6 @@ class DataRepoEntityProvider(requestArguments: EntityRequestArguments, workspace
     }
   }
 
-  // TODO: can we lazy load SnapshotModel
   private def getSnapshotModel = {
     // get snapshot UUID from data reference name
     val snapshotId = lookupSnapshotForName(dataReferenceName)
