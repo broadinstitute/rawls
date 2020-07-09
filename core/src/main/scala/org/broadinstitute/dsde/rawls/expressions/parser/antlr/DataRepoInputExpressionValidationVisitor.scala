@@ -49,17 +49,11 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     }
   }
 
-  @tailrec
+  // TODO: CA-939 support relationships once that information is published by data repo
   private def traverseRelationsAndGetFinalTable(currentTableModel: TableModel, relations: List[RelationContext]): Try[TableModel] = {
     relations match {
-      case nextRelationContext :: remainingRelations => {
-        val nextRelationName = nextRelationContext.getText
-        maybeGetNextTableFromRelation(currentTableModel, nextRelationName) match {
-          case Some(nextTableModel) => traverseRelationsAndGetFinalTable(nextTableModel, remainingRelations)
-          case None => Failure(new RawlsException(s"Relationship with name `${nextRelationName}` and from table `${currentTableModel}` could not be found"))
-        }
-      }
       case Nil => Success(currentTableModel)
+      case _ => Failure(new RawlsException(s"Relationships are not currently supported."))
     }
   }
 
@@ -70,12 +64,6 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
   private def maybeGetNextTableFromRelation(fromTable: TableModel, relationName: String): Option[TableModel] = {
     maybeFindTableInSnapshotModel(fromTable.getName)
       // TODO: CA-939 implement relationship validation
-      // .map { tableModel =>
-      // if (relationship exists with name `relationName` with from_table `fromTable`) then
-      //     return Option(getRelationship(relationName).to_table())
-      // else
-      //     None
-      // }
   }
 
   private def maybeFindTableInSnapshotModel(tableName: String): Option[TableModel] = {

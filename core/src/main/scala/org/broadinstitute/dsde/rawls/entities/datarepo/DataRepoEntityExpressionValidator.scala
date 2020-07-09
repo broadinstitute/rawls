@@ -22,7 +22,7 @@ class DataRepoEntityExpressionValidator(snapshotModel: SnapshotModel) extends Ex
 
   override protected def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
-    val visitor = new LocalOutputExpressionValidationVisitor(rootEntityTypeOption)
+    val visitor = new LocalOutputExpressionValidationVisitor(None)
 
     for {
       parseTree <- Try(terraExpressionParser.root())
