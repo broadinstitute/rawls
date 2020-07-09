@@ -75,7 +75,7 @@ trait ExpressionValidator {
       )
     }
 
-    val (successInputs, failedInputs)   = validateAndPartition(inputs, validateInputExpr())
+    val (successInputs, failedInputs)   = validateAndPartition(inputs, validateInputExpr(rootEntityTypeOption))
     val (successOutputs, failedOutputs) = validateAndPartition(outputs, validateOutputExpr(rootEntityTypeOption))
 
     ValidatedMCExpressions(successInputs, failedInputs, successOutputs, failedOutputs)
