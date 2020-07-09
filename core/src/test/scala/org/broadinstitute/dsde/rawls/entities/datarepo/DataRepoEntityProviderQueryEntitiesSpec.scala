@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{results, schema}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.entities.exceptions.EntityTypeNotFoundException
+import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityTypeNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{AsyncFlatSpec, Matchers}
 
@@ -99,24 +99,13 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
-  ignore should "compute pagination metadata based on BQ metadata" in {
-    // we don't want to test that BQ produces the right pagination; that's BQ's problem. We only test that we interpret it.
-    fail("unit test not written")
-  }
+  it should "throw bad request if a filter is supplied" in {
+    val provider = createTestProvider()
 
-  ignore should "pass sort column and sort order to BigQuery" in {
-    // we don't want to test that results are sorted; that's BQ's problem. We only test that we send the params to BQ.
-    fail("unit test not written")
-  }
-
-  ignore should "pass pagination offset and limit to BigQuery" in {
-    // we don't want to test that results are paginated; that's BQ's problem. We only test that we send the params to BQ.
-    fail("unit test not written")
-  }
-
-  ignore should "throw bad request if a filter is supplied" in {
-    // TODO: alternately, should we silently ignore filters?
-    fail("not implemented in runtime code yet")
+    val ex = intercept[UnsupportedEntityOperationException] {
+      provider.queryEntities("table1", defaultEntityQuery.copy(filterTerms = Some("my filter terms")))
+    }
+    assertResult("term filtering not supported by this provider.") { ex.getMessage }
   }
 
   ignore should "fail if user is a workspace Reader but did not specify a billing project (canCompute?)" in {
