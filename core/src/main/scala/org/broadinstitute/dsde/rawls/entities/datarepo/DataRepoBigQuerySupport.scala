@@ -171,6 +171,8 @@ trait DataRepoBigQuerySupport {
   def queryConfigForQueryEntities(dataProject: String, viewName: String, entityType: String, entityQuery: EntityQuery): QueryJobConfiguration = {
     // generate BQ SQL for this entity
     // TODO: prevent injection in the places BQ doesn't support named params! why doesn't it support params everywhere???
+    // TODO: prevent injection via dataProject, viewName, entityType vars. These are calculated from the snapshot so
+    // they should be safe, but we should have layers of protection.
     val query = s"SELECT * FROM `${dataProject}.${viewName}.${entityType}` " +
       s"ORDER BY ${entityQuery.sortField} ${SortDirections.toSql(entityQuery.sortDirection)} " +
       s"LIMIT ${entityQuery.pageSize} " +

@@ -64,6 +64,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     // determine view name
     val viewName = snapshotModel.getName
     // generate BQ SQL for this entity
+    // TODO: prevent injection via dataProject, viewName, entityType vars. These are calculated from the snapshot so
+    // they should be safe, but we should have layers of protection.
     val query = s"SELECT * FROM `${dataProject}.${viewName}.${entityType}` WHERE $pk = @pkvalue;"
     // generate query config, with named param for primary key
     val queryConfig = QueryJobConfiguration.newBuilder(query)
