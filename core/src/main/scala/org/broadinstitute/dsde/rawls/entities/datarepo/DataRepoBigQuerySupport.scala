@@ -173,6 +173,15 @@ trait DataRepoBigQuerySupport {
     // TODO: prevent injection in the places BQ doesn't support named params! why doesn't it support params everywhere???
     // TODO: prevent injection via dataProject, viewName, entityType vars. These are calculated from the snapshot so
     // they should be safe, but we should have layers of protection.
+    // Google's doc on table naming (https://cloud.google.com/bigquery/docs/tables) says:
+    //   * Contain up to 1,024 characters
+    //   * Contain letters (upper or lower case), numbers, and underscores
+    // Google's doc on dataset naming (https://cloud.google.com/bigquery/docs/datasets) has the exact same requirements
+    // Google's doc on view naming (https://cloud.google.com/bigquery/docs/views) has the exact same requirements
+    // Google's doc on project naming (https://cloud.google.com/resource-manager/docs/creating-managing-projects) says:
+    //   * The project ID must be a unique string of 6 to 30 lowercase letters, digits, or hyphens. It must start with a letter, and cannot have a trailing hyphen.
+    // Google's doc on column naming (https://cloud.google.com/bigquery/docs/schemas) says:
+    //   * A column name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and it must start with a letter or underscore. The maximum column name length is 128 characters
     val query = s"SELECT * FROM `${dataProject}.${viewName}.${entityType}` " +
       s"ORDER BY ${entityQuery.sortField} ${SortDirections.toSql(entityQuery.sortDirection)} " +
       s"LIMIT ${entityQuery.pageSize} " +

@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{results, schema}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityTypeNotFoundException, UnsupportedEntityOperationException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{AsyncFlatSpec, Matchers}
 
@@ -97,6 +97,15 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     futureEx map { ex =>
       assertResult("sam error") { ex.getMessage }
     }
+  }
+
+  it should "throw bad request the supplied sort field does not exist in the target table" in {
+    val provider = createTestProvider()
+
+    val ex = intercept[DataEntityException] {
+      provider.queryEntities("table1", defaultEntityQuery.copy(sortField = "unknownColumn"))
+    }
+    assertResult("sortField not valid for this entity type") { ex.getMessage }
   }
 
   it should "throw bad request if a filter is supplied" in {
