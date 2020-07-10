@@ -2,18 +2,20 @@ package org.broadinstitute.dsde.rawls.snapshot
 
 import java.util.UUID
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
 import com.google.api.client.auth.oauth2.Credential
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamWorkspaceActions, TerraDataRepoSnapshotRequest, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, ErrorReport, SamWorkspaceActions, TerraDataRepoSnapshotRequest, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 object SnapshotService {
 
@@ -45,8 +47,9 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   }
 
   def getSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotReference] = {
+    val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
-      val ref = workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, UUID.fromString(snapshotId), userInfo.accessToken)
+      val ref = workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
       Future.successful(DataRepoSnapshotReference(ref))
     }
   }
@@ -59,8 +62,9 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   }
 
   def deleteSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[Unit] = {
+    val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
-      workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, UUID.fromString(snapshotId), userInfo.accessToken)
+      workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
     }
   }
 
@@ -75,4 +79,13 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
     OAuth2BearerToken(serviceAccountCreds.getAccessToken)
   }
+
+  private def validateSnapshotId(snapshotId: String): UUID = {
+    Try(UUID.fromString(snapshotId)) match {
+      case Success(snapshotUuid) => snapshotUuid
+      case Failure(_) =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "SnapshotId must be a valid UUID."))
+    }
+  }
+
 }
