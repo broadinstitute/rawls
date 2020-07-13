@@ -56,15 +56,6 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     }
   }
 
-  // TODO: this is checking that the `fromTable` exists and that the relationship exists in one spot.  Not sure if we need a separate check for the table and another for the relationship
-  // Maybe we don't need to do all that though...it feels like we're getting into the territory of validating the TDR
-  // "relationship" schema at some point.  Maybe it's ok to just say, "If a relationship is defined with name X and
-  // from_table FOO, then we're going to assume that the RelationshipModel object is valid for this SnapshotModel."
-  private def maybeGetNextTableFromRelation(fromTable: TableModel, relationName: String): Option[TableModel] = {
-    maybeFindTableInSnapshotModel(fromTable.getName)
-      // TODO: CA-939 implement relationship validation
-  }
-
   private def maybeFindTableInSnapshotModel(tableName: String): Option[TableModel] = {
     val snapshotTables = snapshotModel.getTables.asScala.toList
     snapshotTables.find(_.getName == tableName)

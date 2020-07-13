@@ -9,7 +9,7 @@ trait DataRepoExpressionFixture {
     "workspace.library:cohort",
     "workspace.arbitrary:whatever",
     "workspace.yes.we.can",
-    """["a",{"more":{"elaborate":"workspace.example"}}]""" // is this valid now? it seems to be according to grammar but not sure if we actually want this
+    """["a",{"more":{"elaborate":"workspace.example"}}]"""
   )
 
   val validJsonInputExpressions: Seq[String] = Seq(
