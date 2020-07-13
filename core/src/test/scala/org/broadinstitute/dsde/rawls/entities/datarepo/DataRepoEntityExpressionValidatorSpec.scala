@@ -6,6 +6,7 @@ import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
+import org.broadinstitute.dsde.rawls.expressions.DataRepoExpressionFixture
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{AgoraMethod, Attributable, AttributeString, MethodConfiguration}
 import org.scalatest.FlatSpec
@@ -14,7 +15,7 @@ import org.scalatest.time.{Seconds, Span}
 
 import scala.collection.JavaConverters._
 
-class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComponent with RawlsTestUtils with ScalaFutures with DataRepoEntityProviderSpecSupport  {
+class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComponent with RawlsTestUtils with ScalaFutures with DataRepoEntityProviderSpecSupport with DataRepoExpressionFixture {
 
   def toExpressionMap(expressions: Seq[String]): Map[String, AttributeString] =
     expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap

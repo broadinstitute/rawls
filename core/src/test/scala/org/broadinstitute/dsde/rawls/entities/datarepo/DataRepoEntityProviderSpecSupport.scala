@@ -8,7 +8,6 @@ import bio.terra.workspace.model.DataReferenceDescription
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.expressions.DataRepoExpressionFixture
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, RawlsUserEmail, UserInfo, Workspace}
 import org.joda.time.DateTime
@@ -17,7 +16,7 @@ import spray.json.{JsObject, JsString}
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-trait DataRepoEntityProviderSpecSupport extends DataRepoExpressionFixture {
+trait DataRepoEntityProviderSpecSupport {
 
   val slickDataSource: SlickDataSource
   val userInfo: UserInfo
