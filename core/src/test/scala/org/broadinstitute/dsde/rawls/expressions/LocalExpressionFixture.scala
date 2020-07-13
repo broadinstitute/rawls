@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 // test data for Expression Validation and Parsing
 
-trait ExpressionFixture {
+trait LocalExpressionFixture {
   // NOTE: empty strings are handled specially by the validator, so they don't need to be handled by the parser
 
   val parseableInputExpressionsWithNoRoot: Seq[String] = Seq(

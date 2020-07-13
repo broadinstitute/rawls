@@ -58,8 +58,7 @@ trait ExpressionValidator {
     }
   }
 
-  // todo: made public for testing. any other way?
-  def validateMCExpressionsInternal(inputs: Map[String, AttributeString],
+  private[entities] def validateMCExpressionsInternal(inputs: Map[String, AttributeString],
                                             outputs: Map[String, AttributeString],
                                             rootEntityTypeOption: Option[String]): ValidatedMCExpressions = {
     def validateAndPartition(m: Map[String, AttributeString], validateFunc: String => Try[Unit] ) = {
@@ -81,7 +80,7 @@ trait ExpressionValidator {
     ValidatedMCExpressions(successInputs, failedInputs, successOutputs, failedOutputs)
   }
 
-  protected def validateInputExpr(rootEntityTypeOption: Option[String] = None)(expression: String): Try[Unit]
+  protected[entities] def validateInputExpr(rootEntityTypeOption: Option[String] = None)(expression: String): Try[Unit]
 
-  protected def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit]
+  protected[entities] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit]
 }

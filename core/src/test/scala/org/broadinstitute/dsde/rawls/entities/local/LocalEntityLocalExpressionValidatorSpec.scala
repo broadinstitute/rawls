@@ -4,14 +4,15 @@ import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.expressions.ExpressionFixture
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
+import org.broadinstitute.dsde.rawls.expressions.LocalExpressionFixture
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{AgoraMethod, Attributable, AttributeString, MethodConfiguration}
 import org.scalatest.FlatSpec
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Seconds, Span}
 
-class LocalEntityExpressionValidatorSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils with ScalaFutures  {
+class LocalEntityLocalExpressionValidatorSpec extends FlatSpec with TestDriverComponent with LocalExpressionFixture with RawlsTestUtils with ScalaFutures  {
 
   def toExpressionMap(expressions: Seq[String]): Map[String, AttributeString] =
     expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap
@@ -57,7 +58,7 @@ class LocalEntityExpressionValidatorSpec extends FlatSpec with TestDriverCompone
     outputs = toExpressionMap(parseableOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
-  val expressionValidator = new LocalEntityExpressionValidator()
+  val expressionValidator: ExpressionValidator = new LocalEntityExpressionValidator()
 
   it should "validateAndParseMCExpressions" in {
     implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))

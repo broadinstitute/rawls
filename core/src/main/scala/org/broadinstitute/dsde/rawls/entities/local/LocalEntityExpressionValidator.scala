@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpress
 import scala.util.Try
 
 class LocalEntityExpressionValidator extends ExpressionValidator {
-  override protected def validateInputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected[entities] def validateInputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new LocalInputExpressionValidationVisitor(rootEntityTypeOption.isDefined)
 
@@ -19,8 +19,7 @@ class LocalEntityExpressionValidator extends ExpressionValidator {
     Try(terraExpressionParser.root()).flatMap(visitor.visit)
   }
 
-  // public for testing. any other way?
-  override def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected[entities] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new LocalOutputExpressionValidationVisitor(rootEntityTypeOption)
 

@@ -4,7 +4,6 @@ import bio.terra.datarepo.model.{SnapshotModel, TableModel}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{AttributeNameContext, EntityLookupContext, RelationContext}
 
-import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
@@ -33,7 +32,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     maybeFindTableInSnapshotModel(rootTableName) match {
       case Some(rootTableModel) => {
         val relations = entityLookupContext.relation().asScala.toList
-        traverseRelationsAndGetFinalTable(rootTableModel, relations).map(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
+        traverseRelationsAndGetFinalTable(rootTableModel, relations).flatMap(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
       }
       case None => Failure(new RawlsException(s"DataRepo Snapshot must include a table with same name as Root Entity Type: ${rootTableName}"))
     }

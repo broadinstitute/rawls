@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpress
 import scala.util.Try
 
 class DataRepoEntityExpressionValidator(snapshotModel: SnapshotModel) extends ExpressionValidator {
-  override protected def validateInputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected[entities] def validateInputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new DataRepoInputExpressionValidationVisitor(rootEntityTypeOption, snapshotModel)
 
@@ -20,7 +20,7 @@ class DataRepoEntityExpressionValidator(snapshotModel: SnapshotModel) extends Ex
     Try(terraExpressionParser.root()).flatMap(visitor.visit)
   }
 
-  override protected def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected[entities] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new LocalOutputExpressionValidationVisitor(None)
 

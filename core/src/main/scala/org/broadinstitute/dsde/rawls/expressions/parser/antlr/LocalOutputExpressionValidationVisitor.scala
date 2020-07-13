@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{ArrContext, LiteralContext, ObjContext, RelationContext}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{ArrContext, EntityLookupContext, LiteralContext, ObjContext, RelationContext, WorkspaceAttributeLookupContext}
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, UnboundOutputExpression, WorkspaceTarget}
 import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeNull, ErrorReport, ErrorReportSource}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
@@ -34,7 +34,7 @@ class LocalOutputExpressionValidationVisitor(rootEntityTypeOption: Option[String
     Failure(new RawlsException("Entity references not permitted in the middle of output expressions"))
   }
 
-  override def visitEntityLookup(ctx: TerraExpressionParser.EntityLookupContext): Try[Attribute => OutputExpression] = {
+  override def visitEntityLookup(ctx: EntityLookupContext): Try[Attribute => OutputExpression] = {
     rootEntityTypeOption match {
       case None => Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Output expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")))
       case Some(rootEntityType) =>
@@ -46,7 +46,7 @@ class LocalOutputExpressionValidationVisitor(rootEntityTypeOption: Option[String
     }
   }
 
-  override def visitWorkspaceAttributeLookup(ctx: TerraExpressionParser.WorkspaceAttributeLookupContext): Try[Attribute => OutputExpression] = {
+  override def visitWorkspaceAttributeLookup(ctx: WorkspaceAttributeLookupContext): Try[Attribute => OutputExpression] = {
     val attributeName = AntlrTerraExpressionParser.toAttributeName(ctx.attributeName())
     Try(validateAttributeName(attributeName, Attributable.workspaceEntityType)).map { _ =>
       (attribute: Attribute) => BoundOutputExpression(WorkspaceTarget, attributeName, attribute)
