@@ -66,12 +66,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       // EntityService constructor, or other higher-level method
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
 
-      entityManager.resolveProvider(entityRequestArguments).getEntity(entityType, entityName)
-        .map { entity => PerRequest.RequestComplete(StatusCodes.OK, entity) }
-        .recover {
-          case _:EntityNotFoundException => RequestComplete(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName")
-          case ex => RequestComplete(StatusCodes.InternalServerError, ex)
-        }
+      val entityFuture = for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        entity <- entityProvider.getEntity(entityType, entityName)
+      } yield {
+        PerRequest.RequestComplete(StatusCodes.OK, entity)
+      }
+
+      entityFuture.recover {
+        case _: EntityNotFoundException => RequestComplete(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName")
+      }
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
@@ -102,12 +106,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       // EntityService constructor, or other higher-level method
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
 
-      entityManager.resolveProvider(entityRequestArguments).deleteEntities(entRefs)
-        .map(r => RequestComplete(StatusCodes.NoContent))
-        .recover {
-          case delEx: DeleteEntitiesConflictException => RequestComplete(StatusCodes.Conflict, delEx.referringEntities)
-          case ex => RequestComplete(StatusCodes.InternalServerError, ex)
-        }
+      val deleteFuture = for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        _ <- entityProvider.deleteEntities(entRefs)
+      } yield {
+        PerRequest.RequestComplete(StatusCodes.NoContent)
+      }
+
+      deleteFuture.recover {
+        case delEx: DeleteEntitiesConflictException => RequestComplete(StatusCodes.Conflict, delEx.referringEntities)
+      }
     }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =
@@ -155,8 +163,12 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       // TODO: AS-321 insert the billing project, if present. May want to use EntityRequestArguments or other container class.
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
 
-      entityManager.resolveProvider(entityRequestArguments).entityTypeMetadata()
-        .map(r => RequestComplete(StatusCodes.OK, r))
+      for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        metadata <- entityProvider.entityTypeMetadata()
+      } yield {
+        PerRequest.RequestComplete(StatusCodes.OK, metadata)
+      }
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =

@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{ColumnModel, SnapshotModel, TableModel}
 import bio.terra.workspace.model.DataReferenceDescription
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
@@ -35,15 +36,21 @@ trait DataRepoEntityProviderSpecSupport {
   /* A "factory" method to create a DataRepoEntityProvider, with defaults.
    * Individual unit tests should call this to reduce boilerplate.
    */
-  def createTestProvider(workspaceManagerDAO: SpecWorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription())),
-                         dataRepoDAO: SpecDataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel())),
+  def createTestProvider(snapshotModel: SnapshotModel = createSnapshotModel(),
                          samDAO: SamDAO = new MockSamDAO(slickDataSource),
                          bqFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
                          entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName")))
                         ): DataRepoEntityProvider = {
-    new DataRepoEntityProvider(entityRequestArguments, workspaceManagerDAO, dataRepoDAO, samDAO, bqFactory)
+    new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory)
   }
 
+  def createTestBuilder(workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription())),
+                        dataRepoDAO: SpecDataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel())),
+                        samDAO: SamDAO = new MockSamDAO(slickDataSource),
+                        bqServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
+                       ): DataRepoEntityProviderBuilder = {
+    new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory)
+  }
 
 
   /* A "factory" method to create DataReferenceDescription objects, with defaults.

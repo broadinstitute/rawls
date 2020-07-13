@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -7,10 +9,11 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProvid
 import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
-import org.broadinstitute.dsde.rawls.model.{UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, UserInfo, Workspace}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.runtime.universe._
+import scala.util.{Failure, Try}
 
 /**
  * Here's the philosophy behind the important entity classes:
@@ -37,7 +40,7 @@ import scala.reflect.runtime.universe._
  */
 class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvider]]) {
 
-  def resolveProvider(requestArguments: EntityRequestArguments): EntityProvider = {
+  def resolveProvider(requestArguments: EntityRequestArguments): Try[EntityProvider] = {
 
     // soon: look up the reference name to ensure it exists.
     // for now, this simplistic logic illustrates the approach: choose the right builder for the job.
@@ -48,15 +51,28 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     }
 
     providerBuilders.find(_.builds == targetTag) match {
-      case None => throw new DataEntityException(s"no entity provider available for ${requestArguments.workspace.toWorkspaceName}")
+      case None => Failure(new DataEntityException(s"no entity provider available for ${requestArguments.workspace.toWorkspaceName}"))
       case Some(builder) => builder.build(requestArguments)
     }
   }
 
   // convenience for a likely-common pattern
   def resolveProvider(workspace: Workspace, userInfo: UserInfo): EntityProvider =
-    resolveProvider(EntityRequestArguments(workspace, userInfo))
+    // should not throw an exception because this should be a local entity provider
+    resolveProvider(EntityRequestArguments(workspace, userInfo)).get
 
+  /**
+    * Convenience function that converts resolveProvider to Future and adds a 400 status code in case of error
+    * @param entityRequestArguments
+    * @param executionContext
+    * @return
+    */
+  def resolveProviderFuture(entityRequestArguments: EntityRequestArguments)(implicit executionContext: ExecutionContext): Future[EntityProvider] = {
+    Future.fromTry(resolveProvider(entityRequestArguments)).recoverWith {
+      case regrets: DataEntityException =>
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Invalid data reference ${entityRequestArguments.dataReference}", regrets)))
+    }
+  }
 }
 
 object EntityManager {

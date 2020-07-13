@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
 
 import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
+import scala.util.{Try, Success}
 
 /**
  * Builder for the Terra default entity provider
@@ -16,8 +17,7 @@ class LocalEntityProviderBuilder(dataSource: SlickDataSource)
 
   override def builds: TypeTag[LocalEntityProvider] = typeTag[LocalEntityProvider]
 
-  override def build(requestArguments: EntityRequestArguments): LocalEntityProvider = {
-    new LocalEntityProvider(requestArguments.workspace, dataSource)
+  override def build(requestArguments: EntityRequestArguments): Try[LocalEntityProvider] = {
+    Success(new LocalEntityProvider(requestArguments.workspace, dataSource))
   }
-
 }
