@@ -24,11 +24,11 @@ object OutputExpression {
   def build(expr: String, attribute: Attribute, rootEntityTypeOption: Option[String]): Try[OutputExpression] = {
     if (expr.isEmpty) Success(UnboundOutputExpression)
     else {
-      val extendedJsonParser = AntlrTerraExpressionParser.getParser(expr)
+      val terraExpressionParser = AntlrTerraExpressionParser.getParser(expr)
       val visitor = new LocalOutputExpressionValidationVisitor(rootEntityTypeOption)
 
       for {
-        parseTree <- Try(extendedJsonParser.root()).recoverWith {
+        parseTree <- Try(terraExpressionParser.root()).recoverWith {
           case regrets: RawlsException =>
             Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, regrets)))
         }
