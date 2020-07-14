@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import bio.terra.datarepo.model.SnapshotModel
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
 import org.broadinstitute.dsde.rawls.expressions.OutputExpression
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoInputExpressionValidationVisitor, LocalOutputExpressionValidationVisitor}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoInputExpressionValidationVisitor, DataRepoOutputExpressionValidationVisitor}
 
 import scala.util.Try
 
@@ -22,7 +22,7 @@ class DataRepoEntityExpressionValidator(snapshotModel: SnapshotModel) extends Ex
 
   override protected[entities] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
-    val visitor = new LocalOutputExpressionValidationVisitor(None)
+    val visitor = new DataRepoOutputExpressionValidationVisitor
 
     for {
       parseTree <- Try(terraExpressionParser.root())

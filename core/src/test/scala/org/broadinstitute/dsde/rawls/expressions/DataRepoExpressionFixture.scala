@@ -1,5 +1,9 @@
 package org.broadinstitute.dsde.rawls.expressions
 
+import bio.terra.datarepo.model.{ColumnModel, TableModel}
+
+import scala.collection.JavaConverters._
+
 // test data for Data Repo Expression Validation
 trait DataRepoExpressionFixture {
   /** INPUT EXPRESSIONS */
@@ -26,6 +30,7 @@ trait DataRepoExpressionFixture {
   )
 
 
+  // When adding values to this seq, remember to update defaultFixtureRootTableColumns to update the test table schema
   val validEntityInputExpressions: Seq[String] = Seq(
     "this.gvcf",
     "this.with-dash",
@@ -110,4 +115,11 @@ trait DataRepoExpressionFixture {
   val validOutputExpressions: Seq[String] = validWorkspaceOutputExpressions
 
   val invalidOutputExpressions: Seq[String] = unparseableOutputExpressions ++ invalidEntityOutputExpressions
+
+  val defaultFixtureRootTableName = "rootTable"
+  // These should reflect the columns used in validEntityInputExpressions above
+  val defaultFixtureRootTableColumns = List("gvcf", "with-dash", "library:cohort", "library:cohort1", "arbitrary:whatever", "underscores_are_ok", "_", "case_sample")
+  val defaultFixtureTables: List[TableModel] = List(
+    new TableModel().name(defaultFixtureRootTableName).columns(defaultFixtureRootTableColumns.map(new ColumnModel().name(_)).asJava)
+  )
 }
