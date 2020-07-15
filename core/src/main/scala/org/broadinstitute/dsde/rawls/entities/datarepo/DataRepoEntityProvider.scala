@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
+import java.util.UUID
+
+import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
 import cats.effect.{IO, Resource}
 import com.google.cloud.bigquery.{QueryJobConfiguration, QueryParameterValue, TableResult}
@@ -87,6 +90,110 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       }.unsafeRunSync()
 
     }
+  }
+
+  override def queryEntities(entityType: String, entityQuery: EntityQuery): Future[EntityQueryResponse] = {
+    // throw immediate error if user supplied filterTerms
+    if (entityQuery.filterTerms.nonEmpty) {
+      throw new UnsupportedEntityOperationException("term filtering not supported by this provider.")
+    }
+
+    // TODO: lots duplicated here from getEntity
+    // get snapshot UUID from data reference name
+    val snapshotId = lookupSnapshotForName(dataReferenceName)
+
+    // contact TDR to describe the snapshot
+    val snapshotModel = dataRepoDAO.getSnapshot(snapshotId, userInfo.accessToken)
+
+    // extract table definition, with PK, from snapshot schema
+    val tableModel = snapshotModel.getTables.asScala.find(_.getName == entityType) match {
+      case Some(table) => table
+      case None => throw new EntityTypeNotFoundException(entityType)
+    }
+
+    // determine project to be billed for the BQ job TODO: need business logic from PO!
+    val googleProject: String = requestArguments.billingProject match {
+      case Some(billing) => billing.projectName.value
+      case None => workspace.namespace
+    }
+
+    // validate sort column exists in the snapshot's table description
+    if (!tableModel.getColumns.asScala.exists(_.getName == entityQuery.sortField))
+      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"sortField not valid for this entity type")
+
+    //  determine pk column
+    val pk = pkFromSnapshotTable(tableModel)
+    // determine data project
+    val dataProject = snapshotModel.getDataProject
+    // determine view name
+    val viewName = snapshotModel.getName
+
+    val queryConfig = queryConfigForQueryEntities(dataProject, viewName, entityType, entityQuery)
+
+    // get pet service account key for this user
+    samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail) map { petKey =>
+
+      // get a BQ service (i.e. dao) instance, and use it to execute the query against BQ
+      val queryResource: Resource[IO, TableResult] = for {
+        bqService <- bqServiceFactory.getServiceForPet(petKey)
+        queryResults <- Resource.liftF(bqService.query(queryConfig))
+      } yield queryResults
+
+      // translate the BQ results into a Rawls query result
+      queryResource.use { queryResults: TableResult =>
+        val page = queryResultsToEntities(queryResults, entityType, pk)
+        val metadata = queryResultsMetadata(queryResults, entityQuery)
+        val queryResponse = EntityQueryResponse(entityQuery, metadata, page)
+        IO.pure(queryResponse)
+      }.unsafeRunSync()
+
+    }
+  }
+
+  private def getSnapshotModel = {
+    // get snapshot UUID from data reference name
+    val snapshotId = lookupSnapshotForName(dataReferenceName)
+
+    // contact TDR to describe the snapshot
+    dataRepoDAO.getSnapshot(snapshotId, userInfo.accessToken)
+  }
+
+  // not marked as private to ease unit testing
+  def lookupSnapshotForName(dataReferenceName: DataReferenceName): UUID = {
+    // contact WSM to retrieve the data reference specified in the request
+    val dataRef = workspaceManagerDAO.getDataReferenceByName(UUID.fromString(workspace.workspaceId),
+      ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue,
+      dataReferenceName,
+      userInfo.accessToken)
+
+    // the above request will throw a 404 if the reference is not found, so we can assume we have one by the time we reach here.
+
+    // verify it's a TDR snapshot. should be a noop, since getDataReferenceByName enforces this.
+    if (ReferenceTypeEnum.DATAREPOSNAPSHOT != dataRef.getReferenceType) {
+      throw new DataEntityException(s"Reference type value for $dataReferenceName is not of type ${ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue}")
+    }
+
+    // parse the raw reference value into a snapshot reference
+    val dataReference = Try(dataRef.getReference.parseJson.convertTo[TerraDataRepoSnapshotRequest]) match {
+      case Success(ref) => ref
+      case Failure(err) => throw new DataEntityException(s"Could not parse reference value for $dataReferenceName: ${err.getMessage}", err)
+    }
+
+    // verify the instance matches our target instance
+    // TODO: AS-321 is this the right place to validate this? We could add a "validateInstanceURL" method to the DAO itself, for instance
+    if (!dataReference.instanceName.equalsIgnoreCase(dataRepoDAO.getInstanceName)) {
+      logger.error(s"expected instance name ${dataRepoDAO.getInstanceName}, got ${dataReference.instanceName}")
+      throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected instance name value")
+    }
+
+    // verify snapshotId value is a UUID
+    Try(UUID.fromString(dataReference.snapshot)) match {
+      case Success(uuid) => uuid
+      case Failure(ex) =>
+        logger.error(s"invalid UUID for snapshotId in reference: ${dataReference.snapshot}")
+        throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected snapshot value", ex)
+    }
+
   }
 
   def pkFromSnapshotTable(tableModel: TableModel): String = {
