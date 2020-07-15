@@ -98,13 +98,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       throw new UnsupportedEntityOperationException("term filtering not supported by this provider.")
     }
 
-    // TODO: lots duplicated here from getEntity
-    // get snapshot UUID from data reference name
-    val snapshotId = lookupSnapshotForName(dataReferenceName)
-
-    // contact TDR to describe the snapshot
-    val snapshotModel = dataRepoDAO.getSnapshot(snapshotId, userInfo.accessToken)
-
     // extract table definition, with PK, from snapshot schema
     val tableModel = snapshotModel.getTables.asScala.find(_.getName == entityType) match {
       case Some(table) => table
