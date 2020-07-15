@@ -7,7 +7,13 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, E
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.JavaConverters._
+import scala.util.matching.Regex
 import scala.util.{Failure, Success, Try}
+
+// object so we don't recompile this regex for each instance of DataRepoEntityProvider
+object DataRepoBigQuerySupport {
+  val illegalBQChars: Regex = """[^a-zA-Z0-9\-_]""".r
+}
 
 /**
  * contains helper methods for working with BigQuery from an EntityProvider.
@@ -170,30 +176,48 @@ trait DataRepoBigQuerySupport {
    */
   def queryConfigForQueryEntities(dataProject: String, viewName: String, entityType: String, entityQuery: EntityQuery): QueryJobConfiguration = {
     // generate BQ SQL for this entity
-    // TODO: prevent injection in the places BQ doesn't support named params! why doesn't it support params everywhere???
-    // TODO: prevent injection via dataProject, viewName, entityType vars. These are calculated from the snapshot so
-    // they should be safe, but we should have layers of protection.
-    // Google's doc on table naming (https://cloud.google.com/bigquery/docs/tables) says:
-    //   * Contain up to 1,024 characters
-    //   * Contain letters (upper or lower case), numbers, and underscores
-    // Google's doc on dataset naming (https://cloud.google.com/bigquery/docs/datasets) has the exact same requirements
-    // Google's doc on view naming (https://cloud.google.com/bigquery/docs/views) has the exact same requirements
-    // Google's doc on project naming (https://cloud.google.com/resource-manager/docs/creating-managing-projects) says:
-    //   * The project ID must be a unique string of 6 to 30 lowercase letters, digits, or hyphens. It must start with a letter, and cannot have a trailing hyphen.
-    // Google's doc on column naming (https://cloud.google.com/bigquery/docs/schemas) says:
-    //   * A column name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and it must start with a letter or underscore. The maximum column name length is 128 characters
-    val query = s"SELECT * FROM `${dataProject}.${viewName}.${entityType}` " +
-      s"ORDER BY ${entityQuery.sortField} ${SortDirections.toSql(entityQuery.sortDirection)} " +
+    val query = s"SELECT * FROM `${sanitizeSql(dataProject)}.${sanitizeSql(viewName)}.${sanitizeSql(entityType)}` " +
+      s"ORDER BY ${sanitizeSql(entityQuery.sortField)} ${SortDirections.toSql(entityQuery.sortDirection)} " +
       s"LIMIT ${entityQuery.pageSize} " +
       s"OFFSET ${translatePaginationOffset(entityQuery).toLong};"
 
-    // generate query config, with named param for primary key
+    // generate query config
     QueryJobConfiguration.newBuilder(query)
-//      .addNamedParameter("sortcol", QueryParameterValue.string(entityQuery.sortField))
-//      .addNamedParameter("sortdir", QueryParameterValue.string(SortDirections.toSql(entityQuery.sortDirection)))
-//      .addNamedParameter("limit", QueryParameterValue.int64(entityQuery.pageSize.toLong))
-//      .addNamedParameter("offset", QueryParameterValue.int64( translatePaginationOffset(entityQuery).toLong ))
       .build
+  }
+
+  /**
+   * Remove illegal/undesired characters from a string so that it is safe to use inside
+   * a BigQuery SQL statement.
+   *
+   * BQ does not support bind parameters everywhere we want to use them.
+   * Per https://cloud.google.com/bigquery/docs/parameterized-queries,
+   * "Parameters cannot be used as substitutes for identifiers, column names,
+   * table names, or other parts of the query."
+   *
+   * Therefore we must sanitize any dynamic strings we want to use in those places.
+   *
+   * Google's doc on table naming (https://cloud.google.com/bigquery/docs/tables) says:
+   *   - Contain up to 1,024 characters
+   *   - Contain letters (upper or lower case), numbers, and underscores
+   * Google's doc on dataset naming (https://cloud.google.com/bigquery/docs/datasets) has the exact same requirements
+   * Google's doc on view naming (https://cloud.google.com/bigquery/docs/views) has the exact same requirements
+   * Google's doc on project naming (https://cloud.google.com/resource-manager/docs/creating-managing-projects) says:
+   *   - The project ID must be a unique string of 6 to 30 lowercase letters, digits, or hyphens. It must start with a letter, and cannot have a trailing hyphen.
+   * Google's doc on column naming (https://cloud.google.com/bigquery/docs/schemas) says:
+   *   - A column name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and it must start with a letter or underscore. The maximum column name length is 128 characters
+   *
+   * Given those naming requirements, this function allows ONLY: letters, numbers, underscores, hyphens. It does not
+   * impose any length restrictions.
+   *
+   * @param input the string to be sanitized
+   * @return the sanitized string
+   */
+  def sanitizeSql(input: String): String = {
+    if (input == null || input.isEmpty)
+      input
+    else
+      DataRepoBigQuerySupport.illegalBQChars.replaceAllIn(input, "")
   }
 
   // create comma-delimited string of field names for use in error messages.
