@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.datarepo.client.ApiException
+import bio.terra.datarepo.client.{ApiException => DatarepoApiException}
+import bio.terra.workspace.client.{ApiException => WorkspaceApiException}
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -36,19 +37,29 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
 
       // contact TDR to describe the snapshot
       snapshotModel <- Try(dataRepoDAO.getSnapshot(snapshotId, requestArguments.userInfo.accessToken)).recoverWith {
-        case notFound: ApiException if notFound.getCode == StatusCodes.NotFound.intValue => Failure(new DataEntityException(s"Snapshot id $snapshotId does not exist", notFound))
+        case notFound: DatarepoApiException if notFound.getCode == StatusCodes.NotFound.intValue =>
+          Failure(new DataEntityException(s"Snapshot id $snapshotId does not exist or you do not have access", notFound))
+        case forbidden: DatarepoApiException if forbidden.getCode == StatusCodes.Forbidden.intValue =>
+          Failure(new DataEntityException(s"Snapshot id $snapshotId exists but access was denied", forbidden))
       }
     } yield new DataRepoEntityProvider(snapshotModel, requestArguments, samDAO, bqServiceFactory)
   }
 
   private[datarepo] def lookupSnapshotForName(dataReferenceName: DataReferenceName, requestArguments: EntityRequestArguments): UUID = {
     // contact WSM to retrieve the data reference specified in the request
-    val dataRef = workspaceManagerDAO.getDataReferenceByName(UUID.fromString(requestArguments.workspace.workspaceId),
+    val dataRefTry = Try(workspaceManagerDAO.getDataReferenceByName(UUID.fromString(requestArguments.workspace.workspaceId),
       ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue,
       dataReferenceName,
-      requestArguments.userInfo.accessToken)
+      requestArguments.userInfo.accessToken)).recoverWith {
 
-    // the above request will throw a 404 if the reference is not found, so we can assume we have one by the time we reach here.
+      case notFound: WorkspaceApiException if notFound.getCode == StatusCodes.NotFound.intValue =>
+        Failure(new DataEntityException(s"Reference name ${dataReferenceName.value} does not exist.", notFound))
+      case forbidden: WorkspaceApiException if forbidden.getCode == StatusCodes.Forbidden.intValue =>
+        Failure(new DataEntityException(s"Access denied for reference name ${dataReferenceName.value}.", forbidden))
+    }
+
+    // trigger any exceptions
+    val dataRef = dataRefTry.get
 
     // verify it's a TDR snapshot. should be a noop, since getDataReferenceByName enforces this.
     if (ReferenceTypeEnum.DATAREPOSNAPSHOT != dataRef.getReferenceType) {

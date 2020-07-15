@@ -2,14 +2,14 @@ package org.broadinstitute.dsde.rawls.entities
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.ErrorReport
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.runtime.universe._
@@ -56,13 +56,8 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     }
   }
 
-  // convenience for a likely-common pattern
-  def resolveProvider(workspace: Workspace, userInfo: UserInfo): EntityProvider =
-    // should not throw an exception because this should be a local entity provider
-    resolveProvider(EntityRequestArguments(workspace, userInfo)).get
-
   /**
-    * Convenience function that converts resolveProvider to Future and adds a 400 status code in case of error
+    * Convenience function that converts resolveProvider to Future and adds a 400 status code in case of DataEntityException
     * @param entityRequestArguments
     * @param executionContext
     * @return
@@ -70,7 +65,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
   def resolveProviderFuture(entityRequestArguments: EntityRequestArguments)(implicit executionContext: ExecutionContext): Future[EntityProvider] = {
     Future.fromTry(resolveProvider(entityRequestArguments)).recoverWith {
       case regrets: DataEntityException =>
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Invalid data reference ${entityRequestArguments.dataReference}", regrets)))
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, regrets)))
     }
   }
 }

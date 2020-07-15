@@ -1956,7 +1956,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
     if (methodConfig.dataReferenceName.isDefined && submissionRequest.entityName.isDefined) {
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."))
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."))
     }
   }
 }

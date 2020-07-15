@@ -52,9 +52,11 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-        entityManager.resolveProvider(workspaceContext, userInfo).createEntity(entity)
-      }
+      for {
+        workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false)))
+        entityManager <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, userInfo))
+        result <- entityManager.createEntity(entity)
+      } yield result
     }
 
   def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
