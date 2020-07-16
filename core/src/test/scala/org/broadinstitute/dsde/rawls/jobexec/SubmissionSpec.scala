@@ -3,13 +3,24 @@ package org.broadinstitute.dsde.rawls.jobexec
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
+import bio.terra.datarepo.model.{ColumnModel, TableModel}
+import bio.terra.workspace.model.DataReferenceDescription
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig}
+import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
+import org.broadinstitute.dsde.rawls.entities.exceptions.UnsupportedEntityOperationException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -17,18 +28,13 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
-import akka.stream.ActorMaterializer
-import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig}
-import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
-import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.entities.EntityManager
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json._
 
+import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -49,7 +55,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
   with Eventually
   with MockitoTestUtils
   with StatsDTestUtils
-  with RawlsTestUtils {
+  with RawlsTestUtils
+  with DataRepoEntityProviderSpecSupport {
   import driver.api._
 
   def this() = this(ActorSystem("SubmissionSpec"))
@@ -63,7 +70,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
   val bigQueryDAO = new MockGoogleBigQueryDAO
   val mockSubmissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
   val workspaceManagerDAO = new MockWorkspaceManagerDAO
-  val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
+  val dataRepoDAO: DataRepoDAO = mock[DataRepoDAO]
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -1051,11 +1058,121 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
     }
+  }
+
+  it should "validate data repo submission" in withDataAndService ({ workspaceService =>
+    val methodConfig: MethodConfiguration = setupDataRepoMethodConfig(workspaceService)
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = methodConfig.namespace,
+      methodConfigurationName = methodConfig.name,
+      entityType = None,
+      entityName = None,
+      expression = None,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+
+    // TODO: current code does not support expression eval, if the code gets that far though, validation passed. Do a better check once expression eval is supported, see the following commented code
+    val ex = intercept[UnsupportedEntityOperationException] {
+      Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
+    }
+    ex.getMessage shouldBe "evaluateExpressions not supported by this provider."
+//    val vComplete = Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
+//    val (vStatus, vData) = vComplete.response
+//    assertResult(StatusCodes.OK) {
+//      vStatus
+//    }
+//
+//    assertResult(1) { vData.validEntities.length }
+//    assert(vData.invalidEntities.isEmpty)
+  }, withMinimalTestDatabase[Any])
+
+  it should "report error when data reference exists with entity name" in withDataAndService ({ workspaceService =>
+    val methodConfig: MethodConfiguration = setupDataRepoMethodConfig(workspaceService)
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = methodConfig.namespace,
+      methodConfigurationName = methodConfig.name,
+      entityType = methodConfig.rootEntityType,
+      entityName = Option("name"),
+      expression = None,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
+    }
+    ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+    ex.errorReport.message shouldBe "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."
+  }, withMinimalTestDatabase[Any])
+
+  it should "report error when data reference points to unknown snapshot" in withDataAndService ({ workspaceService =>
+    val methodConfig: MethodConfiguration = setupDataRepoMethodConfig(workspaceService)
+    runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(dataReferenceName = Some(DataReferenceName("unknown")))))
+
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = methodConfig.namespace,
+      methodConfigurationName = methodConfig.name,
+      entityType = None,
+      entityName = None,
+      expression = None,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
+    }
+    ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+    ex.errorReport.message shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
+  }, withMinimalTestDatabase[Any])
+
+  it should "report error when root entity type does not refer to a table in the snapshot" in withDataAndService ({ workspaceService =>
+    val methodConfig: MethodConfiguration = setupDataRepoMethodConfig(workspaceService)
+    runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(rootEntityType = Some("unknown"))))
+
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = methodConfig.namespace,
+      methodConfigurationName = methodConfig.name,
+      entityType = None,
+      entityName = None,
+      expression = None,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
+    }
+    ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+    ex.errorReport.message shouldBe "Validation errors: Invalid inputs: three_step.cgrep.pattern -> Root entity type [unknown] is not a name of a table that exist within DataRepo Snapshot."
+  }, withMinimalTestDatabase[Any])
+
+  private def setupDataRepoMethodConfig(workspaceService: WorkspaceService) = {
+    val snapshotUUID = UUID.randomUUID()
+    val tableName = "table1"
+    val columnName = "value"
+
+    when(dataRepoDAO.getSnapshot(snapshotUUID, userInfo.accessToken)).thenReturn(createSnapshotModel(List(
+      new TableModel().name(tableName).primaryKey(null).rowCount(0)
+        .columns(List(columnName).map(new ColumnModel().name(_)).asJava)))
+    )
+
+    when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
+
+    val dataReferenceName = DataReferenceName("dataref")
+    import DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
+    workspaceService.workspaceManagerDAO.createDataReference(minimalTestData.workspace.workspaceIdAsUUID, dataReferenceName, DataReferenceDescription.ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue, TerraDataRepoSnapshotRequest(dataRepoDAO.getInstanceName, snapshotUUID.toString).toJson.compactPrint, "", userInfo.accessToken)
+
+    val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
+
+    runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
+    methodConfig
   }
 
   "Aborting submissions" should "404 if the workspace doesn't exist" in withSubmissionTestWorkspaceService { workspaceService =>

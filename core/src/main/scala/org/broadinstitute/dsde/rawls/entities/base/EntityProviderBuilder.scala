@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.base
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 
 import scala.reflect.runtime.universe._
+import scala.util.Try
 
 /** trait definition EntityProviderBuilders.
  */
@@ -14,5 +15,5 @@ trait EntityProviderBuilder[T <: EntityProvider] {
 
   /** create the EntityProvider this builder knows how to create.
     */
-  def build(requestArguments: EntityRequestArguments): T
+  def build(requestArguments: EntityRequestArguments): Try[T]
 }

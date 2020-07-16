@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
+import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -996,15 +996,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   //validates the expressions in the method configuration, taking into account optional inputs
   private def validateMethodConfiguration(methodConfiguration: MethodConfiguration, workspaceContext: Workspace): Future[ValidatedMethodConfiguration] = {
-    val entityProvider = getEntityProviderForMethodConfig(workspaceContext, methodConfiguration)
     for {
+      entityProvider <- getEntityProviderForMethodConfig(workspaceContext, methodConfiguration)
       gatherInputsResult <- gatherMethodConfigInputs(methodConfiguration)
       vmc <- entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult)
     } yield vmc
   }
 
-  private def getEntityProviderForMethodConfig(workspaceContext: Workspace, methodConfiguration: MethodConfiguration) = {
-    entityManager.resolveProvider(EntityRequestArguments(workspaceContext, userInfo, methodConfiguration.dataReferenceName, None))
+  private def getEntityProviderForMethodConfig(workspaceContext: Workspace, methodConfiguration: MethodConfiguration): Future[EntityProvider] = {
+    entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, userInfo, methodConfiguration.dataReferenceName, None))
   }
 
   def getAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] = {
@@ -1313,12 +1313,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${submissionRequest.methodConfigurationNamespace}/${submissionRequest.methodConfigurationName} does not exist in ${workspaceContext}"))
       )
 
+      entityProvider <- getEntityProviderForMethodConfig(workspaceContext, methodConfig)
 
       _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
 
       gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
 
-      entityProvider = getEntityProviderForMethodConfig(workspaceContext, methodConfig)
       validationResult <- entityProvider.expressionValidator.validateExpressionsForSubmission(methodConfig, gatherInputsResult)
 
       // calling .get on the Try will throw the validation error
@@ -1943,7 +1943,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     if (submissionRequest.entityName.isDefined != submissionRequest.entityType.isDefined) {
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"You must set both entityType and entityName to run on an entity, or neither (to run with literal or workspace inputs)."))
     }
-    if (methodConfig.rootEntityType.isDefined != submissionRequest.entityName.isDefined) {
+    if (methodConfig.dataReferenceName.isEmpty && methodConfig.rootEntityType.isDefined != submissionRequest.entityName.isDefined) {
       if (methodConfig.rootEntityType.isDefined) {
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config defines a root entity but you haven't passed one to the submission."))
       } else {
@@ -1954,6 +1954,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         //More likely than not, an MC with no root entity + a submission entity = you're doing something wrong. So we'll just say no here.
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config uses no root entity, but you passed one to the submission."))
       }
+    }
+    if (methodConfig.dataReferenceName.isDefined && submissionRequest.entityName.isDefined) {
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."))
     }
   }
 }

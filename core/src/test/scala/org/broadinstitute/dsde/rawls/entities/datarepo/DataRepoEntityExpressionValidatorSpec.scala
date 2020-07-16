@@ -37,7 +37,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     GatherInputsResult(methodInputs.toSet, Set(), Set(), Set())
   }
 
-  val provider = createTestProvider(dataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel(defaultFixtureTables))))
+  val provider = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables))
   val expressionValidator: ExpressionValidator = provider.expressionValidator
 
   val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some(defaultFixtureRootTableName), prerequisites=None,

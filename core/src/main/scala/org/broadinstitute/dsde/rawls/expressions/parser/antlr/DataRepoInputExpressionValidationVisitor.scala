@@ -34,7 +34,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
         val relations = entityLookupContext.relation().asScala.toList
         traverseRelationsAndGetFinalTable(rootTableModel, relations).flatMap(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
       }
-      case None => Failure(new RawlsException(s"DataRepo Snapshot must include a table with same name as Root Entity Type: ${rootTableName}"))
+      case None => Failure(new RawlsException(s"Root entity type [$rootTableName] is not a name of a table that exist within DataRepo Snapshot."))
     }
   }
 

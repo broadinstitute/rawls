@@ -4,6 +4,7 @@ import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.workspace.client.ApiException
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport}
@@ -44,7 +45,11 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
     mockReferenceResponse(workspaceId, referenceId)
   }
 
-  override def getDataReferenceByName(workspaceId: UUID, refType: String, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataReferenceDescription = ???
+  override def getDataReferenceByName(workspaceId: UUID, refType: String, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+    this.references.find {
+      case ((workspaceUUID, _), ref) => workspaceUUID == workspaceId && ref.getName == refName.value && ref.getReferenceType.getValue == refType
+    }.getOrElse(throw new ApiException(StatusCodes.NotFound.intValue, s"$refType/$refName not found in workspace $workspaceId"))._2
+  }
 
   override def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList = {
     mockEnumerateReferenceResponse(workspaceId)
