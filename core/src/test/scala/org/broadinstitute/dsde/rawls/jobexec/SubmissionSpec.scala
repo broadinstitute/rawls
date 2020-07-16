@@ -1129,7 +1129,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
     }
     ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
-    ex.errorReport.message shouldBe "Reference name unknown does not exist."
+    ex.errorReport.message shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
   }, withMinimalTestDatabase[Any])
 
   it should "report error when root entity type does not refer to a table in the snapshot" in withDataAndService ({ workspaceService =>
