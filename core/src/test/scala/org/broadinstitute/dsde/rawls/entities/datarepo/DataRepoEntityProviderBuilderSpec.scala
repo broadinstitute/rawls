@@ -20,7 +20,7 @@ class DataRepoEntityProviderBuilderSpec extends FlatSpec with DataRepoEntityProv
 
   behavior of "DataRepoEntityProviderBuilder.build()"
 
-  it should "be happy" in {
+  it should "build successfully with a valid workspace, userInfo, and DataReferenceName" in {
     val builder = createTestBuilder()
     val result = builder.build(defaultEntityRequestArguments)
     assert(result.isSuccess, result)
