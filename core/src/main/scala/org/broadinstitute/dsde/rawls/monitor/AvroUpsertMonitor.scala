@@ -1,16 +1,12 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.io.ByteArrayInputStream
 import java.util.UUID
-import java.util.zip.GZIPInputStream
 
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.pattern._
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import io.circe.Json
 import io.circe.fs2._
 import io.circe.generic.auto._
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -259,7 +255,7 @@ class AvroUpsertMonitorActor(
   }
 
 
-  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Unit] = {
+  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Boolean] = {
     logger.info(s"beginning upsert process for $jobId ...")
 
     /* TODO:
@@ -284,9 +280,14 @@ class AvroUpsertMonitorActor(
     val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
 
     // upsert each chunk
-    batchStream map { chunk =>
+    val upsertFuturesStream = batchStream map { chunk =>
       val isFinalChunk = (chunk.size < batchSize) // if final, we may want to log something or do something?
-      entityService.apply(userInfo).batchUpdateEntities(workspaceName, chunk.iterator.toSeq, true)
+      toFutureTry(entityService.apply(userInfo).batchUpdateEntities(workspaceName, chunk.iterator.toSeq, true))
+    }
+
+    // wait for all upserts
+    Future.sequence(upsertFuturesStream.compile.toList.unsafeRunSync()) map { upsertResults =>
+      upsertResults.forall(_.isSuccess) // do something more elegant than returning true/false here!
     }
 
   }
@@ -325,40 +326,39 @@ class AvroUpsertMonitorActor(
     googleStorage.getBlobBody(bucketName, blobName)
   }
 
-
-  private def readUpsertObject(path: String) = {
-    val pathArray = path.split("/")
-    val bucketName = GcsBucketName(pathArray(0))
-    val blobName = GcsBlobName(pathArray.tail.mkString("/"))
-    readObject[Seq[EntityUpdateDefinition]](bucketName, blobName)
-  }
-
-
-  // TODO: stream-read the batchUpsert json from the bucket. Can use https://github.com/circe/circe-fs2
-  // to interpret the results of googleStorage.getBlobBody as a stream, instead of attempting to
-  // read the whole thing into memory and parse it as a huge string.
-  private def readObject[T](bucketName: GcsBucketName, blobName: GcsBlobName, decompress: Boolean = false)(implicit reader: JsonReader[T]): Future[T] = {
-    logger.info(s"reading ${if (decompress) "compressed " else ""}object $blobName from bucket $bucketName ...")
-    val compiled = googleStorage.getBlobBody(bucketName, blobName).compile
-
-    compiled.toList.unsafeToFuture().map { byteList =>
-      val byteArray = byteList.toArray
-      val bytes = if (decompress) decompressGzip(byteArray) else byteArray
-      logger.info(s"successfully read $blobName from bucket $bucketName; parsing ...")
-      val obj = bytes.map(_.toChar).mkString.parseJson.convertTo[T]
-      logger.info(s"successfully parsed $blobName from bucket $bucketName")
-      obj
-    }
-  }
-
-
-
-  private def decompressGzip(compressed: Array[Byte]): Array[Byte] = {
-    val inputStream = new GZIPInputStream(new ByteArrayInputStream(compressed))
-    val result = org.apache.commons.io.IOUtils.toByteArray(inputStream)
-    inputStream.close()
-    result
-  }
+//  private def readUpsertObject(path: String) = {
+//    val pathArray = path.split("/")
+//    val bucketName = GcsBucketName(pathArray(0))
+//    val blobName = GcsBlobName(pathArray.tail.mkString("/"))
+//    readObject[Seq[EntityUpdateDefinition]](bucketName, blobName)
+//  }
+//
+//
+//  // TODO: stream-read the batchUpsert json from the bucket. Can use https://github.com/circe/circe-fs2
+//  // to interpret the results of googleStorage.getBlobBody as a stream, instead of attempting to
+//  // read the whole thing into memory and parse it as a huge string.
+//  private def readObject[T](bucketName: GcsBucketName, blobName: GcsBlobName, decompress: Boolean = false)(implicit reader: JsonReader[T]): Future[T] = {
+//    logger.info(s"reading ${if (decompress) "compressed " else ""}object $blobName from bucket $bucketName ...")
+//    val compiled = googleStorage.getBlobBody(bucketName, blobName).compile
+//
+//    compiled.toList.unsafeToFuture().map { byteList =>
+//      val byteArray = byteList.toArray
+//      val bytes = if (decompress) decompressGzip(byteArray) else byteArray
+//      logger.info(s"successfully read $blobName from bucket $bucketName; parsing ...")
+//      val obj = bytes.map(_.toChar).mkString.parseJson.convertTo[T]
+//      logger.info(s"successfully parsed $blobName from bucket $bucketName")
+//      obj
+//    }
+//  }
+//
+//
+//
+//  private def decompressGzip(compressed: Array[Byte]): Array[Byte] = {
+//    val inputStream = new GZIPInputStream(new ByteArrayInputStream(compressed))
+//    val result = org.apache.commons.io.IOUtils.toByteArray(inputStream)
+//    inputStream.close()
+//    result
+//  }
 
 
   override val supervisorStrategy =
