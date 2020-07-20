@@ -10,6 +10,9 @@ import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import io.circe.Json
+import io.circe.fs2._
+import io.circe.generic.auto._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
@@ -257,23 +260,35 @@ class AvroUpsertMonitorActor(
 
 
   private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Unit] = {
-    for {
-      //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
-      upsertEntityUpdates <- readUpsertObject(upsertFile)
-      ackResponse <- acknowledgeMessage(ackId)
-      upsertResults <- {
-        val batches = upsertEntityUpdates.grouped(batchSize).zipWithIndex.toList
-        val numBatches = batches.size
-        batches.traverse {
-          case (upsertBatch, idx) =>
-            logger.info(s"starting upsert $idx of $batchSize for $jobId with ${upsertBatch.size} entities ...")
-            IO.fromFuture(IO(entityService.apply(userInfo).batchUpdateEntities(workspaceName, upsertBatch, true)))
-        }.unsafeToFuture
-      }
-    } yield {
-      logger.info(s"completed async upsert job ${jobId} for user: ${userInfo.userEmail} with ${upsertEntityUpdates.size} entities")
-      ()
+    logger.info(s"beginning upsert process for $jobId ...")
+
+    /* TODO:
+        - stat ${upsertFile} to verify we can access it
+        - ack the "do upsert" pubsub message once we know we can access the upsert file
+        - stream-read ${upsertFile}
+        - emit groups of ${batchSize} EntityUpdateDefinition objects
+        - upsert each group as they are emitted
+        - ensure that ANY errors are caught and we mark the import as failed on any error
+     */
+
+    // Start reading the file. This should throw an error if we can't read the file; it returns a stream
+    val upsertStream = getUpsertStream(upsertFile)
+    // Ack the pubsub message as soon as we know we can read the file. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
+    acknowledgeMessage(ackId)
+    // translate the stream of bytes to a stream of json
+    val jsonStream = upsertStream.through(byteArrayParser)
+    // translate the stream of json to a stream of EntityUpdateDefinition
+    val entityUpdateDefinitionStream = jsonStream.through(decoder[IO, EntityUpdateDefinition])
+    // chunk the stream into batches.
+    // TODO: reduce batch size, currently 1000?
+    val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
+
+    // upsert each chunk
+    batchStream map { chunk =>
+      val isFinalChunk = (chunk.size < batchSize) // if final, we may want to log something or do something?
+      entityService.apply(userInfo).batchUpdateEntities(workspaceName, chunk.iterator.toSeq, true)
     }
+
   }
 
 
@@ -302,6 +317,14 @@ class AvroUpsertMonitorActor(
     )
   }
 
+  private def getUpsertStream(path: String) = {
+    val pathArray = path.split("/")
+    val bucketName = GcsBucketName(pathArray(0))
+    val blobName = GcsBlobName(pathArray.tail.mkString("/"))
+    logger.info(s"reading object ${blobName.value} from bucket ${bucketName.value} ...")
+    googleStorage.getBlobBody(bucketName, blobName)
+  }
+
 
   private def readUpsertObject(path: String) = {
     val pathArray = path.split("/")
@@ -311,6 +334,9 @@ class AvroUpsertMonitorActor(
   }
 
 
+  // TODO: stream-read the batchUpsert json from the bucket. Can use https://github.com/circe/circe-fs2
+  // to interpret the results of googleStorage.getBlobBody as a stream, instead of attempting to
+  // read the whole thing into memory and parse it as a huge string.
   private def readObject[T](bucketName: GcsBucketName, blobName: GcsBlobName, decompress: Boolean = false)(implicit reader: JsonReader[T]): Future[T] = {
     logger.info(s"reading ${if (decompress) "compressed " else ""}object $blobName from bucket $bucketName ...")
     val compiled = googleStorage.getBlobBody(bucketName, blobName).compile
