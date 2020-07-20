@@ -4,15 +4,18 @@ import java.util.UUID
 
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
+import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
 import io.circe.fs2._
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.{ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.model.{ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, updateImportStatusFormat}
@@ -75,6 +78,8 @@ case class UpdateImportStatus(importId: String,
                               currentStatus: Option[String] = None,
                               errorMessage: Option[String] = None,
                               action: String = "status")
+
+case class ImportUpsertResults(successes: Int, failures: List[RawlsErrorReport])
 
 
 class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
@@ -220,28 +225,46 @@ class AvroUpsertMonitorActor(
 
   private def importEntities(message: PubSubMessage) = {
     val attributes = parseMessage(message)
-    val importFuture = for {
-      petUserInfo <- getPetServiceAccountUserInfo(attributes.workspace.namespace, attributes.userEmail)
-      importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
-      _ <- importStatus match {
-        // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
-        // end up with a race condition where multiple threads are attempting the same import / updating the status
-        // of the same import.
-        case Some(status) if status == ImportStatuses.ReadyForUpsert => {
-          publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
-          toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, attributes.workspace, petUserInfo)) map {
-            case Success(_) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, None)
-            case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
+
+    try {
+      val importFuture = for {
+        petUserInfo <- getPetServiceAccountUserInfo(attributes.workspace.namespace, attributes.userEmail)
+        importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
+        _ <- importStatus match {
+          // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
+          // end up with a race condition where multiple threads are attempting the same import / updating the status
+          // of the same import.
+          case Some(status) if status == ImportStatuses.ReadyForUpsert => {
+            publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
+            toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, attributes.workspace, petUserInfo)) map {
+              case Success(importUpsertResults) =>
+                val msg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
+                publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, Option(msg))
+              case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
+            }
           }
+          case Some(_) => {
+            logger.warn(s"Received a double message delivery for import ID [${attributes.importId}]")
+            Future.unit
+          }
+          case None => publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option("Import status not found"))
         }
-        case Some(_) => {
-          logger.warn(s"Received a double message delivery for import ID [${attributes.importId}]")
-          Future.unit
-        }
-        case None => publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option("Import status not found"))
-      }
-    } yield ()
-    importFuture.map(_ => ImportComplete) pipeTo self
+      } yield ()
+
+      importFuture recover {
+        case ex:Exception =>
+          logger.error(s"import jobid ${attributes.importId} failed unexpectedly: ${ex.getMessage}", ex)
+          publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(ex.getMessage))
+          // potential for retry here, in case the error was transient
+      } map(_ => ImportComplete) pipeTo self
+
+    } catch {
+      case ex:Exception =>
+        logger.error(s"import jobid ${attributes.importId} failed unexpectedly: ${ex.getMessage}", ex)
+        publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(ex.getMessage)) map (_ =>
+          ImportComplete) pipeTo self
+        // potential for retry here, in case the error was transient
+    }
   }
 
   private def publishMessageToUpdateImportStatus(importId: UUID, currentImportStatus: Option[ImportStatus], newImportStatus: ImportStatus, errorMessage: Option[String]) = {
@@ -254,7 +277,7 @@ class AvroUpsertMonitorActor(
   }
 
 
-  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Boolean] = {
+  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[ImportUpsertResults] = {
     logger.info(s"beginning upsert process for $jobId ...")
 
     /* TODO:
@@ -262,20 +285,17 @@ class AvroUpsertMonitorActor(
           import job as Failed on error. You could do the try/catch in importEntities(), which calls this method.
         - write unit tests for this method, which may require factoring functionality out into smaller, more
           easily-testable methods
-        - clean up the code, this is just a sketch!
-        - figure out what this method should return; it's currently a Future[Boolean] and we could do better
-        - add lots of logging to help debugging in the future
         - manually test this against some of the known-bad use cases
      */
 
     // Start reading the file. This should throw an error if we can't read the file; it returns a stream
-    logger.error(s"~~~~~~~~~~~~~~~~~> checking file access ...")
+    logger.info(s"checking access to $upsertFile for jobId ${jobId.toString} ...")
     val upsertStream = getUpsertStream(upsertFile)
+
     // Ack the pubsub message as soon as we know we can read the file. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
-    logger.error(s"~~~~~~~~~~~~~~~~~> ack-ing pubsub message ...")
+    logger.info(s"acking upsert pubsub message for jobId ${jobId.toString} ...")
     acknowledgeMessage(ackId)
     // translate the stream of bytes to a stream of json
-    logger.error(s"~~~~~~~~~~~~~~~~~> setting up stream transforms ...")
     val jsonStream = upsertStream.through(byteArrayParser)
     // translate the stream of json to a stream of EntityUpdateDefinition. This is awkward, because we break out
     // of Circe and use spray-json parsing, since we have complex custom spray-json decoders for EntityUpdateDefinition
@@ -285,20 +305,33 @@ class AvroUpsertMonitorActor(
     }
 
     // chunk the stream into batches.
-    // TODO: should we reduce batch size, currently 1000?
-    logger.error(s"~~~~~~~~~~~~~~~~~> chunking stream ...")
     val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
 
     // upsert each chunk
     val upsertFuturesStream = batchStream map { chunk =>
       val upsertBatch: List[EntityUpdateDefinition] = chunk.toList
-      logger.error(s"~~~~~~~~~~~~~~~~~> inserting a batch of ${upsertBatch.size} ...")
-      toFutureTry(entityService.apply(userInfo).batchUpdateEntities(workspaceName, upsertBatch, true))
+      logger.info(s"inserting a batch of ${upsertBatch.size} for jobId ${jobId.toString} ...")
+      toFutureTry(entityService.apply(userInfo).batchUpdateEntitiesInternal(workspaceName, upsertBatch, true))
     }
 
     // wait for all upserts
     Future.sequence(upsertFuturesStream.compile.toList.unsafeRunSync()) map { upsertResults =>
-      upsertResults.forall(_.isSuccess) // do something more elegant than returning true/false here!
+
+      val numSuccesses:Int = upsertResults.collect {
+        case Success(entityList) => entityList.size
+      }.sum
+
+      val failureReports:List[RawlsErrorReport] = upsertResults collect {
+        case Failure(regrets:RawlsExceptionWithErrorReport) => regrets.errorReport.causes
+      } flatten
+
+      // fail if nothing at all succeeded
+      if (numSuccesses == 0) {
+        // TODO: this could be a LOT of error reports, should we omit if large?
+        throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest, "All entities could not be updated.", failureReports))
+      }
+
+      ImportUpsertResults(numSuccesses, failureReports)
     }
 
   }
@@ -310,6 +343,7 @@ class AvroUpsertMonitorActor(
   }
 
   case class AvroUpsertAttributes(workspace: WorkspaceName, userEmail: RawlsUserEmail, importId: UUID, upsertFile: String)
+
 
   private def parseMessage(message: PubSubMessage) = {
     val workspaceNamespace = "workspaceNamespace"
@@ -336,41 +370,6 @@ class AvroUpsertMonitorActor(
     logger.info(s"reading object ${blobName.value} from bucket ${bucketName.value} ...")
     googleStorage.getBlobBody(bucketName, blobName)
   }
-
-//  private def readUpsertObject(path: String) = {
-//    val pathArray = path.split("/")
-//    val bucketName = GcsBucketName(pathArray(0))
-//    val blobName = GcsBlobName(pathArray.tail.mkString("/"))
-//    readObject[Seq[EntityUpdateDefinition]](bucketName, blobName)
-//  }
-//
-//
-//  // TODO: stream-read the batchUpsert json from the bucket. Can use https://github.com/circe/circe-fs2
-//  // to interpret the results of googleStorage.getBlobBody as a stream, instead of attempting to
-//  // read the whole thing into memory and parse it as a huge string.
-//  private def readObject[T](bucketName: GcsBucketName, blobName: GcsBlobName, decompress: Boolean = false)(implicit reader: JsonReader[T]): Future[T] = {
-//    logger.info(s"reading ${if (decompress) "compressed " else ""}object $blobName from bucket $bucketName ...")
-//    val compiled = googleStorage.getBlobBody(bucketName, blobName).compile
-//
-//    compiled.toList.unsafeToFuture().map { byteList =>
-//      val byteArray = byteList.toArray
-//      val bytes = if (decompress) decompressGzip(byteArray) else byteArray
-//      logger.info(s"successfully read $blobName from bucket $bucketName; parsing ...")
-//      val obj = bytes.map(_.toChar).mkString.parseJson.convertTo[T]
-//      logger.info(s"successfully parsed $blobName from bucket $bucketName")
-//      obj
-//    }
-//  }
-//
-//
-//
-//  private def decompressGzip(compressed: Array[Byte]): Array[Byte] = {
-//    val inputStream = new GZIPInputStream(new ByteArrayInputStream(compressed))
-//    val result = org.apache.commons.io.IOUtils.toByteArray(inputStream)
-//    inputStream.close()
-//    result
-//  }
-
 
   override val supervisorStrategy =
     OneForOneStrategy() {

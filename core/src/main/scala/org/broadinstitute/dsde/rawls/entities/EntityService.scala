@@ -224,7 +224,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean = false): Future[PerRequestMessage] = {
+  def batchUpdateEntitiesInternal(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean = false): Future[Traversable[Entity]] = {
     val namesToCheck = for {
       update <- entityUpdates
       operation <- update.operations
@@ -262,11 +262,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
             }
           }
 
-          saveAction.map(_ => RequestComplete(StatusCodes.NoContent))
+          saveAction
         }
       }
     }
   }
+
+  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean = false): Future[PerRequestMessage] = {
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert).map(_ => RequestComplete(StatusCodes.NoContent))
+  }
+
 
   /**
     * Applies the sequence of operations in order to the entity.

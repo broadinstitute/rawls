@@ -99,7 +99,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   def setUp(services: TestApiService) = {
     // create the two topics
     services.gpsDAO.createTopic(importReadPubSubTopic)
-    services.gpsDAO.createTopic(importWritePubSubTopic)
+    services.gpsDAO.createTopic(importWritePubSubTopic) map { _ =>
+      services.gpsDAO.createSubscription(importWritePubSubTopic, importWriteSubscriptionName)
+    }
 
     val mockImportServiceDAO =  new MockImportServiceDAO()
 
@@ -118,43 +120,59 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     mockImportServiceDAO
   }
 
+  behavior of "AvroUpsertMonitor"
 
-  "AvroUpsertMonitor" should "upsert entities" in withTestDataApiServices { services =>
-    val timeout = 5000 milliseconds
-    val interval = 250 milliseconds
-    val importId1 = UUID.randomUUID()
+  List(1,2,20,250,2345,12345) foreach { upsertQuantity =>
+    it should s"upsert $upsertQuantity entities" in withTestDataApiServices { services =>
+      val timeout = 120000 milliseconds
+      val interval = 500 milliseconds
+      val importId1 = UUID.randomUUID()
 
-    // add the imports and their statuses to the mock importserviceDAO
-    val mockImportServiceDAO =  setUp(services)
-    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+      // add the imports and their statuses to the mock importserviceDAO
+      val mockImportServiceDAO =  setUp(services)
+      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
-    // create compressed file
-    val contents = """[{"name": "avro-entity", "entityType": "test-type", "operations": [{"op": "AddUpdateAttribute", "attributeName": "avro-attribute", "addUpdateAttribute": "foo"}]}]"""
+      // create indexed range of ints
+      val upsertRange: List[Int] = List.range(1, upsertQuantity+1)
 
-    // Store compressed file
-    Await.result(googleStorage.createBlob(bucketName, blobName, contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
-    val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, blobName).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+      // create upsert json file
+      val upsertOps = upsertRange map ( idx => s"""{"name": "avro-entity-$idx", "entityType": "test-type", "operations": [{"op": "AddUpdateAttribute", "attributeName": "avro-attribute", "addUpdateAttribute": "foo"}]}""" )
 
-    // Publish message on the request topic
-    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
+      val contents = s"[${upsertOps.mkString(",")}]"
 
-    // check if correct message was posted on request topic
-    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 1))
-    }
-    // Check in db if entities are there
-    withWorkspaceContext(testData.workspace) { context =>
-      val entity = Entity(entityName, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
+      // Store upsert json file
+      Await.result(googleStorage.createBlob(bucketName, blobName, contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
+      val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, blobName).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+      // Publish message on the request topic
+      services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
+
+      // check if correct message was posted on request topic
       eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-        assertResult(Some(entity)) { runAndWait(entityQuery.get(context, entityType, entityName)) }
+        assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 1))
+      }
+      // Check in db if entities are there
+      withWorkspaceContext(testData.workspace) { context =>
+
+        eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+          val entitiesOfType = runAndWait(entityQuery.listActiveEntitiesOfType(context, entityType))
+          assertResult(upsertQuantity) { entitiesOfType.size }
+          upsertRange foreach { idx =>
+            val name = s"avro-entity-$idx"
+            val entity = Entity(name, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
+            val actual = entitiesOfType.find(_.name == name)
+            assertResult(Some(entity)) { actual }
+          }
+        }
+
       }
     }
   }
 
 
-  "AvroUpsertMonitor" should "return error for imports with the wrong status" in withTestDataApiServices { services =>
+  it should "return error for imports with the wrong status" in withTestDataApiServices { services =>
     val importId2 = UUID.randomUUID()
     val importId3 = UUID.randomUUID()
     val importId4 = UUID.randomUUID()
@@ -173,4 +191,108 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 3))
 
   }
+
+  it should "mark the import job as failed on malformed json file" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+    val importId1 = UUID.randomUUID()
+
+    // add the imports and their statuses to the mock importserviceDAO
+    val mockImportServiceDAO =  setUp(services)
+    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+    // create a -malformed- upsert json file, which will cause problems when reading
+    val contents = "hey, this isn't valid json! {{{"
+
+    // Store upsert json file
+    Await.result(googleStorage.createBlob(bucketName, blobName, contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, blobName).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Publish message on the request topic
+    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 1))
+    }
+
+    // upsert will fail; check that a pubsub message was published to set the import job to error.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+
+      assert(statusMessages.exists { msg =>
+        msg.attributes.get("importId").contains(importId1.toString) &&
+          msg.attributes.get("newStatus").contains("Error") &&
+          msg.attributes.get("action").contains("status")
+      })
+    }
+  }
+
+  it should "mark the import job as failed on valid json that doesn't match our model" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+    val importId1 = UUID.randomUUID()
+
+    // add the imports and their statuses to the mock importserviceDAO
+    val mockImportServiceDAO =  setUp(services)
+    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+    // create a valid json file that doesn't contain entities
+    val contents = """[{"foo":"bar"},{"baz":"qux"}]"""
+
+    // Store upsert json file
+    Await.result(googleStorage.createBlob(bucketName, blobName, contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, blobName).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Publish message on the request topic
+    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 1))
+    }
+
+    // upsert will fail; check that a pubsub message was published to set the import job to error.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+
+      assert(statusMessages.exists { msg =>
+        msg.attributes.get("importId").contains(importId1.toString) &&
+          msg.attributes.get("newStatus").contains("Error") &&
+          msg.attributes.get("action").contains("status")
+      })
+    }
+  }
+
+  it should "mark the import job as failed if upsert file doesn't exist" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+    val importId1 = UUID.randomUUID()
+
+    // add the imports and their statuses to the mock importserviceDAO
+    val mockImportServiceDAO =  setUp(services)
+    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+    // Publish message on the request topic
+    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 1))
+    }
+
+    // upsert will fail; check that a pubsub message was published to set the import job to error.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+
+      assert(statusMessages.exists { msg =>
+        msg.attributes.get("importId").contains(importId1.toString) &&
+          msg.attributes.get("newStatus").contains("Error") &&
+          msg.attributes.get("action").contains("status")
+      })
+    }
+  }
+
 }
