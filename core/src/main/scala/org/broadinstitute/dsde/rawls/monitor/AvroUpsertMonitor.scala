@@ -8,6 +8,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
+import fs2.Stream
 import io.circe.fs2._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -253,14 +254,14 @@ class AvroUpsertMonitorActor(
 
       importFuture recover {
         case ex:Exception =>
-          logger.error(s"import jobid ${attributes.importId} failed unexpectedly: ${ex.getMessage}", ex)
+          logger.error(s"import jobid ${attributes.importId} failed unexpectedly, in recover: ${ex.getMessage}", ex)
           publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(ex.getMessage))
           // potential for retry here, in case the error was transient
       } map(_ => ImportComplete) pipeTo self
 
     } catch {
       case ex:Exception =>
-        logger.error(s"import jobid ${attributes.importId} failed unexpectedly: ${ex.getMessage}", ex)
+        logger.error(s"import jobid ${attributes.importId} failed unexpectedly, in catch: ${ex.getMessage}", ex)
         publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(ex.getMessage)) map (_ =>
           ImportComplete) pipeTo self
         // potential for retry here, in case the error was transient
@@ -280,17 +281,15 @@ class AvroUpsertMonitorActor(
   private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[ImportUpsertResults] = {
     logger.info(s"beginning upsert process for $jobId ...")
 
-    /* TODO:
-        - wrap this entire thing in a try/catch, or otherwise ensure that ALL errors are caught, and mark the
-          import job as Failed on error. You could do the try/catch in importEntities(), which calls this method.
-        - write unit tests for this method, which may require factoring functionality out into smaller, more
-          easily-testable methods
-        - manually test this against some of the known-bad use cases
-     */
-
-    // Start reading the file. This should throw an error if we can't read the file; it returns a stream
+    // Start reading the file. This returns a stream
     logger.info(s"checking access to $upsertFile for jobId ${jobId.toString} ...")
     val upsertStream = getUpsertStream(upsertFile)
+
+    // ensure that the file has some contents. Our implementation of GoogleStorageInterpreter will return an empty
+    // stream instead of an error in cases where it could not read the file.
+    if (Stream.empty == upsertStream) {
+      throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest, s"Batch upsert file $upsertFile not found."))
+    }
 
     // Ack the pubsub message as soon as we know we can read the file. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
     logger.info(s"acking upsert pubsub message for jobId ${jobId.toString} ...")
