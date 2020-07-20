@@ -259,12 +259,14 @@ class AvroUpsertMonitorActor(
     logger.info(s"beginning upsert process for $jobId ...")
 
     /* TODO:
-        - stat ${upsertFile} to verify we can access it
-        - ack the "do upsert" pubsub message once we know we can access the upsert file
-        - stream-read ${upsertFile}
-        - emit groups of ${batchSize} EntityUpdateDefinition objects
-        - upsert each group as they are emitted
-        - ensure that ANY errors are caught and we mark the import as failed on any error
+        - wrap this entire thing in a try/catch, or otherwise ensure that ALL errors are caught, and mark the
+          import job as Failed on error. You could do the try/catch in importEntities(), which calls this method.
+        - write unit tests for this method, which may require factoring functionality out into smaller, more
+          easily-testable methods
+        - clean up the code, this is just a sketch!
+        - figure out what this method should return; it's currently a Future[Boolean] and we could do better
+        - add lots of logging to help debugging in the future
+        - manually test this against some of the known-bad use cases
      */
 
     // Start reading the file. This should throw an error if we can't read the file; it returns a stream
@@ -276,11 +278,12 @@ class AvroUpsertMonitorActor(
     // translate the stream of json to a stream of EntityUpdateDefinition
     val entityUpdateDefinitionStream = jsonStream.through(decoder[IO, EntityUpdateDefinition])
     // chunk the stream into batches.
-    // TODO: reduce batch size, currently 1000?
+    // TODO: should we reduce batch size, currently 1000?
     val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
 
     // upsert each chunk
     val upsertFuturesStream = batchStream map { chunk =>
+      // TODO: this definition of final will be false-negative if the number of upserts is an clean multiple of batchSize
       val isFinalChunk = (chunk.size < batchSize) // if final, we may want to log something or do something?
       toFutureTry(entityService.apply(userInfo).batchUpdateEntities(workspaceName, chunk.iterator.toSeq, true))
     }
