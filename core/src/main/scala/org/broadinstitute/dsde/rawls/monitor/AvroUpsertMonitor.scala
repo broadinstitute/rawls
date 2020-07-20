@@ -8,12 +8,11 @@ import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
 import io.circe.fs2._
-import io.circe.generic.auto._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.model.{ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, updateImportStatusFormat}
@@ -270,22 +269,31 @@ class AvroUpsertMonitorActor(
      */
 
     // Start reading the file. This should throw an error if we can't read the file; it returns a stream
+    logger.error(s"~~~~~~~~~~~~~~~~~> checking file access ...")
     val upsertStream = getUpsertStream(upsertFile)
     // Ack the pubsub message as soon as we know we can read the file. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
+    logger.error(s"~~~~~~~~~~~~~~~~~> ack-ing pubsub message ...")
     acknowledgeMessage(ackId)
     // translate the stream of bytes to a stream of json
+    logger.error(s"~~~~~~~~~~~~~~~~~> setting up stream transforms ...")
     val jsonStream = upsertStream.through(byteArrayParser)
-    // translate the stream of json to a stream of EntityUpdateDefinition
-    val entityUpdateDefinitionStream = jsonStream.through(decoder[IO, EntityUpdateDefinition])
+    // translate the stream of json to a stream of EntityUpdateDefinition. This is awkward, because we break out
+    // of Circe and use spray-json parsing, since we have complex custom spray-json decoders for EntityUpdateDefinition
+    // and I would prefer not to have multiple complex custom decoders
+    val entityUpdateDefinitionStream = jsonStream.map { circeJson =>
+      circeJson.toString().parseJson.convertTo[EntityUpdateDefinition]
+    }
+
     // chunk the stream into batches.
     // TODO: should we reduce batch size, currently 1000?
+    logger.error(s"~~~~~~~~~~~~~~~~~> chunking stream ...")
     val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
 
     // upsert each chunk
     val upsertFuturesStream = batchStream map { chunk =>
-      // TODO: this definition of final will be false-negative if the number of upserts is an clean multiple of batchSize
-      val isFinalChunk = (chunk.size < batchSize) // if final, we may want to log something or do something?
-      toFutureTry(entityService.apply(userInfo).batchUpdateEntities(workspaceName, chunk.iterator.toSeq, true))
+      val upsertBatch: List[EntityUpdateDefinition] = chunk.toList
+      logger.error(s"~~~~~~~~~~~~~~~~~> inserting a batch of ${upsertBatch.size} ...")
+      toFutureTry(entityService.apply(userInfo).batchUpdateEntities(workspaceName, upsertBatch, true))
     }
 
     // wait for all upserts
