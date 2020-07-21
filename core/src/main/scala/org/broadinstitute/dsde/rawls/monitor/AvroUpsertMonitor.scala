@@ -249,12 +249,7 @@ class AvroUpsertMonitorActor(
       }
     } yield ()
 
-    importFuture recover {
-      case ex:Exception =>
-        logger.error(s"import jobid ${attributes.importId} failed unexpectedly, in recover: ${ex.getMessage}", ex)
-        publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(ex.getMessage))
-        // potential for retry here, in case the error was transient
-    } map(_ => ImportComplete) pipeTo self
+    importFuture.map(_ => ImportComplete) pipeTo self
   }
 
   private def publishMessageToUpdateImportStatus(importId: UUID, currentImportStatus: Option[ImportStatus], newImportStatus: ImportStatus, errorMessage: Option[String]) = {
@@ -372,7 +367,6 @@ class AvroUpsertMonitorActor(
   }
 
   case class AvroUpsertAttributes(workspace: WorkspaceName, userEmail: RawlsUserEmail, importId: UUID, upsertFile: String)
-
 
   private def parseMessage(message: PubSubMessage) = {
     val workspaceNamespace = "workspaceNamespace"

@@ -63,8 +63,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     super.afterAll()
   }
 
-
-
   val workspaceName =  testData.workspace.toWorkspaceName
   val googleStorage = FakeGoogleStorageInterpreter
   val importReadPubSubTopic = "request-topic"
