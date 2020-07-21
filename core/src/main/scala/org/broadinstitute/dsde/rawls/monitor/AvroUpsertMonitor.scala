@@ -8,7 +8,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
-import fs2.Stream
 import io.circe.fs2._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -31,7 +30,7 @@ import spray.json._
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Created by mbemis on 10/17/19.
@@ -285,10 +284,16 @@ class AvroUpsertMonitorActor(
     logger.info(s"checking access to $upsertFile for jobId ${jobId.toString} ...")
     val upsertStream = getUpsertStream(upsertFile)
 
-    // ensure that the file has some contents. Our implementation of GoogleStorageInterpreter will return an empty
-    // stream instead of an error in cases where it could not read the file.
-    if (Stream.empty == upsertStream) {
-      throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest, s"Batch upsert file $upsertFile not found."))
+    // Ensure that the file has some contents. Our implementation of GoogleStorageInterpreter will return an empty
+    // stream instead of an error in cases where it could not read the file. We check to see if there is at least
+    // one valid byte in the stream.
+    val nonEmptyStream = Try(upsertStream.exists(_.isValidByte).compile.toList.unsafeRunSync().head) match {
+      case Success(true) => true
+      case _ => false
+    }
+    if (!nonEmptyStream) {
+      throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest,
+        s"Intermediate batch upsert file $upsertFile not found, or file was empty for jobId $jobId"))
     }
 
     // Ack the pubsub message as soon as we know we can read the file. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
@@ -296,6 +301,7 @@ class AvroUpsertMonitorActor(
     acknowledgeMessage(ackId)
     // translate the stream of bytes to a stream of json
     val jsonStream = upsertStream.through(byteArrayParser)
+
     // translate the stream of json to a stream of EntityUpdateDefinition. This is awkward, because we break out
     // of Circe and use spray-json parsing, since we have complex custom spray-json decoders for EntityUpdateDefinition
     // and I would prefer not to have multiple complex custom decoders
