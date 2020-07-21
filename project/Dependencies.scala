@@ -104,7 +104,6 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.9.0"
   val circeFS2: ModuleID = "io.circe" %% "circe-fs2" % "0.13.0"
-  val circeGeneric: ModuleID = "io.circe" %% "circe-generic" % "0.14.0-M1"
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
@@ -207,7 +206,6 @@ object Dependencies {
     swaggerUI,
     circeYAML,
     circeFS2,
-    circeGeneric,
     commonsJEXL,
     cromwellClient,
     cats,
