@@ -183,14 +183,19 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      val requestArgs = EntityRequestArguments(workspaceContext, userInfo, dataReference)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
 
-      entityManager.resolveProvider(requestArgs).queryEntities(entityType, query)
-        .map { response => RequestComplete(StatusCodes.OK, response) }
-        .recover {
-          case dee:DataEntityException => RequestComplete(dee.code, dee.getMessage)
-          case ex => RequestComplete(StatusCodes.InternalServerError, ex)
-        }
+      val queryFuture = for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        entities <- entityProvider.queryEntities(entityType, query)
+      } yield {
+        PerRequest.RequestComplete(StatusCodes.OK, entities)
+      }
+
+      queryFuture.recover {
+        case dee:DataEntityException => RequestComplete(dee.code, dee.getMessage)
+        case ex => RequestComplete(StatusCodes.InternalServerError, ex)
+      }
     }
   }
 

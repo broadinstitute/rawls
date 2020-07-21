@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{results, schema}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{AsyncFlatSpec, Matchers}
@@ -16,6 +17,8 @@ import scala.collection.JavaConverters._
 class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
+
+  val defaultEntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName")))
 
   behavior of "DataEntityProvider.queryEntities()"
 
@@ -77,16 +80,6 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
-  it should "bubble up error if workspace manager errors (includes reference not found)" in {
-    val provider = createTestProvider(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Left(new bio.terra.workspace.client.ApiException("whoops 1"))))
-
-    val ex = intercept[bio.terra.workspace.client.ApiException] {
-      provider.queryEntities("table1", defaultEntityQuery)
-    }
-    assertResult("whoops 1") { ex.getMessage }
-  }
-
   it should "fail if pet credentials not available from Sam" in {
     val provider = createTestProvider(
       samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
@@ -123,19 +116,9 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     fail("not implemented in runtime code yet")
   }
 
-  it should "bubble up error if data repo errors (includes snapshot not found/not allowed)" in {
-    val provider = createTestProvider(
-      dataRepoDAO = new SpecDataRepoDAO(Left(new bio.terra.datarepo.client.ApiException("whoops 2"))))
-
-    val ex = intercept[bio.terra.datarepo.client.ApiException] {
-      provider.queryEntities("table1", defaultEntityQuery)
-    }
-    assertResult("whoops 2") { ex.getMessage }
-  }
-
   it should "fail if snapshot has no tables in data repo" in {
     val provider = createTestProvider(
-      dataRepoDAO = new SpecDataRepoDAO(Right( createSnapshotModel( List.empty[TableModel] ) )))
+      snapshotModel = createSnapshotModel( List.empty[TableModel] ))
 
     val ex = intercept[EntityTypeNotFoundException] {
       provider.queryEntities("table1", defaultEntityQuery)
