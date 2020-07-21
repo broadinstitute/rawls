@@ -94,7 +94,10 @@ trait DataRepoEntityProviderSpecSupport {
   /* A "factory" method to create SnapshotModel objects, with default.
    */
   def createSnapshotModel( tables: List[TableModel] = defaultTables): SnapshotModel =
-    new SnapshotModel().tables(tables.asJava)
+    new SnapshotModel()
+      .tables(tables.asJava)
+      .dataProject("unittest-dataproject")
+      .name("unittest-name")
 
   /**
    * Mock for WorkspaceManagerDAO that allows the caller to specify behavior for the getDataReferenceByName method.

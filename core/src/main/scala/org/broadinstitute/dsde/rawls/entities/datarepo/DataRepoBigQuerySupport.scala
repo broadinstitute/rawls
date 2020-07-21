@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import akka.http.scaladsl.model.StatusCodes
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery._
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, IllegalIdentifierException}
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.JavaConverters._
@@ -176,8 +176,8 @@ trait DataRepoBigQuerySupport {
    */
   def queryConfigForQueryEntities(dataProject: String, viewName: String, entityType: String, entityQuery: EntityQuery): QueryJobConfiguration = {
     // generate BQ SQL for this entity
-    val query = s"SELECT * FROM `${sanitizeSql(dataProject)}.${sanitizeSql(viewName)}.${sanitizeSql(entityType)}` " +
-      s"ORDER BY ${sanitizeSql(entityQuery.sortField)} ${SortDirections.toSql(entityQuery.sortDirection)} " +
+    val query = s"SELECT * FROM `${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(entityType)}` " +
+      s"ORDER BY ${validateSql(entityQuery.sortField)} ${SortDirections.toSql(entityQuery.sortDirection)} " +
       s"LIMIT ${entityQuery.pageSize} " +
       s"OFFSET ${translatePaginationOffset(entityQuery).toLong};"
 
@@ -187,15 +187,15 @@ trait DataRepoBigQuerySupport {
   }
 
   /**
-   * Remove illegal/undesired characters from a string so that it is safe to use inside
-   * a BigQuery SQL statement.
+   * Checks for illegal/undesired characters in a string so that it is safe to use inside
+   * a BigQuery SQL statement. Throws an error if illegal characters exist.
    *
    * BQ does not support bind parameters everywhere we want to use them.
    * Per https://cloud.google.com/bigquery/docs/parameterized-queries,
    * "Parameters cannot be used as substitutes for identifiers, column names,
    * table names, or other parts of the query."
    *
-   * Therefore we must sanitize any dynamic strings we want to use in those places.
+   * Therefore we must validate any dynamic strings we want to use in those places.
    *
    * Google's doc on table naming (https://cloud.google.com/bigquery/docs/tables) says:
    *   - Contain up to 1,024 characters
@@ -207,17 +207,20 @@ trait DataRepoBigQuerySupport {
    * Google's doc on column naming (https://cloud.google.com/bigquery/docs/schemas) says:
    *   - A column name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and it must start with a letter or underscore. The maximum column name length is 128 characters
    *
-   * Given those naming requirements, this function allows ONLY: letters, numbers, underscores, hyphens. It does not
-   * impose any length restrictions.
+   * Given those naming requirements, this function allows ONLY: letters, numbers, underscores, hyphens.
+   * It does not impose any length restrictions.
    *
-   * @param input the string to be sanitized
-   * @return the sanitized string
+   * @param input the string to be validated
+   * @return the original string, if valid; throws an error if invalid.
    */
-  def sanitizeSql(input: String): String = {
-    if (input == null || input.isEmpty)
+  def validateSql(input: String): String = {
+    if (input == null || DataRepoBigQuerySupport.illegalBQChars.findFirstIn(input).isDefined) {
+      val inputSubstring = scala.Option(input).getOrElse("null").take(64)
+      val sanitizedForOutput = DataRepoBigQuerySupport.illegalBQChars.replaceAllIn(inputSubstring, "_")
+      throw new IllegalIdentifierException(s"Illegal identifier used in BigQuery SQL. Original input was like [$sanitizedForOutput]")
+    } else {
       input
-    else
-      DataRepoBigQuerySupport.illegalBQChars.replaceAllIn(input, "")
+    }
   }
 
   // create comma-delimited string of field names for use in error messages.

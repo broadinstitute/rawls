@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import java.nio.charset.Charset
 
 import com.google.common.io.Resources
+import org.broadinstitute.dsde.rawls.entities.exceptions.IllegalIdentifierException
 import org.scalatest.{BeforeAndAfterAll, FreeSpec}
 import spray.json._
 
@@ -33,17 +34,22 @@ class DataRepoBigQuerySanitizationSpec extends FreeSpec with DataRepoBigQuerySup
   }
 
 
-  "DataRepoBigQuerySupport, when sanitizing SQL strings, should" - {
+  "DataRepoBigQuerySupport, when validating SQL strings, should" - {
     "pass legal strings untouched" in {
       val input = "thisIsALegalString"
       val expected = "thisIsALegalString"
-      assertResult(expected) { sanitizeSql(input) }
+      assertResult(expected) { validateSql(input) }
     }
 
-    "remove illegal characters in strings" in {
+    "throw error on illegal characters in strings" in {
       val input = "this has bad characters; it's no good!"
       val expected = "thishasbadcharactersitsnogood"
-      assertResult(expected) { sanitizeSql(input) }
+      val ex = intercept[IllegalIdentifierException] {
+        validateSql(input)
+      }
+      assertResult("Illegal identifier used in BigQuery SQL. Original input was like [this_has_bad_characters__it_s_no_good_]") {
+        ex.getMessage
+      }
     }
 
     s"do the right things across ${naughtyStrings.size} inputs from github.com/minimaxir/big-list-of-naughty-strings" in {
@@ -60,8 +66,22 @@ class DataRepoBigQuerySanitizationSpec extends FreeSpec with DataRepoBigQuerySup
       def isLegalSqlString(s: String): Boolean = s.toCharArray.forall(isLegalSqlChar)
 
       naughtyStrings.foreach { input =>
-        val actual = sanitizeSql(input)
-        assert(isLegalSqlString(actual), s"found an illegal character in '$input' which sanitized to '$actual'")
+
+        val isLegal = isLegalSqlString(input)
+
+        if (isLegal) {
+          // input is legal; validate function should return it unchanged
+          assertResult(input) { validateSql(input) }
+        } else {
+          val ex = intercept[IllegalIdentifierException] { validateSql(input) }
+          assert(ex.getMessage.startsWith("Illegal identifier used in BigQuery SQL."))
+          // also assert that our output message does not echo any unsafe chars
+          val outputMessage = ex.getMessage
+            .replace("Illegal identifier used in BigQuery SQL. Original input was like [", "")
+            .replace("]", "")
+          assert(isLegalSqlString(outputMessage), "output message echoed an illegal character")
+        }
+
       }
     }
 
