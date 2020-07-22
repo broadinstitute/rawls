@@ -42,7 +42,7 @@ trait EntityApiService extends UserInfoDirectives {
 
             if (errors.isEmpty) {
               val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
-              complete { entityServiceConstructor(userInfo).QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery) }
+              complete { entityServiceConstructor(userInfo).QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery) }
             } else {
               complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
             }

@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
+import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNull, AttributeNumber, AttributeString, Entity}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNull, AttributeNumber, AttributeString, Entity, EntityQuery, EntityQueryResultMetadata, SortDirections}
 import org.scalatest.FreeSpec
 
 import scala.collection.JavaConverters._
@@ -305,6 +305,95 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
         queryResultsToEntities(tableResult, "entityType", "string-field")
       }
     }
+
+    // (input pageSize, result set size) -> expected number of pages in result set
+    val pagination = Map(
+      (10, 0) -> 0,
+      (10, 1) -> 1,
+      (10, 9) -> 1,
+      (10, 10) -> 1,
+      (10, 11) -> 2,
+      (10, 10000) -> 1000,
+      (10, 10001) -> 1001,
+      (20, 10000) -> 500,
+      (20, 10001) -> 501,
+    )
+
+    pagination foreach {
+      case ((inputPageSize, resultSetSize), expectedPages) =>
+        s"compute correct pagination metadata from BQ results for pageSize $inputPageSize and result set size $resultSetSize (expect $expectedPages)" in {
+          val entityQuery = EntityQuery(page = 4, pageSize = inputPageSize, sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None)
+
+          val schema: Schema = Schema.of(F_INTEGER)
+          val row: FieldValueList = FieldValueList.of(List(FV_INTEGER).asJava, F_INTEGER)
+          val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List.fill(inputPageSize)(row).asJava)
+          val queryResults: TableResult = new TableResult(schema, resultSetSize, page)
+
+          val actual = queryResultsMetadata(queryResults, entityQuery)
+
+          assertResult(EntityQueryResultMetadata(resultSetSize, resultSetSize, expectedPages)) { actual }
+        }
+    }
+
+  }
+
+  "DataRepoBigQuerySupport, when generating query config for queryEntities, should" - {
+
+    List(SortDirections.Ascending, SortDirections.Descending) foreach {sortDirection =>
+      s"include sort column and sort direction ${SortDirections.toSql(sortDirection)} in BigQuery SQL" in {
+        val entityQuery = EntityQuery(page = 1, pageSize = 20, sortField = "mySortField", sortDirection = sortDirection, filterTerms = None)
+        val actual = queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
+
+        assert(actual.getQuery.contains(s"ORDER BY mySortField ${SortDirections.toSql(sortDirection)}"),
+          "generated BQ SQL does not contain correct ORDER BY clause")
+
+      }
+    }
+
+    // map of input (page, pageSize) and expected (offset, limit)
+    val pagination:Map[(Int,Int),(Int,Int)] = Map(
+      (1, 10) -> (0, 10),
+      (1, 20) -> (0, 20),
+      (5, 50) -> (200, 50),
+      (100, 5) -> (495, 5)
+    )
+
+    pagination.foreach {
+      case ((page, pageSize), (offset, _)) =>
+        s"calculate correct pagination offset for input page=$page, pageSize=$pageSize" in {
+          val actual = translatePaginationOffset(EntityQuery(page = page, pageSize = pageSize,
+            sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None))
+          assertResult(offset) { actual }
+        }
+    }
+
+    pagination.foreach {
+      case ((page, pageSize), (offset, limit)) =>
+        s"include correct pagination offset and limit in BigQuery SQL for input page=$page, pageSize=$pageSize" in {
+          val entityQuery = EntityQuery(page = page, pageSize = pageSize,
+            sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None)
+          val actual = queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
+
+          assert(actual.getQuery.contains(s"OFFSET $offset"),
+            "generated BQ SQL does not contain correct OFFSET clause")
+
+          assert(actual.getQuery.contains(s"LIMIT $limit"),
+            "generated BQ SQL does not contain correct LIMIT clause")
+        }
+    }
+
+    List(0, -1, Int.MinValue) foreach { page =>
+      s"throw error if input page value is less than 1 for input $page" in {
+        val entityQuery = EntityQuery(page = page, pageSize = 10, sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None)
+
+        val ex = intercept[DataEntityException] {
+          queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
+        }
+        assertResult("page value must be at least 1.") { ex.getMessage }
+
+      }
+    }
+
   }
 
 }

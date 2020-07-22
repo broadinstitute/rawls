@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
+import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
 import cats.effect.{IO, Resource}
 import com.google.cloud.bigquery.{QueryJobConfiguration, QueryParameterValue, TableResult}
@@ -7,9 +8,9 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionValidator}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityTypeNotFoundException, UnsupportedEntityOperationException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, SubmissionValidationEntityInputs}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -61,7 +62,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     // determine view name
     val viewName = snapshotModel.getName
     // generate BQ SQL for this entity
-    val query = s"SELECT * FROM `${dataProject}.${viewName}.${entityType}` WHERE $pk = @pkvalue;"
+    // they should be safe, but we should have layers of protection.
+    val query = s"SELECT * FROM `${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(entityType)}` WHERE $pk = @pkvalue;"
     // generate query config, with named param for primary key
     val queryConfig = QueryJobConfiguration.newBuilder(query)
       .addNamedParameter("pkvalue", QueryParameterValue.string(entityName))
@@ -79,6 +81,57 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       // translate the BQ results into a single Rawls Entity
       queryResource.use { queryResults: TableResult =>
         IO.pure(queryResultsToEntity(queryResults, entityType, pk))
+      }.unsafeRunSync()
+
+    }
+  }
+
+  override def queryEntities(entityType: String, entityQuery: EntityQuery): Future[EntityQueryResponse] = {
+    // throw immediate error if user supplied filterTerms
+    if (entityQuery.filterTerms.nonEmpty) {
+      throw new UnsupportedEntityOperationException("term filtering not supported by this provider.")
+    }
+
+    // extract table definition, with PK, from snapshot schema
+    val tableModel = snapshotModel.getTables.asScala.find(_.getName == entityType) match {
+      case Some(table) => table
+      case None => throw new EntityTypeNotFoundException(entityType)
+    }
+
+    // determine project to be billed for the BQ job TODO: need business logic from PO!
+    val googleProject: String = requestArguments.billingProject match {
+      case Some(billing) => billing.projectName.value
+      case None => requestArguments.workspace.namespace
+    }
+
+    // validate sort column exists in the snapshot's table description
+    if (!tableModel.getColumns.asScala.exists(_.getName == entityQuery.sortField))
+      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"sortField not valid for this entity type")
+
+    //  determine pk column
+    val pk = pkFromSnapshotTable(tableModel)
+    // determine data project
+    val dataProject = snapshotModel.getDataProject
+    // determine view name
+    val viewName = snapshotModel.getName
+
+    val queryConfig = queryConfigForQueryEntities(dataProject, viewName, entityType, entityQuery)
+
+    // get pet service account key for this user
+    samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail) map { petKey =>
+
+      // get a BQ service (i.e. dao) instance, and use it to execute the query against BQ
+      val queryResource: Resource[IO, TableResult] = for {
+        bqService <- bqServiceFactory.getServiceForPet(petKey)
+        queryResults <- Resource.liftF(bqService.query(queryConfig))
+      } yield queryResults
+
+      // translate the BQ results into a Rawls query result
+      queryResource.use { queryResults: TableResult =>
+        val page = queryResultsToEntities(queryResults, entityType, pk)
+        val metadata = queryResultsMetadata(queryResults, entityQuery)
+        val queryResponse = EntityQueryResponse(entityQuery, metadata, page)
+        IO.pure(queryResponse)
       }.unsafeRunSync()
 
     }
