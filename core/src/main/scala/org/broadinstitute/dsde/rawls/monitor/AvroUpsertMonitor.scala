@@ -27,7 +27,7 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import scala.concurrent.duration.{FiniteDuration, _}
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -308,11 +308,10 @@ class AvroUpsertMonitorActor(
 
       // upsert each chunk
       val upsertFuturesStream = batchStream.zipWithIndex.map {
-        case (chunk, idx) => toFutureTry(performUpsertBatch(idx, chunk.toList))
+        case (chunk, idx) => Await.result(toFutureTry(performUpsertBatch(idx, chunk.toList)), 5.minutes)
       }
 
-      // wait for all upserts
-      Future.sequence(upsertFuturesStream.compile.toList.unsafeRunSync()) map { upsertResults =>
+      val upsertResults = upsertFuturesStream.compile.toList.unsafeRunSync()
 
         val numSuccesses:Int = upsertResults.collect {
           case Success(entityList) => entityList.size
@@ -340,16 +339,16 @@ class AvroUpsertMonitorActor(
         val elapsed = System.currentTimeMillis() - startTime
         logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted, ${failureReports.size} failed.")
 
-        ImportUpsertResults(numSuccesses, failureReports)
+        Future.successful(ImportUpsertResults(numSuccesses, failureReports))
 
-      } recoverWith {
-        // recoverWith for any uncaught errors in Futures. Potential for retry here, in case of transient failures
-        case ex:Exception =>
-          val elapsed = System.currentTimeMillis() - startTime
-          logger.error(s"upsert process for $jobId FAILED after $elapsed ms: ${ex.getMessage}")
-          acknowledgeMessage(ackId) // just in case
-          Future.failed(ex)
-      }
+//      } recoverWith {
+//        // recoverWith for any uncaught errors in Futures. Potential for retry here, in case of transient failures
+//        case ex:Exception =>
+//          val elapsed = System.currentTimeMillis() - startTime
+//          logger.error(s"upsert process for $jobId FAILED after $elapsed ms: ${ex.getMessage}")
+//          acknowledgeMessage(ackId) // just in case
+//          Future.failed(ex)
+//      }
     } catch {
       // try/catch for any synchronous exceptions, not covered by a Future.recover(). Potential for retry here, in case of transient failures
       case ex:Exception =>
