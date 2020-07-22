@@ -1,22 +1,22 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.io.ByteArrayInputStream
 import java.util.UUID
-import java.util.zip.GZIPInputStream
 
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
+import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import io.circe.fs2._
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName, ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
-import org.broadinstitute.dsde.rawls.model.{ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
@@ -29,7 +29,7 @@ import spray.json._
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Created by mbemis on 10/17/19.
@@ -77,6 +77,8 @@ case class UpdateImportStatus(importId: String,
                               currentStatus: Option[String] = None,
                               errorMessage: Option[String] = None,
                               action: String = "status")
+
+case class ImportUpsertResults(successes: Int, failures: List[RawlsErrorReport])
 
 
 class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
@@ -222,6 +224,7 @@ class AvroUpsertMonitorActor(
 
   private def importEntities(message: PubSubMessage) = {
     val attributes = parseMessage(message)
+
     val importFuture = for {
       petUserInfo <- getPetServiceAccountUserInfo(attributes.workspace.namespace, attributes.userEmail)
       importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
@@ -232,7 +235,9 @@ class AvroUpsertMonitorActor(
         case Some(status) if status == ImportStatuses.ReadyForUpsert => {
           publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
           toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, attributes.workspace, petUserInfo)) map {
-            case Success(_) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, None)
+            case Success(importUpsertResults) =>
+              val msg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
+              publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, Option(msg))
             case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
           }
         }
@@ -243,6 +248,7 @@ class AvroUpsertMonitorActor(
         case None => publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option("Import status not found"))
       }
     } yield ()
+
     importFuture.map(_ => ImportComplete) pipeTo self
   }
 
@@ -256,23 +262,101 @@ class AvroUpsertMonitorActor(
   }
 
 
-  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Unit] = {
-    for {
-      //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
-      upsertEntityUpdates <- readUpsertObject(upsertFile)
-      ackResponse <- acknowledgeMessage(ackId)
-      upsertResults <- {
-        val batches = upsertEntityUpdates.grouped(batchSize).zipWithIndex.toList
-        val numBatches = batches.size
-        batches.traverse {
-          case (upsertBatch, idx) =>
-            logger.info(s"starting upsert $idx of $batchSize for $jobId with ${upsertBatch.size} entities ...")
-            IO.fromFuture(IO(entityService.apply(userInfo).batchUpdateEntities(workspaceName, upsertBatch, true)))
-        }.unsafeToFuture
+  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[ImportUpsertResults] = {
+    val startTime = System.currentTimeMillis()
+    logger.info(s"beginning upsert process for $jobId ...")
+
+    try {
+
+      // Start reading the file. This returns a stream
+      logger.info(s"checking access to $upsertFile for jobId ${jobId.toString} ...")
+      val upsertStream = getUpsertStream(upsertFile)
+
+      // Ensure that the file has some contents. Our implementation of GoogleStorageInterpreter will return an empty
+      // stream instead of an error in cases where it could not read the file. We check to see if there is at least
+      // one valid byte in the stream.
+      val nonEmptyStream = Try(upsertStream.exists(_.isValidByte).compile.toList.unsafeRunSync().head) match {
+        case Success(true) => true
+        case _ => false
       }
-    } yield {
-      logger.info(s"completed async upsert job ${jobId} for user: ${userInfo.userEmail} with ${upsertEntityUpdates.size} entities")
-      ()
+      if (!nonEmptyStream) {
+        throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest,
+          s"Intermediate batch upsert file $upsertFile not found, or file was empty for jobId $jobId"))
+      }
+
+      // Ack the pubsub message as soon as we know we can read the file. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
+      logger.info(s"acking upsert pubsub message for jobId ${jobId.toString} ...")
+      acknowledgeMessage(ackId)
+      // translate the stream of bytes to a stream of json
+      val jsonStream = upsertStream.through(byteArrayParser)
+
+      // translate the stream of json to a stream of EntityUpdateDefinition. This is awkward, because we break out
+      // of Circe and use spray-json parsing, since we have complex custom spray-json decoders for EntityUpdateDefinition
+      // and I would prefer not to have multiple complex custom decoders
+      val entityUpdateDefinitionStream = jsonStream.map { circeJson =>
+        circeJson.toString().parseJson.convertTo[EntityUpdateDefinition]
+      }
+
+      // chunk the stream into batches.
+      val batchStream = entityUpdateDefinitionStream.chunkN(batchSize)
+
+      // convenience method to encapsulate the call to EntityService's batchUpdateEntitiesInternal
+      def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
+        logger.info(s"inserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
+        entityService.apply(userInfo).batchUpdateEntitiesInternal(workspaceName, upsertBatch, upsert = true)
+      }
+
+      // upsert each chunk
+      val upsertFuturesStream = batchStream.zipWithIndex.map {
+        case (chunk, idx) => toFutureTry(performUpsertBatch(idx, chunk.toList))
+      }
+
+      // wait for all upserts
+      Future.sequence(upsertFuturesStream.compile.toList.unsafeRunSync()) map { upsertResults =>
+
+        val numSuccesses:Int = upsertResults.collect {
+          case Success(entityList) => entityList.size
+        }.sum
+
+        val failureReports:List[RawlsErrorReport] = upsertResults collect {
+          case Failure(regrets:RawlsExceptionWithErrorReport) => regrets.errorReport.causes
+        } flatten
+
+        // fail if nothing at all succeeded
+        if (numSuccesses == 0) {
+          // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
+          // Cap the failure reports at 100.
+          val failureReportsForCaller = failureReports.take(100)
+          val additionalErrorString = if (failureReports.size > failureReportsForCaller.size) {
+            "; only the first 100 errors are shown."
+          } else {
+            "."
+          }
+          throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest,
+            s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString",
+            failureReportsForCaller))
+        }
+
+        val elapsed = System.currentTimeMillis() - startTime
+        logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted, ${failureReports.size} failed.")
+
+        ImportUpsertResults(numSuccesses, failureReports)
+
+      } recoverWith {
+        // recoverWith for any uncaught errors in Futures. Potential for retry here, in case of transient failures
+        case ex:Exception =>
+          val elapsed = System.currentTimeMillis() - startTime
+          logger.error(s"upsert process for $jobId FAILED after $elapsed ms: ${ex.getMessage}")
+          acknowledgeMessage(ackId) // just in case
+          Future.failed(ex)
+      }
+    } catch {
+      // try/catch for any synchronous exceptions, not covered by a Future.recover(). Potential for retry here, in case of transient failures
+      case ex:Exception =>
+        val elapsed = System.currentTimeMillis() - startTime
+        logger.error(s"upsert process for $jobId FAILED after $elapsed ms: ${ex.getMessage}")
+        acknowledgeMessage(ackId) // just in case
+        Future.failed(ex)
     }
   }
 
@@ -302,38 +386,13 @@ class AvroUpsertMonitorActor(
     )
   }
 
-
-  private def readUpsertObject(path: String) = {
+  private def getUpsertStream(path: String) = {
     val pathArray = path.split("/")
     val bucketName = GcsBucketName(pathArray(0))
     val blobName = GcsBlobName(pathArray.tail.mkString("/"))
-    readObject[Seq[EntityUpdateDefinition]](bucketName, blobName)
+    logger.info(s"reading object ${blobName.value} from bucket ${bucketName.value} ...")
+    googleStorage.getBlobBody(bucketName, blobName)
   }
-
-
-  private def readObject[T](bucketName: GcsBucketName, blobName: GcsBlobName, decompress: Boolean = false)(implicit reader: JsonReader[T]): Future[T] = {
-    logger.info(s"reading ${if (decompress) "compressed " else ""}object $blobName from bucket $bucketName ...")
-    val compiled = googleStorage.getBlobBody(bucketName, blobName).compile
-
-    compiled.toList.unsafeToFuture().map { byteList =>
-      val byteArray = byteList.toArray
-      val bytes = if (decompress) decompressGzip(byteArray) else byteArray
-      logger.info(s"successfully read $blobName from bucket $bucketName; parsing ...")
-      val obj = bytes.map(_.toChar).mkString.parseJson.convertTo[T]
-      logger.info(s"successfully parsed $blobName from bucket $bucketName")
-      obj
-    }
-  }
-
-
-
-  private def decompressGzip(compressed: Array[Byte]): Array[Byte] = {
-    val inputStream = new GZIPInputStream(new ByteArrayInputStream(compressed))
-    val result = org.apache.commons.io.IOUtils.toByteArray(inputStream)
-    inputStream.close()
-    result
-  }
-
 
   override val supervisorStrategy =
     OneForOneStrategy() {

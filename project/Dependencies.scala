@@ -103,6 +103,7 @@ object Dependencies {
   val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.9.0"
+  val circeFS2: ModuleID = "io.circe" %% "circe-fs2" % "0.13.0"
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
@@ -204,6 +205,7 @@ object Dependencies {
     akkaStream,
     swaggerUI,
     circeYAML,
+    circeFS2,
     commonsJEXL,
     cromwellClient,
     cats,
