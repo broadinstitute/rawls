@@ -6,8 +6,10 @@ import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
+import cats.implicits._
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
+import fs2.concurrent.SignallingRef
 import io.circe.fs2._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -302,17 +304,34 @@ class AvroUpsertMonitorActor(
 
       // convenience method to encapsulate the call to EntityService's batchUpdateEntitiesInternal
       def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
-        logger.info(s"inserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
+        logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         entityService.apply(userInfo).batchUpdateEntitiesInternal(workspaceName, upsertBatch, upsert = true)
       }
 
-      // upsert each chunk
-      val upsertFuturesStream = batchStream.zipWithIndex.map {
-        case (chunk, idx) => toFutureTry(performUpsertBatch(idx, chunk.toList))
-      }
+      // create our pause signal. We use this to control when the stream should pause and resume.
+      val sig = SignallingRef[IO, Boolean](false).unsafeRunSync()
 
-      // wait for all upserts
-      Future.sequence(upsertFuturesStream.compile.toList.unsafeRunSync()) map { upsertResults =>
+      // tell the stream what to execute for each batch.
+      // we must ensure that each batch is upserted sequentially, because later entities may reference earlier entities.
+      // if we try to upsert them in parallel, the referenced entity may not exist yet, and the "later" upsert would fail.
+      // therefore, for each batch, we:
+      //  1. pause the stream by setting the signal to true
+      //  2. perform this batch's upsert
+      //  3. resume the stream by setting the signal to false
+      val upsertFuturesStream = batchStream.zipWithIndex.map {
+        case (chunk, idx) =>
+          for {
+            _ <- sig.set(true)
+            attempt <- IO.fromFuture(IO(toFutureTry(performUpsertBatch(idx, chunk.toList))))
+            _ <- sig.set(false)
+          } yield {
+            logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
+            attempt
+          }
+      }.pauseWhen(sig)
+
+      // finally, after all the stream setup, tell the stream to execute
+      upsertFuturesStream.compile.toList.unsafeRunSync().sequence.map { upsertResults =>
 
         val numSuccesses:Int = upsertResults.collect {
           case Success(entityList) => entityList.size
@@ -342,14 +361,8 @@ class AvroUpsertMonitorActor(
 
         ImportUpsertResults(numSuccesses, failureReports)
 
-      } recoverWith {
-        // recoverWith for any uncaught errors in Futures. Potential for retry here, in case of transient failures
-        case ex:Exception =>
-          val elapsed = System.currentTimeMillis() - startTime
-          logger.error(s"upsert process for $jobId FAILED after $elapsed ms: ${ex.getMessage}")
-          acknowledgeMessage(ackId) // just in case
-          Future.failed(ex)
-      }
+      }.unsafeToFuture()
+
     } catch {
       // try/catch for any synchronous exceptions, not covered by a Future.recover(). Potential for retry here, in case of transient failures
       case ex:Exception =>
