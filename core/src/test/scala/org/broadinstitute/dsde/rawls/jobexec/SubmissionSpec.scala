@@ -868,6 +868,43 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     }
   }
 
+  it should "create data repo submission" in {
+    val tableData = List.fill(3)(UUID.randomUUID().toString).map(rowId => rowId -> s"value $rowId").toMap
+    dataRepoSubmissionTest(tableData) { (workspaceService, methodConfig, snapshotId) =>
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = methodConfig.namespace,
+        methodConfigurationName = methodConfig.name,
+        entityType = None,
+        entityName = None,
+        expression = None,
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false
+      )
+
+      // change the expression to include both workspace and entity lookups
+      val workspaceAttrName = "attr"
+      val workspaceAttrValue = "foobar"
+      val inputsWithWorkspaceExpression = methodConfig.inputs.map { case (name, expr) => name -> AttributeString(s"""{"entity": ${expr.value}, "workspace": workspace.$workspaceAttrName}""")}
+      runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(inputs =  inputsWithWorkspaceExpression)))
+      runAndWait(workspaceQuery.save(minimalTestData.workspace.copy(attributes = Map(AttributeName.withDefaultNS(workspaceAttrName) -> AttributeString(workspaceAttrValue)))))
+
+      val vComplete = Await.result(workspaceService.createSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+      val (vStatus, resultSubmission) = vComplete.response
+      assertResult(StatusCodes.Created) {
+        vStatus
+      }
+
+      resultSubmission.header.entityStoreId shouldBe Some(snapshotId.toString)
+      resultSubmission.header.entityType shouldBe methodConfig.rootEntityType
+
+      val expectedValidInputs = tableData.map { case (rowId, resultVal) =>
+        val expectedRawJson = s"""{"entity": "$resultVal", "workspace": "$workspaceAttrValue"}"""
+        SubmissionValidationEntityInputs(rowId, Set(SubmissionValidationValue(Option(AttributeValueRawJson(expectedRawJson)), None, methodConfig.inputs.keys.head)))
+      }
+      resultSubmission.workflows should contain theSameElementsAs expectedValidInputs
+    }
+  }
+
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = "dsde",
@@ -1132,33 +1169,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val expectedValidInputs = tableData.map { case (rowId, resultVal) => SubmissionValidationEntityInputs(rowId, Set(SubmissionValidationValue(Option(AttributeString(resultVal)), None, methodConfig.inputs.keys.head))) }
       vData.validEntities should contain theSameElementsAs expectedValidInputs
       assert(vData.invalidEntities.isEmpty)
-    }
-  }
-
-  it should "create data repo submission" in {
-    val tableData = List.fill(3)(UUID.randomUUID().toString).map(rowId => rowId -> s"value $rowId").toMap
-    dataRepoSubmissionTest(tableData) { (workspaceService, methodConfig, snapshotId) =>
-      val submissionRq = SubmissionRequest(
-        methodConfigurationNamespace = methodConfig.namespace,
-        methodConfigurationName = methodConfig.name,
-        entityType = None,
-        entityName = None,
-        expression = None,
-        useCallCache = false,
-        deleteIntermediateOutputFiles = false
-      )
-
-      val vComplete = Await.result(workspaceService.createSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-      val (vStatus, resultSubmission) = vComplete.response
-      assertResult(StatusCodes.Created) {
-        vStatus
-      }
-
-      resultSubmission.header.entityStoreId shouldBe Some(snapshotId.toString)
-      resultSubmission.header.entityType shouldBe methodConfig.rootEntityType
-
-      val expectedValidInputs = tableData.map { case (rowId, resultVal) => SubmissionValidationEntityInputs(rowId, Set(SubmissionValidationValue(Option(AttributeString(resultVal)), None, methodConfig.inputs.keys.head))) }
-      resultSubmission.workflows should contain theSameElementsAs expectedValidInputs
     }
   }
 
