@@ -215,11 +215,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     }
   }
 
-  val table2Result = {
-    val table2RowCount = 123
+  private def createTestTableResult(tableRowCount: Int): TableResult = {
     val schema: Schema = Schema.of(F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
 
-    val stringKeys = List.tabulate(table2RowCount)(i => "Row" + i)
+    val stringKeys = List.tabulate(tableRowCount)(i => "Row" + i)
 
     val results = stringKeys map { stringKey  =>
       FieldValueList.of(List(
@@ -229,15 +228,15 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     }
 
     val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.asJava)
-    val tableResult: TableResult = new TableResult(schema, table2RowCount, page)
+    val tableResult: TableResult = new TableResult(schema, tableRowCount, page)
     tableResult
   }
 
   it should "fail if the query results in more rows than are allowed by config" in {
+    val tableRowCount = 123
     val smallMaxRowsPerQuery = 100
-    val table2RowCount = 123
 
-    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(table2Result)), config = DataRepoEntityProviderConfig(maxInputsPerSubmission, smallMaxRowsPerQuery))
+    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))), config = DataRepoEntityProviderConfig(maxInputsPerSubmission, smallMaxRowsPerQuery))
     val expressionEvaluationContext = ExpressionEvaluationContext(None, None, None, Some("table2"))
 
     val gatherInputsResult = GatherInputsResult(Set(
@@ -247,14 +246,15 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
     intercept[RawlsExceptionWithErrorReport] {
       Await.result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map("workspace.string" -> Success(List(AttributeString("workspaceValue"))))), Duration.Inf)
-    }.errorReport.message should be(s"Too many results. Results size ${table2RowCount} cannot exceed ${smallMaxRowsPerQuery}. Expression(s): [this.col2a, this.col2b].")
+    }.errorReport.message should be(s"Too many results. Results size ${tableRowCount} cannot exceed ${smallMaxRowsPerQuery}. Expression(s): [this.col2a, this.col2b].")
   }
 
 
   it should "fail if the submission has more inputs than are allowed by config" in {
+    val tableRowCount = 123
     val smallMaxInputsPerSubmission = 200
 
-    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(table2Result)), config = DataRepoEntityProviderConfig(smallMaxInputsPerSubmission, maxRowsPerQuery))
+    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))), config = DataRepoEntityProviderConfig(smallMaxInputsPerSubmission, maxRowsPerQuery))
     val expressionEvaluationContext = ExpressionEvaluationContext(None, None, None, Some("table2"))
 
     val gatherInputsResult = GatherInputsResult(Set(
