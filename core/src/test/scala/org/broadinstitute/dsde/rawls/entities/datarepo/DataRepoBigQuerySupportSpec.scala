@@ -5,6 +5,7 @@ import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNull, AttributeNumber, AttributeString, Entity, EntityQuery, EntityQueryResultMetadata, SortDirections}
 import org.scalatest.FreeSpec
+import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.createKeyList
 
 import scala.collection.JavaConverters._
 
@@ -280,7 +281,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
     "return multiple-element array if queryResultsToEntities is given more than one row" in {
       val schema: Schema = Schema.of(F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
 
-      val stringKeys = List("the first row", "the second row", "the third row")
+      val stringKeys = createKeyList(3)
 
       val results = stringKeys map { stringKey  =>
         FieldValueList.of(List(

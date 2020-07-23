@@ -108,7 +108,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
 
     val futureEx = recoverToExceptionIf[Exception] {
-      provider.getEntity("table1", "the first row")
+      provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
       assertResult("sam error") { ex.getMessage }
@@ -125,7 +125,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider() // default behavior returns three rows
 
     val ex = intercept[EntityTypeNotFoundException] {
-      provider.getEntity("this_table_is_unknown", "the first row")
+      provider.getEntity("this_table_is_unknown", "Row0")
     }
     assertResult("this_table_is_unknown") { ex.requestedType }
   }
@@ -135,7 +135,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       bqFactory = MockBigQueryServiceFactory.ioFactory(Left(new BigQueryException(555, "unit test exception message"))))
 
     val futureEx = recoverToExceptionIf[BigQueryException] {
-      provider.getEntity("table1", "the first row")
+      provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
       assertResult("unit test exception message") { ex.getMessage }
@@ -149,7 +149,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
 
     val futureEx = recoverToExceptionIf[EntityNotFoundException] {
-      provider.getEntity("table1", "the first row")
+      provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
       assertResult("Entity not found.") { ex.getMessage }
@@ -160,7 +160,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider() // default behavior returns three rows
 
     val futureEx = recoverToExceptionIf[DataEntityException] {
-      provider.getEntity("table1", "the first row")
+      provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
       assertResult("Query succeeded, but returned 3 rows; expected one row.") { ex.getMessage }
