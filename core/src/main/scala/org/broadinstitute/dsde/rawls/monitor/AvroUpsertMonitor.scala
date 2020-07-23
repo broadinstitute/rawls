@@ -34,8 +34,8 @@ import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 /**
-  * Created by mbemis on 10/17/19.
-  */
+ * Created by mbemis on 10/17/19.
+ */
 object AvroUpsertMonitorSupervisor {
   sealed trait AvroUpsertMonitorSupervisorMessage
   case object Init extends AvroUpsertMonitorSupervisorMessage
@@ -258,8 +258,8 @@ class AvroUpsertMonitorActor(
     logger.info(s"asking to change import job $importId from $currentImportStatus to $newImportStatus ${errorMessage.getOrElse("")}")
     val updateImportStatus = UpdateImportStatus(importId.toString, newImportStatus.toString, currentImportStatus.map(_.toString), errorMessage)
     val attributes: Map[String, String] = updateImportStatus.toJson.asJsObject.fields.collect {
-     case (attName:String, attValue:JsString) => (attName, attValue.value)
-   }
+      case (attName:String, attValue:JsString) => (attName, attValue.value)
+    }
     importServicePubSubDAO.publishMessages(importStatusPubSubTopic, Seq(GooglePubSubDAO.MessageRequest("", attributes)))
   }
 
@@ -318,7 +318,10 @@ class AvroUpsertMonitorActor(
       //  1. pause the stream by setting the signal to true
       //  2. perform this batch's upsert
       //  3. resume the stream by setting the signal to false
-      val upsertFuturesStream = batchStream.zipWithIndex.map {
+      // TODO: I _think_ that by using evalMapChunk here, we can eliminate the pause/resume and trust the stream
+      // to handle it natively. This will require more testing so I am leaving the pause/resume in place, as it does
+      // no harm.
+      val upsertFuturesStream = batchStream.zipWithIndex.evalMapChunk {
         case (chunk, idx) =>
           for {
             _ <- sig.set(true)
@@ -331,37 +334,35 @@ class AvroUpsertMonitorActor(
       }.pauseWhen(sig)
 
       // finally, after all the stream setup, tell the stream to execute
-      upsertFuturesStream.compile.toList.unsafeRunSync().sequence.map { upsertResults =>
+      val upsertResults = upsertFuturesStream.compile.toList.unsafeRunSync()
 
-        val numSuccesses:Int = upsertResults.collect {
-          case Success(entityList) => entityList.size
-        }.sum
+      val numSuccesses:Int = upsertResults.collect {
+        case Success(entityList) => entityList.size
+      }.sum
 
-        val failureReports:List[RawlsErrorReport] = upsertResults collect {
-          case Failure(regrets:RawlsExceptionWithErrorReport) => regrets.errorReport.causes
-        } flatten
+      val failureReports:List[RawlsErrorReport] = upsertResults collect {
+        case Failure(regrets:RawlsExceptionWithErrorReport) => regrets.errorReport.causes
+      } flatten
 
-        // fail if nothing at all succeeded
-        if (numSuccesses == 0) {
-          // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
-          // Cap the failure reports at 100.
-          val failureReportsForCaller = failureReports.take(100)
-          val additionalErrorString = if (failureReports.size > failureReportsForCaller.size) {
-            "; only the first 100 errors are shown."
-          } else {
-            "."
-          }
-          throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest,
-            s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString",
-            failureReportsForCaller))
+      // fail if nothing at all succeeded
+      if (numSuccesses == 0) {
+        // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
+        // Cap the failure reports at 100.
+        val failureReportsForCaller = failureReports.take(100)
+        val additionalErrorString = if (failureReports.size > failureReportsForCaller.size) {
+          "; only the first 100 errors are shown."
+        } else {
+          "."
         }
+        throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest,
+          s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString",
+          failureReportsForCaller))
+      }
 
-        val elapsed = System.currentTimeMillis() - startTime
-        logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted, ${failureReports.size} failed.")
+      val elapsed = System.currentTimeMillis() - startTime
+      logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted, ${failureReports.size} failed.")
 
-        ImportUpsertResults(numSuccesses, failureReports)
-
-      }.unsafeToFuture()
+      Future.successful(ImportUpsertResults(numSuccesses, failureReports))
 
     } catch {
       // try/catch for any synchronous exceptions, not covered by a Future.recover(). Potential for retry here, in case of transient failures
