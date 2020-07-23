@@ -28,7 +28,7 @@ trait EntityProvider {
             - through a series of transformations, generate a Map of entity name to Map of lookup expressions and their
               evaluated value for that entity
             - for each entity, substitute the evaluated values back into the input expression
-    To help understand the approach if their are lookup expressions present, we will follow the below example roughly:
+    To help understand the approach if there are lookup expressions present, we will follow the below example roughly:
       expression = "{"exampleRef1":this.bam, "exampleIndex":this.index}"
       rootEntities = Seq(101, 102) (here we assume the entity name is 101 for Entity Record 1 and 102 for Entity record 2)
 
