@@ -24,6 +24,23 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
+  private def createTestTableResult(tableRowCount: Int): TableResult = {
+    val schema: Schema = Schema.of(F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
+
+    val stringKeys = List.tabulate(tableRowCount)(i => "Row" + i)
+
+    val results = stringKeys map { stringKey  =>
+      FieldValueList.of(List(
+        FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey),
+        FV_INTEGER, FV_BOOLEAN, FV_TIMESTAMP).asJava,
+        F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
+    }
+
+    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.asJava)
+    val tableResult: TableResult = new TableResult(schema, tableRowCount, page)
+    tableResult
+  }
+
   behavior of "DataEntityProvider.entityTypeMetadata()"
 
   it should "return entity type metadata in the golden path" in {
@@ -211,23 +228,6 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       })
       submissionValidationEntityInputs should contain theSameElementsAs expectedResults
     }
-  }
-
-  private def createTestTableResult(tableRowCount: Int): TableResult = {
-    val schema: Schema = Schema.of(F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
-
-    val stringKeys = List.tabulate(tableRowCount)(i => "Row" + i)
-
-    val results = stringKeys map { stringKey  =>
-      FieldValueList.of(List(
-        FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey),
-        FV_INTEGER, FV_BOOLEAN, FV_TIMESTAMP).asJava,
-        F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
-    }
-
-    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.asJava)
-    val tableResult: TableResult = new TableResult(schema, tableRowCount, page)
-    tableResult
   }
 
   it should "fail if the query results in more rows than are allowed by config" in {
