@@ -5,7 +5,7 @@ import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
-import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{results, schema}
+import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{createTestTableResult}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
@@ -27,8 +27,7 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
   it should "return one entity if all OK and BQ returned one" in {
 
     // set up a provider with a mock that returns exactly one BQ row
-    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.take(1).asJava)
-    val tableResult: TableResult = new TableResult(schema, 1, page)
+    val tableResult: TableResult = createTestTableResult(1)
     val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
 
     provider.queryEntities("table1", defaultEntityQuery) map { entityQueryResponse: EntityQueryResponse =>
