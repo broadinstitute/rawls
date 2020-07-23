@@ -24,10 +24,14 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
+  private def createKeyList(n: Int): List[String] = {
+    List.tabulate(n)(i => "Row" + i)
+  }
+
   private def createTestTableResult(tableRowCount: Int): TableResult = {
     val schema: Schema = Schema.of(F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
 
-    val stringKeys = List.tabulate(tableRowCount)(i => "Row" + i)
+    val stringKeys = createKeyList(tableRowCount)
 
     val results = stringKeys map { stringKey  =>
       FieldValueList.of(List(
@@ -187,25 +191,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   behavior of "DataEntityProvider.evaluateExpressions()"
 
   it should "do the happy path for basic expressions" in {
+    val tableRowCount = 3
+    val stringKeys = createKeyList(tableRowCount)
 
-    val F_INTEGER = Field.of("integer-field", LegacySQLTypeName.INTEGER)
-    val F_BOOLEAN = Field.of("boolean-field", LegacySQLTypeName.BOOLEAN)
-    val F_STRING = Field.of("datarepo_row_id", LegacySQLTypeName.STRING)
-    val F_TIMESTAMP = Field.of("timestamp-field", LegacySQLTypeName.TIMESTAMP)
-
-    val schema: Schema = Schema.of(F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
-
-    val results = stringKeys map { stringKey  =>
-      FieldValueList.of(List(
-        FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey),
-        FV_INTEGER, FV_BOOLEAN, FV_TIMESTAMP).asJava,
-        F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
-    }
-
-    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.asJava)
-    val tableResult: TableResult = new TableResult(schema, 3, page)
-
-
+    val tableResult = createTestTableResult(tableRowCount)
     // set up a provider with a mock that returns ..
     val provider = createTestProvider(snapshotModel = createSnapshotModel(List(new TableModel().name("table1").primaryKey(null).rowCount(3)
       .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava))), bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
