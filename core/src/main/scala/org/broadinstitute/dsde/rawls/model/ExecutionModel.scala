@@ -116,6 +116,8 @@ case class WorkflowCost(
   cost: Option[Float]
 )
 
+case class ExternalEntityInfo(dataStoreId: String, rootEntityType: String)
+
 // Status of a submission
 case class Submission(
   submissionId: String,
@@ -129,40 +131,9 @@ case class Submission(
   useCallCache: Boolean,
   deleteIntermediateOutputFiles: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
-  cost: Option[Float] = None
+  cost: Option[Float] = None,
+  externalEntityInfo: Option[ExternalEntityInfo] = None
 )
-
-case class SubmissionStatusResponse(
-  submissionId: String,
-  submissionDate: DateTime,
-  submitter: String,
-  methodConfigurationNamespace: String,
-  methodConfigurationName: String,
-  submissionEntity: Option[AttributeEntityReference],
-  workflows: Seq[Workflow],
-  status: SubmissionStatus,
-  useCallCache: Boolean,
-  deleteIntermediateOutputFiles: Boolean,
-  workflowFailureMode: Option[WorkflowFailureMode] = None,
-  cost: Option[Float] = None
-)
-object SubmissionStatusResponse {
-  def apply(submission: Submission): SubmissionStatusResponse =
-    SubmissionStatusResponse(
-      submissionId = submission.submissionId,
-      submissionDate = submission.submissionDate,
-      submitter = submission.submitter.value,
-      methodConfigurationNamespace = submission.methodConfigurationNamespace,
-      methodConfigurationName = submission.methodConfigurationName,
-      submissionEntity = submission.submissionEntity,
-      workflows = submission.workflows,
-      status = submission.status,
-      useCallCache = submission.useCallCache,
-      deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
-      workflowFailureMode = submission.workflowFailureMode,
-      cost = submission.cost
-    )
-}
 
 case class SubmissionListResponse(
   submissionId: String,
@@ -178,8 +149,10 @@ case class SubmissionListResponse(
   deleteIntermediateOutputFiles: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   workflowIds: Option[Seq[String]],
-  cost: Option[Float] = None
-)
+  cost: Option[Float] = None,
+  externalEntityInfo: Option[ExternalEntityInfo] = None
+
+                                 )
 object SubmissionListResponse {
   def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts, methodConfigurationDeleted: Boolean): SubmissionListResponse =
     SubmissionListResponse(
@@ -195,7 +168,8 @@ object SubmissionListResponse {
       useCallCache = submission.useCallCache,
       deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
       workflowFailureMode = submission.workflowFailureMode,
-      workflowIds = workflowIds
+      workflowIds = workflowIds,
+      externalEntityInfo = submission.externalEntityInfo
     )
 }
 
@@ -208,7 +182,8 @@ case class SubmissionValidationInput(
 // common values for all the entities -- the entity type and the input descriptions
 case class SubmissionValidationHeader(
   entityType: Option[String],
-  inputExpressions: Set[SubmissionValidationInput] // size of Set is nInputs
+  inputExpressions: Set[SubmissionValidationInput], // size of Set is nInputs
+  entityStoreId: Option[String]
 )
 
 // result of an expression parse
@@ -416,7 +391,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionValidationInputFormat = jsonFormat2(SubmissionValidationInput)
 
-  implicit val SubmissionValidationHeaderFormat = jsonFormat2(SubmissionValidationHeader)
+  implicit val SubmissionValidationHeaderFormat = jsonFormat3(SubmissionValidationHeader)
 
   implicit val SubmissionValidationValueFormat = jsonFormat3(SubmissionValidationValue)
 
@@ -426,13 +401,13 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFormat = jsonFormat7(Workflow)
 
-  implicit val SubmissionFormat = jsonFormat12(Submission)
+  implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
+
+  implicit val SubmissionFormat = jsonFormat13(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionStatusResponseFormat = jsonFormat12(SubmissionStatusResponse.apply)
-
-  implicit val SubmissionListResponseFormat = jsonFormat14(SubmissionListResponse.apply)
+  implicit val SubmissionListResponseFormat = jsonFormat15(SubmissionListResponse.apply)
 
   implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
 

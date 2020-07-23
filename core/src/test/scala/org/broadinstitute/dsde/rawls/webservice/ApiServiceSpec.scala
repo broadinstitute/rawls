@@ -32,7 +32,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
@@ -197,7 +197,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
-    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory)
+    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10))
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,

@@ -17,13 +17,16 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
+import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -1325,11 +1328,29 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ = validationResult.get
 
       methodConfigInputs = gatherInputsResult.processableInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.getName, methodInput.expression) }
-      header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
+      header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs, entityProvider.entityStoreId)
 
-      submissionParameters <- entityProvider.evaluateExpressions(ExpressionEvaluationContext(submissionRequest.entityType, submissionRequest.entityName, submissionRequest.expression, methodConfig.rootEntityType), gatherInputsResult)
+      workspaceExpressionResults <- evaluateWorkspaceExpressions(workspaceContext, gatherInputsResult)
+      submissionParameters <- entityProvider.evaluateExpressions(ExpressionEvaluationContext(submissionRequest.entityType, submissionRequest.entityName, submissionRequest.expression, methodConfig.rootEntityType), gatherInputsResult, workspaceExpressionResults)
     } yield {
       (workspaceContext, submissionParameters, workflowFailureMode, header)
+    }
+  }
+
+  private def evaluateWorkspaceExpressions(workspace: Workspace, gatherInputResults: GatherInputsResult): Future[Map[LookupExpression, Try[Iterable[AttributeValue]]]] = {
+    dataSource.inTransaction { dataAccess =>
+      ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, None) { expressionEvaluator =>
+        val expressionQueries = gatherInputResults.processableInputs.map { input =>
+          expressionEvaluator.evalWorkspaceExpressionsOnly(workspace, input.expression)
+        }
+
+        // reduce(_ ++ _) collapses the series of maps into a single map
+        // duplicate map keys are dropped but that is ok as the values should be duplicate
+        DBIO.sequence(expressionQueries.toSeq).map {
+          case Seq() => Map.empty[LookupExpression, Try[Iterable[AttributeValue]]]
+          case results => results.reduce(_ ++ _)
+        }
+      }
     }
   }
 
@@ -1368,7 +1389,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         )
       }
 
-      val submissionEntityOpt = if (header.entityType.isEmpty) {
+      val submissionEntityOpt = if (header.entityType.isEmpty || submissionRequest.entityName.isEmpty) {
         None
       } else {
         Some(AttributeEntityReference(entityType = submissionRequest.entityType.get, entityName = submissionRequest.entityName.get))
@@ -1384,7 +1405,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         status = SubmissionStatuses.Submitted,
         useCallCache = submissionRequest.useCallCache,
         deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
-        workflowFailureMode = workflowFailureMode
+        workflowFailureMode = workflowFailureMode,
+        externalEntityInfo = for {
+          entityType <- header.entityType
+          dataStoreId <- header.entityStoreId
+        } yield ExternalEntityInfo(dataStoreId, entityType)
       )
 
       // implicitly passed to SubmissionComponent.create
@@ -1421,7 +1446,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, Option(submission.submissionDate))) map {
           case Failure(ex) =>
             logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
-            RequestComplete((StatusCodes.OK, SubmissionStatusResponse(submission)))
+            RequestComplete((StatusCodes.OK, submission))
           case Success(costMap) =>
             val costedWorkflows = submission.workflows.map { workflow =>
               workflow.workflowId match {
@@ -1430,7 +1455,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               }
             }
             val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-            RequestComplete((StatusCodes.OK, SubmissionStatusResponse(costedSubmission)))
+            RequestComplete((StatusCodes.OK, costedSubmission))
         }
       }
     }

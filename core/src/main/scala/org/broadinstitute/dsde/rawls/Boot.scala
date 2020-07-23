@@ -354,7 +354,7 @@ object Boot extends IOApp with LazyLogging {
       val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
       // create the entity manager.
-      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO, appDependencies.bigQueryServiceFactory)
+      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO, appDependencies.bigQueryServiceFactory, DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")))
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,

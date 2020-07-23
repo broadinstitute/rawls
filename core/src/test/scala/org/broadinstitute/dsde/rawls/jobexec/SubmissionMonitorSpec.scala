@@ -228,7 +228,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None), outputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None, None), outputs))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz", "output3" -> "workspace.garble")
 
@@ -244,7 +244,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs with library attributes" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None), outputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None, None), outputs))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.library:bar", "output2" -> "this.library:baz", "output3" -> "workspace.library:garble")
 
@@ -268,7 +268,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs only entities" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None), outputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None, None), outputs))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz")
 
@@ -284,7 +284,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs none" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None), outputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None, None), outputs))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map.empty
 
@@ -296,7 +296,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "attachOutputs with no root entity" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, None, 0, None), outputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, None, 0, None, None), outputs))
     val outputExpressions: Map[String, String] = Map("output" -> "", "output2" -> "", "output3" -> "")
 
     val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
@@ -309,7 +309,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs missing expected output" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowRecord = WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None)
+    val workflowRecord = WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None, None)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((workflowRecord, ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello world!"))))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("missing" -> "this.bar")

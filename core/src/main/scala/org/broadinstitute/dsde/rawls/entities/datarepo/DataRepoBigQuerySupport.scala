@@ -50,14 +50,14 @@ trait DataRepoBigQuerySupport {
   }
 
   /**
-   * Given a BigQuery row and one named field from the BQ schema, return a Rawls AttributeName->Attribute pair
+   * Given a BigQuery row and one named field from the BQ schema, return a Rawls Attribute
    * representing that field's value(s) inside the row.
    *
    * @param field the BQ schema's field definition
    * @param row all field values for a single BQ row
-   * @return the Rawls attributename->attribute pair, post-translation
+   * @return the Rawls attribute, post-translation
    */
-  def fieldToAttribute(field: Field, row: FieldValueList): (AttributeName, Attribute) = {
+  def fieldToAttribute(field: Field, row: FieldValueList): Attribute = {
     val attrName = field.getName
     val fv = Try(row.get(attrName)) match {
       case Success(fieldValue) => fieldValue
@@ -77,8 +77,10 @@ trait DataRepoBigQuerySupport {
       case _ => fieldValueToAttributeValue(field, fv)
     }
 
-    (AttributeName.withDefaultNS(attrName), attribute)
+    attribute
   }
+
+  def fieldToAttributeName(field: Field): AttributeName = AttributeName.withDefaultNS(field.getName)
 
   /**
    * Translates a BigQuery result set into a list of Rawls Entities. Returns an empty list if BigQuery returned zero rows.
@@ -107,7 +109,7 @@ trait DataRepoBigQuerySupport {
       } else {
         val fieldDefs:List[Field] = schemaFields.iterator().asScala.toList
         queryResults.iterateAll().asScala.map { row =>
-          val attrs = fieldDefs.map { field => fieldToAttribute(field, row) }.toMap
+          val attrs = fieldDefs.map { field => fieldToAttributeName(field) -> fieldToAttribute(field, row) }.toMap
           val entityName = attrs.find(_._1.name == primaryKey) match {
             case Some((_, a: Attribute)) => AttributeStringifier.apply(a)
             case None =>

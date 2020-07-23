@@ -7,6 +7,7 @@ import bio.terra.datarepo.client.{ApiException => DatarepoApiException}
 import bio.terra.workspace.client.{ApiException => WorkspaceApiException}
 import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
@@ -22,7 +23,8 @@ import scala.reflect.runtime.universe._
 import scala.util.{Failure, Success, Try}
 
 class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, dataRepoDAO: DataRepoDAO,
-                                       samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory)
+                                    samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory,
+                                    config: DataRepoEntityProviderConfig)
                                    (implicit protected val executionContext: ExecutionContext)
   extends EntityProviderBuilder[DataRepoEntityProvider] with LazyLogging {
 
@@ -42,7 +44,7 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
         case forbidden: DatarepoApiException if forbidden.getCode == StatusCodes.Forbidden.intValue =>
           Failure(new DataEntityException(s"Snapshot id $snapshotId exists but access was denied", forbidden))
       }
-    } yield new DataRepoEntityProvider(snapshotModel, requestArguments, samDAO, bqServiceFactory)
+    } yield new DataRepoEntityProvider(snapshotModel, requestArguments, samDAO, bqServiceFactory, config)
   }
 
   private[datarepo] def lookupSnapshotForName(dataReferenceName: DataReferenceName, requestArguments: EntityRequestArguments): UUID = {

@@ -22,6 +22,7 @@ import scala.concurrent.ExecutionContext
  */
 
 object MockBigQueryServiceFactory {
+  val defaultRowCount = 3
 
   // default fixture data returned by the underlying MockGoogleBigQueryService, unless a caller overrides it
   val F_INTEGER = Field.of("integer-field", LegacySQLTypeName.INTEGER)
@@ -33,19 +34,28 @@ object MockBigQueryServiceFactory {
   val FV_BOOLEAN = FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, "true")
   val FV_TIMESTAMP = FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, "1408452095.22")
 
-  val schema: Schema = Schema.of(F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
+  val tableResult: TableResult = createTestTableResult(defaultRowCount)
 
-  val stringKeys = List("the first row", "the second row", "the third row")
-
-  val results = stringKeys map { stringKey  =>
-    FieldValueList.of(List(
-      FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey),
-      FV_INTEGER, FV_BOOLEAN, FV_TIMESTAMP).asJava,
-      F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
+  def createKeyList(n: Int): List[String] = {
+    List.tabulate(n)(i => "Row" + i)
   }
 
-  val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.asJava)
-  val tableResult: TableResult = new TableResult(schema, 3, page)
+  def createTestTableResult(tableRowCount: Int): TableResult = {
+    val schema: Schema = Schema.of(F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
+
+    val stringKeys = createKeyList(tableRowCount)
+
+    val results = stringKeys map { stringKey  =>
+      FieldValueList.of(List(
+        FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey),
+        FV_INTEGER, FV_BOOLEAN, FV_TIMESTAMP).asJava,
+        F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
+    }
+
+    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.asJava)
+    val tableResult: TableResult = new TableResult(schema, tableRowCount, page)
+    tableResult
+  }
 
   def ioFactory(queryResponse: Either[Throwable, TableResult] = Right(tableResult)): MockBigQueryServiceFactory = {
     lazy val blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)

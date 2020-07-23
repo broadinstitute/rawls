@@ -28,7 +28,8 @@ case class WorkflowRecord(id: Long,
                           statusLastChangedDate: Timestamp,
                           workflowEntityId: Option[Long],
                           recordVersion: Long,
-                          executionServiceKey: Option[String]
+                          executionServiceKey: Option[String],
+                          externalEntityId: Option[String]
                          )
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
@@ -54,8 +55,9 @@ trait WorkflowComponent {
     def workflowEntityId = column[Option[Long]]("ENTITY_ID")
     def version = column[Long]("record_version")
     def executionServiceKey = column[Option[String]]("EXEC_SERVICE_KEY")
+    def externalEntityId = column[Option[String]]("EXTERNAL_ENTITY_ID")
 
-    def * = (id, externalId, submissionId, status, statusLastChangedDate, workflowEntityId, version, executionServiceKey) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
+    def * = (id, externalId, submissionId, status, statusLastChangedDate, workflowEntityId, version, executionServiceKey, externalEntityId) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
     def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id.?)
@@ -116,10 +118,15 @@ trait WorkflowComponent {
       deleteWorkflowAction(id).map(_ > 0)
     }
 
-    def createWorkflows(workspaceContext: Workspace, submissionId: UUID, workflows: Seq[Workflow])(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Seq[Workflow]] = {
-      def insertWorkflowRecs(submissionId: UUID, workflows: Seq[Workflow], entityRecs: Seq[EntityRecord]): ReadWriteAction[Map[Option[AttributeEntityReference], WorkflowRecord]] = {
-        val entityRecsMap = entityRecs.map(e => e.toReference -> e.id).toMap
-        val recsToInsert = workflows.map(workflow => marshalNewWorkflow(submissionId, workflow, workflow.workflowEntity.map(entityRecsMap(_))))
+    def createWorkflows(workspaceContext: Workspace, submissionId: UUID, workflows: Seq[Workflow], externalEntityInfo: Option[ExternalEntityInfo])(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Seq[Workflow]] = {
+      def insertWorkflowRecs(submissionId: UUID, workflows: Seq[Workflow], localEntityRecs: Seq[EntityRecord]): ReadWriteAction[Map[Option[AttributeEntityReference], WorkflowRecord]] = {
+        val localEntityRecsMap = localEntityRecs.map(e => e.toReference -> e.id).toMap
+        val recsToInsert = workflows.map(workflow => {
+          val entityId = workflow.workflowEntity.flatMap(localEntityRecsMap.get)
+          // if entity does not exist locally (i.e. we don't have an id) then workflowEntity must be external
+          val externalEntity = if (entityId.isEmpty) workflow.workflowEntity.map(_.entityName) else None
+          marshalNewWorkflow(submissionId, workflow, entityId, externalEntity)
+        })
 
         val insertedRecQuery = for {
           (workflowRec, workflowEntityRec) <- findWorkflowsBySubmissionId(submissionId) joinLeft entityQuery on (_.workflowEntityId === _.id )
@@ -128,10 +135,18 @@ trait WorkflowComponent {
         insertInBatches(workflowQuery, recsToInsert).map { rows =>
           recsToInsert.foreach(wf => wfStatusCounter(WorkflowStatuses.withName(wf.status)).foreach(_ += 1))
           rows
-        } andThen
-        insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
-          workflowEntityRec.map(_.toReference) -> workflowRec
-        }.toMap)
+        } andThen {
+          externalEntityInfo match {
+            case None => insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
+              workflowEntityRec.map(_.toReference) -> workflowRec
+            }.toMap)
+
+            case Some(info) => insertedRecQuery.result.map(_.map { case (workflowRec, _) =>
+              workflowRec.externalEntityId.map(AttributeEntityReference(info.rootEntityType, _)) -> workflowRec
+            }.toMap)
+          }
+
+        }
       }
 
       def insertInputResolutionRecs(submissionId: UUID, workflows: Seq[Workflow], workflowRecsByEntity: Map[Option[AttributeEntityReference], WorkflowRecord]): ReadWriteAction[Map[(Option[AttributeEntityReference], String), SubmissionValidationRecord]] = {
@@ -143,13 +158,15 @@ trait WorkflowComponent {
         }
 
         val insertedRecQuery = for {
-          (workflowRec, workflowEntityRec) <- findWorkflowsBySubmissionId(submissionId) joinLeft entityQuery on (_.workflowEntityId === _.id)
+          workflowRec <- findWorkflowsBySubmissionId(submissionId)
           insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
-        } yield (workflowEntityRec, insertedInputResolutionRec)
+        } yield insertedInputResolutionRec
+
+        val entityRefsByWorkflowId = workflowRecsByEntity.map { case (entityRef, workflowRec) => workflowRec.id -> entityRef }
 
         insertInBatches(submissionValidationQuery, inputResolutionRecs) andThen
-        insertedRecQuery.result.map(_.map { case (workflowEntityRec, insertedInputResolutionRec) =>
-          val ref = workflowEntityRec.map(_.toReference)
+        insertedRecQuery.result.map(_.map { insertedInputResolutionRec =>
+          val ref = entityRefsByWorkflowId(insertedInputResolutionRec.workflowId)
           val name = insertedInputResolutionRec.inputName
           (ref, name) -> insertedInputResolutionRec
         }.toMap)
@@ -190,9 +207,20 @@ trait WorkflowComponent {
         throw new RawlsException(s"Each workflow in a submission must have a unique entity. Entities [${entitiesWithMultipleWorkflows.mkString(", ")}] have multiple workflows")
       }
 
+      def maybeLookupLocalEntities = {
+        externalEntityInfo match {
+          case Some(_) =>
+            // externalEntityInfo exists: don't lookup any entities because they are not local
+            DBIO.successful(Seq.empty)
+          case None =>
+            // externalEntityInfo does not exist: lookup local entities
+            entityQuery.getEntityRecords(workspaceContext.workspaceIdAsUUID, workflows.flatMap(_.workflowEntity).toSet)
+        }
+      }
+
       for {
-        entityRecs <- entityQuery.getEntityRecords(workspaceContext.workspaceIdAsUUID, workflows.flatMap(_.workflowEntity).toSet)
-        workflowRecsByEntity <- insertWorkflowRecs(submissionId, workflows, entityRecs)
+        localEntityRecs <- maybeLookupLocalEntities
+        workflowRecsByEntity <- insertWorkflowRecs(submissionId, workflows, localEntityRecs)
         inputResolutionRecs <- insertInputResolutionRecs(submissionId, workflows, workflowRecsByEntity)
         _ <- insertInputResolutionAttributes(workflows, inputResolutionRecs)
         _ <- insertMessages(workflows, workflowRecsByEntity)
@@ -296,11 +324,25 @@ trait WorkflowComponent {
 
     def loadWorkflow(rec: WorkflowRecord): ReadAction[Option[Workflow]] = {
       for {
-        entity <- DBIO.sequenceOption(rec.workflowEntityId.map(loadWorkflowEntity))
+        entity <- DBIO.sequenceOption(loadWorkflowEntity(rec))
         inputResolutions <- loadInputResolutions(rec.id)
         messages <- loadWorkflowMessages(rec.id)
       } yield {
         Option(unmarshalWorkflow(rec, entity, inputResolutions, messages))
+      }
+    }
+
+    private def loadWorkflowEntity(rec: WorkflowRecord): Option[ReadAction[AttributeEntityReference]] = {
+      (rec.workflowEntityId, rec.externalEntityId) match {
+        case (Some(entityId), _) => Option(submissionQuery.loadEntity(entityId))
+        case (_, Some(externalId)) => Option(uniqueResult[SubmissionRecord](submissionQuery.findById(rec.submissionId)).map { subOpt =>
+          val entityRefOpt = for {
+            sub <- subOpt
+            entityType <- sub.rootEntityType
+          } yield AttributeEntityReference(entityType, externalId)
+          entityRefOpt.getOrElse(throw new RawlsException(s"externalEntityId exists on workflow ${rec.id} but rootEntityType not defined on submission"))
+        })
+        case _ => None
       }
     }
 
@@ -379,12 +421,6 @@ trait WorkflowComponent {
 
     def listWorkflowRecsForSubmission(submissionId: UUID): ReadAction[Seq[WorkflowRecord]] = {
       findWorkflowsBySubmissionId(submissionId).result
-    }
-
-    private def loadWorkflowEntity(entityId: Long): ReadAction[AttributeEntityReference] = {
-      uniqueResult[EntityRecord](entityQuery.findEntityById(entityId)).map { rec =>
-        unmarshalEntity(rec.getOrElse(throw new RawlsException(s"entity with id $entityId does not exist")))
-      }
     }
 
     def loadWorkflowMessages(workflowId: Long): ReadAction[Seq[AttributeString]] = {
@@ -509,7 +545,7 @@ trait WorkflowComponent {
       the marshal and unmarshal methods
      */
 
-    def marshalNewWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long]): WorkflowRecord = {
+    def marshalNewWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long], externalEntityId: Option[String]): WorkflowRecord = {
       WorkflowRecord(
         0,
         workflow.workflowId,
@@ -518,7 +554,8 @@ trait WorkflowComponent {
         new Timestamp(workflow.statusLastChangedDate.toDate.getTime),
         entityId,
         0,
-        None
+        None,
+        externalEntityId
       )
     }
 

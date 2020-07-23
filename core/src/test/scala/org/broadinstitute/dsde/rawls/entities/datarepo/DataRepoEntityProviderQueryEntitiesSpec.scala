@@ -5,7 +5,7 @@ import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
-import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{results, schema}
+import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{createTestTableResult, createKeyList}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
@@ -27,14 +27,13 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
   it should "return one entity if all OK and BQ returned one" in {
 
     // set up a provider with a mock that returns exactly one BQ row
-    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.take(1).asJava)
-    val tableResult: TableResult = new TableResult(schema, 1, page)
+    val tableResult: TableResult = createTestTableResult(1)
     val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
 
     provider.queryEntities("table1", defaultEntityQuery) map { entityQueryResponse: EntityQueryResponse =>
       // this is the default expected value, should it move to the support trait?
-      val expected = Seq(Entity("the first row", "table1", Map(
-        AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("the first row"),
+      val expected = Seq(Entity("Row0", "table1", Map(
+        AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("Row0"),
         AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
         AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
         AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
@@ -51,7 +50,7 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
 
     provider.queryEntities("table1", defaultEntityQuery) map { entityQueryResponse: EntityQueryResponse =>
       // this is the default expected value, should it move to the support trait?
-      val expected = Seq("the first row", "the second row", "the third row") map { stringKey  =>
+      val expected = createKeyList(3) map { stringKey  =>
         Entity(stringKey, "table1", Map(
           AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString(stringKey),
           AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),

@@ -45,7 +45,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   // dummy WorkflowRecord
   val testWorkflowRecord = WorkflowRecord(
     1, Some(UUID.randomUUID().toString), submissionId, "Submitted",
-    new Timestamp(System.currentTimeMillis()), Some(1), 1, Some("default"))
+    new Timestamp(System.currentTimeMillis()), Some(1), 1, Some("default"), None)
 
   // UUIDs
   val subWithExecutionKeys = UUID.randomUUID()

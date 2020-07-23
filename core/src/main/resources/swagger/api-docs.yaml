@@ -4510,7 +4510,18 @@ components:
           enum:
             - NoNewCalls
             - ContinueWhilePossible
+        externalEntityInfo:
+          $ref: '#/components/schemas/ExternalEntityInfo'
       description: ""
+    ExternalEntityInfo:
+      type: object
+      properties:
+        dataStoreId:
+          type: string
+          description: external datastore id for the collection of data
+        rootEntityType:
+          type: string
+          description: type of data within the external datastore
     SubmissionListResponse:
       type: object
       properties:
@@ -4547,6 +4558,8 @@ components:
           enum:
             - NoNewCalls
             - ContinueWhilePossible
+        externalEntityInfo:
+          $ref: '#/components/schemas/ExternalEntityInfo'
       description: An abbreviated Submission, without workflow information, good for
         listings
     ActiveSubmission:

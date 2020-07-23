@@ -158,7 +158,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
-                                         services: TestApiService, workflowFailureMode: Option[String] = None): SubmissionStatusResponse = {
+                                         services: TestApiService, workflowFailureMode: Option[String] = None): Submission = {
 
     Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -202,7 +202,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
               assertResult(StatusCodes.OK) {
                 status
               }
-              responseAs[SubmissionStatusResponse]
+              responseAs[Submission]
             }
         }
     } { capturedMetrics =>
@@ -306,17 +306,17 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
-    // calls GET ../submissions/<sub-id> and returns the SubmissionStatusResponse
+    // calls GET ../submissions/<sub-id> and returns the Submission
     val submissionResponseWithFailureMode = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
 
-    // The SubmissionStatusResponse should contain the workflow failure mode
+    // The Submission should contain the workflow failure mode
     submissionResponseWithFailureMode.workflows.size should equal (1)
     submissionResponseWithFailureMode.workflowFailureMode should equal (Some(WorkflowFailureModes.ContinueWhilePossible))
 
-    // calls GET ../submissions/<sub-id> and returns the SubmissionStatusResponse
+    // calls GET ../submissions/<sub-id> and returns the Submission
     val submissionResponseWithoutFailureMode = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services)
 
-    // The SubmissionStatusResponse should not contain a workflow failure mode
+    // The Submission should not contain a workflow failure mode
     submissionResponseWithoutFailureMode.workflows.size should equal (1)
     submissionResponseWithoutFailureMode.workflowFailureMode should equal (None)
 
@@ -452,7 +452,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(SubmissionStatusResponse(testData.costedSubmission1)) {responseAs[SubmissionStatusResponse]}
+        assertResult(testData.costedSubmission1) {responseAs[Submission]}
       }
   }
 
@@ -589,7 +589,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         val entities = for (i <- 1 to count) yield Entity(i.toString, status.toString, Map.empty)
         runAndWait(entityQuery.save(context, entities))
         val workflows = for (i <- 1 to count) yield Workflow(Option(s"workflow${i}_of_$count"), status, testDate, Some(AttributeEntityReference(status.toString, i.toString)), testData.inputResolutions)
-        runAndWait(workflowQuery.createWorkflows(context, UUID.fromString(testData.submissionUpdateEntity.submissionId), workflows))
+        runAndWait(workflowQuery.createWorkflows(context, UUID.fromString(testData.submissionUpdateEntity.submissionId), workflows, None))
       }
     }
 

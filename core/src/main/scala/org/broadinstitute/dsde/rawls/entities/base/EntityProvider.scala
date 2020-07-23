@@ -1,14 +1,17 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, SubmissionValidationEntityInputs}
 
 import scala.concurrent.Future
+import scala.util.Try
 
 /**
  * trait definition for entity providers.
  */
 trait EntityProvider {
+  def entityStoreId: Option[String]
 
   def entityTypeMetadata(): Future[Map[String, EntityTypeMetadata]]
 
@@ -16,7 +19,29 @@ trait EntityProvider {
 
   def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
 
-  def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult): Future[Stream[SubmissionValidationEntityInputs]]
+  /**
+  The overall approach is:
+        - Parse the input expression using ANTLR Extended JSON parser
+        - Visit the parsed tree to find all the lookup expressions (e.g. this.attribute)
+        - If there are lookup expressions:
+            - for each lookup expressions, evaluate in the entity provider specific way
+            - through a series of transformations, generate a Map of entity name to Map of lookup expressions and their
+              evaluated value for that entity
+            - for each entity, substitute the evaluated values back into the input expression
+    To help understand the approach if there are lookup expressions present, we will follow the below example roughly:
+      expression = "{"exampleRef1":this.bam, "exampleIndex":this.index}"
+      rootEntities = Seq(101, 102) (here we assume the entity name is 101 for Entity Record 1 and 102 for Entity record 2)
+
+    The final output will be:
+    ReadWriteAction(Map(
+          "101" -> Try(Seq(AttributeValueRawJson("{"exampleRef1":"gs://abc", "exampleIndex":123}"))),
+          "102" -> Try(Seq(AttributeValueRawJson("{"exampleRef1":"gs://def", "exampleIndex":456}")))
+        )
+    )
+
+    see core/src/main/antlr4/org/broadinstitute/dsde/rawls/expressions/parser/antlr/TerraExpression.g4
+    */
+  def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]]
 
   def expressionValidator: ExpressionValidator
 

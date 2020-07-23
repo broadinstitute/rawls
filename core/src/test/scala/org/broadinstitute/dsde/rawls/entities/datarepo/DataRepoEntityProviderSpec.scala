@@ -1,21 +1,29 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import bio.terra.datarepo.model.TableModel
+import bio.terra.datarepo.model.{ColumnModel, TableModel}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
-import org.broadinstitute.dsde.rawls.TestExecutionContext
+import cromwell.client.model.{ToolInputParameter, ValueType}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
-import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{results, schema}
+import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException}
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueRawJson, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import org.scalatest.{AsyncFlatSpec, Matchers}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+import scala.util.Success
 
 class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
+
 
   behavior of "DataEntityProvider.entityTypeMetadata()"
 
@@ -33,7 +41,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       // this is the default expected value, should it move to the support trait?
       val expected = Map(
         ("table1", EntityTypeMetadata(0, "datarepo_row_id", Seq("datarepo_row_id", "integer-field", "boolean-field", "timestamp-field"))),
-        ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2.1", "col2.2"))),
+        ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2a", "col2b"))),
         ("table3", EntityTypeMetadata(456, "datarepo_row_id", Seq("col3.1", "col3.2"))))
       assertResult(expected) { metadata }
     }
@@ -79,16 +87,14 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   behavior of "DataEntityProvider.getEntity()"
 
   it should "return exactly one entity if all OK" in {
+    val tableRowCount = 1
 
     // set up a provider with a mock that returns exactly one BQ row
-    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.take(1).asJava)
-    val tableResult: TableResult = new TableResult(schema, 1, page)
-    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
-
-    provider.getEntity("table1", "the first row") map { entity: Entity =>
+    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))))
+    provider.getEntity("table1", "Row0") map { entity: Entity =>
       // this is the default expected value, should it move to the support trait?
-      val expected = Entity("the first row", "table1", Map(
-        AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("the first row"),
+      val expected = Entity("Row0", "table1", Map(
+        AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("Row0"),
         AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
         AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
         AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
@@ -102,7 +108,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
 
     val futureEx = recoverToExceptionIf[Exception] {
-      provider.getEntity("table1", "the first row")
+      provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
       assertResult("sam error") { ex.getMessage }
@@ -119,7 +125,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider() // default behavior returns three rows
 
     val ex = intercept[EntityTypeNotFoundException] {
-      provider.getEntity("this_table_is_unknown", "the first row")
+      provider.getEntity("this_table_is_unknown", "Row0")
     }
     assertResult("this_table_is_unknown") { ex.requestedType }
   }
@@ -129,7 +135,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       bqFactory = MockBigQueryServiceFactory.ioFactory(Left(new BigQueryException(555, "unit test exception message"))))
 
     val futureEx = recoverToExceptionIf[BigQueryException] {
-      provider.getEntity("table1", "the first row")
+      provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
       assertResult("unit test exception message") { ex.getMessage }
@@ -143,7 +149,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
 
     val futureEx = recoverToExceptionIf[EntityNotFoundException] {
-      provider.getEntity("table1", "the first row")
+      provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
       assertResult("Entity not found.") { ex.getMessage }
@@ -154,12 +160,80 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider() // default behavior returns three rows
 
     val futureEx = recoverToExceptionIf[DataEntityException] {
-      provider.getEntity("table1", "the first row")
+      provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
       assertResult("Query succeeded, but returned 3 rows; expected one row.") { ex.getMessage }
     }
   }
+
+
+  behavior of "DataEntityProvider.evaluateExpressions()"
+
+  it should "do the happy path for basic expressions" in {
+    val tableRowCount = 3
+    val stringKeys = createKeyList(tableRowCount)
+
+    val tableResult = createTestTableResult(tableRowCount)
+    // set up a provider with a mock that returns ..
+    val provider = createTestProvider(snapshotModel = createSnapshotModel(List(new TableModel().name("table1").primaryKey(null).rowCount(3)
+      .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava))), bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
+    val expressionEvaluationContext = ExpressionEvaluationContext(None, None, None, Some("table1"))
+    val gatherInputsResult = GatherInputsResult(Set(
+      MethodInput(new ToolInputParameter().name("name1").valueType(new ValueType().typeName(ValueType.TypeNameEnum.INT)), "this.integer-field"),
+      MethodInput(new ToolInputParameter().name("name2").valueType(new ValueType().typeName(ValueType.TypeNameEnum.BOOLEAN)), "this.boolean-field"),
+      MethodInput(new ToolInputParameter().name("workspace1").valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING)), "workspace.string"),
+      MethodInput(new ToolInputParameter().name("name3").valueType(new ValueType().typeName(ValueType.TypeNameEnum.OBJECT)), """{"foo": this.boolean-field, "bar": this.timestamp-field, "workspace": workspace.string}""")
+    ), Set.empty, Set.empty, Set.empty)
+
+    provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map("workspace.string" -> Success(List(AttributeString("workspaceValue"))))) map { submissionValidationEntityInputs =>
+      val expectedResults = (stringKeys map { stringKey =>
+        SubmissionValidationEntityInputs(stringKey, Set(
+          SubmissionValidationValue(Some(AttributeNumber(MockBigQueryServiceFactory.FV_INTEGER.getNumericValue)), None, "name1"),
+          SubmissionValidationValue(Some(AttributeBoolean(MockBigQueryServiceFactory.FV_BOOLEAN.getBooleanValue)), None, "name2"),
+          SubmissionValidationValue(Some(AttributeString("workspaceValue")), None, "workspace1"),
+          SubmissionValidationValue(Some(AttributeValueRawJson(s"""{"foo": ${MockBigQueryServiceFactory.FV_BOOLEAN.getBooleanValue}, "bar": "${MockBigQueryServiceFactory.FV_TIMESTAMP.getStringValue}", "workspace": "workspaceValue"}""")), None, "name3")
+        ))
+      })
+      submissionValidationEntityInputs should contain theSameElementsAs expectedResults
+    }
+  }
+
+  it should "fail if the query results in more rows than are allowed by config" in {
+    val tableRowCount = 123
+    val smallMaxRowsPerQuery = 100
+
+    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))), config = DataRepoEntityProviderConfig(maxInputsPerSubmission, smallMaxRowsPerQuery))
+    val expressionEvaluationContext = ExpressionEvaluationContext(None, None, None, Some("table2"))
+
+    val gatherInputsResult = GatherInputsResult(Set(
+      MethodInput(new ToolInputParameter().name("col2a").valueType(new ValueType().typeName(ValueType.TypeNameEnum.INT)), "this.col2a"),
+      MethodInput(new ToolInputParameter().name("col2b").valueType(new ValueType().typeName(ValueType.TypeNameEnum.BOOLEAN)), "this.col2b"),
+    ), Set.empty, Set.empty, Set.empty)
+
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map("workspace.string" -> Success(List(AttributeString("workspaceValue"))))), Duration.Inf)
+    }.errorReport.message should be(s"Too many results. Results size ${tableRowCount} cannot exceed ${smallMaxRowsPerQuery}. Expression(s): [this.col2a, this.col2b].")
+  }
+
+
+  it should "fail if the submission has more inputs than are allowed by config" in {
+    val tableRowCount = 123
+    val smallMaxInputsPerSubmission = 200
+
+    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))), config = DataRepoEntityProviderConfig(smallMaxInputsPerSubmission, maxRowsPerQuery))
+    val expressionEvaluationContext = ExpressionEvaluationContext(None, None, None, Some("table2"))
+
+    val gatherInputsResult = GatherInputsResult(Set(
+      MethodInput(new ToolInputParameter().name("col2a").valueType(new ValueType().typeName(ValueType.TypeNameEnum.INT)), "this.col2a"),
+      MethodInput(new ToolInputParameter().name("col2b").valueType(new ValueType().typeName(ValueType.TypeNameEnum.BOOLEAN)), "this.col2b"),
+    ), Set.empty, Set.empty, Set.empty)
+
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map("workspace.string" -> Success(List(AttributeString("workspaceValue"))))), Duration.Inf)
+    }.errorReport.message should be(s"Too many results. Snapshot row count * number of entity expressions cannot exceed ${smallMaxInputsPerSubmission}.")
+  }
+
 
 }
 
