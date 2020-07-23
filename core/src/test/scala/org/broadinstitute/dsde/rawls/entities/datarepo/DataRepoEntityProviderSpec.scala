@@ -86,16 +86,14 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   behavior of "DataEntityProvider.getEntity()"
 
   it should "return exactly one entity if all OK" in {
+    val tableRowCount = 1
 
     // set up a provider with a mock that returns exactly one BQ row
-    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.take(1).asJava)
-    val tableResult: TableResult = new TableResult(schema, 1, page)
-    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
-
-    provider.getEntity("table1", "the first row") map { entity: Entity =>
+    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))))
+    provider.getEntity("table1", "Row0") map { entity: Entity =>
       // this is the default expected value, should it move to the support trait?
-      val expected = Entity("the first row", "table1", Map(
-        AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("the first row"),
+      val expected = Entity("Row0", "table1", Map(
+        AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("Row0"),
         AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
         AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
         AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
