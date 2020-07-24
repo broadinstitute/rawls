@@ -6,7 +6,8 @@ import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
-import cats.implicits._
+import blobstore.Path
+import blobstore.gcs.GcsStore
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
 import fs2.concurrent.SignallingRef
@@ -17,11 +18,11 @@ import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName, ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
+import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName, ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
-import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
+import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
 import org.broadinstitute.dsde.workbench.util.FutureSupport
@@ -53,7 +54,7 @@ object AvroUpsertMonitorSupervisor {
   def props(entityService: UserInfo => EntityService,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
-            googleStorage: GoogleStorageService[IO],
+            gcsBlobStore: GcsStore[IO],
             pubSubDAO: GooglePubSubDAO,
             importServicePubSubDAO: GooglePubSubDAO,
             importServiceDAO: ImportServiceDAO,
@@ -63,7 +64,7 @@ object AvroUpsertMonitorSupervisor {
         entityService,
         googleServicesDAO,
         samDAO,
-        googleStorage,
+        gcsBlobStore,
         pubSubDAO,
         importServicePubSubDAO,
         importServiceDAO,
@@ -86,7 +87,7 @@ case class ImportUpsertResults(successes: Int, failures: List[RawlsErrorReport])
 class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
                                   googleServicesDAO: GoogleServicesDAO,
                                   samDAO: SamDAO,
-                                  googleStorage: GoogleStorageService[IO],
+                                  gcsBlobStore: GcsStore[IO],
                                   pubSubDAO: GooglePubSubDAO,
                                   importServicePubSubDAO: GooglePubSubDAO,
                                   importServiceDAO: ImportServiceDAO,
@@ -112,7 +113,7 @@ class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
+    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, entityService, googleServicesDAO, samDAO, gcsBlobStore, pubSubDAO, importServicePubSubDAO, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
   }
 
   override val supervisorStrategy =
@@ -138,14 +139,14 @@ object AvroUpsertMonitor {
              entityService: UserInfo => EntityService,
              googleServicesDAO: GoogleServicesDAO,
              samDAO: SamDAO,
-             googleStorage: GoogleStorageService[IO],
+             gcsBlobStore: GcsStore[IO],
              pubSubDao: GooglePubSubDAO,
              importServicePubSubDAO: GooglePubSubDAO,
              pubSubSubscriptionName: String,
              importStatusPubSubTopic: String,
              importServiceDAO: ImportServiceDAO,
              batchSize: Int)(implicit cs: ContextShift[IO]): Props =
-    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO,
+    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, entityService, googleServicesDAO, samDAO, gcsBlobStore, pubSubDao, importServicePubSubDAO,
       pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize))
 }
 
@@ -155,7 +156,7 @@ class AvroUpsertMonitorActor(
                               entityService: UserInfo => EntityService,
                               val googleServicesDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              googleStorage: GoogleStorageService[IO],
+                              gcsBlobStore: GcsStore[IO],
                               pubSubDao: GooglePubSubDAO,
                               importServicePubSubDAO: GooglePubSubDAO,
                               pubSubSubscriptionName: String,
@@ -405,7 +406,10 @@ class AvroUpsertMonitorActor(
     val bucketName = GcsBucketName(pathArray(0))
     val blobName = GcsBlobName(pathArray.tail.mkString("/"))
     logger.info(s"reading object ${blobName.value} from bucket ${bucketName.value} ...")
-    googleStorage.getBlobBody(bucketName, blobName)
+
+    gcsBlobStore.getUnderlying(Path(s"gs://$path"),
+      chunkSize = 1024*1024*2,
+      direct = false, maxChunkInFlight = None)
   }
 
   override val supervisorStrategy =

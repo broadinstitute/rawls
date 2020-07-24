@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
+import blobstore.gcs.GcsStore
 import cats.effect._
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
@@ -428,6 +429,7 @@ object Boot extends IOApp with LazyLogging {
           importServicePubSubDAO,
           importServiceDAO,
           appDependencies.googleStorageService,
+          appDependencies.gcsBlobstore,
           methodRepoDAO,
           dosResolver,
           entityServiceConstructor,
@@ -499,18 +501,21 @@ object Boot extends IOApp with LazyLogging {
     for {
       blockingEc <- ExecutionContexts.fixedThreadPool[F](256) //scala.concurrent.blocking has default max extra thread number 256, so use this number to start with
       blocker = Blocker.liftExecutionContext(blockingEc)
-      googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, blocker, None, Option(serviceProject))
+      googleStorageService <- GoogleStorageService.resource[F](pathToCredentialJson, blocker, None, Option(serviceProject))
+      gcsStorage <- GoogleStorageInterpreter.storage(pathToCredentialJson, blocker, None, Option(serviceProject))
+      gcsBlobstore = GcsStore(gcsStorage, blocker, List.empty)
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
       bqServiceFactory = new GoogleBigQueryServiceFactory(blocker)(executionContext)
-    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory)
+    } yield AppDependencies[F](googleStorageService, gcsBlobstore, googleServiceHttp, topicAdmin, bqServiceFactory)
   }
 }
 
 // Any resources need clean up should be put in AppDependencies
 final case class AppDependencies[F[_]](
   googleStorageService: GoogleStorageService[F],
+  gcsBlobstore: GcsStore[F],
   googleServiceHttp: GoogleServiceHttp[F],
   topicAdmin: GoogleTopicAdmin[F],
   bigQueryServiceFactory: GoogleBigQueryServiceFactory)

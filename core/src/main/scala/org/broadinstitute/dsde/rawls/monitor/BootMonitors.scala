@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
+import blobstore.gcs.GcsStore
 import cats.effect.{ContextShift, IO}
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
@@ -35,6 +36,7 @@ object BootMonitors extends LazyLogging {
                    importServicePubSubDAO: GooglePubSubDAO,
                    importServiceDAO: HttpImportServiceDAO,
                    googleStorage: GoogleStorageService[IO],
+                   gcsBlobStore: GcsStore[IO],
                    methodRepoDAO: MethodRepoDAO,
                    dosResolver: DosResolver,
                    entityService: (org.broadinstitute.dsde.rawls.model.UserInfo) => EntityService,
@@ -89,7 +91,7 @@ object BootMonitors extends LazyLogging {
     )
 
     //Boot the avro upsert monitor to read and process messages in the specified PubSub topic
-    startAvroUpsertMonitor(system, entityService, gcsDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO,
+    startAvroUpsertMonitor(system, entityService, gcsDAO, samDAO, googleStorage, gcsBlobStore, pubSubDAO, importServicePubSubDAO,
       importServiceDAO, avroUpsertMonitorConfig)
   }
 
@@ -188,13 +190,13 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO]) = {
+  private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], gcsBlobStore: GcsStore[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO]) = {
     system.actorOf(
       AvroUpsertMonitorSupervisor.props(
         entityService,
         googleServicesDAO,
         samDAO,
-        googleStorage,
+        gcsBlobStore,
         googlePubSubDAO,
         importServicePubSubDAO,
         importServiceDAO,

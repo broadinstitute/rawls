@@ -5,33 +5,53 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.IO
+import blobstore.gcs.GcsStore
+import cats.effect.{Blocker, IO}
+import com.google.cloud.storage.Storage
+import com.google.cloud.storage.contrib.nio.testing.LocalStorageHelper
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, Entity, ImportStatuses}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
-import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
-import org.broadinstitute.dsde.workbench.google2.GcsBlobName
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageInterpreterSpec.{blocker, semaphore}
+import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageInterpreter, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
-import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 
-import scala.concurrent.ExecutionContext.global
-import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext}
 import scala.language.postfixOps
 
 class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually {
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource,
+                            gcsDAO: MockGoogleServicesDAO,
+                            gpsDAO: MockGooglePubSubDAO,
+                            localStorageDb: Storage,
+                            localStorageInterpreter: GoogleStorageService[IO])
+                           (implicit override val executionContext: ExecutionContext)
+    extends ApiServices with MockUserInfoDirectives
+
+  implicit val cs = IO.contextShift(TestExecutionContext.testExecutionContext)
+  implicit val timer = IO.timer(TestExecutionContext.testExecutionContext)
+  implicit val structuredLogger = Slf4jLogger.getLogger[IO]
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService =>  T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+    val localStorageDb = LocalStorageHelper.getOptions.getService
+    val apiService = new TestApiService(dataSource,
+      new MockGoogleServicesDAO("test"),
+      new MockGooglePubSubDAO,
+      localStorageDb,
+      GoogleStorageInterpreter[IO](localStorageDb, blocker, Some(semaphore))
+    )
     try {
       testCode(apiService)
     } finally {
@@ -51,7 +71,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     }
   }
 
-  implicit val cs = IO.contextShift(global)
+//  implicit val cs = IO.contextShift(global)
   def this() = this(ActorSystem("AvroUpsertMonitorSpec"))
 
   override def beforeAll(): Unit = {
@@ -64,7 +84,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   }
 
   val workspaceName =  testData.workspace.toWorkspaceName
-  val googleStorage = FakeGoogleStorageInterpreter
+  // val googleStorage = FakeGoogleStorageInterpreter
+  // val gcsBlobstore = GcsStore[IO](LocalStorageHelper.getOptions.getService, Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global))
   val importReadPubSubTopic = "request-topic"
   val importReadSubscriptionName = "request-sub"
   val importWritePubSubTopic = "status-topic"
@@ -107,7 +128,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       services.entityServiceConstructor,
       services.gcsDAO,
       services.samDAO,
-      googleStorage,
+      GcsStore[IO](services.localStorageDb, Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)),
       services.gpsDAO,
       services.gpsDAO,
       mockImportServiceDAO,
@@ -139,9 +160,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       val contents = s"[${upsertOps.mkString(",")}]"
 
       // Store upsert json file
-      Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+      Await.result(services.localStorageInterpreter.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
-      val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+      val blob = Await.result(services.localStorageInterpreter.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
       // Publish message on the request topic
       services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId1.toString, testAttributes(importId1))))
@@ -204,9 +225,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     val contents = "hey, this isn't valid json! {{{"
 
     // Store upsert json file
-    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+    Await.result(services.localStorageInterpreter.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
-    val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+    val blob = Await.result(services.localStorageInterpreter.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
     // Publish message on the request topic
     services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId1.toString, testAttributes(importId1))))
@@ -241,9 +262,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     val contents = """[{"foo":"bar"},{"baz":"qux"}]"""
 
     // Store upsert json file
-    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+    Await.result(services.localStorageInterpreter.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
-    val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+    val blob = Await.result(services.localStorageInterpreter.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
     // Publish message on the request topic
     services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId1.toString, testAttributes(importId1))))
@@ -278,9 +299,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     val contents = s"""[{"name": "avro-entity", "entityType": "test-type", "operations": [{"op": "AddUpdateAttribute", "attributeName": "avro-attribute", "addUpdateAttribute": "foo"}]}]"""
 
     // Store upsert json file, even though we expect the code to look elsewhere and miss this file
-    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+    Await.result(services.localStorageInterpreter.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
-    val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+    val blob = Await.result(services.localStorageInterpreter.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
     // Publish message on the request topic - but ensure that the gcs: location in the pubsub message is incorrect
     val badMessageAttrs = testAttributes(importId1) ++ Map("upsertFile" ->  s"$bucketName/intentionally.nonexistent.unittest")
