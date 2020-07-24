@@ -71,7 +71,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     }
   }
 
-//  implicit val cs = IO.contextShift(global)
   def this() = this(ActorSystem("AvroUpsertMonitorSpec"))
 
   override def beforeAll(): Unit = {
@@ -84,8 +83,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   }
 
   val workspaceName =  testData.workspace.toWorkspaceName
-  // val googleStorage = FakeGoogleStorageInterpreter
-  // val gcsBlobstore = GcsStore[IO](LocalStorageHelper.getOptions.getService, Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global))
   val importReadPubSubTopic = "request-topic"
   val importReadSubscriptionName = "request-sub"
   val importWritePubSubTopic = "status-topic"
