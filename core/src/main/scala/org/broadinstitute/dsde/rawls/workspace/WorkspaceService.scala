@@ -18,7 +18,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
-import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
+import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -26,7 +27,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -1000,14 +1001,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   //validates the expressions in the method configuration, taking into account optional inputs
   private def validateMethodConfiguration(methodConfiguration: MethodConfiguration, workspaceContext: Workspace): Future[ValidatedMethodConfiguration] = {
     for {
-      entityProvider <- getEntityProviderForMethodConfig(workspaceContext, methodConfiguration)
       gatherInputsResult <- gatherMethodConfigInputs(methodConfiguration)
-      vmc <- entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult)
+      entityProviderTry = entityManager.resolveProvider(methodConfigEntityRequestArgs(methodConfiguration, workspaceContext))
+      vmc <- entityProviderTry match {
+        case Success(entityProvider) =>
+          entityProvider.expressionValidator.validateMCExpressions(methodConfiguration, gatherInputsResult)
+        case Failure(regrets: DataEntityException) =>
+          // any DataEntityException resolving entity provider treated as validation error
+          Future.successful(ValidatedMethodConfiguration(methodConfiguration, Set.empty, Map.empty, Set.empty, Set.empty, Set.empty, Map.empty, Seq(regrets.getMessage)))
+        case Failure(regrets) => Future.failed(regrets)
+      }
     } yield vmc
   }
 
-  private def getEntityProviderForMethodConfig(workspaceContext: Workspace, methodConfiguration: MethodConfiguration): Future[EntityProvider] = {
-    entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, userInfo, methodConfiguration.dataReferenceName, None))
+  private def methodConfigEntityRequestArgs(methodConfiguration: MethodConfiguration, workspaceContext: Workspace) = {
+    EntityRequestArguments(workspaceContext, userInfo, methodConfiguration.dataReferenceName, None)
   }
 
   def getAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] = {
@@ -1316,7 +1324,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${submissionRequest.methodConfigurationNamespace}/${submissionRequest.methodConfigurationName} does not exist in ${workspaceContext}"))
       )
 
-      entityProvider <- getEntityProviderForMethodConfig(workspaceContext, methodConfig)
+      entityProvider <- entityManager.resolveProviderFuture(methodConfigEntityRequestArgs(methodConfig, workspaceContext))
 
       _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
 

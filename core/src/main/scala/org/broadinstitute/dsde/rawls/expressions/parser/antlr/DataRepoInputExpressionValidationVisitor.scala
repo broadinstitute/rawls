@@ -44,7 +44,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     if (tableColumns.exists(_.getName == attributeName)) {
       Success()
     } else {
-      Failure(new RawlsException(s"Missing attribute `${attributeName}` on table `${tableModel.getName}`"))
+      Failure(new RawlsException(s"Column `${attributeName}` does not exist on table `${tableModel.getName}`"))
     }
   }
 

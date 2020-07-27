@@ -45,12 +45,12 @@ trait ExpressionValidator {
     validateMCExpressions(methodConfiguration, gatherInputsResult).map { validated =>
 
       Try {
-        if (validated.invalidInputs.nonEmpty || validated.missingInputs.nonEmpty || validated.extraInputs.nonEmpty || validated.invalidOutputs.nonEmpty) {
+        if (validated.invalidInputs.nonEmpty || validated.missingInputs.nonEmpty || validated.extraInputs.nonEmpty || validated.invalidOutputs.nonEmpty || validated.generalMessages.nonEmpty) {
           val inputMsg = if (validated.invalidInputs.isEmpty) Seq() else Seq(s"Invalid inputs: ${validated.invalidInputs.mkString(",")}")
           val missingMsg = if (validated.missingInputs.isEmpty) Seq() else Seq(s"Missing inputs: ${validated.missingInputs.mkString(",")}")
           val extrasMsg = if (validated.extraInputs.isEmpty) Seq() else Seq(s"Extra inputs: ${validated.extraInputs.mkString(",")}")
           val outputMsg = if (validated.invalidOutputs.isEmpty) Seq() else Seq(s"Invalid outputs: ${validated.invalidOutputs.mkString(",")}")
-          val errorStr = (inputMsg ++ missingMsg ++ extrasMsg ++ outputMsg) mkString " ; "
+          val errorStr = (validated.generalMessages ++ inputMsg ++ missingMsg ++ extrasMsg ++ outputMsg) mkString " ; "
           throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Validation errors: $errorStr"))
         }
         validated

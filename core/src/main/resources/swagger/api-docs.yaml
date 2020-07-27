@@ -5146,6 +5146,7 @@ components:
         - missingInputs
         - validInputs
         - validOutputs
+        - generalMessages
       type: object
       properties:
         validInputs:
@@ -5170,6 +5171,10 @@ components:
         invalidOutputs:
           type: object
           properties: {}
+        generalMessages:
+          type: array
+          items:
+            type: string
         methodConfiguration:
           $ref: '#/components/schemas/MethodConfiguration'
       description: Information about the validity of a method configuration's expressions

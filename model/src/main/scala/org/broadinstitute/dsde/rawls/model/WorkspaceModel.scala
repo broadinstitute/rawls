@@ -408,7 +408,8 @@ case class ValidatedMethodConfiguration(
                                          missingInputs: Set[String],
                                          extraInputs: Set[String],
                                          validOutputs: Set[String],
-                                         invalidOutputs: Map[String,String])
+                                         invalidOutputs: Map[String,String],
+                                         generalMessages: Seq[String] = Seq.empty)
 
 case class ValidatedMCExpressions(
                                          validInputs: Set[String],
@@ -732,7 +733,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
-  implicit val ValidatedMethodConfigurationFormat = jsonFormat7(ValidatedMethodConfiguration)
+  implicit val ValidatedMethodConfigurationFormat = jsonFormat8(ValidatedMethodConfiguration)
 
   implicit val GA4GHToolDescriptorFormat = jsonFormat3(GA4GHTool)
 

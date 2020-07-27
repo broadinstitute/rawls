@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -11,10 +13,12 @@ import spray.json.DefaultJsonProtocol._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import akka.http.scaladsl.testkit.RouteTestTimeout
-import akka.http.scaladsl.model.headers.Location
+import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.makeBadWorkflowDescription
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
+import spray.json._
 
 
 /**
@@ -130,6 +134,74 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
         assertSameElements(expectedFailureInputs, validated.invalidInputs)
         assertSameElements(expectedSuccessOutputs, validated.validOutputs)
         assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
+
+        // all inputs and outputs are saved, regardless of parsing errors
+        for ((key, value) <- inputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
+        }
+        for ((key, value) <- outputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+        }
+      }
+  }
+
+  it should "validate should detect data reference does not exists in create method configuration" in withTestDataApiServices { services =>
+    val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse"))
+    val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
+    val dataReferenceName = DataReferenceName("data_ref_name")
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), None, inputs, outputs,
+      AgoraMethod("dsde", "good_and_bad", 1), dataReferenceName = Option(dataReferenceName))
+
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        assertResult(newMethodConfig) {
+          validated.methodConfiguration
+        }
+        validated.generalMessages should contain(s"Reference name ${dataReferenceName.value} does not exist in workspace ${testData.workspace.toWorkspaceName}.")
+        validated.validInputs shouldBe empty
+        validated.invalidInputs shouldBe empty
+        validated.validOutputs shouldBe empty
+        validated.invalidOutputs shouldBe empty
+
+        // all inputs and outputs are saved, regardless of parsing errors
+        for ((key, value) <- inputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
+        }
+        for ((key, value) <- outputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(testData.workspace, newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+        }
+      }
+  }
+
+  it should "validate should detect data reference does exists but snapshot does not in create method configuration" in withTestDataApiServices { services =>
+    val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse"))
+    val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
+    val dataReferenceName = DataReferenceName("data_ref_name")
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), None, inputs, outputs,
+      AgoraMethod("dsde", "good_and_bad", 1), dataReferenceName = Option(dataReferenceName))
+
+    val terraDataRepoSnapshotRequest = TerraDataRepoSnapshotRequest(services.dataRepoDAO.getInstanceName, UUID.randomUUID().toString)
+    val dataReferenceString = terraDataRepoSnapshotRequest.toJson.compactPrint
+    services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), dataReferenceName, "DataRepoSnapshot", dataReferenceString, "foo", OAuth2BearerToken("foo")).getReferenceId
+
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        assertResult(newMethodConfig) { validated.methodConfiguration }
+        validated.generalMessages should contain (s"Snapshot id ${terraDataRepoSnapshotRequest.snapshot} does not exist or you do not have access")
+        validated.validInputs shouldBe empty
+        validated.invalidInputs shouldBe empty
+        validated.validOutputs shouldBe empty
+        validated.invalidOutputs shouldBe empty
 
         // all inputs and outputs are saved, regardless of parsing errors
         for ((key, value) <- inputs) assertResult(Option(value)) {
