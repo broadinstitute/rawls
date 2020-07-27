@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName, ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
-import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, updateImportStatusFormat}
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, KeepAlive, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
@@ -40,6 +40,7 @@ object AvroUpsertMonitorSupervisor {
   sealed trait AvroUpsertMonitorSupervisorMessage
   case object Init extends AvroUpsertMonitorSupervisorMessage
   case object Start extends AvroUpsertMonitorSupervisorMessage
+  case object KeepAlive extends AvroUpsertMonitorSupervisorMessage
 
   final case class AvroUpsertMonitorConfig(pollInterval: FiniteDuration,
                                            pollIntervalJitter: FiniteDuration,
@@ -205,6 +206,10 @@ class AvroUpsertMonitorActor(
       logger.info(s"received async upsert message: $message")
       importEntities(message)
 
+    case KeepAlive =>
+      // noop, here to ensure the actor does not time out from not receiving messages for too long
+      logger.info("received keepalive message")
+
     case None =>
       // there was no message so wait and try again
       val nextTime = org.broadinstitute.dsde.workbench.util.addJitter(pollInterval, pollIntervalJitter)
@@ -305,7 +310,12 @@ class AvroUpsertMonitorActor(
       // convenience method to encapsulate the call to EntityService's batchUpdateEntitiesInternal
       def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
-        entityService.apply(userInfo).batchUpdateEntitiesInternal(workspaceName, upsertBatch, upsert = true)
+        for {
+          petUserInfo <- getPetServiceAccountUserInfo(workspaceName.namespace, userInfo.userEmail)
+          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspaceName, upsertBatch, upsert = true)
+        } yield {
+          upsertResults
+        }
       }
 
       // create our pause signal. We use this to control when the stream should pause and resume.
@@ -325,6 +335,7 @@ class AvroUpsertMonitorActor(
         case (chunk, idx) =>
           for {
             _ <- sig.set(true)
+            _ = self ! KeepAlive // keep actor alive during this loop
             attempt <- IO.fromFuture(IO(toFutureTry(performUpsertBatch(idx, chunk.toList))))
             _ <- sig.set(false)
           } yield {
