@@ -7,7 +7,7 @@ object Dependencies {
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
-  val workbenchGoogle2V = "0.10-956a642"
+  val workbenchGoogle2V = "0.11-b9da9fc-SNAP"
 
   val cromwellVersion = "40-2754783"
 
@@ -60,6 +60,8 @@ object Dependencies {
   val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.30.0"
   val googleRpcNettyShaded: ModuleID =    "io.grpc" % "grpc-netty-shaded" % "1.30.0"
   val googleCloudCoreGrpc: ModuleID =     "com.google.cloud" % "google-cloud-core-grpc" % "1.93.6"
+
+  val googleAutoValue: ModuleID =         "com.google.auto.value" % "auto-value-annotations" % "1.7.4"
 
   val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
 
@@ -165,7 +167,8 @@ object Dependencies {
     googleCloudCoreGrpc,
     googleRpc,
     googleRpcNettyShaded,
-    workbenchGoogle2Tests
+    workbenchGoogle2Tests,
+    googleAutoValue // workbench-libs/google2 fails to correctly pull this as a dependency, so we do it manually
   )
 
   val utilDependencies = Seq(
