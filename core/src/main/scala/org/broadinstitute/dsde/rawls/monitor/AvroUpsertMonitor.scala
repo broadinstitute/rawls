@@ -241,7 +241,7 @@ class AvroUpsertMonitorActor(
         // of the same import.
         case Some(status) if status == ImportStatuses.ReadyForUpsert => {
           publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
-          toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, attributes.workspace, petUserInfo)) map {
+          toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, attributes.workspace, attributes.userEmail)) map {
             case Success(importUpsertResults) =>
               val msg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
               publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, Option(msg))
@@ -269,7 +269,7 @@ class AvroUpsertMonitorActor(
   }
 
 
-  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[ImportUpsertResults] = {
+  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userEmail: RawlsUserEmail): Future[ImportUpsertResults] = {
     val startTime = System.currentTimeMillis()
     logger.info(s"beginning upsert process for $jobId ...")
 
@@ -311,7 +311,7 @@ class AvroUpsertMonitorActor(
       def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         for {
-          petUserInfo <- getPetServiceAccountUserInfo(workspaceName.namespace, userInfo.userEmail)
+          petUserInfo <- getPetServiceAccountUserInfo(workspaceName.namespace, userEmail)
           upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspaceName, upsertBatch, upsert = true)
         } yield {
           upsertResults
