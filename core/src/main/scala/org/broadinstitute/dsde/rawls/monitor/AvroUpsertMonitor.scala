@@ -310,7 +310,12 @@ class AvroUpsertMonitorActor(
       // convenience method to encapsulate the call to EntityService's batchUpdateEntitiesInternal
       def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
-        entityService.apply(userInfo).batchUpdateEntitiesInternal(workspaceName, upsertBatch, upsert = true)
+        for {
+          petUserInfo <- getPetServiceAccountUserInfo(workspaceName.namespace, userInfo.userEmail)
+          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspaceName, upsertBatch, upsert = true)
+        } yield {
+          upsertResults
+        }
       }
 
       // create our pause signal. We use this to control when the stream should pause and resume.
