@@ -135,6 +135,16 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 400 when getting a reference to a snapshot that is not a valid UUID" in withTestDataApiServices { services =>
+    Get(s"${testData.wsName.path}/snapshots/not-a-valid-uuid") ~>
+      sealRoute(services.snapshotRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
   it should "return 404 when getting a reference to a snapshot that doesn't exist" in withTestDataApiServices { services =>
     Get(s"${testData.wsName.path}/snapshots/${UUID.randomUUID().toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
@@ -146,7 +156,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when getting a reference to a snapshot in a workspace that doesn't exist" in withTestDataApiServices { services =>
-    Get(s"/workspaces/foo/bar/snapshots/doesntmatter") ~>
+    Get(s"/workspaces/foo/bar/snapshots/${UUID.randomUUID().toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -275,8 +285,18 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 400 when a user tries to delete a snapshot that is not a valid UUID" in withTestDataApiServices { services =>
+    Delete(s"${testData.wsName.path}/snapshots/not-a-valid-uuid") ~>
+      sealRoute(services.snapshotRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
   it should "return 403 when a user can only read a workspace and tries to delete a snapshot" in withTestDataApiServicesAndUser("reader-access") { services =>
-    Delete(s"${testData.wsName.path}/snapshots/doesntmatter") ~>
+    Delete(s"${testData.wsName.path}/snapshots/${UUID.randomUUID().toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.Forbidden) {status} }
   }
