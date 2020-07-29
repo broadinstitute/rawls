@@ -4,6 +4,7 @@ import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.workspace.model.{CloningInstructionsEnum, ReferenceTypeEnum}
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -303,7 +304,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when a user tries to delete a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
     val dataReferenceString = TerraDataRepoSnapshotRequest("foo", "bar").toJson.compactPrint
-    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), "DataRepoSnapshot", dataReferenceString, "foo", OAuth2BearerToken("foo")).getReferenceId
+    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReferenceString, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
     Delete(s"${testData.wsName.path}/snapshots/${id.toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }

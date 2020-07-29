@@ -4,7 +4,7 @@ import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
+import bio.terra.workspace.model.{CloningInstructionsEnum, ReferenceTypeEnum}
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -40,7 +40,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       }
 
       val dataRepoReference = TerraDataRepoSnapshotRequest(terraDataRepoInstanceName, snapshot.snapshotId).toJson.compactPrint
-      val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue, dataRepoReference, CloningInstructionsEnum.NOTHING.getValue, userInfo.accessToken)
+      val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
       Future.successful(DataRepoSnapshotReference(ref))
     }

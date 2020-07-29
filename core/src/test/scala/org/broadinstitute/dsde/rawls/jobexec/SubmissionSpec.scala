@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
-import bio.terra.workspace.model.DataReferenceDescription
+import bio.terra.workspace.model.{CloningInstructionsEnum, ReferenceTypeEnum}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
 import com.typesafe.config.ConfigFactory
@@ -1124,7 +1124,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
 
     withDataAndService({ workspaceService =>
-      workspaceService.workspaceManagerDAO.createDataReference(minimalTestData.workspace.workspaceIdAsUUID, dataReferenceName, DataReferenceDescription.ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue, TerraDataRepoSnapshotRequest(dataRepoDAO.getInstanceName, snapshotUUID.toString).toJson.compactPrint, "", userInfo.accessToken)
+      workspaceService.workspaceManagerDAO.createDataReference(minimalTestData.workspace.workspaceIdAsUUID, dataReferenceName, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, TerraDataRepoSnapshotRequest(dataRepoDAO.getInstanceName, snapshotUUID.toString).toJson.compactPrint, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
       test(workspaceService, methodConfig, snapshotUUID)
     }, withMinimalTestDatabase[Any], bigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)), dataRepoDAO = dataRepoDAO)
