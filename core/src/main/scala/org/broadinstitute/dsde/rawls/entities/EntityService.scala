@@ -193,8 +193,10 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
 
       queryFuture.recover {
-        case dee:DataEntityException => RequestComplete(dee.code, dee.getMessage)
-        case ex => RequestComplete(StatusCodes.InternalServerError, ex)
+        case dee:DataEntityException =>
+          throw new RawlsExceptionWithErrorReport(ErrorReport(dee.code, dee.getMessage))
+        case ex =>
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex))
       }
     }
   }
