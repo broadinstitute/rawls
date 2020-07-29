@@ -65,8 +65,11 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     */
   def resolveProviderFuture(entityRequestArguments: EntityRequestArguments)(implicit executionContext: ExecutionContext): Future[EntityProvider] = {
     Future.fromTry(resolveProvider(entityRequestArguments)).recoverWith {
+      // pass DataEntityExceptions untouched; wrap any other exception in an ErrorReport
       case regrets: DataEntityException =>
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, regrets)))
+        Future.failed(regrets)
+      case ex: Exception =>
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex)))
     }
   }
 }
