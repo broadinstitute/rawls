@@ -2,23 +2,26 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
-import cats.effect.{ContextShift, IO, Resource}
-import cats.implicits._
-import com.google.cloud.bigquery.{QueryJobConfiguration, QueryParameterValue, TableResult}
+import cats.effect.{ContextShift, IO}
+import com.google.cloud.bigquery.Field.Mode
+import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, QueryParameterValue, TableResult}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base._
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
+import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, AttributeValueList, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -28,9 +31,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
                             (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with DataRepoBigQuerySupport with LazyLogging with ExpressionEvaluationSupport {
 
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
   override val entityStoreId: Option[String] = Option(snapshotModel.getId)
-
-  val datarepoRowIdColumn = "datarepo_row_id"
 
   private lazy val googleProject = {
     // determine project to be billed for the BQ job TODO: need business logic from PO!
@@ -64,7 +66,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     // extract table definition, with PK, from snapshot schema
-    val tableModel = getTableModel(entityType)
+    val tableModel = getTableModel(snapshotModel, entityType)
 
     //  determine pk column
     val pk = pkFromSnapshotTable(tableModel)
@@ -76,25 +78,20 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     // they should be safe, but we should have layers of protection.
     val query = s"SELECT * FROM `${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(entityType)}` WHERE $pk = @pkvalue;"
     // generate query config, with named param for primary key
-    val queryConfig = QueryJobConfiguration.newBuilder(query)
+    val queryConfigBuilder = QueryJobConfiguration.newBuilder(query)
+      .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
       .addNamedParameter("pkvalue", QueryParameterValue.string(entityName))
-      .build
 
-    // get pet service account key for this user
-    samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail) map { petKey =>
-
-      // get a BQ service (i.e. dao) instance, and use it to execute the query against BQ
-      val queryResource: Resource[IO, TableResult] = for {
-        bqService <- bqServiceFactory.getServiceForPet(petKey)
-        queryResults <- Resource.liftF(bqService.query(queryConfig))
-      } yield queryResults
-
+    val resultIO = for {
+      // get pet service account key for this user
+      petKey <- getPetSAKey
+      // execute the query against BQ
+      queryResults <- runBigQuery(queryConfigBuilder, petKey)
+    } yield {
       // translate the BQ results into a single Rawls Entity
-      queryResource.use { queryResults: TableResult =>
-        IO.pure(queryResultsToEntity(queryResults, entityType, pk))
-      }.unsafeRunSync()
-
+      queryResultsToEntity(queryResults, entityType, pk)
     }
+    resultIO.unsafeToFuture()
   }
 
   override def queryEntities(entityType: String, entityQuery: EntityQuery): Future[EntityQueryResponse] = {
@@ -104,16 +101,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
 
     // extract table definition, with PK, from snapshot schema
-    val tableModel = snapshotModel.getTables.asScala.find(_.getName == entityType) match {
-      case Some(table) => table
-      case None => throw new EntityTypeNotFoundException(entityType)
-    }
-
-    // determine project to be billed for the BQ job TODO: need business logic from PO!
-    val googleProject: String = requestArguments.billingProject match {
-      case Some(billing) => billing.projectName.value
-      case None => requestArguments.workspace.namespace
-    }
+    val tableModel = getTableModel(snapshotModel, entityType)
 
     // validate sort column exists in the snapshot's table description
     if (!tableModel.getColumns.asScala.exists(_.getName == entityQuery.sortField))
@@ -126,33 +114,20 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     // determine view name
     val viewName = snapshotModel.getName
 
-    val queryConfig = queryConfigForQueryEntities(dataProject, viewName, entityType, entityQuery)
+    val queryConfigBuilder = queryConfigForQueryEntities(dataProject, viewName, entityType, entityQuery)
 
-    // get pet service account key for this user
-    samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail) map { petKey =>
-
-      // get a BQ service (i.e. dao) instance, and use it to execute the query against BQ
-      val queryResource: Resource[IO, TableResult] = for {
-        bqService <- bqServiceFactory.getServiceForPet(petKey)
-        queryResults <- Resource.liftF(bqService.query(queryConfig))
-      } yield queryResults
-
+    val resultIO = for {
+      // get pet service account key for this user
+      petKey <- getPetSAKey
+      // execute the query against BQ
+      queryResults <- runBigQuery(queryConfigBuilder, petKey)
+    } yield {
       // translate the BQ results into a Rawls query result
-      queryResource.use { queryResults: TableResult =>
-        val page = queryResultsToEntities(queryResults, entityType, pk)
-        val metadata = queryResultsMetadata(queryResults, entityQuery)
-        val queryResponse = EntityQueryResponse(entityQuery, metadata, page)
-        IO.pure(queryResponse)
-      }.unsafeRunSync()
-
+      val page = queryResultsToEntities(queryResults, entityType, pk)
+      val metadata = queryResultsMetadata(queryResults, entityQuery)
+      EntityQueryResponse(entityQuery, metadata, page)
     }
-  }
-
-  private def getTableModel(entityType: String) = {
-    snapshotModel.getTables.asScala.find(_.getName == entityType) match {
-      case Some(table) => table
-      case None => throw new EntityTypeNotFoundException(entityType)
-    }
+    resultIO.unsafeToFuture()
   }
 
   def pkFromSnapshotTable(tableModel: TableModel): String = {
@@ -164,34 +139,81 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
   }
 
+  private[datarepo] def convertToListAndCheckSize(expressionResultsStream: Stream[ExpressionAndResult], expectedSize: Int): List[ExpressionAndResult] = {
+    // this size of stuff is not meant to be precise but just hopefully close enough
+    // so that we can protect from OOMs
+    val objectSize = 8
+    val bigDecimalSize = objectSize + 40
+    val booleanSize = objectSize + 1
+    def stringSize(s: String) = objectSize + s.length * 1
+
+    def sizeOfJsValueBytes(jsValue: JsValue): Int = {
+      jsValue match {
+        case JsArray(elements) => objectSize + elements.map(sizeOfJsValueBytes).sum
+        case JsBoolean(_) => booleanSize
+        case JsNull => 0
+        case JsNumber(_) => bigDecimalSize
+        case JsObject(fields) => fields.map { case (k, v) => stringSize(k) + sizeOfJsValueBytes(v) }.sum
+        case JsString(value) => objectSize + stringSize(value)
+      }
+    }
+
+    def sizeOfAttributeValueBytes(attributeValue: AttributeValue): Int = {
+      attributeValue match {
+        case AttributeNull => 0
+        case AttributeBoolean(_) => booleanSize
+        case AttributeNumber(_) => bigDecimalSize
+        case AttributeString(value) => objectSize + stringSize(value)
+        case AttributeValueRawJson(value) => objectSize + sizeOfJsValueBytes(value)
+      }
+    }
+
+    val buffer = new ArrayBuffer[ExpressionAndResult](expectedSize)
+    var runningSizeEstimateBytes = 0
+    expressionResultsStream.foreach { expressionAndResult =>
+      val result = expressionAndResult._2
+      // the getOrElse(0) below ignores any failures in the Try
+      val sizeEstimateBytes = result.values.map(_.map(_.map(sizeOfAttributeValueBytes).sum).getOrElse(0)).sum
+      runningSizeEstimateBytes += sizeEstimateBytes
+
+      if(runningSizeEstimateBytes > config.maxBigQueryResponseSizeBytes) {
+        throw new DataEntityException(s"Query returned too many results likely due to either large one-to-many relationships or arrays. The limit on the total number bytes is ${config.maxBigQueryResponseSizeBytes}.")
+      }
+
+      buffer += expressionAndResult
+    }
+
+    buffer.toList
+  }
+
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] = {
     expressionEvaluationContext match {
       case ExpressionEvaluationContext(None, None, None, Some(rootEntityType)) =>
         /*
         overall approach here is to extract all the entity lookup expressions from the input expressions,
-        generate BigQuery queries from the lookup expressions, execute the queries, use the BQ results to
+        generate 1 BigQuery query from the lookup expressions, execute it, use the BQ results to
         construct a value for each input expression for each entity
 
         Some things to consider:
         input expressions may have 0 or more entity lookup expressions
         the same entity lookup expression may appear more than once within an input expression or across all input expressions
-        only one BigQuery job is created for each relationship
-        after running the BigQuery jobs the work is to figure out where those results get plugged into input values for each entity
+        after running the BigQuery job the work is to figure out where those results get plugged into input values for each entity
          */
-        implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
         val baseTableAlias = "root"
         val resultIO = for {
           parsedExpressions <- parseAllExpressions(gatherInputsResult, baseTableAlias)
-          tableModel = getTableModel(rootEntityType)
+          tableModel = getTableModel(snapshotModel, rootEntityType)
           _ <- checkSubmissionSize(parsedExpressions, tableModel)
           entityNameColumn = pkFromSnapshotTable(tableModel)
-          bqQueryJobConfigs = generateBigQueryJobConfigs(parsedExpressions, tableModel, entityNameColumn, baseTableAlias)
-          petKey <- IO.fromFuture(IO(samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)))
-          bqExpressionResults <- runBigQueryQueries(entityNameColumn, bqQueryJobConfigs, petKey)
-          rootEntityNames = getEntityNames(bqExpressionResults)
+          (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel, parsedExpressions, tableModel, entityNameColumn, baseTableAlias)
+          petKey <- getPetSAKey
+          queryResults <- runBigQuery(bqQueryJobConfig, petKey)
         } yield {
+          val expressionResultsStream = transformQueryResultToExpressionAndResult(entityNameColumn, parsedExpressions, selectAndFroms, queryResults)
+          val expressionResults = convertToListAndCheckSize(expressionResultsStream, tableModel.getRowCount)
+          val rootEntityNames = getEntityNames(expressionResults)
           val workspaceExpressionResultsPerEntity = populateWorkspaceLookupPerEntity(workspaceExpressionResults, rootEntityNames)
-          val groupedResults = groupResultsByExpressionAndEntityName(bqExpressionResults ++ workspaceExpressionResultsPerEntity)
+          val groupedResults = groupResultsByExpressionAndEntityName(expressionResults ++ workspaceExpressionResultsPerEntity)
 
           val entityNameAndInputValues = constructInputsForEachEntity(gatherInputsResult, groupedResults, baseTableAlias, rootEntityNames)
 
@@ -203,7 +225,11 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
   }
 
-  private def getEntityNames(bqExpressionResults: List[(LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])]): List[EntityName] = {
+  private def getPetSAKey: IO[String] = {
+    IO.fromFuture(IO(samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)))
+  }
+
+  private def getEntityNames(bqExpressionResults: List[ExpressionAndResult]): List[EntityName] = {
     bqExpressionResults.flatMap {
       case (_, resultsMap) => resultsMap.keys
     }.distinct
@@ -249,78 +275,64 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
   }
 
-  private def runBigQueryQueries(entityNameColumn: String, bqQueryJobConfigs: Map[Set[ParsedEntityLookupExpression], QueryJobConfiguration], petKey: String): IO[List[ExpressionAndResult]] = {
-    bqServiceFactory.getServiceForPet(petKey).use { bqService =>
-      for {
-        queryResults <- bqQueryJobConfigs.toList.traverse { // consider parTraverse if serial is slow but be careful not to use too many threads
-          case (expressions, bqJob) => bqService.query(bqJob).map(expressions -> _)
-        }
-        _ <- checkQuerySize(queryResults)
-      } yield {
-        transformQueryResultToExpressionAndResult(entityNameColumn, queryResults)
-      }
-    }
+  private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String): IO[TableResult] = {
+    bqServiceFactory.getServiceForPet(petKey).use(_.query(
+      bqQueryJobConfigBuilder
+        .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
+        .build()))
   }
 
-  private def transformQueryResultToExpressionAndResult(entityNameColumn: String, queryResults: List[(Set[ParsedEntityLookupExpression], TableResult)]): List[ExpressionAndResult] = {
+  /**
+    * The tableResult should have a single row per root entity. Each row should have a column for each
+    * column request from the root entity. Each row should also have a column for each related entity
+    * from which columns were requested. Each of these "related entity" columns is an array of structs.
+    * The columns of each struct are the columns requested from that entity.
+    *
+    * @param entityNameColumn
+    * @param parsedExpressions
+    * @param selectAndFroms
+    * @param tableResult
+    * @return Stream because it should not suck all the results from BigQuery into memory
+    */
+  private[datarepo] def transformQueryResultToExpressionAndResult(entityNameColumn: String, parsedExpressions: Set[ParsedEntityLookupExpression], selectAndFroms: List[SelectAndFrom], tableResult: TableResult): Stream[ExpressionAndResult] = {
+    val selectAndFromByRelationshipPath = selectAndFroms.map(sf => sf.relationship.map(_.relationshipPath).getOrElse(List.empty) -> sf).toMap
+    val relationshipAliasesByPath = selectAndFroms.flatMap(j => j.relationship.map(r => r.relationshipPath -> r.alias)).toMap
     for {
-      (parsedExpressions, tableResult) <- queryResults
-      resultRow <- tableResult.iterateAll().asScala
+      resultRow <- tableResult.iterateAll().asScala.toStream // this is the streaming goodness
       parsedExpression <- parsedExpressions
     } yield {
-      val field = tableResult.getSchema.getFields.get(parsedExpression.columnName)
+      val columnIndex = selectAndFromByRelationshipPath(parsedExpression.relationships).selectColumns.map(_.column).indexOf(parsedExpression.columnName)
+      val attribute = relationshipAliasesByPath.get(parsedExpression.relationships) match {
+        case None =>
+          // this is a root level expression, e.g. this.foo, no alias required it should be at the top level of the row
+          val field = tableResult.getSchema.getFields.get(columnIndex)
+          val fieldValue = resultRow.get(columnIndex)
+          fieldValueToAttributeValue(field, fieldValue)
+        case Some(relationshipAlias) =>
+          // this is a relation expressions, e.g. this.foo.bar, it should be an array of structs (i.e. repeated record) column
+          // the name if the column is the relationshipAlias and the sub fields the names of the columns in the expressions
+          val field = tableResult.getSchema.getFields.get(relationshipAlias)
+          assert(field.getMode == Mode.REPEATED, "expected result from relationship to be an array")
+          assert(field.getType == LegacySQLTypeName.RECORD, "expected result from relationship to be a struct")
+          val subField = field.getSubFields.get(columnIndex)
+          val attributeValues = resultRow.get(relationshipAlias).getRepeatedValue.asScala.map { struct =>
+            val subFieldValue = struct.getRecordValue.get(columnIndex)
+            fieldValueToAttributeValue(subField, subFieldValue)
+          }.flatMap {
+            case v: AttributeValue => Seq(v)
+            case AttributeValueList(l) => l
+            case unsupported => throw new RawlsException(s"unsupported attribute: $unsupported")
+          }
+          AttributeValueList(attributeValues)
+      }
+
       val primaryKey: EntityName = resultRow.get(entityNameColumn).getStringValue
-      val attribute = fieldToAttribute(field, resultRow)
       val evaluationResult: Try[Iterable[AttributeValue]] = attribute match {
         case v: AttributeValue => Success(Seq(v))
         case AttributeValueList(l) => Success(l)
         case unsupported => Failure(new RawlsException(s"unsupported attribute: $unsupported"))
       }
       (parsedExpression.expression, Map(primaryKey -> evaluationResult))
-    }
-  }
-
-  private def checkQuerySize(queryResults: List[(Set[ParsedEntityLookupExpression], TableResult)]): IO[Unit] = {
-    queryResults.traverse { case (queryResult, tableResults) =>
-      if (tableResults.getTotalRows > config.maxRowsPerQuery) {
-        IO.raiseError(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Too many results. Results size ${tableResults.getTotalRows} cannot exceed ${config.maxRowsPerQuery}. Expression(s): [${queryResult.map(_.expression).mkString(", ")}].")))
-      } else {
-        IO.unit
-      }
-    }.void
-  }
-
-  /**
-    * Generate the BQ job for each of the entity lookup expressions. The lookup expressions are grouped based on
-    * their relationships so that only 1 job is created per relationship plus 1 for the base table. We do no want
-    * to make a BQ job per lookup expression as that could potentially be many.
-    * @param parsedExpressions
-    * @param tableModel
-    * @param entityNameColumn
-    * @param baseTableAlias
-    * @return
-    */
-  private def generateBigQueryJobConfigs(parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel, entityNameColumn: String, baseTableAlias: String) = {
-    parsedExpressions.groupBy(_.relationships).map {
-      case (Nil, expressions) =>
-        val columnNames = expressions.map(_.columnName)
-        val validColumnNames = tableModel.getColumns.asScala.map(_.getName.toLowerCase).toSet
-
-        val invalidColumnNames = columnNames -- validColumnNames
-        if (invalidColumnNames.nonEmpty) {
-          // we should have validated all this already, this is just to be sure we don't get any sql injection
-          throw new RawlsException(s"invalid columns: ${invalidColumnNames.mkString(",")}")
-        }
-
-        val dataProject = snapshotModel.getDataProject
-        // determine view name
-        val viewName = snapshotModel.getName
-        // generate BQ SQL for this entity
-        val query = s"SELECT $baseTableAlias.$entityNameColumn, ${expressions.map(_.qualifiedColumnName).mkString(", ")} FROM `${dataProject}.${viewName}.${tableModel.getName}` $baseTableAlias"
-
-        (expressions, QueryJobConfiguration.newBuilder(query).build)
-
-      case _ => throw new RawlsException("relations not implemented yet")
     }
   }
 

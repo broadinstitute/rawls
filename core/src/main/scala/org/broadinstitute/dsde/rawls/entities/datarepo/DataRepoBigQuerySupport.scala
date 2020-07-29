@@ -1,18 +1,104 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.datarepo.model.{RelationshipModel, SnapshotModel, TableModel}
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery._
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, IllegalIdentifierException}
+import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException, IllegalIdentifierException}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 import scala.util.{Failure, Success, Try}
 
-// object so we don't recompile this regex for each instance of DataRepoEntityProvider
 object DataRepoBigQuerySupport {
   val illegalBQChars: Regex = """[^a-zA-Z0-9\-_]""".r
+  val datarepoRowIdColumn = "datarepo_row_id"
+
+  def tableNameInQuery(dataProject: String, viewName: String, tableName: String, alias: scala.Option[String] = None): String = {
+    val aliasString = alias.map(a => " " + validateSql(a)).getOrElse("")
+    s"`${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(tableName)}`$aliasString"
+  }
+
+  /**
+    * Checks for illegal/undesired characters in a string so that it is safe to use inside
+    * a BigQuery SQL statement. Throws an error if illegal characters exist.
+    *
+    * BQ does not support bind parameters everywhere we want to use them.
+    * Per https://cloud.google.com/bigquery/docs/parameterized-queries,
+    * "Parameters cannot be used as substitutes for identifiers, column names,
+    * table names, or other parts of the query."
+    *
+    * Therefore we must validate any dynamic strings we want to use in those places.
+    *
+    * Google's doc on table naming (https://cloud.google.com/bigquery/docs/tables) says:
+    *   - Contain up to 1,024 characters
+    *   - Contain letters (upper or lower case), numbers, and underscores
+    * Google's doc on dataset naming (https://cloud.google.com/bigquery/docs/datasets) has the exact same requirements
+    * Google's doc on view naming (https://cloud.google.com/bigquery/docs/views) has the exact same requirements
+    * Google's doc on project naming (https://cloud.google.com/resource-manager/docs/creating-managing-projects) says:
+    *   - The project ID must be a unique string of 6 to 30 lowercase letters, digits, or hyphens. It must start with a letter, and cannot have a trailing hyphen.
+    * Google's doc on column naming (https://cloud.google.com/bigquery/docs/schemas) says:
+    *   - A column name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and it must start with a letter or underscore. The maximum column name length is 128 characters
+    *
+    * Given those naming requirements, this function allows ONLY: letters, numbers, underscores, hyphens.
+    * It does not impose any length restrictions.
+    *
+    * @param input the string to be validated
+    * @return the original string, if valid; throws an error if invalid.
+    */
+  def validateSql(input: String): String = {
+    if (input == null || DataRepoBigQuerySupport.illegalBQChars.findFirstIn(input).isDefined) {
+      val inputSubstring = scala.Option(input).getOrElse("null").take(64)
+      val sanitizedForOutput = DataRepoBigQuerySupport.illegalBQChars.replaceAllIn(inputSubstring, "_")
+      throw new IllegalIdentifierException(s"Illegal identifier used in BigQuery SQL. Original input was like [$sanitizedForOutput]")
+    } else {
+      input
+    }
+  }
+
+  def getTableModel(snapshotModel: SnapshotModel, entityType: String) = {
+    snapshotModel.getTables.asScala.find(_.getName == entityType) match {
+      case Some(table) => table
+      case None => throw new EntityTypeNotFoundException(entityType)
+    }
+  }
+
+  def getRelationshipModel(snapshotModel: SnapshotModel, relationshipName: String) = {
+    snapshotModel.getRelationships.asScala.find(_.getName == relationshipName) match {
+      case Some(relationshipModel) => relationshipModel
+      case None => throw new DataEntityException(s"relationship $relationshipName does not exist")
+    }
+  }
+
+  /*
+  The following set of case classes are used as an intermediate representation derived from a set of entity lookup
+  expressions. The intermediate representation is then used to construct a SQL query to submit to BigQuery.
+   */
+  object EntityTable {
+    def apply(snapshotModel: SnapshotModel, name: String, alias: String): EntityTable = {
+      EntityTable(snapshotModel.getDataProject, snapshotModel.getName, name, alias)
+    }
+  }
+  case class EntityTable(dataProject: String, viewName: String, name: String, alias: String) {
+    lazy val nameInQuery: String = tableNameInQuery(dataProject, viewName, name, scala.Option(alias))
+  }
+
+  object EntityColumn {
+    def apply(snapshotModel: SnapshotModel, table: EntityTable, column: String): EntityColumn = {
+      val isArray = getTableModel(snapshotModel, table.name).getColumns.asScala.find(_.getName == column).exists(_.isArrayOf)
+      EntityColumn(table, column, isArray)
+    }
+  }
+  case class EntityColumn(table: EntityTable, column: String, isArray: Boolean) {
+    lazy val qualifiedName = s"${validateSql(table.alias)}.${validateSql(column)}"
+  }
+  case class EntityRelationship(from: EntityColumn, to: EntityColumn, relationshipPath: List[String], alias: String, isArray: Boolean)
+  case class SelectAndFrom(fromTable: EntityTable, relationship: scala.Option[EntityRelationship], selectColumns: List[EntityColumn])
 }
 
 /**
@@ -21,13 +107,13 @@ object DataRepoBigQuerySupport {
 trait DataRepoBigQuerySupport {
 
   /**
-   * translate a single BigQuery FieldValue to a single Rawls AttributeValue
+   * translate a single BigQuery FieldValue (i.e. not a repeated/array type) to a single Rawls AttributeValue
    *
    * @param field the BQ schema's field definition
    * @param fv the BQ field value
    * @return the Rawls attribute value, post-translation
    */
-  def fieldValueToAttributeValue(field: Field, fv: FieldValue): AttributeValue = {
+  def singleFieldValueToAttributeValue(field: Field, fv: FieldValue): AttributeValue = {
     field.getType match {
       case x if fv.isNull =>
         AttributeNull
@@ -65,16 +151,27 @@ trait DataRepoBigQuerySupport {
         throw new DataEntityException(s"field ${field.getName} not found in row ${asDelimitedString(row)}")
     }
 
+    fieldValueToAttributeValue(field, fv)
+  }
+
+  /**
+    * translate a BigQuery FieldValue, possibly repeated/array, to a Rawls Attribute.
+    *
+    * @param field the BQ schema's field definition
+    * @param fv the BQ field value
+    * @return the Rawls attribute value, post-translation
+    */
+  def fieldValueToAttributeValue(field: Field, fv: FieldValue): Attribute = {
     val attribute = field.getMode match {
       case Mode.REPEATED =>
         fv.getRepeatedValue.asScala.toList match {
           case x if x.isEmpty => AttributeValueEmptyList
           case members =>
             // can a list itself contain a list? Recursion here is difficult because of the Attribute/AttributeValue hierarchy
-            val attrValues = members.map { member => fieldValueToAttributeValue(field, member) }
+            val attrValues = members.map { member => singleFieldValueToAttributeValue(field, member) }
             AttributeValueList(attrValues)
         }
-      case _ => fieldValueToAttributeValue(field, fv)
+      case _ => singleFieldValueToAttributeValue(field, fv)
     }
 
     attribute
@@ -176,53 +273,15 @@ trait DataRepoBigQuerySupport {
    * @param entityQuery user-supplied query criteria
    * @return the object to pass to BQ to execute a query
    */
-  def queryConfigForQueryEntities(dataProject: String, viewName: String, entityType: String, entityQuery: EntityQuery): QueryJobConfiguration = {
+  def queryConfigForQueryEntities(dataProject: String, viewName: String, entityType: String, entityQuery: EntityQuery): QueryJobConfiguration.Builder = {
     // generate BQ SQL for this entity
-    val query = s"SELECT * FROM `${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(entityType)}` " +
+    val query = s"SELECT * FROM ${tableNameInQuery(dataProject, viewName, entityType)} " +
       s"ORDER BY ${validateSql(entityQuery.sortField)} ${SortDirections.toSql(entityQuery.sortDirection)} " +
       s"LIMIT ${entityQuery.pageSize} " +
       s"OFFSET ${translatePaginationOffset(entityQuery).toLong};"
 
     // generate query config
     QueryJobConfiguration.newBuilder(query)
-      .build
-  }
-
-  /**
-   * Checks for illegal/undesired characters in a string so that it is safe to use inside
-   * a BigQuery SQL statement. Throws an error if illegal characters exist.
-   *
-   * BQ does not support bind parameters everywhere we want to use them.
-   * Per https://cloud.google.com/bigquery/docs/parameterized-queries,
-   * "Parameters cannot be used as substitutes for identifiers, column names,
-   * table names, or other parts of the query."
-   *
-   * Therefore we must validate any dynamic strings we want to use in those places.
-   *
-   * Google's doc on table naming (https://cloud.google.com/bigquery/docs/tables) says:
-   *   - Contain up to 1,024 characters
-   *   - Contain letters (upper or lower case), numbers, and underscores
-   * Google's doc on dataset naming (https://cloud.google.com/bigquery/docs/datasets) has the exact same requirements
-   * Google's doc on view naming (https://cloud.google.com/bigquery/docs/views) has the exact same requirements
-   * Google's doc on project naming (https://cloud.google.com/resource-manager/docs/creating-managing-projects) says:
-   *   - The project ID must be a unique string of 6 to 30 lowercase letters, digits, or hyphens. It must start with a letter, and cannot have a trailing hyphen.
-   * Google's doc on column naming (https://cloud.google.com/bigquery/docs/schemas) says:
-   *   - A column name must contain only letters (a-z, A-Z), numbers (0-9), or underscores (_), and it must start with a letter or underscore. The maximum column name length is 128 characters
-   *
-   * Given those naming requirements, this function allows ONLY: letters, numbers, underscores, hyphens.
-   * It does not impose any length restrictions.
-   *
-   * @param input the string to be validated
-   * @return the original string, if valid; throws an error if invalid.
-   */
-  def validateSql(input: String): String = {
-    if (input == null || DataRepoBigQuerySupport.illegalBQChars.findFirstIn(input).isDefined) {
-      val inputSubstring = scala.Option(input).getOrElse("null").take(64)
-      val sanitizedForOutput = DataRepoBigQuerySupport.illegalBQChars.replaceAllIn(inputSubstring, "_")
-      throw new IllegalIdentifierException(s"Illegal identifier used in BigQuery SQL. Original input was like [$sanitizedForOutput]")
-    } else {
-      input
-    }
   }
 
   // create comma-delimited string of field names for use in error messages.
@@ -234,4 +293,256 @@ trait DataRepoBigQuerySupport {
     fieldValueList.asScala.toList.map(_.toString).sorted.mkString(",")
   }
 
+  /**
+    * Generate the BQ job for each of the entity lookup expressions. The lookup expressions are grouped based on
+    * their relationships so that only 1 job is created per relationship plus 1 for the base table. We do no want
+    * to make a BQ job per lookup expression as that could potentially be many.
+    * @param parsedExpressions
+    * @param tableModel
+    * @param entityNameColumn
+    * @param baseTableAlias
+    * @return
+    */
+  protected[datarepo] def queryConfigForExpressions(snapshotModel: SnapshotModel, parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel, entityNameColumn: String, baseTableAlias: String): (List[SelectAndFrom], QueryJobConfiguration.Builder) = {
+    val rootEntityTable = EntityTable(snapshotModel, tableModel.getName, baseTableAlias)
+    val idColumn = EntityColumn(rootEntityTable, entityNameColumn, false)
+    val selectAndFroms = if (parsedExpressions.isEmpty) {
+      // there is an edge case where there are no entity lookup expressions, namely all the inputs are either
+      // literals or workspace lookup expressions. In this case we just query for the id column so we end up
+      // getting 1 row per entity and still run 1 workflow per entity
+      List(SelectAndFrom(rootEntityTable, None, List(idColumn)))
+    } else {
+      figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions)
+    }
+
+    val query: String = generateExpressionSQL(idColumn, selectAndFroms)
+
+    (selectAndFroms, QueryJobConfiguration.newBuilder(query))
+  }
+
+  /**
+    * Makes the sql. The first element in selectAndFroms determines the start of the query. There should be
+    * no relationship defined in the first selectAndFrom. Its columns are added directly to the SELECT and
+    * its table added directly to the FROM. So, if there is only selectAndFrom the query is trivial:
+    *   SELECT {selectAndFroms[0].selectColumns}
+    *   FROM {selectAndFroms[0].fromTable}
+    *
+    * Each additional selectAndFrom may add an ARRAY of STRUCT to the SELECT clause
+    * (if there are no selectColumns nothing is added) and does add a JOIN to the FROM clause.
+    *
+    * The STRUCT looks like
+    *   dedup(ARRAY_AGG(STRUCT(selectColumns)))
+    * See dedupFunction below for what dedup is. This means that each related entity is represented by an array of
+    * structures. If it is a many to one relationship the array may have 0 or 1 elements. If it is a one to many
+    * relationship the array may have 0 or more elements.
+    *
+    * The JOIN looks like a typical join. Unless the from column is an array in which case there is first
+    * a CROSS JOIN UNNEST on the array column.
+    *
+    * ARRAY_AGG is an aggregate function so we also need a GROUP BY clause which is the column list defined by the
+    * first selectAndFrom.
+    *
+    * A full example looks like (with no selected array columns)
+    * CREATE TEMP FUNCTION dedup_5(val ANY TYPE) AS ((
+    *   SELECT ARRAY_AGG(t)
+    *   FROM (SELECT DISTINCT * FROM UNNEST(val) v) t
+    * ));
+    * SELECT blarg.donor_id, blarg.string-field, blarg.datarepo_row_id,
+    *   dedup_5(ARRAY_AGG(STRUCT(entity_3.path, entity_3.datarepo_row_id, entity_3.sample_id))) rel_4
+    * FROM `unittest-dataproject.unittest-name.donor` blarg
+    *   JOIN `unittest-dataproject.unittest-name.sample` entity_1 ON blarg.donor_id = entity_1.donor_id
+    *   JOIN `unittest-dataproject.unittest-name.file` entity_3 ON entity_1.sample_id = entity_3.sample_id
+    * GROUP BY blarg.donor_id, blarg.string-field, blarg.datarepo_row_id;
+    *
+    * The collection of expressions that would make the above are
+    * this.donor_id
+    * this.my_donor.sample.path
+    * this.my_donor.sample.sample_id
+    * this.string-field
+    * (also notice that datarepo_row_id columns are automatically added if not otherwise requested, necessary for proper grouping)
+    *
+    * @param idColumn
+    * @param selectAndFroms
+    * @return
+    */
+  private[datarepo] def generateExpressionSQL(idColumn: EntityColumn, selectAndFroms: List[SelectAndFrom]) = {
+    // the head of selectAndFroms is special, it is the starting point of the query
+    // all elements of the tail eventually join back to the head (like that snake thing)
+    val rootTableJoin = selectAndFroms.head
+
+    if (rootTableJoin.relationship.isDefined) {
+      throw new DataEntityException(s"expected rootTableJoin.relationship to be None")
+    }
+
+    val rootSelectFragment = (rootTableJoin.selectColumns :+ idColumn).map(_.qualifiedName).mkString(", ")
+    val rootFromFragment = rootTableJoin.fromTable.nameInQuery
+
+    val (selectFragments, fromFragments, dedupFunctionDefs) = selectAndFroms.tail.map { selectAndFrom =>
+      val relationship = selectAndFrom.relationship.getOrElse(throw new DataEntityException("there should only be 1 join without a relationship"))
+      val idColumn = EntityColumn(relationship.to.table, datarepoRowIdColumn, false)
+      val (selectFragment, dedupFunctionDef) = if (selectAndFrom.selectColumns.isEmpty) {
+        // there are no selected columns related to this join so we don't include anything in the select clause
+        // but the join will still exist in the from clause as it is probably a part of a relationship path
+        (None, None)
+      } else {
+        val (dedupFunctionName, dedupFunctionDef) = dedupFunction(selectAndFrom)
+        (
+          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns :+ idColumn).map(_.qualifiedName).mkString(", ")}))) ${relationship.alias}"),
+          scala.Option(dedupFunctionDef)
+        )
+      }
+      val fromFragment = joinClause(relationship)
+      (selectFragment, fromFragment, dedupFunctionDef)
+    }.unzip3
+
+    val query = if (selectFragments.isEmpty) {
+      // there are no joins
+      s"""SELECT $rootSelectFragment FROM $rootFromFragment;"""
+    } else {
+      s"""${dedupFunctionDefs.flatten.mkString("\n")}
+         |SELECT $rootSelectFragment,
+         |${selectFragments.flatten.mkString(",\n")}
+         |FROM $rootFromFragment
+         |${fromFragments.mkString("\n")}
+         |GROUP BY $rootSelectFragment;""".stripMargin
+    }
+    query
+  }
+
+  /**
+    * A dedup function is used in the BQ query to remove duplicate structs when there is a cartesian product caused
+    * by diverging joins. For example expressions this.foo.bar and this.baz.splat would lead to a join to the foo
+    * and baz tables and a cartesian product.
+    *
+    * When arrays are not involved a generic function can be used. However when arrays are in the structs we need a
+    * more specialized function that unnests the arrays and reaggregates them.
+    * @param selectAndFrom
+    * @return
+    */
+  private[datarepo] def dedupFunction(selectAndFrom: SelectAndFrom): (String, String) = {
+    val dedupFunctionName = nextAlias("dedup")
+    val (arrayColumns, scalarColumns) = selectAndFrom.selectColumns.partition(_.isArray)
+    val dedupFunctionDef = if (arrayColumns.nonEmpty) {
+      val arrayColumnNames = arrayColumns.map(c => validateSql(c.column))
+      val arrayColumnNameWithAliases = arrayColumnNames.zip(List.fill(arrayColumnNames.size)(nextAlias("ac")))
+      val scalarColumnNames = scalarColumns.map(c => validateSql(c.column))
+
+      val scalarColumnList = scalarColumnNames.mkString(", ")
+      val arrayAliasList = arrayColumnNameWithAliases.map(_._2).mkString(", ")
+      val reAggregateList = arrayColumnNameWithAliases.map { case (arrayName, arrayAlias) =>
+        s"ARRAY_AGG(DISTINCT $arrayAlias) $arrayName"
+      }.mkString(", ")
+      val unnestList = arrayColumnNameWithAliases.map { case (arrayName, arrayAlias) =>
+        s"UNNEST(v.$arrayName) $arrayAlias"
+      }.mkString(", ")
+
+      s"""CREATE TEMP FUNCTION ${dedupFunctionName}(val ANY TYPE) AS ((
+         |  SELECT ARRAY_AGG(STRUCT(${(scalarColumnNames ++ arrayColumnNames).mkString(", ")})) FROM (
+         |    SELECT $scalarColumnList, $reAggregateList
+         |    FROM (SELECT DISTINCT $scalarColumnList, $arrayAliasList FROM UNNEST(val) v, $unnestList)
+         |    GROUP BY $scalarColumnList
+         |  )
+         |));""".stripMargin
+    } else {
+      s"""CREATE TEMP FUNCTION ${dedupFunctionName}(val ANY TYPE) AS ((
+         |  SELECT ARRAY_AGG(t)
+         |  FROM (SELECT DISTINCT * FROM UNNEST(val) v) t
+         |));""".stripMargin
+    }
+
+    dedupFunctionName -> dedupFunctionDef
+  }
+
+  /**
+    * This is the main work of converting parsedExpressions to a sql query. At this time there is not WHERE clause
+    * in our sql queries, we are getting all the data. This function figures out what columns go in the SELECT clause
+    * and what tables and joins go in the FROM clause. The result is a List[SelectAndFrom]. This will never be emtpy.
+    * The first will never have a relationship (i.e. it is not a join) and always have fromTable as the table. Each
+    * subsequent SelectAndFrom will have a relationship to one of the tables referenced by a previous SelectAndFrom
+    * in the List. Order matters so the sql can be constructed correctly.
+    *
+    * This function is recursive.
+    *
+    * @param snapshotModel
+    * @param fromTable
+    * @param parsedExpressions
+    * @param traversedRelationships used to capture the relationship path as this function recurses
+    * @return
+    */
+  private[datarepo] def figureOutQueryStructureForExpressions(snapshotModel: SnapshotModel, fromTable: EntityTable, parsedExpressions: Set[ParsedEntityLookupExpression], traversedRelationships: List[String] = List.empty): List[SelectAndFrom] = {
+    def groupAndOrderByRelationshipName(parsedExpressions: Set[ParsedEntityLookupExpression]): List[(scala.Option[String], Set[ParsedEntityLookupExpression])] = {
+      parsedExpressions.groupBy(_.relationships.headOption).toList.sortBy { case (name, _) => name.getOrElse("") }
+    }
+
+    // ordering is important here because it determines the order in which the joins are added in the final SQL
+    groupAndOrderByRelationshipName(parsedExpressions).flatMap {
+      case (None, baseTableExpressions) =>
+        List(SelectAndFrom(fromTable, None, baseTableExpressions.map(expr => EntityColumn(snapshotModel, fromTable, expr.columnName)).toList))
+
+      case (Some(relationshipName), baseTableExpressions) =>
+        val currentRelationshipPath = traversedRelationships :+ relationshipName
+        val relationshipModel = getRelationshipModel(snapshotModel, relationshipName)
+        // the given fromTable may be either the from or the to in the relationship model
+        // depending on the direction the relationship is being traversed
+        val relationship = fromTable.name match {
+          case forward if forward.equalsIgnoreCase(relationshipModel.getFrom.getTable) =>
+            val fromColumn = EntityColumn(snapshotModel, fromTable, relationshipModel.getFrom.getColumn)
+            val toColumn = EntityColumn(snapshotModel, EntityTable(snapshotModel, relationshipModel.getTo.getTable, nextAlias("entity")), relationshipModel.getTo.getColumn)
+            createEntityRelation(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)
+
+          case backward if backward.equalsIgnoreCase(relationshipModel.getTo.getTable) =>
+            val fromColumn = EntityColumn(snapshotModel, fromTable, relationshipModel.getTo.getColumn)
+            val toColumn = EntityColumn(snapshotModel, EntityTable(snapshotModel, relationshipModel.getFrom.getTable, nextAlias("entity")), relationshipModel.getFrom.getColumn)
+            createEntityRelation(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)
+
+          case _ => throw new DataEntityException(s"$fromTable does not exist in relationship ${relationshipModel.getName}")
+        }
+
+        val popOffTheRelationshipHead = baseTableExpressions.map(ex => ex.copy(relationships = ex.relationships.tail))
+        val (noMoreRelationships, continueRecursing) = popOffTheRelationshipHead.partition(_.relationships.isEmpty)
+
+        // Construct a SelectAndFrom with all columns in noMoreRelationships.
+        // Note that noMoreRelationships may actually be empty, this is the case where no columns are selected from
+        // the relation but it is still part of the path to get to a further related entity so still needs a join.
+        // Append results of figureOutQueryStructureForExpressions called with continueRecursing
+        // to continue walking the relationship path.
+        List(SelectAndFrom(fromTable, scala.Option(relationship), noMoreRelationships.map(expr => EntityColumn(snapshotModel, relationship.to.table, expr.columnName)).toList)) ++
+          figureOutQueryStructureForExpressions(snapshotModel, relationship.to.table, continueRecursing, currentRelationshipPath)
+    }
+  }
+
+  private def createEntityRelation(snapshotModel: SnapshotModel, fromTable: EntityTable, relationshipModel: RelationshipModel, fromColumn: EntityColumn, toColumn: EntityColumn, relationshipPath: List[String]) = {
+    val isArray = isColumnArray(snapshotModel, fromTable, fromColumn)
+    EntityRelationship(fromColumn, toColumn, relationshipPath, nextAlias("rel"), isArray)
+  }
+
+  private def isColumnArray(snapshotModel: SnapshotModel, fromTable: EntityTable, fromColumn: EntityColumn) = {
+    getTableModel(snapshotModel, fromTable.name).getColumns.asScala.find(_.getName == fromColumn.column).exists(_.isArrayOf)
+  }
+
+  private def joinClause(relationship: EntityRelationship): String = {
+    if (relationship.isArray) {
+      // in this case the "from" column is an array so the join needs more fancy
+      // note alias must not start with a number
+      val unnestJoinAlias = nextAlias("unnest")
+      s"""LEFT JOIN UNNEST(${relationship.from.qualifiedName}) $unnestJoinAlias
+         |LEFT JOIN ${relationship.to.table.nameInQuery} ON $unnestJoinAlias = ${relationship.to.qualifiedName}""".stripMargin
+    } else {
+      s"LEFT JOIN ${relationship.to.table.nameInQuery} ON ${relationship.from.qualifiedName} = ${relationship.to.qualifiedName}"
+    }
+  }
+
+  /**
+    * nextAliasIndex is used as a counter within nextAlias. It is an AtomicInteger just in case there is
+    * multi-threaded access. This is mutable state but no code should expect particular values.
+    */
+  private val nextAliasIndex = new AtomicInteger(1)
+
+  /**
+    * Returns a unique (within this instance) string for use as alias within SQL statements. Use this function
+    * instead of aliases derived from external input to ensure SQL safety.
+    * @param prefix
+    * @return
+    */
+  private def nextAlias(prefix: String): String = s"${prefix}_${nextAliasIndex.getAndIncrement()}"
 }

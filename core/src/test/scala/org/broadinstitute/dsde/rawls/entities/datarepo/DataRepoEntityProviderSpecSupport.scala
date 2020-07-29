@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import java.util.UUID
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.datarepo.model.{ColumnModel, SnapshotModel, TableModel}
+import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, SnapshotModel, TableModel}
 import bio.terra.workspace.model.DataReferenceDescription
 import bio.terra.workspace.model.{CloningInstructionsEnum, ReferenceTypeEnum}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
@@ -36,7 +36,7 @@ trait DataRepoEntityProviderSpecSupport {
 
   // defaults for DataRepoEntityProviderConfig
   val maxInputsPerSubmission: Int = 1000
-  val maxRowsPerQuery: Int = 500
+  val maxBigQueryResponseSizeBytes: Int = 500000
 
   /* A "factory" method to create a DataRepoEntityProvider, with defaults.
    * Individual unit tests should call this to reduce boilerplate.
@@ -45,7 +45,7 @@ trait DataRepoEntityProviderSpecSupport {
                          samDAO: SamDAO = new MockSamDAO(slickDataSource),
                          bqFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
                          entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName"))),
-                         config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxRowsPerQuery)
+                         config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                         ): DataRepoEntityProvider = {
     new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory, config)
   }
@@ -54,7 +54,7 @@ trait DataRepoEntityProviderSpecSupport {
                         dataRepoDAO: SpecDataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel())),
                         samDAO: SamDAO = new MockSamDAO(slickDataSource),
                         bqServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
-                        config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxRowsPerQuery)
+                        config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                        ): DataRepoEntityProviderBuilder = {
     new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, config)
   }
@@ -100,9 +100,10 @@ trait DataRepoEntityProviderSpecSupport {
 
   /* A "factory" method to create SnapshotModel objects, with default.
    */
-  def createSnapshotModel( tables: List[TableModel] = defaultTables): SnapshotModel =
+  def createSnapshotModel( tables: List[TableModel] = defaultTables, relationships: List[RelationshipModel] = List.empty): SnapshotModel =
     new SnapshotModel()
       .tables(tables.asJava)
+      .relationships(relationships.asJava)
       .dataProject("unittest-dataproject")
       .name("unittest-name")
 

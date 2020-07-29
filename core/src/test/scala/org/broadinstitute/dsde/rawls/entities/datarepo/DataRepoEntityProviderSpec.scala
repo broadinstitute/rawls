@@ -1,24 +1,26 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import bio.terra.datarepo.model.{ColumnModel, TableModel}
+import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, RelationshipTermModel, TableModel}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
 import cromwell.client.model.{ToolInputParameter, ValueType}
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
+import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueRawJson, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.scalatest.{AsyncFlatSpec, Matchers}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import scala.util.Success
+import scala.util.{Random, Success}
 
 class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
 
@@ -199,29 +201,11 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     }
   }
 
-  it should "fail if the query results in more rows than are allowed by config" in {
-    val tableRowCount = 123
-    val smallMaxRowsPerQuery = 100
-
-    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))), config = DataRepoEntityProviderConfig(maxInputsPerSubmission, smallMaxRowsPerQuery))
-    val expressionEvaluationContext = ExpressionEvaluationContext(None, None, None, Some("table2"))
-
-    val gatherInputsResult = GatherInputsResult(Set(
-      MethodInput(new ToolInputParameter().name("col2a").valueType(new ValueType().typeName(ValueType.TypeNameEnum.INT)), "this.col2a"),
-      MethodInput(new ToolInputParameter().name("col2b").valueType(new ValueType().typeName(ValueType.TypeNameEnum.BOOLEAN)), "this.col2b"),
-    ), Set.empty, Set.empty, Set.empty)
-
-    intercept[RawlsExceptionWithErrorReport] {
-      Await.result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map("workspace.string" -> Success(List(AttributeString("workspaceValue"))))), Duration.Inf)
-    }.errorReport.message should be(s"Too many results. Results size ${tableRowCount} cannot exceed ${smallMaxRowsPerQuery}. Expression(s): [this.col2a, this.col2b].")
-  }
-
-
   it should "fail if the submission has more inputs than are allowed by config" in {
     val tableRowCount = 123
     val smallMaxInputsPerSubmission = 200
 
-    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))), config = DataRepoEntityProviderConfig(smallMaxInputsPerSubmission, maxRowsPerQuery))
+    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))), config = DataRepoEntityProviderConfig(smallMaxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0))
     val expressionEvaluationContext = ExpressionEvaluationContext(None, None, None, Some("table2"))
 
     val gatherInputsResult = GatherInputsResult(Set(
@@ -234,6 +218,295 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     }.errorReport.message should be(s"Too many results. Snapshot row count * number of entity expressions cannot exceed ${smallMaxInputsPerSubmission}.")
   }
 
+  behavior of "DataEntityProvider.convertToListAndCheckSize()"
+
+  it should "fail if the stream is too big" in {
+    val size = 1000
+    val provider = createTestProvider(config = DataRepoEntityProviderConfig(0, size, 0))
+
+    intercept[DataEntityException] {
+      provider.convertToListAndCheckSize(Stream.fill(size)(("", Map("" -> Success(List(AttributeNumber(2)))))), size)
+    }.getMessage should be(s"Query returned too many results likely due to either large one-to-many relationships or arrays. The limit on the total number bytes is $size.")
+  }
+
+  it should "return the right items in expected order" in {
+    val provider = createTestProvider()
+    val size = 100
+    val expectedResult = List.fill(size)((Random.nextString(5), Map(Random.nextString(5) -> Success(List(AttributeNumber(Random.nextDouble()))))))
+    provider.convertToListAndCheckSize(expectedResult.toStream, size) should contain theSameElementsInOrderAs expectedResult
+  }
+
+  behavior of "DataEntityProvider.figureOutQueryStructureForExpressions()"
+
+  it should "return a single value for many expressions without relationships" in {
+    val testTables = defaultTables
+    val snapshotModel = createSnapshotModel(testTables)
+    val provider = createTestProvider(snapshotModel)
+
+    val tableName = testTables.head.getName
+    val columnNames = testTables.head.getColumns.asScala.map(_.getName)
+    val alias = "blarg"
+
+    val parsedExpressions = columnNames.map { columnName =>
+      ParsedEntityLookupExpression(List.empty, columnName, s"this.$columnName")
+    }.toSet
+
+    val entityTable = EntityTable(snapshotModel, tableName, alias)
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions)
+    result should contain theSameElementsAs List(
+      SelectAndFrom(entityTable, None, columnNames.toList.map((column: String) => EntityColumn(entityTable, column, false)))
+    )
+  }
+
+  it should "return a single value for many expressions followed by another for a relationship" in {
+    val joinColumnName = "donor_id"
+    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", "string-field", joinColumnName).map(new ColumnModel().name(_)).asJava)
+
+    val dependentTable = new TableModel().name("sample").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", "another-string-field", joinColumnName).map(new ColumnModel().name(_)).asJava)
+
+    val relationshipName = "my_donor"
+    val relationship = new RelationshipModel()
+      .from(new RelationshipTermModel().table(dependentTable.getName).column(joinColumnName))
+      .to(new RelationshipTermModel().table(rootTable.getName).column(joinColumnName))
+      .name(relationshipName)
+
+    val testTables = List(rootTable, dependentTable)
+
+    val snapshotModel = createSnapshotModel(testTables, List(relationship))
+    val provider = createTestProvider(snapshotModel)
+
+    val rootTableName = rootTable.getName
+    val rootColumnNames = rootTable.getColumns.asScala.map(_.getName)
+    val alias = "blarg"
+
+    val dependentTableName = dependentTable.getName
+    val dependentColumns = dependentTable.getColumns.asScala.map(_.getName)
+
+    val parsedExpressions = rootColumnNames.map { columnName =>
+      ParsedEntityLookupExpression(List.empty, columnName, s"this.$columnName")
+    }.toSet ++ dependentColumns.map { columnName =>
+      ParsedEntityLookupExpression(List(relationshipName), columnName, s"this.$relationshipName.$columnName")
+    }
+
+    val rootEntityTable = EntityTable(snapshotModel, rootTableName, alias)
+    val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, relationshipName)
+
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions)
+    result should contain theSameElementsInOrderAs List(
+      SelectAndFrom(rootEntityTable, None, rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false))),
+      SelectAndFrom(rootEntityTable,
+        scala.Option(EntityRelationship(
+          EntityColumn(rootEntityTable, joinColumnName, false),
+          EntityColumn(dependentEntityTable, joinColumnName, false),
+          List(relationshipName),
+          "rel_1",
+          false
+        )),
+        dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
+    )
+  }
+
+  it should "handle relationship in the other direction" in {
+    val joinColumnName = "donor_id"
+    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", "string-field", joinColumnName).map(new ColumnModel().name(_)).asJava)
+
+    val dependentTable = new TableModel().name("sample").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", "another-string-field", joinColumnName).map(new ColumnModel().name(_)).asJava)
+
+    val relationshipName = "my_donor"
+    val relationship = new RelationshipModel()
+      .from(new RelationshipTermModel().table(dependentTable.getName).column(joinColumnName))
+      .to(new RelationshipTermModel().table(rootTable.getName).column(joinColumnName))
+      .name(relationshipName)
+
+    val testTables = List(rootTable, dependentTable)
+
+    val snapshotModel = createSnapshotModel(testTables, List(relationship))
+    val provider = createTestProvider(snapshotModel)
+
+    val rootTableName = rootTable.getName
+    val rootColumnNames = rootTable.getColumns.asScala.map(_.getName)
+    val alias = "blarg"
+
+    val dependentTableName = dependentTable.getName
+    val dependentColumns = dependentTable.getColumns.asScala.map(_.getName)
+
+    // notice the swap of dependentColumns and rootColumnNames from the test above
+    val parsedExpressions = dependentColumns.map { columnName =>
+      ParsedEntityLookupExpression(List.empty, columnName, s"this.$columnName")
+    }.toSet ++ rootColumnNames.map { columnName =>
+      ParsedEntityLookupExpression(List(relationshipName), columnName, s"this.$relationshipName.$columnName")
+    }
+
+    val rootEntityTable = EntityTable(snapshotModel, rootTableName, relationshipName)
+    val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, alias)
+
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, dependentEntityTable, parsedExpressions)
+    result should contain theSameElementsInOrderAs List(
+      SelectAndFrom(dependentEntityTable, None, dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false))),
+      SelectAndFrom(dependentEntityTable,
+        scala.Option(EntityRelationship(
+          EntityColumn(dependentEntityTable, joinColumnName, false),
+          EntityColumn(rootEntityTable, joinColumnName, false),
+          List(relationshipName),
+          "rel_1",
+          false
+        )),
+        rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false)))
+    )
+  }
+
+  it should "handle multiple hops with no columns selected in the middle" in {
+    val donorIdColumn = "donor_id"
+    val sampleIdColumn = "sample_id"
+    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", "string-field", donorIdColumn).map(new ColumnModel().name(_)).asJava)
+
+    val middleTable = new TableModel().name("sample").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", sampleIdColumn, donorIdColumn).map(new ColumnModel().name(_)).asJava)
+
+    val finalTable = new TableModel().name("file").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", sampleIdColumn, "path").map(new ColumnModel().name(_)).asJava)
+
+    val relationshipName1 = "my_donor"
+    val relationship1 = new RelationshipModel()
+      .from(new RelationshipTermModel().table(middleTable.getName).column(donorIdColumn))
+      .to(new RelationshipTermModel().table(rootTable.getName).column(donorIdColumn))
+      .name(relationshipName1)
+
+    val relationshipName2 = "sample"
+    val relationship2 = new RelationshipModel()
+      .from(new RelationshipTermModel().table(finalTable.getName).column(sampleIdColumn))
+      .to(new RelationshipTermModel().table(middleTable.getName).column(sampleIdColumn))
+      .name(relationshipName2)
+
+    val testTables = List(rootTable, middleTable, finalTable)
+
+    val snapshotModel = createSnapshotModel(testTables, List(relationship1, relationship2))
+    val provider = createTestProvider(snapshotModel)
+
+    val rootTableName = rootTable.getName
+    val rootColumnNames = rootTable.getColumns.asScala.map(_.getName)
+    val alias = "blarg"
+
+    val finalTableName = finalTable.getName
+    val finalColumns = finalTable.getColumns.asScala.map(_.getName)
+
+    val parsedExpressions = rootColumnNames.map { columnName =>
+      ParsedEntityLookupExpression(List.empty, columnName, s"this.$columnName")
+    }.toSet ++ finalColumns.map { columnName =>
+      ParsedEntityLookupExpression(List(relationshipName1, relationshipName2), columnName, s"this.$relationshipName1.$relationshipName2.$columnName")
+    }
+
+    val rootEntityTable = EntityTable(snapshotModel, rootTableName, alias)
+    val middleEntityTable = EntityTable(snapshotModel, middleTable.getName, "entity_1")
+    val finalEntityTable = EntityTable(snapshotModel, finalTableName, "entity_3")
+
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions)
+    result should contain theSameElementsInOrderAs List(
+      SelectAndFrom(rootEntityTable, None, rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false))),
+      SelectAndFrom(rootEntityTable,
+        scala.Option(EntityRelationship(
+          EntityColumn(rootEntityTable, donorIdColumn, false),
+          EntityColumn(middleEntityTable, donorIdColumn, false),
+          List(relationshipName1),
+          "rel_2",
+          false
+        )),
+        List.empty),
+      SelectAndFrom(middleEntityTable,
+        scala.Option(EntityRelationship(
+          EntityColumn(middleEntityTable, sampleIdColumn, false),
+          EntityColumn(finalEntityTable, sampleIdColumn, false),
+          List(relationshipName1, relationshipName2),
+          "rel_4",
+          false
+        )),
+        finalColumns.toList.map((column: String) => EntityColumn(finalEntityTable, column, false)))
+    )
+  }
+
+  it should "handle forked relationships" in {
+    val fooIdColumn = "foo_id"
+    val barIdColumn = "bar_id"
+    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", "string-field", fooIdColumn, barIdColumn).map(new ColumnModel().name(_)).asJava)
+
+    val dependentTable1 = new TableModel().name("foo").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", "table_1_col", fooIdColumn).map(new ColumnModel().name(_)).asJava)
+
+    val dependentTable2 = new TableModel().name("bar").primaryKey(null).rowCount(0)
+      .columns(List("datarepo_row_id", "table_2_col", barIdColumn).map(new ColumnModel().name(_)).asJava)
+
+    val relationshipName1 = "fooed"
+    val relationship1 = new RelationshipModel()
+      .from(new RelationshipTermModel().table(rootTable.getName).column(fooIdColumn))
+      .to(new RelationshipTermModel().table(dependentTable1.getName).column(fooIdColumn))
+      .name(relationshipName1)
+
+    val relationshipName2 = "bared"
+    val relationship2 = new RelationshipModel()
+      .from(new RelationshipTermModel().table(rootTable.getName).column(barIdColumn))
+      .to(new RelationshipTermModel().table(dependentTable2.getName).column(barIdColumn))
+      .name(relationshipName2)
+
+    val testTables = List(rootTable, dependentTable1, dependentTable2)
+
+    val snapshotModel = createSnapshotModel(testTables, List(relationship1, relationship2))
+    val provider = createTestProvider(snapshotModel)
+
+    val rootTableName = rootTable.getName
+    val alias = "blarg"
+
+    val parsedExpressions = Set(
+      ParsedEntityLookupExpression(List.empty, "string-field", "this.string-field"),
+      ParsedEntityLookupExpression(List(relationshipName1), "table_1_col", "this.fooed.table_1_col"),
+      ParsedEntityLookupExpression(List(relationshipName2), "table_2_col", "this.bared.table_2_col")
+    )
+
+    val rootEntityTable = EntityTable(snapshotModel, rootTableName, alias)
+    val dependent1EntityTable = EntityTable(snapshotModel, dependentTable1.getName, relationshipName1)
+    val dependent2EntityTable = EntityTable(snapshotModel, dependentTable2.getName, relationshipName2)
+
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions)
+    result should contain theSameElementsInOrderAs List(
+      SelectAndFrom(rootEntityTable, None, List(EntityColumn(rootEntityTable, "string-field", false))),
+      SelectAndFrom(rootEntityTable,
+        scala.Option(EntityRelationship(
+          EntityColumn(rootEntityTable, barIdColumn, false),
+          EntityColumn(dependent2EntityTable, barIdColumn, false),
+          List(relationshipName2),
+          "rel_1",
+          false
+        )),
+        List(EntityColumn(dependent2EntityTable, "table_2_col", false))),
+      SelectAndFrom(rootEntityTable,
+        scala.Option(EntityRelationship(
+          EntityColumn(rootEntityTable, fooIdColumn, false),
+          EntityColumn(dependent1EntityTable, fooIdColumn, false),
+          List(relationshipName1),
+          "rel_2",
+          false
+        )),
+        List(EntityColumn(dependent1EntityTable, "table_1_col", false)))
+    )
+  }
+
+  behavior of "DataEntityProvider.transformQueryResultToExpressionAndResult()"
+
+  it should "handle root entity attributes" in pending
+  it should "handle related entity attributes" in pending
+
+  behavior of "DataEntityProvider.generateExpressionSQL()"
+
+  it should "create basic query" in pending
+  it should "create query with regular joins" in pending
+  it should "create query with cross joins" in pending
+  it should "create query with regular joins and array columns" in pending
+  it should "create query with regular join missing select columns" in pending
 
 }
 

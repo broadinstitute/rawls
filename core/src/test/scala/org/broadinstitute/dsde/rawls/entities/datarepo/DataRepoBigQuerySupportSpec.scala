@@ -345,7 +345,7 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
         val entityQuery = EntityQuery(page = 1, pageSize = 20, sortField = "mySortField", sortDirection = sortDirection, filterTerms = None)
         val actual = queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
 
-        assert(actual.getQuery.contains(s"ORDER BY mySortField ${SortDirections.toSql(sortDirection)}"),
+        assert(actual.build.getQuery.contains(s"ORDER BY mySortField ${SortDirections.toSql(sortDirection)}"),
           "generated BQ SQL does not contain correct ORDER BY clause")
 
       }
@@ -375,10 +375,10 @@ class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport 
             sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None)
           val actual = queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
 
-          assert(actual.getQuery.contains(s"OFFSET $offset"),
+          assert(actual.build.getQuery.contains(s"OFFSET $offset"),
             "generated BQ SQL does not contain correct OFFSET clause")
 
-          assert(actual.getQuery.contains(s"LIMIT $limit"),
+          assert(actual.build.getQuery.contains(s"LIMIT $limit"),
             "generated BQ SQL does not contain correct LIMIT clause")
         }
     }
