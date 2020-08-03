@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
-import bio.terra.datarepo.model.{SnapshotModel, TableModel}
-import org.broadinstitute.dsde.rawls.RawlsException
+import bio.terra.datarepo.model.{RelationshipModel, SnapshotModel, TableModel}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{AttributeNameContext, EntityLookupContext, RelationContext}
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
@@ -48,16 +49,34 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     }
   }
 
-  // TODO: CA-939 support relationships once that information is published by data repo
   private def traverseRelationsAndGetFinalTable(currentTableModel: TableModel, relations: List[RelationContext]): Try[TableModel] = {
     relations match {
       case Nil => Success(currentTableModel)
-      case _ => Failure(new RawlsException(s"Relationships are not currently supported."))
+      case nextRelationContext :: remainingRelations => {
+        val nextRelationName = nextRelationContext.attributeName.name.getText
+        maybeGetNextTableFromRelation(currentTableModel, nextRelationName) match {
+          case Some(nextTableModel) => traverseRelationsAndGetFinalTable(nextTableModel, remainingRelations)
+          case None => Failure(new RawlsException(s"Relationship with name `${nextRelationName}` and from table `${currentTableModel}` could not be found.")) // This would only happen if there is a bug in TDR code.
+        }
+      }
     }
   }
 
   private def maybeFindTableInSnapshotModel(tableName: String): Option[TableModel] = {
     val snapshotTables = snapshotModel.getTables.asScala.toList
     snapshotTables.find(_.getName == tableName)
+  }
+
+  private def maybeGetNextTableFromRelation(fromTable: TableModel, relationName: String): Option[TableModel] = {
+    val relationships = snapshotModel.getRelationships.asScala.toList
+    maybeFindTableInSnapshotModel(fromTable.getName)
+      .flatMap { tableModel =>
+        relationships.find { relationship =>
+          relationship.getFrom.getTable == tableModel.getName && relationship.getFrom.getColumn == relationName
+        }.map { relationship =>
+          val nextTableName = relationship.getTo.getTable
+          return maybeFindTableInSnapshotModel(nextTableName)
+        }
+      }
   }
 }
