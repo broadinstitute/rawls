@@ -61,14 +61,14 @@ object DataRepoBigQuerySupport {
     }
   }
 
-  def getTableModel(snapshotModel: SnapshotModel, entityType: String) = {
+  def getTableModel(snapshotModel: SnapshotModel, entityType: String): TableModel = {
     snapshotModel.getTables.asScala.find(_.getName == entityType) match {
       case Some(table) => table
       case None => throw new EntityTypeNotFoundException(entityType)
     }
   }
 
-  def getRelationshipModel(snapshotModel: SnapshotModel, relationshipName: String) = {
+  def getRelationshipModel(snapshotModel: SnapshotModel, relationshipName: String): RelationshipModel = {
     snapshotModel.getRelationships.asScala.find(_.getName == relationshipName) match {
       case Some(relationshipModel) => relationshipModel
       case None => throw new DataEntityException(s"relationship $relationshipName does not exist")
@@ -97,8 +97,28 @@ object DataRepoBigQuerySupport {
   case class EntityColumn(table: EntityTable, column: String, isArray: Boolean) {
     lazy val qualifiedName = s"${validateSql(table.alias)}.${validateSql(column)}"
   }
-  case class EntityRelationship(from: EntityColumn, to: EntityColumn, relationshipPath: List[String], alias: String, isArray: Boolean)
-  case class SelectAndFrom(fromTable: EntityTable, relationship: scala.Option[EntityRelationship], selectColumns: List[EntityColumn])
+
+  /**
+    * Contains the data to construct a JOIN in SQL and identify the JOIN in the results
+    * @param from left side of join
+    * @param to right side of join
+    * @param relationshipPath list of relationship names that resulted in this join
+    * @param alias alias used in the SQL and results
+    * @param isArray joins on array columns require an extra join on the unnested array
+    */
+  case class EntityRelationship(from: EntityColumn, to: EntityColumn, relationshipPath: Seq[String], alias: String, isArray: Boolean)
+
+  /**
+    * This class represents the parts of the query an expression may add to the BigQuery query
+    * @param fromTable the table that the data comes from. If there is no relationship then this table would come after
+    *                  the FROM statement. If there is a relationship this comes after a JOIN statement
+    * @param relationship if this is a join, this specifies both sides of the ON statement
+    * @param selectColumns the columns that are selected from fromTable. Order is important. The order in this list
+    *                      is the order that the columns appear in the actual SQL query and the results. Due to the
+    *                      use of STRUCTs we can't rely on the names of fields to extract values from the result and
+    *                      must use indexes.
+    */
+  case class SelectAndFrom(fromTable: EntityTable, relationship: scala.Option[EntityRelationship], selectColumns: Seq[EntityColumn])
 }
 
 /**
@@ -151,7 +171,7 @@ trait DataRepoBigQuerySupport {
         throw new DataEntityException(s"field ${field.getName} not found in row ${asDelimitedString(row)}")
     }
 
-    fieldValueToAttributeValue(field, fv)
+    fieldValueToAttribute(field, fv)
   }
 
   /**
@@ -161,7 +181,7 @@ trait DataRepoBigQuerySupport {
     * @param fv the BQ field value
     * @return the Rawls attribute value, post-translation
     */
-  def fieldValueToAttributeValue(field: Field, fv: FieldValue): Attribute = {
+  def fieldValueToAttribute(field: Field, fv: FieldValue): Attribute = {
     val attribute = field.getMode match {
       case Mode.REPEATED =>
         fv.getRepeatedValue.asScala.toList match {
@@ -297,25 +317,24 @@ trait DataRepoBigQuerySupport {
     * Generate the BQ job for each of the entity lookup expressions. The lookup expressions are grouped based on
     * their relationships so that only 1 job is created per relationship plus 1 for the base table. We do no want
     * to make a BQ job per lookup expression as that could potentially be many.
-    * @param parsedExpressions
-    * @param tableModel
-    * @param entityNameColumn
-    * @param baseTableAlias
+    * @param parsedExpressions incoming expressions
+    * @param tableModel model object for base table
+    * @param entityNameColumn name of column used for the entity name
     * @return
     */
-  protected[datarepo] def queryConfigForExpressions(snapshotModel: SnapshotModel, parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel, entityNameColumn: String, baseTableAlias: String): (List[SelectAndFrom], QueryJobConfiguration.Builder) = {
-    val rootEntityTable = EntityTable(snapshotModel, tableModel.getName, baseTableAlias)
-    val idColumn = EntityColumn(rootEntityTable, entityNameColumn, false)
+  protected def queryConfigForExpressions(snapshotModel: SnapshotModel, parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel, entityNameColumn: String): (Seq[SelectAndFrom], QueryJobConfiguration.Builder) = {
+    val rootEntityTable = EntityTable(snapshotModel, tableModel.getName, nextAlias("root"))
     val selectAndFroms = if (parsedExpressions.isEmpty) {
       // there is an edge case where there are no entity lookup expressions, namely all the inputs are either
       // literals or workspace lookup expressions. In this case we just query for the id column so we end up
       // getting 1 row per entity and still run 1 workflow per entity
-      List(SelectAndFrom(rootEntityTable, None, List(idColumn)))
+      val idColumn = EntityColumn(rootEntityTable, entityNameColumn, false)
+      Seq(SelectAndFrom(rootEntityTable, None, Seq(idColumn)))
     } else {
-      figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions)
+      figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, entityNameColumn)
     }
 
-    val query: String = generateExpressionSQL(idColumn, selectAndFroms)
+    val query: String = generateExpressionSQL(selectAndFroms)
 
     (selectAndFroms, QueryJobConfiguration.newBuilder(query))
   }
@@ -336,8 +355,8 @@ trait DataRepoBigQuerySupport {
     * structures. If it is a many to one relationship the array may have 0 or 1 elements. If it is a one to many
     * relationship the array may have 0 or more elements.
     *
-    * The JOIN looks like a typical join. Unless the from column is an array in which case there is first
-    * a CROSS JOIN UNNEST on the array column.
+    * The JOIN looks like a typical left join. Unless the from column is an array in which case there is first
+    * a LEFT JOIN UNNEST on the array column.
     *
     * ARRAY_AGG is an aggregate function so we also need a GROUP BY clause which is the column list defined by the
     * first selectAndFrom.
@@ -347,12 +366,12 @@ trait DataRepoBigQuerySupport {
     *   SELECT ARRAY_AGG(t)
     *   FROM (SELECT DISTINCT * FROM UNNEST(val) v) t
     * ));
-    * SELECT blarg.donor_id, blarg.string-field, blarg.datarepo_row_id,
+    * SELECT root.donor_id, root.string-field, root.datarepo_row_id,
     *   dedup_5(ARRAY_AGG(STRUCT(entity_3.path, entity_3.datarepo_row_id, entity_3.sample_id))) rel_4
-    * FROM `unittest-dataproject.unittest-name.donor` blarg
-    *   JOIN `unittest-dataproject.unittest-name.sample` entity_1 ON blarg.donor_id = entity_1.donor_id
-    *   JOIN `unittest-dataproject.unittest-name.file` entity_3 ON entity_1.sample_id = entity_3.sample_id
-    * GROUP BY blarg.donor_id, blarg.string-field, blarg.datarepo_row_id;
+    * FROM `unittest-dataproject.unittest-name.donor` root
+    *   LEFT JOIN `unittest-dataproject.unittest-name.sample` entity_1 ON root.donor_id = entity_1.donor_id
+    *   LEFT JOIN `unittest-dataproject.unittest-name.file` entity_3 ON entity_1.sample_id = entity_3.sample_id
+    * GROUP BY root.donor_id, root.string-field, root.datarepo_row_id;
     *
     * The collection of expressions that would make the above are
     * this.donor_id
@@ -361,11 +380,10 @@ trait DataRepoBigQuerySupport {
     * this.string-field
     * (also notice that datarepo_row_id columns are automatically added if not otherwise requested, necessary for proper grouping)
     *
-    * @param idColumn
     * @param selectAndFroms
     * @return
     */
-  private[datarepo] def generateExpressionSQL(idColumn: EntityColumn, selectAndFroms: List[SelectAndFrom]) = {
+  private def generateExpressionSQL(selectAndFroms: Seq[SelectAndFrom]) = {
     // the head of selectAndFroms is special, it is the starting point of the query
     // all elements of the tail eventually join back to the head (like that snake thing)
     val rootTableJoin = selectAndFroms.head
@@ -374,12 +392,11 @@ trait DataRepoBigQuerySupport {
       throw new DataEntityException(s"expected rootTableJoin.relationship to be None")
     }
 
-    val rootSelectFragment = (rootTableJoin.selectColumns :+ idColumn).map(_.qualifiedName).mkString(", ")
+    val rootSelectFragment = (rootTableJoin.selectColumns).map(_.qualifiedName).mkString(", ")
     val rootFromFragment = rootTableJoin.fromTable.nameInQuery
 
     val (selectFragments, fromFragments, dedupFunctionDefs) = selectAndFroms.tail.map { selectAndFrom =>
       val relationship = selectAndFrom.relationship.getOrElse(throw new DataEntityException("there should only be 1 join without a relationship"))
-      val idColumn = EntityColumn(relationship.to.table, datarepoRowIdColumn, false)
       val (selectFragment, dedupFunctionDef) = if (selectAndFrom.selectColumns.isEmpty) {
         // there are no selected columns related to this join so we don't include anything in the select clause
         // but the join will still exist in the from clause as it is probably a part of a relationship path
@@ -387,7 +404,8 @@ trait DataRepoBigQuerySupport {
       } else {
         val (dedupFunctionName, dedupFunctionDef) = dedupFunction(selectAndFrom)
         (
-          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns :+ idColumn).map(_.qualifiedName).mkString(", ")}))) ${relationship.alias}"),
+          // important that selectAndFrom.selectColumns added in order so that the indexes in the result set are as expected
+          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(_.qualifiedName).mkString(", ")}))) ${relationship.alias}"),
           scala.Option(dedupFunctionDef)
         )
       }
@@ -424,7 +442,7 @@ trait DataRepoBigQuerySupport {
     val (arrayColumns, scalarColumns) = selectAndFrom.selectColumns.partition(_.isArray)
     val dedupFunctionDef = if (arrayColumns.nonEmpty) {
       val arrayColumnNames = arrayColumns.map(c => validateSql(c.column))
-      val arrayColumnNameWithAliases = arrayColumnNames.zip(List.fill(arrayColumnNames.size)(nextAlias("ac")))
+      val arrayColumnNameWithAliases = arrayColumnNames.zip(Seq.fill(arrayColumnNames.size)(nextAlias("ac")))
       val scalarColumnNames = scalarColumns.map(c => validateSql(c.column))
 
       val scalarColumnList = scalarColumnNames.mkString(", ")
@@ -456,10 +474,10 @@ trait DataRepoBigQuerySupport {
   /**
     * This is the main work of converting parsedExpressions to a sql query. At this time there is not WHERE clause
     * in our sql queries, we are getting all the data. This function figures out what columns go in the SELECT clause
-    * and what tables and joins go in the FROM clause. The result is a List[SelectAndFrom]. This will never be emtpy.
+    * and what tables and joins go in the FROM clause. The result is a Seq[SelectAndFrom]. This will never be emtpy.
     * The first will never have a relationship (i.e. it is not a join) and always have fromTable as the table. Each
     * subsequent SelectAndFrom will have a relationship to one of the tables referenced by a previous SelectAndFrom
-    * in the List. Order matters so the sql can be constructed correctly.
+    * in the Seq. Order matters so the sql can be constructed correctly.
     *
     * This function is recursive.
     *
@@ -469,15 +487,18 @@ trait DataRepoBigQuerySupport {
     * @param traversedRelationships used to capture the relationship path as this function recurses
     * @return
     */
-  private[datarepo] def figureOutQueryStructureForExpressions(snapshotModel: SnapshotModel, fromTable: EntityTable, parsedExpressions: Set[ParsedEntityLookupExpression], traversedRelationships: List[String] = List.empty): List[SelectAndFrom] = {
-    def groupAndOrderByRelationshipName(parsedExpressions: Set[ParsedEntityLookupExpression]): List[(scala.Option[String], Set[ParsedEntityLookupExpression])] = {
-      parsedExpressions.groupBy(_.relationships.headOption).toList.sortBy { case (name, _) => name.getOrElse("") }
+  private[datarepo] def figureOutQueryStructureForExpressions(snapshotModel: SnapshotModel, fromTable: EntityTable, parsedExpressions: Set[ParsedEntityLookupExpression], entityNameColumn: String, traversedRelationships: Seq[String] = Seq.empty): Seq[SelectAndFrom] = {
+    def groupAndOrderByRelationshipName(parsedExpressions: Set[ParsedEntityLookupExpression]): Seq[(scala.Option[String], Set[ParsedEntityLookupExpression])] = {
+      parsedExpressions.groupBy(_.relationships.headOption).toSeq.sortBy { case (name, _) => name.getOrElse("") }
     }
 
     // ordering is important here because it determines the order in which the joins are added in the final SQL
     groupAndOrderByRelationshipName(parsedExpressions).flatMap {
       case (None, baseTableExpressions) =>
-        List(SelectAndFrom(fromTable, None, baseTableExpressions.map(expr => EntityColumn(snapshotModel, fromTable, expr.columnName)).toList))
+        val entityColumns = baseTableExpressions.map(expr => EntityColumn(snapshotModel, fromTable, expr.columnName)) +
+          EntityColumn(fromTable, entityNameColumn, false)
+        // sort columns by name for consistency in tests
+        Seq(SelectAndFrom(fromTable, None, entityColumns.toSeq.sortBy(_.column)))
 
       case (Some(relationshipName), baseTableExpressions) =>
         val currentRelationshipPath = traversedRelationships :+ relationshipName
@@ -506,12 +527,20 @@ trait DataRepoBigQuerySupport {
         // the relation but it is still part of the path to get to a further related entity so still needs a join.
         // Append results of figureOutQueryStructureForExpressions called with continueRecursing
         // to continue walking the relationship path.
-        List(SelectAndFrom(fromTable, scala.Option(relationship), noMoreRelationships.map(expr => EntityColumn(snapshotModel, relationship.to.table, expr.columnName)).toList)) ++
-          figureOutQueryStructureForExpressions(snapshotModel, relationship.to.table, continueRecursing, currentRelationshipPath)
+        val columns = noMoreRelationships.map(expr => EntityColumn(snapshotModel, relationship.to.table, expr.columnName)) match {
+          case empty if empty.isEmpty => Set.empty
+          case someColumns =>
+            // only add the datarepo id column if other columns exist
+            someColumns + EntityColumn(relationship.to.table, datarepoRowIdColumn, false)
+        }
+
+        // sort columns by name for consistency in tests
+        Seq(SelectAndFrom(fromTable, scala.Option(relationship), columns.toSeq.sortBy(_.column))) ++
+          figureOutQueryStructureForExpressions(snapshotModel, relationship.to.table, continueRecursing, entityNameColumn, currentRelationshipPath)
     }
   }
 
-  private def createEntityRelation(snapshotModel: SnapshotModel, fromTable: EntityTable, relationshipModel: RelationshipModel, fromColumn: EntityColumn, toColumn: EntityColumn, relationshipPath: List[String]) = {
+  private def createEntityRelation(snapshotModel: SnapshotModel, fromTable: EntityTable, relationshipModel: RelationshipModel, fromColumn: EntityColumn, toColumn: EntityColumn, relationshipPath: Seq[String]) = {
     val isArray = isColumnArray(snapshotModel, fromTable, fromColumn)
     EntityRelationship(fromColumn, toColumn, relationshipPath, nextAlias("rel"), isArray)
   }

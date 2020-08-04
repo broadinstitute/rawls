@@ -244,7 +244,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider(snapshotModel)
 
     val tableName = testTables.head.getName
-    val columnNames = testTables.head.getColumns.asScala.map(_.getName)
+    val columnNames = testTables.head.getColumns.asScala.map(_.getName).sorted
     val alias = "blarg"
 
     val parsedExpressions = columnNames.map { columnName =>
@@ -252,19 +252,19 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     }.toSet
 
     val entityTable = EntityTable(snapshotModel, tableName, alias)
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions)
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions, datarepoRowIdColumn)
     result should contain theSameElementsAs List(
-      SelectAndFrom(entityTable, None, columnNames.toList.map((column: String) => EntityColumn(entityTable, column, false)))
+      SelectAndFrom(entityTable, None, columnNames.map((column: String) => EntityColumn(entityTable, column, false)))
     )
   }
 
   it should "return a single value for many expressions followed by another for a relationship" in {
     val joinColumnName = "donor_id"
     val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
-      .columns(List("datarepo_row_id", "string-field", joinColumnName).map(new ColumnModel().name(_)).asJava)
+      .columns(List("string-field", joinColumnName, "datarepo_row_id").map(new ColumnModel().name(_)).asJava)
 
     val dependentTable = new TableModel().name("sample").primaryKey(null).rowCount(0)
-      .columns(List("datarepo_row_id", "another-string-field", joinColumnName).map(new ColumnModel().name(_)).asJava)
+      .columns(List("another-string-field", joinColumnName, "datarepo_row_id").map(new ColumnModel().name(_)).asJava)
 
     val relationshipName = "my_donor"
     val relationship = new RelationshipModel()
@@ -278,33 +278,31 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider(snapshotModel)
 
     val rootTableName = rootTable.getName
-    val rootColumnNames = rootTable.getColumns.asScala.map(_.getName)
-    val alias = "blarg"
-
+    val rootColumnNames = rootTable.getColumns.asScala.map(_.getName).sorted
     val dependentTableName = dependentTable.getName
-    val dependentColumns = dependentTable.getColumns.asScala.map(_.getName)
+    val dependentColumns = dependentTable.getColumns.asScala.map(_.getName).sorted
 
     val parsedExpressions = rootColumnNames.map { columnName =>
       ParsedEntityLookupExpression(List.empty, columnName, s"this.$columnName")
-    }.toSet ++ dependentColumns.map { columnName =>
+    } ++ dependentColumns.map { columnName =>
       ParsedEntityLookupExpression(List(relationshipName), columnName, s"this.$relationshipName.$columnName")
     }
 
-    val rootEntityTable = EntityTable(snapshotModel, rootTableName, alias)
-    val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, relationshipName)
+    val rootEntityTable = EntityTable(snapshotModel, rootTableName, "root")
+    val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, "entity_1")
 
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions)
-    result should contain theSameElementsInOrderAs List(
-      SelectAndFrom(rootEntityTable, None, rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false))),
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions.toSet, datarepoRowIdColumn)
+    result should contain theSameElementsInOrderAs Seq(
+      SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
         scala.Option(EntityRelationship(
           EntityColumn(rootEntityTable, joinColumnName, false),
           EntityColumn(dependentEntityTable, joinColumnName, false),
-          List(relationshipName),
-          "rel_1",
+          Seq(relationshipName),
+          "rel_2",
           false
         )),
-        dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
+        dependentColumns.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
     )
   }
 
@@ -328,11 +326,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider(snapshotModel)
 
     val rootTableName = rootTable.getName
-    val rootColumnNames = rootTable.getColumns.asScala.map(_.getName)
-    val alias = "blarg"
+    val rootColumnNames = rootTable.getColumns.asScala.map(_.getName).sorted
 
     val dependentTableName = dependentTable.getName
-    val dependentColumns = dependentTable.getColumns.asScala.map(_.getName)
+    val dependentColumns = dependentTable.getColumns.asScala.map(_.getName).sorted
 
     // notice the swap of dependentColumns and rootColumnNames from the test above
     val parsedExpressions = dependentColumns.map { columnName =>
@@ -341,21 +338,21 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       ParsedEntityLookupExpression(List(relationshipName), columnName, s"this.$relationshipName.$columnName")
     }
 
-    val rootEntityTable = EntityTable(snapshotModel, rootTableName, relationshipName)
-    val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, alias)
+    val rootEntityTable = EntityTable(snapshotModel, rootTableName, "entity_1")
+    val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, "root")
 
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, dependentEntityTable, parsedExpressions)
-    result should contain theSameElementsInOrderAs List(
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, dependentEntityTable, parsedExpressions, datarepoRowIdColumn)
+    result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(dependentEntityTable, None, dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false))),
       SelectAndFrom(dependentEntityTable,
         scala.Option(EntityRelationship(
           EntityColumn(dependentEntityTable, joinColumnName, false),
           EntityColumn(rootEntityTable, joinColumnName, false),
           List(relationshipName),
-          "rel_1",
+          "rel_2",
           false
         )),
-        rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false)))
+        rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false)))
     )
   }
 
@@ -389,11 +386,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider(snapshotModel)
 
     val rootTableName = rootTable.getName
-    val rootColumnNames = rootTable.getColumns.asScala.map(_.getName)
-    val alias = "blarg"
+    val rootColumnNames = rootTable.getColumns.asScala.map(_.getName).sorted
 
     val finalTableName = finalTable.getName
-    val finalColumns = finalTable.getColumns.asScala.map(_.getName)
+    val finalColumns = finalTable.getColumns.asScala.map(_.getName).sorted
 
     val parsedExpressions = rootColumnNames.map { columnName =>
       ParsedEntityLookupExpression(List.empty, columnName, s"this.$columnName")
@@ -401,31 +397,31 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       ParsedEntityLookupExpression(List(relationshipName1, relationshipName2), columnName, s"this.$relationshipName1.$relationshipName2.$columnName")
     }
 
-    val rootEntityTable = EntityTable(snapshotModel, rootTableName, alias)
+    val rootEntityTable = EntityTable(snapshotModel, rootTableName, "root")
     val middleEntityTable = EntityTable(snapshotModel, middleTable.getName, "entity_1")
     val finalEntityTable = EntityTable(snapshotModel, finalTableName, "entity_3")
 
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions)
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, datarepoRowIdColumn)
     result should contain theSameElementsInOrderAs List(
-      SelectAndFrom(rootEntityTable, None, rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false))),
+      SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
         scala.Option(EntityRelationship(
           EntityColumn(rootEntityTable, donorIdColumn, false),
           EntityColumn(middleEntityTable, donorIdColumn, false),
-          List(relationshipName1),
+          Seq(relationshipName1),
           "rel_2",
           false
         )),
-        List.empty),
+        Seq.empty),
       SelectAndFrom(middleEntityTable,
         scala.Option(EntityRelationship(
           EntityColumn(middleEntityTable, sampleIdColumn, false),
           EntityColumn(finalEntityTable, sampleIdColumn, false),
-          List(relationshipName1, relationshipName2),
+          Seq(relationshipName1, relationshipName2),
           "rel_4",
           false
         )),
-        finalColumns.toList.map((column: String) => EntityColumn(finalEntityTable, column, false)))
+        finalColumns.map((column: String) => EntityColumn(finalEntityTable, column, false)))
     )
   }
 
@@ -459,7 +455,6 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = createTestProvider(snapshotModel)
 
     val rootTableName = rootTable.getName
-    val alias = "blarg"
 
     val parsedExpressions = Set(
       ParsedEntityLookupExpression(List.empty, "string-field", "this.string-field"),
@@ -467,31 +462,31 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       ParsedEntityLookupExpression(List(relationshipName2), "table_2_col", "this.bared.table_2_col")
     )
 
-    val rootEntityTable = EntityTable(snapshotModel, rootTableName, alias)
-    val dependent1EntityTable = EntityTable(snapshotModel, dependentTable1.getName, relationshipName1)
-    val dependent2EntityTable = EntityTable(snapshotModel, dependentTable2.getName, relationshipName2)
+    val rootEntityTable = EntityTable(snapshotModel, rootTableName, "root")
+    val dependent1EntityTable = EntityTable(snapshotModel, dependentTable1.getName, "entity_3")
+    val dependent2EntityTable = EntityTable(snapshotModel, dependentTable2.getName, "entity_1")
 
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions)
-    result should contain theSameElementsInOrderAs List(
-      SelectAndFrom(rootEntityTable, None, List(EntityColumn(rootEntityTable, "string-field", false))),
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, "string-field")
+    result should contain theSameElementsInOrderAs Seq(
+      SelectAndFrom(rootEntityTable, None, Seq(EntityColumn(rootEntityTable, "string-field", false))),
       SelectAndFrom(rootEntityTable,
         scala.Option(EntityRelationship(
           EntityColumn(rootEntityTable, barIdColumn, false),
           EntityColumn(dependent2EntityTable, barIdColumn, false),
-          List(relationshipName2),
-          "rel_1",
+          Seq(relationshipName2),
+          "rel_2",
           false
         )),
-        List(EntityColumn(dependent2EntityTable, "table_2_col", false))),
+        Seq(EntityColumn(dependent2EntityTable, datarepoRowIdColumn, false), EntityColumn(dependent2EntityTable, "table_2_col", false))),
       SelectAndFrom(rootEntityTable,
         scala.Option(EntityRelationship(
           EntityColumn(rootEntityTable, fooIdColumn, false),
           EntityColumn(dependent1EntityTable, fooIdColumn, false),
-          List(relationshipName1),
-          "rel_2",
+          Seq(relationshipName1),
+          "rel_4",
           false
         )),
-        List(EntityColumn(dependent1EntityTable, "table_1_col", false)))
+        Seq(EntityColumn(dependent1EntityTable, datarepoRowIdColumn, false), EntityColumn(dependent1EntityTable, "table_1_col", false)))
     )
   }
 

@@ -41,15 +41,13 @@ object MockBigQueryServiceFactory {
   }
 
   def createTestTableResult(tableRowCount: Int): TableResult = {
-    val schema: Schema = Schema.of(F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
+    val schema: Schema = Schema.of(F_BOOLEAN, F_STRING, F_INTEGER, F_TIMESTAMP)
 
     val stringKeys = createKeyList(tableRowCount)
 
     val results = stringKeys map { stringKey  =>
-      FieldValueList.of(List(
-        FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey),
-        FV_INTEGER, FV_BOOLEAN, FV_TIMESTAMP).asJava,
-        F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
+      FieldValueList.of(List(FV_BOOLEAN, FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey), FV_INTEGER, FV_TIMESTAMP).asJava,
+        F_BOOLEAN, F_STRING, F_INTEGER, F_TIMESTAMP)
     }
 
     val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.asJava)

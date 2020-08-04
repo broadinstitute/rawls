@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
@@ -139,7 +139,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
   }
 
-  private[datarepo] def convertToListAndCheckSize(expressionResultsStream: Stream[ExpressionAndResult], expectedSize: Int): List[ExpressionAndResult] = {
+  private[datarepo] def convertToListAndCheckSize(expressionResultsStream: Stream[ExpressionAndResult], expectedSize: Int): Seq[ExpressionAndResult] = {
     // this size of stuff is not meant to be precise but just hopefully close enough
     // so that we can protect from OOMs
     val objectSize = 8
@@ -183,7 +183,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       buffer += expressionAndResult
     }
 
-    buffer.toList
+    buffer
   }
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] = {
@@ -199,13 +199,12 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
         the same entity lookup expression may appear more than once within an input expression or across all input expressions
         after running the BigQuery job the work is to figure out where those results get plugged into input values for each entity
          */
-        val baseTableAlias = "root"
         val resultIO = for {
-          parsedExpressions <- parseAllExpressions(gatherInputsResult, baseTableAlias)
+          parsedExpressions <- parseAllExpressions(gatherInputsResult)
           tableModel = getTableModel(snapshotModel, rootEntityType)
           _ <- checkSubmissionSize(parsedExpressions, tableModel)
           entityNameColumn = pkFromSnapshotTable(tableModel)
-          (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel, parsedExpressions, tableModel, entityNameColumn, baseTableAlias)
+          (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel, parsedExpressions, tableModel, entityNameColumn)
           petKey <- getPetSAKey
           queryResults <- runBigQuery(bqQueryJobConfig, petKey)
         } yield {
@@ -215,7 +214,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
           val workspaceExpressionResultsPerEntity = populateWorkspaceLookupPerEntity(workspaceExpressionResults, rootEntityNames)
           val groupedResults = groupResultsByExpressionAndEntityName(expressionResults ++ workspaceExpressionResultsPerEntity)
 
-          val entityNameAndInputValues = constructInputsForEachEntity(gatherInputsResult, groupedResults, baseTableAlias, rootEntityNames)
+          val entityNameAndInputValues = constructInputsForEachEntity(gatherInputsResult, groupedResults, rootEntityNames)
 
           createSubmissionValidationEntityInputs(CollectionUtils.groupByTuples(entityNameAndInputValues))
         }
@@ -229,14 +228,14 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     IO.fromFuture(IO(samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)))
   }
 
-  private def getEntityNames(bqExpressionResults: List[ExpressionAndResult]): List[EntityName] = {
+  private def getEntityNames(bqExpressionResults: Seq[ExpressionAndResult]): Seq[EntityName] = {
     bqExpressionResults.flatMap {
       case (_, resultsMap) => resultsMap.keys
     }.distinct
   }
 
-  private def populateWorkspaceLookupPerEntity(workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]], rootEntities: List[EntityName]): List[ExpressionAndResult] = {
-    workspaceExpressionResults.toList.map { case(lookup, result) =>
+  private def populateWorkspaceLookupPerEntity(workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]], rootEntities: Seq[EntityName]): Seq[ExpressionAndResult] = {
+    workspaceExpressionResults.toSeq.map { case(lookup, result) =>
       (lookup, rootEntities.map(_ -> result).toMap)
     }
   }
@@ -249,7 +248,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
   }
 
-  private def constructInputsForEachEntity(gatherInputsResult: GatherInputsResult, groupedResults: Seq[(ExpressionEvaluationSupport.LookupExpression, Map[ExpressionEvaluationSupport.EntityName, Try[scala.Iterable[AttributeValue]]])], baseTableAlias: LookupExpression, rootEntities: List[EntityName]): Seq[(EntityName, SubmissionValidationValue)] = {
+  private def constructInputsForEachEntity(gatherInputsResult: GatherInputsResult, groupedResults: Seq[(LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])], rootEntities: Seq[EntityName]) = {
     // gatherInputsResult.processableInputs.toSeq so that the result is not a Set and does not worry about duplicates
     gatherInputsResult.processableInputs.toSeq.flatMap { input =>
       val parser = AntlrTerraExpressionParser.getParser(input.expression)
@@ -265,7 +264,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
   }
 
-  private def groupResultsByExpressionAndEntityName(expressionResults: List[ExpressionAndResult]) = {
+  private def groupResultsByExpressionAndEntityName(expressionResults: Seq[ExpressionAndResult]) = {
     expressionResults.groupBy {
       case (expression, _) => expression
     }.toSeq.map {
@@ -288,26 +287,27 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     * from which columns were requested. Each of these "related entity" columns is an array of structs.
     * The columns of each struct are the columns requested from that entity.
     *
-    * @param entityNameColumn
-    * @param parsedExpressions
-    * @param selectAndFroms
-    * @param tableResult
+    * @param entityNameColumn name of column representing the entity name
+    * @param parsedExpressions incoming expressions
+    * @param selectAndFroms query structure
+    * @param tableResult query results
     * @return Stream because it should not suck all the results from BigQuery into memory
     */
-  private[datarepo] def transformQueryResultToExpressionAndResult(entityNameColumn: String, parsedExpressions: Set[ParsedEntityLookupExpression], selectAndFroms: List[SelectAndFrom], tableResult: TableResult): Stream[ExpressionAndResult] = {
-    val selectAndFromByRelationshipPath = selectAndFroms.map(sf => sf.relationship.map(_.relationshipPath).getOrElse(List.empty) -> sf).toMap
+  private[datarepo] def transformQueryResultToExpressionAndResult(entityNameColumn: String, parsedExpressions: Set[ParsedEntityLookupExpression], selectAndFroms: Seq[SelectAndFrom], tableResult: TableResult): Stream[ExpressionAndResult] = {
+    val selectAndFromByRelationshipPath = selectAndFroms.map(sf => sf.relationship.map(_.relationshipPath).getOrElse(Seq.empty) -> sf).toMap
     val relationshipAliasesByPath = selectAndFroms.flatMap(j => j.relationship.map(r => r.relationshipPath -> r.alias)).toMap
     for {
       resultRow <- tableResult.iterateAll().asScala.toStream // this is the streaming goodness
       parsedExpression <- parsedExpressions
     } yield {
+      // determine column index based on position of parsedExpression.columnName in SelectAndFrom.selectColumns
       val columnIndex = selectAndFromByRelationshipPath(parsedExpression.relationships).selectColumns.map(_.column).indexOf(parsedExpression.columnName)
       val attribute = relationshipAliasesByPath.get(parsedExpression.relationships) match {
         case None =>
           // this is a root level expression, e.g. this.foo, no alias required it should be at the top level of the row
           val field = tableResult.getSchema.getFields.get(columnIndex)
           val fieldValue = resultRow.get(columnIndex)
-          fieldValueToAttributeValue(field, fieldValue)
+          fieldValueToAttribute(field, fieldValue)
         case Some(relationshipAlias) =>
           // this is a relation expressions, e.g. this.foo.bar, it should be an array of structs (i.e. repeated record) column
           // the name if the column is the relationshipAlias and the sub fields the names of the columns in the expressions
@@ -317,7 +317,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
           val subField = field.getSubFields.get(columnIndex)
           val attributeValues = resultRow.get(relationshipAlias).getRepeatedValue.asScala.map { struct =>
             val subFieldValue = struct.getRecordValue.get(columnIndex)
-            fieldValueToAttributeValue(subField, subFieldValue)
+            fieldValueToAttribute(subField, subFieldValue)
           }.flatMap {
             case v: AttributeValue => Seq(v)
             case AttributeValueList(l) => l
@@ -340,13 +340,12 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     * Iterate through all the input expressions and extract the entity lookup expressions
     *
     * @param gatherInputsResult input expression source
-    * @param baseTableAlias alias for the base table in the BQ query
     * @return
     */
-  private def parseAllExpressions(gatherInputsResult: GatherInputsResult, baseTableAlias: String): IO[Set[ParsedEntityLookupExpression]] = IO {
+  private def parseAllExpressions(gatherInputsResult: GatherInputsResult) = IO {
     gatherInputsResult.processableInputs.flatMap { input =>
       val parser = AntlrTerraExpressionParser.getParser(input.expression)
-      val visitor = new DataRepoEvaluateToAttributeVisitor(baseTableAlias)
+      val visitor = new DataRepoEvaluateToAttributeVisitor()
       visitor.visit(parser.root())
     }
   }

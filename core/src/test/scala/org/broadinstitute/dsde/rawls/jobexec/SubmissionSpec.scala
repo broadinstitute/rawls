@@ -335,7 +335,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
-      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0))
+      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0))
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
