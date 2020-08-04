@@ -380,10 +380,12 @@ trait DataRepoBigQuerySupport {
     * this.string-field
     * (also notice that datarepo_row_id columns are automatically added if not otherwise requested, necessary for proper grouping)
     *
+    * see behavior of "DataEntityProvider.generateExpressionSQL()" tests in DataRepoEntityProviderSpec
+    *
     * @param selectAndFroms
     * @return
     */
-  private def generateExpressionSQL(selectAndFroms: Seq[SelectAndFrom]) = {
+  private[datarepo] def generateExpressionSQL(selectAndFroms: Seq[SelectAndFrom]) = {
     // the head of selectAndFroms is special, it is the starting point of the query
     // all elements of the tail eventually join back to the head (like that snake thing)
     val rootTableJoin = selectAndFroms.head
@@ -528,7 +530,7 @@ trait DataRepoBigQuerySupport {
         // Append results of figureOutQueryStructureForExpressions called with continueRecursing
         // to continue walking the relationship path.
         val columns = noMoreRelationships.map(expr => EntityColumn(snapshotModel, relationship.to.table, expr.columnName)) match {
-          case empty if empty.isEmpty => Set.empty
+          case empty if empty.isEmpty  => Set.empty
           case someColumns =>
             // only add the datarepo id column if other columns exist
             someColumns + EntityColumn(relationship.to.table, datarepoRowIdColumn, false)
