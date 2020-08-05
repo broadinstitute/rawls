@@ -219,6 +219,17 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     }.errorReport.message should be(s"Too many results. Snapshot row count * number of entity expressions cannot exceed ${smallMaxInputsPerSubmission}.")
   }
 
+  behavior of "DataEntityProvider.queryConfigForExpressions()"
+
+  it should "output a single SelectAndFrom when there are no lookup expressions" in {
+    val provider = new DataRepoBigQuerySupport {}
+    val snapshotModel = createSnapshotModel(defaultTables)
+    val (selectAndFroms, _) = provider.queryConfigForExpressions(snapshotModel, Set.empty, defaultTables.head, datarepoRowIdColumn)
+
+    val table = EntityTable(snapshotModel, defaultTables.head.getName, "root_1")
+    selectAndFroms should contain theSameElementsAs Seq(SelectAndFrom(table, None, Seq(EntityColumn(table, datarepoRowIdColumn, false))))
+  }
+
   behavior of "DataEntityProvider.convertToListAndCheckSize()"
 
   it should "fail if the stream is too big" in {

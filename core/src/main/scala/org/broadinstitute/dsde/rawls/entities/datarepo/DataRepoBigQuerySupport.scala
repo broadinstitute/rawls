@@ -321,7 +321,7 @@ trait DataRepoBigQuerySupport {
     * @return structural information about the query (aliases and column ordering are important)
     *         and the BQ job config containing the sql
     */
-  protected def queryConfigForExpressions(snapshotModel: SnapshotModel, parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel, entityNameColumn: String): (Seq[SelectAndFrom], QueryJobConfiguration.Builder) = {
+  protected[datarepo] def queryConfigForExpressions(snapshotModel: SnapshotModel, parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel, entityNameColumn: String): (Seq[SelectAndFrom], QueryJobConfiguration.Builder) = {
     val rootEntityTable = EntityTable(snapshotModel, tableModel.getName, nextAlias("root"))
     val selectAndFroms = if (parsedExpressions.isEmpty) {
       // there is an edge case where there are no entity lookup expressions, namely all the inputs are either
