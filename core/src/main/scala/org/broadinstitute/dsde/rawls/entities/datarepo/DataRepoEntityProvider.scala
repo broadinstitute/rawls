@@ -310,7 +310,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
           fieldValueToAttribute(field, fieldValue)
         case Some(relationshipAlias) =>
           // this is a relation expressions, e.g. this.foo.bar, it should be an array of structs (i.e. repeated record) column
-          // the name if the column is the relationshipAlias and the sub fields the names of the columns in the expressions
+          // the name of the column is the relationshipAlias and the sub fields the names of the columns in the expressions
           val field = tableResult.getSchema.getFields.get(relationshipAlias)
           assert(field.getMode == Mode.REPEATED, "expected result from relationship to be an array")
           assert(field.getType == LegacySQLTypeName.RECORD, "expected result from relationship to be a struct")

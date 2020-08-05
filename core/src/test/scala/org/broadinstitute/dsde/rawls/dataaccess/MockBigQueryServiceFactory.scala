@@ -55,6 +55,33 @@ object MockBigQueryServiceFactory {
     tableResult
   }
 
+  def createTestTableResultWithNestedStruct(tableRowCount: Int, nestedFieldName: String): TableResult = {
+    val nestedField = Field.newBuilder(nestedFieldName, LegacySQLTypeName.RECORD, F_BOOLEAN, F_STRING, F_INTEGER).setMode(Field.Mode.REPEATED).build()
+    val schema: Schema = Schema.of(F_STRING, nestedField)
+
+    val stringKeys = createKeyList(tableRowCount)
+
+    val results = stringKeys map { stringKey  =>
+      val subKeyList = createKeyList(tableRowCount)
+      val nestedRecord = subKeyList.map { subKey =>
+        FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.RECORD, FieldValueList.of(
+          List(FV_BOOLEAN, FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, subKey), FV_INTEGER).asJava,
+          F_BOOLEAN, F_STRING, F_INTEGER))
+      }.asJava
+
+      FieldValueList.of(
+        List(
+          FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey),
+          FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.REPEATED, nestedRecord)
+        ).asJava,
+        F_STRING, nestedField)
+    }
+
+    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.asJava)
+    val tableResult: TableResult = new TableResult(schema, tableRowCount, page)
+    tableResult
+  }
+
   def ioFactory(queryResponse: Either[Throwable, TableResult] = Right(tableResult)): MockBigQueryServiceFactory = {
     lazy val blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)
     implicit val ec = TestExecutionContext.testExecutionContext

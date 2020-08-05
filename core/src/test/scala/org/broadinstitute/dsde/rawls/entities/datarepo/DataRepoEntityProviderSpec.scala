@@ -9,11 +9,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.ExpressionAndResult
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueRawJson, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.scalatest.{AsyncFlatSpec, Matchers}
 
@@ -492,8 +493,71 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
   behavior of "DataEntityProvider.transformQueryResultToExpressionAndResult()"
 
-  it should "handle root entity attributes" in pending
-  it should "handle related entity attributes" in pending
+  it should "handle root entity attributes" in {
+    val provider = createTestProvider()
+    val table = EntityTable("proj", "view", "table", "root")
+    val selectAndFroms = Seq(SelectAndFrom(table, None, Seq(
+      EntityColumn(table, F_BOOLEAN.getName, false),
+      EntityColumn(table, F_STRING.getName, false),
+      EntityColumn(table, F_INTEGER.getName, false))))
+
+    val parsedExpressions = Set(
+      ParsedEntityLookupExpression(List.empty, F_BOOLEAN.getName, s"this.${F_BOOLEAN.getName}"),
+      ParsedEntityLookupExpression(List.empty, F_INTEGER.getName, s"this.${F_INTEGER.getName}")
+    )
+
+    val tableResult = createTestTableResult(3)
+
+    val results = provider.transformQueryResultToExpressionAndResult(datarepoRowIdColumn, parsedExpressions, selectAndFroms, tableResult)
+
+    val expectedResults: Set[ExpressionAndResult] = for {
+      expr <- parsedExpressions
+      row <- tableResult.iterateAll().asScala
+      field <- Seq(F_BOOLEAN, F_INTEGER) if field.getName == expr.columnName
+    } yield {
+      (expr.expression, Map(row.get(datarepoRowIdColumn).getStringValue -> Success(Seq(provider.fieldToAttribute(field, row).asInstanceOf[AttributeValue]))))
+    }
+
+    results should contain theSameElementsAs expectedResults
+  }
+
+  it should "handle related entity attributes" in {
+    val provider = createTestProvider()
+    val relationshipName = "relationship"
+    val table = EntityTable("proj", "view", "table", "root")
+    val relatedAlias = "related"
+    val relatedTable = EntityTable("proj", "view", "relatedTable", relatedAlias)
+    val selectAndFroms = Seq(
+      SelectAndFrom(table, None, Seq(EntityColumn(table, F_STRING.getName, false))),
+      // the actual to and from columns should not matter anymore
+      SelectAndFrom(relatedTable, Some(EntityRelationship(null, null, Seq(relationshipName), relatedAlias, false)), Seq(
+        EntityColumn(relatedTable, F_BOOLEAN.getName, false),
+        EntityColumn(relatedTable, F_STRING.getName, false),
+        EntityColumn(relatedTable, F_INTEGER.getName, false)))
+    )
+
+    val parsedExpressions = Set(
+      ParsedEntityLookupExpression(List(relationshipName), F_BOOLEAN.getName, s"this.$relationshipName.${F_BOOLEAN.getName}"),
+      ParsedEntityLookupExpression(List(relationshipName), F_INTEGER.getName, s"this.$relationshipName.${F_INTEGER.getName}")
+    )
+
+    val tableResult = createTestTableResultWithNestedStruct(3, relatedAlias)
+
+    val results = provider.transformQueryResultToExpressionAndResult(datarepoRowIdColumn, parsedExpressions, selectAndFroms, tableResult)
+
+    val expectedResults: Set[ExpressionAndResult] = for {
+      expr <- parsedExpressions
+      row <- tableResult.iterateAll().asScala
+      field <- Seq(F_BOOLEAN, F_INTEGER) if field.getName == expr.columnName
+    } yield {
+      val attributeValues = row.get(relatedAlias).getRepeatedValue.asScala.map { fv =>
+        provider.fieldToAttribute(field, fv.getRecordValue).asInstanceOf[AttributeValue]
+      }
+      (expr.expression, Map(row.get(datarepoRowIdColumn).getStringValue -> Success(attributeValues)))
+    }
+
+    results should contain theSameElementsAs expectedResults
+  }
 
   behavior of "DataEntityProvider.generateExpressionSQL()"
 
