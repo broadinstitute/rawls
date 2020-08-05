@@ -314,13 +314,12 @@ trait DataRepoBigQuerySupport {
   }
 
   /**
-    * Generate the BQ job for each of the entity lookup expressions. The lookup expressions are grouped based on
-    * their relationships so that only 1 job is created per relationship plus 1 for the base table. We do no want
-    * to make a BQ job per lookup expression as that could potentially be many.
+    * Generate the BQ job for all of the entity lookup expression.
     * @param parsedExpressions incoming expressions
     * @param tableModel model object for base table
     * @param entityNameColumn name of column used for the entity name
-    * @return
+    * @return structural information about the query (aliases and column ordering are important)
+    *         and the BQ job config containing the sql
     */
   protected def queryConfigForExpressions(snapshotModel: SnapshotModel, parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel, entityNameColumn: String): (Seq[SelectAndFrom], QueryJobConfiguration.Builder) = {
     val rootEntityTable = EntityTable(snapshotModel, tableModel.getName, nextAlias("root"))
@@ -474,7 +473,7 @@ trait DataRepoBigQuerySupport {
   }
 
   /**
-    * This is the main work of converting parsedExpressions to a sql query. At this time there is not WHERE clause
+    * This is the main work of converting parsedExpressions to a sql query. At this time there is no WHERE clause
     * in our sql queries, we are getting all the data. This function figures out what columns go in the SELECT clause
     * and what tables and joins go in the FROM clause. The result is a Seq[SelectAndFrom]. This will never be emtpy.
     * The first will never have a relationship (i.e. it is not a join) and always have fromTable as the table. Each
