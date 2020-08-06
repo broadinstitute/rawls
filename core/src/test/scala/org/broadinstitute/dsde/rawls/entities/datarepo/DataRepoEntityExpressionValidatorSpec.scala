@@ -145,7 +145,6 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     val actualValid = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
     actualValid.invalidInputs.size shouldBe 12
     actualValid.invalidOutputs shouldBe 'empty
-    // todo: should error with message ^ but the exception doesn't seem to bubble up?
   }
 
   it should "fail if the relationship does not exist for relationship traversals" in {
@@ -206,6 +205,23 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
   it should "fail for empty required input expressions in a MethodConfiguration" in {
     val actualOneEmpty = expressionValidator.validateExpressionsForSubmission(oneEmpty, toGatherInputs(oneEmpty.inputs)).futureValue
     actualOneEmpty shouldBe a [scala.util.Failure[_]]
+  }
+
+  // should never get here if TDR is not buggy
+  it should "fail if the linked table does not exist for relationship traversals" in {
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables, relationships))
+    val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
+    val actualInvalid = expressionValidatorWithMultipleTables.validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    actualInvalid shouldBe a [scala.util.Failure[_]]
+  }
+
+  it should "fail if the relationship does not exist for relationship traversals" in {
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleFixturesTables, List.empty))
+    val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
+    val actualInvalid = expressionValidatorWithMultipleTables.validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    actualInvalid shouldBe a [scala.util.Failure[_]]
   }
 
 
