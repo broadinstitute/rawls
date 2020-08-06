@@ -26,7 +26,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     rootEntityType match {
       case Some(rootTableName) => validateEntityLookup(rootTableName, ctx)
       case None => Failure(new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
+        ErrorReport(StatusCodes.BadRequest, "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.") // it seems like it would get here only if methodConfiguration.rootEntityType is not set, so this error message doesn't make sense to me. Shouldn't it be something like "Missing Root Entity Type. Please select one and try again."
       ))
     }
   }

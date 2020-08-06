@@ -34,16 +34,13 @@ trait DataRepoExpressionFixture {
   val validEntityInputExpressions: Seq[String] = Seq(
     "this.gvcf",
     "this.with-dash",
-    "this.library:cohort",
-    "this.library:cohort1",
-    "this.arbitrary:whatever",
     "this.underscores_are_ok",
     "this._",
     """["foo","bar", this.gvcf]""",
     """["a",{"more":{"elaborate":this.gvcf}}]""",
     """{"more":{"elaborate":{"reference1": this.gvcf, "path":"gs://abc/123"}}}""",
-    """["foo", "bar", 123, ["array", this.gvcf, this.library:cohort], false]""",
-    """["foo", "bar", 123, ["array", this.gvcf, [this.library:cohort]], false, ["abc", this.with-dash]]"""
+    """["foo", "bar", 123, ["array", this.gvcf], false]""",
+    """["foo", "bar", 123, ["array", this.gvcf], false, ["abc", this.with-dash]]"""
   )
 
   val validInputExpressionsWithNoRoot: Seq[String] = validWorkspaceInputExpressions ++ validJsonInputExpressions
@@ -54,16 +51,13 @@ trait DataRepoExpressionFixture {
     "this.gvcf", // root table entity
     "this.gvcf.gvcf",
     "this.gvcf.with-dash",
-    "this.gvcf.library:cohort",
-    "this.gvcf.library:cohort1",
-    "this.gvcf.arbitrary:whatever",
     "this.gvcf.underscores_are_ok",
     "this.gvcf._",
     """["foo","bar", this.gvcf.gvcf]""",
     """["a",{"more":{"elaborate":this.gvcf.gvcf}}]""",
     """{"more":{"elaborate":{"reference1": this.gvcf.gvcf, "path":"gs://abc/123"}}}""",
-    """["foo", "bar", 123, ["array", this.gvcf.gvcf, this.gvcf.library:cohort], false]""",
-    """["foo", "bar", 123, ["array", this.gvcf.gvcf, [this.gvcf.library:cohort]], false, ["abc", this.gvcf.with-dash]]"""
+    """["foo", "bar", 123, ["array", this.gvcf.gvcf], false]""",
+    """["foo", "bar", 123, ["array", this.gvcf.gvcf], false, ["abc", this.gvcf.with-dash]]"""
   )
   val validInputExpressionsWithNoRootWithRelationships: Seq[String] = validWorkspaceInputExpressions ++ validJsonInputExpressions
   val validInputExpressionsWithRelationships: Seq[String] = validInputExpressionsWithNoRootWithRelationships ++ validEntityInputExpressionsWithRelationships
@@ -84,10 +78,16 @@ trait DataRepoExpressionFixture {
   // parseable input expressions that are invalid (don't fit the schema, relations, any other reason?)
   val invalidInputExpressions: Seq[String] = Seq(
     "this.column_does_not_exist",
-    "this.case_sample.foo:ref.bar:attribute", // invalid for now -- relations
-    """{"level1": "easy", "other-levels": {"level2": this.gvcf, "level3": [this.library:cohort, "extremely difficult", this.library:cohort.entity]}}""", // invalid -- relations
+    "this.library:cohort", // namespace:name is not allowed for BQ column/table names
+    "this.library:cohort1",
+    "this.arbitrary:whatever",
+    "this.case_sample.foo:ref.bar:attribute",
+    """{"level1": "easy", "other-levels": {"level2": this.gvcf, "level3": [this.library:cohort, "extremely difficult", this.library:cohort.entity]}}""",
+    """["foo", "bar", 123, ["array", this.gvcf, this.library:cohort], false]""",
+    """["foo", "bar", 123, ["array", this.gvcf, [this.library:cohort]], false, ["abc", this.with-dash]]""",
+    """["foo", "bar", 123, ["array", this.gvcf.gvcf, this.gvcf.library:cohort], false]""",
+    """["foo", "bar", 123, ["array", this.gvcf.gvcf, [this.gvcf.library:cohort]], false, ["abc", this.gvcf.with-dash]]"""
   )
-  // todo: why didn't these fail ^^
 
   val badInputExpressionsWithRoot: Seq[String] = invalidInputExpressions ++ unparseableInputExpressions
 
@@ -137,13 +137,13 @@ trait DataRepoExpressionFixture {
 
   val defaultFixtureRootTableName = "rootTable"
   // These should reflect the columns used in validEntityInputExpressions above
-  val defaultFixtureRootTableColumns = List("gvcf", "with-dash", "library:cohort", "library:cohort1", "arbitrary:whatever", "underscores_are_ok", "_", "case_sample")
+  val defaultFixtureRootTableColumns = List("gvcf", "with-dash", "underscores_are_ok", "_", "case_sample")
   val defaultFixtureTables: List[TableModel] = List(
     new TableModel().name(defaultFixtureRootTableName).columns(defaultFixtureRootTableColumns.map(new ColumnModel().name(_)).asJava)
   )
 
   val linkedTableName = "linkedTable"
-  val linkedTableColumns = List("gvcf", "with-dash", "library:cohort", "library:cohort1", "arbitrary:whatever", "underscores_are_ok", "_", "case_sample")
+  val linkedTableColumns = List("gvcf", "with-dash", "underscores_are_ok", "_", "case_sample")
   val multipleFixturesTables: List[TableModel] = defaultFixtureTables ++ List(
     new TableModel().name(linkedTableName).columns(linkedTableColumns.map(new ColumnModel().name(_)).asJava)
   )
