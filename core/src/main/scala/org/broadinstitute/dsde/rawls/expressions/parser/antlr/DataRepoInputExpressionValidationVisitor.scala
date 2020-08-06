@@ -31,6 +31,29 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     }
   }
 
+  override def visitNamespace(ctx: TerraExpressionParser.NamespaceContext): Try[Unit] = {
+    rootEntityType match {
+      case Some(_) => {
+        val maybeParent = Option(ctx.parent.parent.getChild(0).getText)
+        maybeParent match {
+          case Some(maybeWorkspace) => {
+            if (maybeWorkspace == "workspace.")
+              super.visitNamespace(ctx)
+            else
+              Failure(new RawlsExceptionWithErrorReport(
+                ErrorReport(StatusCodes.BadRequest, "Expressions with \"namespace: name\" are not valid for BigQuery")
+              ))
+          }
+          case None => Failure(new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, "Expressions with \"namespace: name\" are not valid for BigQuery")
+          ))
+        }
+
+      }
+      case None => super.visitNamespace(ctx)
+    }
+  }
+
   // Valid DataRepo EntityLookups mean that each of the relationships exist and the final attribute exists as a column
   // on the final table
   private def validateEntityLookup(rootTableName: String, entityLookupContext: EntityLookupContext): Try[Unit] = {
