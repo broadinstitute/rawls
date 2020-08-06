@@ -223,8 +223,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
    * */
   def unregisterBillingProjectWithUserInfo(projectName: RawlsBillingProjectName, ownerUserInfo: UserInfo): Future[PerRequestMessage] = {
     for {
-      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
-      _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
       _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
       _ <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.delete(projectName)
@@ -232,14 +230,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }
-  }
-
-  private def destroyPet(userIdInfo: UserIdInfo, projectName: RawlsBillingProjectName): Future[Unit] = {
-    for {
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName.value, RawlsUserEmail(userIdInfo.userEmail))
-      petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName.value, petUserInfo)
-    } yield ()
   }
 
   def adminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
