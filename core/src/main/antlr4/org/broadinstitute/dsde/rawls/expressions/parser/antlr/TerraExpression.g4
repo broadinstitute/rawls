@@ -31,15 +31,9 @@ workspaceEntity: relation;
 
 workspaceEntityLookup: 'workspace.' workspaceEntity (relation)* attributeName;
 
-bigQueryAttributeName: name;
-
-bigQueryRelation: bigQueryAttributeName '.';
-
-bigQueryEntityLookup: 'this' ('.' (bigQueryRelation)* bigQueryAttributeName)?;
-
 entityLookup: 'this' ('.' (relation)* attributeName)?;
 
-lookup: workspaceAttributeLookup | workspaceEntityLookup | bigQueryEntityLookup | entityLookup;
+lookup: workspaceAttributeLookup | workspaceEntityLookup | entityLookup;
 
 value: literal | obj | arr | lookup;
 

@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.BigQueryEntityLookupContext
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.EntityLookupContext
 
 import scala.collection.JavaConverters._
 
@@ -16,8 +16,8 @@ class DataRepoEvaluateToAttributeVisitor(rootTableAlias: String) extends TerraEx
     aggregate ++ nextResult
   }
 
-  override def visitBigQueryEntityLookup(ctx: BigQueryEntityLookupContext): Seq[ParsedEntityLookupExpression] = {
-    val relations = ctx.bigQueryRelation().asScala.toList
+  override def visitEntityLookup(ctx: EntityLookupContext): Seq[ParsedEntityLookupExpression] = {
+    val relations = ctx.relation().asScala.toList
 
     val tableAlias = if (relations.isEmpty) {
       rootTableAlias
@@ -26,8 +26,8 @@ class DataRepoEvaluateToAttributeVisitor(rootTableAlias: String) extends TerraEx
     }
 
     Seq(ParsedEntityLookupExpression(
-      relations.map(_.bigQueryAttributeName().getText),
-      ctx.bigQueryAttributeName().getText.toLowerCase,
+      relations.map(_.attributeName().getText),
+      ctx.attributeName().getText.toLowerCase,
       ctx.getText,
       tableAlias
     ))
