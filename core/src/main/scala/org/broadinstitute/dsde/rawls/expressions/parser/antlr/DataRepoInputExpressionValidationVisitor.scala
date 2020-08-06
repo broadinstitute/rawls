@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
-import bio.terra.datarepo.model.{RelationshipModel, SnapshotModel, TableModel}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import akka.http.scaladsl.model.StatusCodes
+import bio.terra.datarepo.model.{SnapshotModel, TableModel}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{AttributeNameContext, EntityLookupContext, RelationContext}
+import org.broadinstitute.dsde.rawls.model.ErrorReport
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -23,7 +25,9 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
   override def visitEntityLookup(ctx: EntityLookupContext): Try[Unit] = {
     rootEntityType match {
       case Some(rootTableName) => validateEntityLookup(rootTableName, ctx)
-      case None => Failure(new RawlsException("Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."))
+      case None => Failure(new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
+      ))
     }
   }
 
@@ -35,7 +39,9 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
         val relations = entityLookupContext.relation().asScala.toList
         traverseRelationsAndGetFinalTable(rootTableModel, relations).flatMap(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
       }
-      case None => Failure(new RawlsException(s"Root entity type [$rootTableName] is not a name of a table that exist within DataRepo Snapshot."))
+      case None => Failure(new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, s"Root entity type [$rootTableName] is not a name of a table that exist within DataRepo Snapshot.")
+      ))
     }
   }
 
@@ -45,10 +51,13 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     if (tableColumns.exists(_.getName == attributeName)) {
       Success()
     } else {
-      Failure(new RawlsException(s"Missing attribute `${attributeName}` on table `${tableModel.getName}`"))
+      Failure(new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, s"Missing attribute `${attributeName}` on table `${tableModel.getName}`")
+      ))
     }
   }
 
+  @tailrec
   private def traverseRelationsAndGetFinalTable(currentTableModel: TableModel, relations: List[RelationContext]): Try[TableModel] = {
     relations match {
       case Nil => Success(currentTableModel)
@@ -56,7 +65,9 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
         val nextRelationName = nextRelationContext.attributeName.name.getText
         maybeGetNextTableFromRelation(currentTableModel, nextRelationName) match {
           case Some(nextTableModel) => traverseRelationsAndGetFinalTable(nextTableModel, remainingRelations)
-          case None => Failure(new RawlsException(s"Relationship with name `${nextRelationName}` and from table `${currentTableModel}` could not be found.")) // This would only happen if there is a bug in TDR code.
+          case None => Failure(new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, s"Relationship with name `${nextRelationName}` and from table `${currentTableModel}` could not be found.") // This would only happen if there is a bug in TDR code.
+          ))
         }
       }
     }

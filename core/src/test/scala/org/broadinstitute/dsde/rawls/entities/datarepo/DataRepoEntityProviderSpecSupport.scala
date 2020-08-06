@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import java.util.UUID
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.datarepo.model.{ColumnModel, SnapshotModel, TableModel}
+import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, SnapshotModel, TableModel}
 import bio.terra.workspace.model.DataReferenceDescription
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
@@ -100,11 +100,12 @@ trait DataRepoEntityProviderSpecSupport {
 
   /* A "factory" method to create SnapshotModel objects, with default.
    */
-  def createSnapshotModel( tables: List[TableModel] = defaultTables): SnapshotModel =
+  def createSnapshotModel( tables: List[TableModel] = defaultTables, relationships: List[RelationshipModel] = List.empty): SnapshotModel =
     new SnapshotModel()
       .tables(tables.asJava)
       .dataProject("unittest-dataproject")
       .name("unittest-name")
+      .relationships(relationships.asJava)
 
   /**
    * Mock for WorkspaceManagerDAO that allows the caller to specify behavior for the getDataReferenceByName method.

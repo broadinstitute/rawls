@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
+import bio.terra.datarepo.model.{RelationshipModel, RelationshipTermModel}
 import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
@@ -40,12 +41,24 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
   val provider = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables))
   val expressionValidator: ExpressionValidator = provider.expressionValidator
 
+  val fromRelationshipTermModel = new RelationshipTermModel().table(defaultFixtureRootTableName).column(defaultFixtureRootTableColumns.head)
+  val toRelationshipTermModel = new RelationshipTermModel().table(linkedTableName).column(linkedTableColumns.head)
+  val relationshipModel = new RelationshipModel().name("link").from(fromRelationshipTermModel).to(toRelationshipTermModel)
+  val relationships = List(relationshipModel)
+  val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleFixturesTables, relationships))
+  val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
   val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
     inputs = toExpressionMap(validInputExpressions),
     outputs = toExpressionMap(validOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
   val allValidNoRootMC = allValid.copy(inputs = toExpressionMap(validInputExpressionsWithNoRoot), outputs = toExpressionMap(validWorkspaceOutputExpressions), rootEntityType = None)
+
+  val allValidWithRelationships = MethodConfiguration("dsde", "methodConfigValidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
+    inputs = toExpressionMap(validInputExpressionsWithRelationships),
+    outputs = toExpressionMap(validOutputExpressions), // output is always saved in workspace attributes
+    AgoraMethod("dsde", "three_step", 1))
 
   val allInvalid = MethodConfiguration("dsde", "methodConfigInvalidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
     inputs = toExpressionMap(badInputExpressionsWithRoot),
@@ -116,6 +129,34 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     actualOptionalEmpty.invalidOutputs shouldBe 'empty
   }
 
+  it should "validate the happy path for relationship traversals" in {
+    val actualValid = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    assertSameElements(validInputExpressionsWithRelationships, actualValid.validInputs)
+    assertSameElements(validOutputExpressions, actualValid.validOutputs)
+    actualValid.invalidInputs shouldBe 'empty
+    actualValid.invalidOutputs shouldBe 'empty
+  }
+
+  // should never get here if TDR is not buggy
+  it should "fail if the linked table does not exist for relationship traversals" in {
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables, relationships))
+    val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
+    val actualValid = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    actualValid.invalidInputs.size shouldBe 12
+    actualValid.invalidOutputs shouldBe 'empty
+    // todo: should error with message ^ but the exception doesn't seem to bubble up?
+  }
+
+  it should "fail if the relationship does not exist for relationship traversals" in {
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleFixturesTables, List.empty))
+    val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
+    val actualValid = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    actualValid.invalidInputs.size shouldBe 12
+    actualValid.invalidOutputs shouldBe 'empty
+  }
+
   "validateExpressionsForSubmission" should "succeed for valid expressions in a MethodConfiguration with a root entity" in {
     val actualValid = expressionValidator.validateExpressionsForSubmission(allValid, toGatherInputs(allValid.inputs)).futureValue.get
     assertSameElements(validInputExpressions, actualValid.validInputs)
@@ -144,6 +185,14 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     actualOptionalEmpty.invalidOutputs shouldBe 'empty
   }
 
+  it should "succeed for relationship traversals" in {
+    val actualValid = expressionValidatorWithMultipleTables.validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue.get
+    assertSameElements(validInputExpressionsWithRelationships, actualValid.validInputs)
+    assertSameElements(validOutputExpressions, actualValid.validOutputs)
+    actualValid.invalidInputs shouldBe 'empty
+    actualValid.invalidOutputs shouldBe 'empty
+  }
+
   it should "fail for invalid expressions in a MethodConfiguration with a root entity" in {
     val actualInvalid = expressionValidator.validateExpressionsForSubmission(allInvalid, toGatherInputs(allInvalid.inputs)).futureValue
     actualInvalid shouldBe a [scala.util.Failure[_]]
@@ -158,6 +207,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     val actualOneEmpty = expressionValidator.validateExpressionsForSubmission(oneEmpty, toGatherInputs(oneEmpty.inputs)).futureValue
     actualOneEmpty shouldBe a [scala.util.Failure[_]]
   }
+
 
   private val defaultRootEntity: Option[String] = Option("Sample")
 
@@ -180,6 +230,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "bonk.library:attribute").isFailure, "bonk.library:attribute should not parse correctly" )
     assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = s"this.${defaultRootEntity.get}${Attributable.entityIdAttributeSuffix}").isFailure, "this.sample_id should reject reserved attribute name" )
     assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "this.name").isFailure, "this.name should reject reserved attribute name" )
+    assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "this.foo.name").isFailure, "this.foo.name should reject reserved attribute name" )
   }
 
   it should "fail for library entity output expressions" in {
