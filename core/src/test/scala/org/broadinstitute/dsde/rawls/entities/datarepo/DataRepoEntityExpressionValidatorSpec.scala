@@ -43,7 +43,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
 
   val fromRelationshipTermModel = new RelationshipTermModel().table(defaultFixtureRootTableName).column(defaultFixtureRootTableColumns.head)
   val toRelationshipTermModel = new RelationshipTermModel().table(linkedTableName).column(linkedTableColumns.head)
-  val relationshipModel = new RelationshipModel().name("link").from(fromRelationshipTermModel).to(toRelationshipTermModel)
+  val relationshipModel = new RelationshipModel().name("relationshipName").from(fromRelationshipTermModel).to(toRelationshipTermModel)
   val relationships = List(relationshipModel)
   val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleFixturesTables, relationships))
   val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator

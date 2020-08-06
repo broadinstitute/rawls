@@ -49,15 +49,15 @@ trait DataRepoExpressionFixture {
 
   val validEntityInputExpressionsWithRelationships: Seq[String] = Seq(
     "this.gvcf", // root table entity
-    "this.gvcf.gvcf",
-    "this.gvcf.with-dash",
-    "this.gvcf.underscores_are_ok",
-    "this.gvcf._",
-    """["foo","bar", this.gvcf.gvcf]""",
-    """["a",{"more":{"elaborate":this.gvcf.gvcf}}]""",
-    """{"more":{"elaborate":{"reference1": this.gvcf.gvcf, "path":"gs://abc/123"}}}""",
-    """["foo", "bar", 123, ["array", this.gvcf.gvcf], false]""",
-    """["foo", "bar", 123, ["array", this.gvcf.gvcf], false, ["abc", this.gvcf.with-dash]]"""
+    "this.relationshipName.gvcf",
+    "this.relationshipName.with-dash",
+    "this.relationshipName.underscores_are_ok",
+    "this.relationshipName._",
+    """["foo","bar", this.relationshipName.gvcf]""",
+    """["a",{"more":{"elaborate":this.relationshipName.gvcf}}]""",
+    """{"more":{"elaborate":{"reference1": this.relationshipName.gvcf, "path":"gs://abc/123"}}}""",
+    """["foo", "bar", 123, ["array", this.relationshipName.gvcf], false]""",
+    """["foo", "bar", 123, ["array", this.relationshipName.gvcf], false, ["abc", this.relationshipName.with-dash]]"""
   )
   val validInputExpressionsWithNoRootWithRelationships: Seq[String] = validWorkspaceInputExpressions ++ validJsonInputExpressions
   val validInputExpressionsWithRelationships: Seq[String] = validInputExpressionsWithNoRootWithRelationships ++ validEntityInputExpressionsWithRelationships
@@ -85,8 +85,8 @@ trait DataRepoExpressionFixture {
     """{"level1": "easy", "other-levels": {"level2": this.gvcf, "level3": [this.library:cohort, "extremely difficult", this.library:cohort.entity]}}""",
     """["foo", "bar", 123, ["array", this.gvcf, this.library:cohort], false]""",
     """["foo", "bar", 123, ["array", this.gvcf, [this.library:cohort]], false, ["abc", this.with-dash]]""",
-    """["foo", "bar", 123, ["array", this.gvcf.gvcf, this.gvcf.library:cohort], false]""",
-    """["foo", "bar", 123, ["array", this.gvcf.gvcf, [this.gvcf.library:cohort]], false, ["abc", this.gvcf.with-dash]]"""
+    """["foo", "bar", 123, ["array", this.relationshipName.gvcf, this.relationshipName.library:cohort], false]""",
+    """["foo", "bar", 123, ["array", this.relationshipName.gvcf, [this.relationshipName.library:cohort]], false, ["abc", this.relationshipName.with-dash]]"""
   )
 
   val badInputExpressionsWithRoot: Seq[String] = invalidInputExpressions ++ unparseableInputExpressions

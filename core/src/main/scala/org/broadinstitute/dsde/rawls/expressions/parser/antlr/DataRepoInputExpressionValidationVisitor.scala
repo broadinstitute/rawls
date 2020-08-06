@@ -101,16 +101,16 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     snapshotTables.find(_.getName == tableName)
   }
 
-  private def maybeGetNextTableFromRelation(fromTable: TableModel, relationName: String): Option[TableModel] = {
+  private def maybeGetNextTableFromRelation(fromTable: TableModel, relationshipName: String): Option[TableModel] = {
     val relationships = snapshotModel.getRelationships.asScala.toList
-    maybeFindTableInSnapshotModel(fromTable.getName)
-      .flatMap { tableModel =>
-        relationships.find { relationship =>
-          relationship.getFrom.getTable == tableModel.getName && relationship.getFrom.getColumn == relationName
-        }.map { relationship =>
-          val nextTableName = relationship.getTo.getTable
-          return maybeFindTableInSnapshotModel(nextTableName)
-        }
-      }
+    for {
+      tableModel <- maybeFindTableInSnapshotModel(fromTable.getName)
+      relationship <- relationships.find {relationship =>
+        relationship.getFrom.getTable == tableModel.getName && relationship.getName == relationshipName}
+      nextTableName = relationship.getTo.getTable
+      nextTable <- maybeFindTableInSnapshotModel(nextTableName)
+    } yield {
+      nextTable
+    }
   }
 }
