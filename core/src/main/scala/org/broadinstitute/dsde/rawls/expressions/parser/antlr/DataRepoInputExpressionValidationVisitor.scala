@@ -25,7 +25,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     rootEntityType match {
       case Some(rootTableName) => validateEntityLookup(rootTableName, ctx)
       case None => Failure(new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.") // it seems like it would get here only if methodConfiguration.rootEntityType is not set, so this error message doesn't make sense to me. Shouldn't it be something like "Missing Root Entity Type. Please select one and try again."
+        ErrorReport(StatusCodes.BadRequest, "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
       ))
     }
   }
@@ -39,7 +39,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
         traverseRelationsAndGetFinalTable(rootTableModel, relations).flatMap(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
       case (Failure(regrets), _) => Failure(regrets)
       case (_, Some(_)) => Failure(new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, "Expressions with \"namespace: name\" are not valid for BigQuery")
+        ErrorReport(StatusCodes.BadRequest, "Expressions with \"namespace: name\" are not valid with snapshots")
       ))
     }
   }
@@ -51,7 +51,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
       Success()
     } else {
       Failure(new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, s"Missing attribute `${attributeName}` on table `${tableModel.getName}`")
+        ErrorReport(StatusCodes.BadRequest, s"Column `${attributeName}` does not exist on table `${tableModel.getName}`")
       ))
     }
   }
@@ -70,7 +70,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     val snapshotTables = snapshotModel.getTables.asScala.toList
     snapshotTables.find(_.getName == tableName) match {
       case None => Failure(new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, s"Table $tableName does not exist in snapshot")
+        ErrorReport(StatusCodes.BadRequest, s"Table `$tableName` does not exist in snapshot")
       ))
       case Some(tableModel) => Success(tableModel)
     }
@@ -80,7 +80,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     val snapshotRelationships = snapshotModel.getRelationships.asScala.toList
     snapshotRelationships.find(_.getName == relationshipName) match {
       case None => Failure(new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, s"Relationship $relationshipName does not exist in snapshot")
+        ErrorReport(StatusCodes.BadRequest, s"Relationship `$relationshipName` does not exist in snapshot")
       ))
       case Some(relationshipModel) => Success(relationshipModel)
     }
@@ -93,7 +93,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
         case forward if forward.equalsIgnoreCase(relationshipModel.getFrom.getTable) => Success(relationshipModel.getTo.getTable)
         case backward if backward.equalsIgnoreCase(relationshipModel.getTo.getTable) => Success(relationshipModel.getFrom.getTable)
         case _ => Failure(new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.BadRequest, s"Table $fromTable does not exist in relationship ${relationshipModel.getName}")
+          ErrorReport(StatusCodes.BadRequest, s"Table `$fromTable` does not exist in relationship `${relationshipModel.getName}``")
         ))
       }
       nextTable <- maybeFindTableInSnapshotModel(nextTableName)
