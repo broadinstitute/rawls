@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.client.{ApiException => DatarepoApiException}
 import bio.terra.workspace.client.{ApiException => WorkspaceApiException}
-import bio.terra.workspace.model.DataReferenceDescription.ReferenceTypeEnum
+import bio.terra.workspace.model.ReferenceTypeEnum
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -50,7 +50,7 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
   private[datarepo] def lookupSnapshotForName(dataReferenceName: DataReferenceName, requestArguments: EntityRequestArguments): UUID = {
     // contact WSM to retrieve the data reference specified in the request
     val dataRefTry = Try(workspaceManagerDAO.getDataReferenceByName(UUID.fromString(requestArguments.workspace.workspaceId),
-      ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue,
+      ReferenceTypeEnum.DATA_REPO_SNAPSHOT,
       dataReferenceName,
       requestArguments.userInfo.accessToken)).recoverWith {
 
@@ -64,8 +64,8 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
     val dataRef = dataRefTry.get
 
     // verify it's a TDR snapshot. should be a noop, since getDataReferenceByName enforces this.
-    if (ReferenceTypeEnum.DATAREPOSNAPSHOT != dataRef.getReferenceType) {
-      throw new DataEntityException(s"Reference type value for $dataReferenceName is not of type ${ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue}")
+    if (ReferenceTypeEnum.DATA_REPO_SNAPSHOT != dataRef.getReferenceType) {
+      throw new DataEntityException(s"Reference type value for $dataReferenceName is not of type ${ReferenceTypeEnum.DATA_REPO_SNAPSHOT.getValue}")
     }
 
     // parse the raw reference value into a snapshot reference

@@ -8,7 +8,7 @@ import bio.terra.workspace.client.ApiException
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport}
-import bio.terra.workspace.model.{CreatedWorkspace, DataReferenceDescription, DataReferenceList, WorkspaceDescription}
+import bio.terra.workspace.model.{CloningInstructionsEnum, CreatedWorkspace, DataReferenceDescription, DataReferenceList, ReferenceTypeEnum, WorkspaceDescription}
 
 import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
@@ -30,12 +30,12 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def deleteWorkspace(workspaceId: UUID, folderManagerAccessToken: OAuth2BearerToken, bodyAccessToken: OAuth2BearerToken): Unit = ()
 
-  override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceType: String, reference: String, cloningInstructions: String, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+  override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceType: ReferenceTypeEnum, reference: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
     if(reference.contains("fakesnapshot"))
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found"))
     else {
       val newId = UUID.randomUUID()
-      val ref = new DataReferenceDescription().referenceId(newId).name(name.value).workspaceId(workspaceId).referenceType(DataReferenceDescription.ReferenceTypeEnum.fromValue(referenceType)).reference(reference.toString()).cloningInstructions(DataReferenceDescription.CloningInstructionsEnum.NOTHING)
+      val ref = new DataReferenceDescription().referenceId(newId).name(name.value).workspaceId(workspaceId).referenceType(referenceType).reference(reference.toString()).cloningInstructions(CloningInstructionsEnum.NOTHING)
       references.put((workspaceId, newId), ref)
       mockReferenceResponse(workspaceId, newId)
     }
@@ -45,9 +45,9 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
     mockReferenceResponse(workspaceId, referenceId)
   }
 
-  override def getDataReferenceByName(workspaceId: UUID, refType: String, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+  override def getDataReferenceByName(workspaceId: UUID, refType: ReferenceTypeEnum, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataReferenceDescription = {
     this.references.find {
-      case ((workspaceUUID, _), ref) => workspaceUUID == workspaceId && ref.getName == refName.value && ref.getReferenceType.getValue == refType
+      case ((workspaceUUID, _), ref) => workspaceUUID == workspaceId && ref.getName == refName.value && ref.getReferenceType == refType
     }.getOrElse(throw new ApiException(StatusCodes.NotFound.intValue, s"$refType/$refName not found in workspace $workspaceId"))._2
   }
 

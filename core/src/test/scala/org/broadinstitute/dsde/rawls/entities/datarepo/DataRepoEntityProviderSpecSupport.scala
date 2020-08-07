@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, SnapshotModel, TableModel}
 import bio.terra.workspace.model.DataReferenceDescription
-import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
+import bio.terra.workspace.model.{CloningInstructionsEnum, ReferenceTypeEnum}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
@@ -64,7 +64,7 @@ trait DataRepoEntityProviderSpecSupport {
    * Allows callers to only specify the arguments they want to override.
    */
   def createDataRefDescription(name: String = "refName",
-                               referenceType: ReferenceTypeEnum = ReferenceTypeEnum.DATAREPOSNAPSHOT,
+                               referenceType: ReferenceTypeEnum = ReferenceTypeEnum.DATA_REPO_SNAPSHOT,
                                referenceId: UUID = refId,
                                cloningInstructionsEnum: CloningInstructionsEnum = CloningInstructionsEnum.NOTHING,
                                credentialId: String = "",
@@ -111,7 +111,7 @@ trait DataRepoEntityProviderSpecSupport {
    * Mock for WorkspaceManagerDAO that allows the caller to specify behavior for the getDataReferenceByName method.
    */
   class SpecWorkspaceManagerDAO(refByNameResponse:Either[Throwable, DataReferenceDescription]) extends MockWorkspaceManagerDAO {
-    override def getDataReferenceByName(workspaceId: UUID, refType: String, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataReferenceDescription =
+    override def getDataReferenceByName(workspaceId: UUID, refType: ReferenceTypeEnum, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataReferenceDescription =
       refByNameResponse match {
         case Left(t) => throw t
         case Right(ref) =>
