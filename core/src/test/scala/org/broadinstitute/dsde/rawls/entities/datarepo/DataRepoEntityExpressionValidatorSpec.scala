@@ -41,7 +41,28 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
   val provider: DataRepoEntityProvider = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables))
   val expressionValidator: ExpressionValidator = provider.expressionValidator
 
-  /* Set up Relationships */
+  val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
+    inputs = toExpressionMap(validInputExpressions),
+    outputs = toExpressionMap(validOutputExpressions),
+    AgoraMethod("dsde", "three_step", 1))
+
+  val allValidNoRootMC = allValid.copy(inputs = toExpressionMap(validInputExpressionsWithNoRoot), outputs = toExpressionMap(validWorkspaceOutputExpressions), rootEntityType = None)
+
+  val allInvalid = MethodConfiguration("dsde", "methodConfigInvalidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
+    inputs = toExpressionMap(badInputExpressionsWithRoot),
+    outputs = toExpressionMap(invalidOutputExpressions),
+    AgoraMethod("dsde", "three_step", 1))
+
+  val allInvalidNoRootMC = allInvalid.copy(inputs = toExpressionMap(badInputExpressionsWithNoRoot), outputs = toExpressionMap(invalidOutputExpressions), rootEntityType = None)
+
+  val emptyExpr = "this.empty" -> AttributeString("")
+
+  val oneEmpty = MethodConfiguration("dsde", "methodConfigEmptyExpr", Some(defaultFixtureRootTableName), prerequisites=None,
+    inputs = toExpressionMap(validInputExpressions) + emptyExpr,
+    outputs = toExpressionMap(validOutputExpressions),
+    AgoraMethod("dsde", "three_step", 1))
+
+  /* Set up for Relationships */
   val toRootTableAndColumn: RelationshipTermModel = new RelationshipTermModel().table(rootTableName).column("root_table_column")
   val toSecondTableAndColumn: RelationshipTermModel = new RelationshipTermModel().table(secondTableName).column("second_table_column")
   val toThirdTableAndColumn: RelationshipTermModel = new RelationshipTermModel().table(thirdTableName).column("third_table_column")
@@ -60,31 +81,9 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
   val providerWithMultipleTables: DataRepoEntityProvider = createTestProvider(snapshotModel = createSnapshotModel(multipleTables, relationships))
   val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
-
-  val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
-    inputs = toExpressionMap(validInputExpressions),
-    outputs = toExpressionMap(validOutputExpressions),
-    AgoraMethod("dsde", "three_step", 1))
-
-  val allValidNoRootMC = allValid.copy(inputs = toExpressionMap(validInputExpressionsWithNoRoot), outputs = toExpressionMap(validWorkspaceOutputExpressions), rootEntityType = None)
-
   val allValidWithRelationships = MethodConfiguration("dsde", "methodConfigValidExprs", Some(rootTableName), prerequisites=None,
     inputs = toExpressionMap(validInputExpressionsWithRelationships),
     outputs = toExpressionMap(validOutputExpressions), // output is always saved in workspace attributes
-    AgoraMethod("dsde", "three_step", 1))
-
-  val allInvalid = MethodConfiguration("dsde", "methodConfigInvalidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
-    inputs = toExpressionMap(badInputExpressionsWithRoot),
-    outputs = toExpressionMap(invalidOutputExpressions),
-    AgoraMethod("dsde", "three_step", 1))
-
-  val allInvalidNoRootMC = allInvalid.copy(inputs = toExpressionMap(badInputExpressionsWithNoRoot), outputs = toExpressionMap(invalidOutputExpressions), rootEntityType = None)
-
-  val emptyExpr = "this.empty" -> AttributeString("")
-
-  val oneEmpty = MethodConfiguration("dsde", "methodConfigEmptyExpr", Some(defaultFixtureRootTableName), prerequisites=None,
-    inputs = toExpressionMap(validInputExpressions) + emptyExpr,
-    outputs = toExpressionMap(validOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
@@ -259,7 +258,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "bonk.library:attribute").isFailure, "bonk.library:attribute should not parse correctly" )
     assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = s"this.${defaultRootEntity.get}${Attributable.entityIdAttributeSuffix}").isFailure, "this.sample_id should reject reserved attribute name" )
     assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "this.name").isFailure, "this.name should reject reserved attribute name" )
-    assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "this.foo.name").isFailure, "this.foo.name should reject reserved attribute name" )
+    assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "this.invalid.name").isFailure, "this.invalid.name should not find invalid relationship" )
   }
 
   it should "fail for library entity output expressions" in {
