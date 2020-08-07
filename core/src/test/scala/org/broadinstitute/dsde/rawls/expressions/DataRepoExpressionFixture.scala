@@ -105,8 +105,8 @@ trait DataRepoExpressionFixture {
     """{"level1": "easy", "other-levels": {"level2": this.gvcf, "level3": [this.library:cohort, "extremely difficult", this.library:cohort.entity]}}""",
     """["foo", "bar", 123, ["array", this.gvcf, this.library:cohort], false]""",
     """["foo", "bar", 123, ["array", this.gvcf, [this.library:cohort]], false, ["abc", this.with-dash]]""",
-    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.gvcf, this.rootTableToSecondTable.library:cohort], false]""",
-    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.gvcf, [this.rootTableToSecondTable.library:cohort]], false, ["abc", this.rootTableToSecondTable.with-dash]]"""
+    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.second_root, this.rootTableToSecondTable.library:second_table_column], false]""",
+    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.second_root, [this.rootTableToSecondTable.library:second_table_column]], false, ["abc", this.rootTableToSecondTable.second_third]]"""
   )
 
   val badInputExpressionsWithRoot: Seq[String] = invalidInputExpressions ++ unparseableInputExpressions
