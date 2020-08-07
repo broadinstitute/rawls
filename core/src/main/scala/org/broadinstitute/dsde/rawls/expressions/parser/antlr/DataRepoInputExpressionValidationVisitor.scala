@@ -105,9 +105,17 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     val relationships = snapshotModel.getRelationships.asScala.toList
     for {
       tableModel <- maybeFindTableInSnapshotModel(fromTable.getName)
-      relationship <- relationships.find {relationship =>
-        relationship.getFrom.getTable == tableModel.getName && relationship.getName == relationshipName}
-      nextTableName = relationship.getTo.getTable
+      relationshipModel <- relationships.find {relationship =>
+        (relationship.getName == relationshipName &&
+          (relationship.getFrom.getTable == tableModel.getName || relationship.getTo.getTable == tableModel.getName)
+          )}
+      nextTableName = fromTable.getName match {
+        case forward if forward.equalsIgnoreCase(relationshipModel.getFrom.getTable) => relationshipModel.getTo.getTable
+        case backward if backward.equalsIgnoreCase(relationshipModel.getTo.getTable) => relationshipModel.getFrom.getTable
+        case _ => throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"$fromTable does not exist in relationship ${relationshipModel.getName}")
+        )
+      }
       nextTable <- maybeFindTableInSnapshotModel(nextTableName)
     } yield {
       nextTable
