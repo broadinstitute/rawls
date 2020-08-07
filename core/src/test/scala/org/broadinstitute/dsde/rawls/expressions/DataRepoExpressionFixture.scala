@@ -48,16 +48,34 @@ trait DataRepoExpressionFixture {
   val validInputExpressions: Seq[String] = validInputExpressionsWithNoRoot ++ validEntityInputExpressions
 
   val validEntityInputExpressionsWithRelationships: Seq[String] = Seq(
-    "this.gvcf", // root table entity
-    "this.relationshipName.gvcf",
-    "this.relationshipName.with-dash",
-    "this.relationshipName.underscores_are_ok",
-    "this.relationshipName._",
-    """["foo","bar", this.relationshipName.gvcf]""",
-    """["a",{"more":{"elaborate":this.relationshipName.gvcf}}]""",
-    """{"more":{"elaborate":{"reference1": this.relationshipName.gvcf, "path":"gs://abc/123"}}}""",
-    """["foo", "bar", 123, ["array", this.relationshipName.gvcf], false]""",
-    """["foo", "bar", 123, ["array", this.relationshipName.gvcf], false, ["abc", this.relationshipName.with-dash]]"""
+    // forward reference to the second table
+    "this.rootTableToSecondTable.second_table_column",
+    "this.rootTableToSecondTable.second_third",
+    "this.rootTableToSecondTable.second_root",
+    """["foo","bar", this.rootTableToSecondTable.second_table_column]""",
+    """["a",{"more":{"elaborate":this.rootTableToSecondTable.second_table_column}}]""",
+    """{"more":{"elaborate":{"reference1": this.rootTableToSecondTable.second_table_column, "path":"gs://abc/123"}}}""",
+    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.second_table_column], false]""",
+    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.second_table_column], false, ["abc", this.rootTableToSecondTable.second_third]]""",
+    // backward reference to the second table
+    "this.secondTableToRootTable.second_table_column",
+    "this.secondTableToRootTable.second_third",
+    "this.secondTableToRootTable.second_root",
+    """["foo","bar", this.secondTableToRootTable.second_table_column]""",
+    """["a",{"more":{"elaborate":this.secondTableToRootTable.second_table_column}}]""",
+    """{"more":{"elaborate":{"reference1": this.secondTableToRootTable.second_table_column, "path":"gs://abc/123"}}}""",
+    """["foo", "bar", 123, ["array", this.secondTableToRootTable.second_table_column], false]""",
+    """["foo", "bar", 123, ["array", this.secondTableToRootTable.second_table_column], false, ["abc", this.secondTableToRootTable.second_third]]""",
+    // forward and backward references to the third table
+    "this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column",
+    "this.rootTableToSecondTable.thirdTableToSecondTable.third_second",
+    """["foo","bar", this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column]""",
+    """["a",{"more":{"elaborate":this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column}}]""",
+    """{"more":{"elaborate":{"reference1": this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column, "path":"gs://abc/123"}}}""",
+    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column], false]""",
+    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column], false, ["abc", this.rootTableToSecondTable.thirdTableToSecondTable.third_second]]"""
+
+
   )
   val validInputExpressionsWithNoRootWithRelationships: Seq[String] = validWorkspaceInputExpressions ++ validJsonInputExpressions
   val validInputExpressionsWithRelationships: Seq[String] = validInputExpressionsWithNoRootWithRelationships ++ validEntityInputExpressionsWithRelationships
@@ -78,6 +96,8 @@ trait DataRepoExpressionFixture {
   // parseable input expressions that are invalid (don't fit the schema, relations, any other reason?)
   val invalidInputExpressions: Seq[String] = Seq(
     "this.column_does_not_exist",
+    "this.relationship_does_not_exist.second_table_column",
+    "this.rootTableToSecondTable.column_does_not_exist",
     "this.library:cohort", // namespace:name is not allowed for BQ column/table names
     "this.library:cohort1",
     "this.arbitrary:whatever",
@@ -85,8 +105,8 @@ trait DataRepoExpressionFixture {
     """{"level1": "easy", "other-levels": {"level2": this.gvcf, "level3": [this.library:cohort, "extremely difficult", this.library:cohort.entity]}}""",
     """["foo", "bar", 123, ["array", this.gvcf, this.library:cohort], false]""",
     """["foo", "bar", 123, ["array", this.gvcf, [this.library:cohort]], false, ["abc", this.with-dash]]""",
-    """["foo", "bar", 123, ["array", this.relationshipName.gvcf, this.relationshipName.library:cohort], false]""",
-    """["foo", "bar", 123, ["array", this.relationshipName.gvcf, [this.relationshipName.library:cohort]], false, ["abc", this.relationshipName.with-dash]]"""
+    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.gvcf, this.rootTableToSecondTable.library:cohort], false]""",
+    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.gvcf, [this.rootTableToSecondTable.library:cohort]], false, ["abc", this.rootTableToSecondTable.with-dash]]"""
   )
 
   val badInputExpressionsWithRoot: Seq[String] = invalidInputExpressions ++ unparseableInputExpressions
@@ -135,6 +155,7 @@ trait DataRepoExpressionFixture {
 
   val invalidOutputExpressions: Seq[String] = unparseableOutputExpressions ++ invalidEntityOutputExpressions
 
+  /** TABLES AND COLUMNS */
   val defaultFixtureRootTableName = "rootTable"
   // These should reflect the columns used in validEntityInputExpressions above
   val defaultFixtureRootTableColumns = List("gvcf", "with-dash", "underscores_are_ok", "_", "case_sample")
@@ -142,9 +163,18 @@ trait DataRepoExpressionFixture {
     new TableModel().name(defaultFixtureRootTableName).columns(defaultFixtureRootTableColumns.map(new ColumnModel().name(_)).asJava)
   )
 
-  val linkedTableName = "linkedTable"
-  val linkedTableColumns = List("gvcf", "with-dash", "underscores_are_ok", "_", "case_sample")
-  val multipleFixturesTables: List[TableModel] = defaultFixtureTables ++ List(
-    new TableModel().name(linkedTableName).columns(linkedTableColumns.map(new ColumnModel().name(_)).asJava)
+  val rootTableName = "rootTable"
+  val rootTableColumns = List("root_table_column", "gvcf", "with-dash", "underscores_are_ok", "_", "case_sample", "root_second")
+
+  val secondTableName = "secondTable"
+  val secondTableColumns = List("second_table_column", "second_third", "second_root")
+
+  val thirdTableName = "thirdTable"
+  val thirdTableColumns = List("third_table_column", "third_second")
+
+  val multipleTables: List[TableModel] = List(
+    new TableModel().name(rootTableName).columns(rootTableColumns.map(new ColumnModel().name(_)).asJava),
+    new TableModel().name(secondTableName).columns(secondTableColumns.map(new ColumnModel().name(_)).asJava),
+    new TableModel().name(thirdTableName).columns(thirdTableColumns.map(new ColumnModel().name(_)).asJava)
   )
 }

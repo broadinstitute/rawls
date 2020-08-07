@@ -38,15 +38,28 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     GatherInputsResult(methodInputs.toSet, Set(), Set(), Set())
   }
 
-  val provider = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables))
+  val provider: DataRepoEntityProvider = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables))
   val expressionValidator: ExpressionValidator = provider.expressionValidator
 
-  val fromRelationshipTermModel = new RelationshipTermModel().table(defaultFixtureRootTableName).column(defaultFixtureRootTableColumns.head)
-  val toRelationshipTermModel = new RelationshipTermModel().table(linkedTableName).column(linkedTableColumns.head)
-  val relationshipModel = new RelationshipModel().name("relationshipName").from(fromRelationshipTermModel).to(toRelationshipTermModel)
-  val relationships = List(relationshipModel)
-  val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleFixturesTables, relationships))
+  /* Set up Relationships */
+  val toRootTableAndColumn: RelationshipTermModel = new RelationshipTermModel().table(rootTableName).column("root_table_column")
+  val toSecondTableAndColumn: RelationshipTermModel = new RelationshipTermModel().table(secondTableName).column("second_table_column")
+  val toThirdTableAndColumn: RelationshipTermModel = new RelationshipTermModel().table(thirdTableName).column("third_table_column")
+  val fromRootTableAndColumnToSecondTable: RelationshipTermModel = new RelationshipTermModel().table(rootTableName).column("root_second")
+  val fromSecondTableAndColumnToThirdTable: RelationshipTermModel = new RelationshipTermModel().table(secondTableName).column("second_third")
+  val fromSecondTableAndColumnToRootTable: RelationshipTermModel = new RelationshipTermModel().table(secondTableName).column("second_root")
+  val fromThirdTableAndColumnToSecondTable: RelationshipTermModel = new RelationshipTermModel().table(thirdTableName).column("third_second")
+
+  val rootTableToSecondTable: RelationshipModel = new RelationshipModel().name("rootTableToSecondTable").from(fromRootTableAndColumnToSecondTable).to(toSecondTableAndColumn)
+  val secondTableToThirdTable: RelationshipModel = new RelationshipModel().name("secondTableToThirdTable").from(fromSecondTableAndColumnToThirdTable).to(toThirdTableAndColumn)
+  val secondTableToRootTable: RelationshipModel = new RelationshipModel().name("secondTableToRootTable").from(fromSecondTableAndColumnToRootTable).to(toRootTableAndColumn)
+  val thirdTableToSecondTable: RelationshipModel = new RelationshipModel().name("thirdTableToSecondTable").from(fromThirdTableAndColumnToSecondTable).to(toSecondTableAndColumn)
+
+  val relationships: List[RelationshipModel] = List(rootTableToSecondTable, secondTableToThirdTable, thirdTableToSecondTable, secondTableToRootTable)
+
+  val providerWithMultipleTables: DataRepoEntityProvider = createTestProvider(snapshotModel = createSnapshotModel(multipleTables, relationships))
   val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
 
   val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
     inputs = toExpressionMap(validInputExpressions),
@@ -55,7 +68,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
 
   val allValidNoRootMC = allValid.copy(inputs = toExpressionMap(validInputExpressionsWithNoRoot), outputs = toExpressionMap(validWorkspaceOutputExpressions), rootEntityType = None)
 
-  val allValidWithRelationships = MethodConfiguration("dsde", "methodConfigValidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
+  val allValidWithRelationships = MethodConfiguration("dsde", "methodConfigValidExprs", Some(rootTableName), prerequisites=None,
     inputs = toExpressionMap(validInputExpressionsWithRelationships),
     outputs = toExpressionMap(validOutputExpressions), // output is always saved in workspace attributes
     AgoraMethod("dsde", "three_step", 1))
@@ -143,16 +156,16 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
     val actualValid = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
-    actualValid.invalidInputs.size shouldBe 9
+    actualValid.invalidInputs.size shouldBe 23
     actualValid.invalidOutputs shouldBe 'empty
   }
 
   it should "fail if the relationship does not exist for relationship traversals" in {
-    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleFixturesTables, List.empty))
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleTables, List.empty))
     val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
     val actualValid = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
-    actualValid.invalidInputs.size shouldBe 9
+    actualValid.invalidInputs.size shouldBe 23
     actualValid.invalidOutputs shouldBe 'empty
   }
 
@@ -217,7 +230,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
   }
 
   it should "fail if the relationship does not exist for relationship traversals" in {
-    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleFixturesTables, List.empty))
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleTables, List.empty))
     val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
     val actualInvalid = expressionValidatorWithMultipleTables.validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
