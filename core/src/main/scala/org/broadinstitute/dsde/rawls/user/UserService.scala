@@ -232,10 +232,27 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  private def deletePetsInProject(projectName: RawlsBillingProjectName, userInfo: UserInfo): Future[Unit] = {
+    for {
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+      _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
+    } yield ()
+  }
+
+  private def destroyPet(userIdInfo: UserIdInfo, projectName: RawlsBillingProjectName): Future[Unit] = {
+    for {
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName.value, RawlsUserEmail(userIdInfo.userEmail))
+      petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName.value, petUserInfo)
+    } yield ()
+  }
+
   def adminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
     // unregister then delete actual project in google
+    val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
     for {
-      _ <- unregisterBillingProjectWithOwnerInfo(projectName, ownerInfo)
+      _ <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
+      _ <- deletePetsInProject(projectName, ownerUserInfo)
       _ <- gcsDAO.deleteProject(projectName)
     } yield RequestComplete(StatusCodes.NoContent)
   }
@@ -247,14 +264,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         dataAccess.workspaceQuery.countByNamespace(projectName)
       }
 
-      _<- if(workspaceCount > 0) {
+      _<- if (workspaceCount > 0) {
        Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Project cannot be deleted because it contains workspaces.")))
      } else {
       Future.successful(())
      }
       // unregister then delete actual project in google
-      _<- unregisterBillingProjectWithUserInfo(projectName, userInfo)
-      _<- gcsDAO.deleteProject(projectName)
+      _ <- unregisterBillingProjectWithUserInfo(projectName, userInfo)
+      _ <- deletePetsInProject(projectName, userInfo)
+      _ <- gcsDAO.deleteProject(projectName)
     } yield RequestComplete(StatusCodes.NoContent)
   }
 
