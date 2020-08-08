@@ -79,7 +79,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     val query = s"SELECT * FROM `${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(entityType)}` WHERE $pk = @pkvalue;"
     // generate query config, with named param for primary key
     val queryConfigBuilder = QueryJobConfiguration.newBuilder(query)
-      .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
       .addNamedParameter("pkvalue", QueryParameterValue.string(entityName))
 
     val resultIO = for {
