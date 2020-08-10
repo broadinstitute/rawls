@@ -251,8 +251,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     // unregister then delete actual project in google
     val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
     for {
-      _ <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
       _ <- deletePetsInProject(projectName, ownerUserInfo)
+      _ <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
       _ <- gcsDAO.deleteProject(projectName)
     } yield RequestComplete(StatusCodes.NoContent)
   }
@@ -270,8 +270,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       Future.successful(())
      }
       // unregister then delete actual project in google
-      _ <- unregisterBillingProjectWithUserInfo(projectName, userInfo)
       _ <- deletePetsInProject(projectName, userInfo)
+      _ <- unregisterBillingProjectWithUserInfo(projectName, userInfo)
       _ <- gcsDAO.deleteProject(projectName)
     } yield RequestComplete(StatusCodes.NoContent)
   }
