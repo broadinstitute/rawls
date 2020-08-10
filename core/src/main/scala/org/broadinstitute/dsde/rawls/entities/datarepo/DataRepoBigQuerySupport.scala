@@ -102,23 +102,24 @@ object DataRepoBigQuerySupport {
     * Contains the data to construct a JOIN in SQL and identify the JOIN in the results
     * @param from left side of join
     * @param to right side of join
-    * @param relationshipPath list of relationship names that resulted in this join
+    * @param relationshipPath list of relationship names that resulted in this join, used to figure out how to map the
+    *                         results back to the input expressions, see ParsedEntityLookupExpression.relationshipPath
     * @param alias alias used in the SQL and results
     * @param isArray joins on array columns require an extra join on the unnested array
     */
-  case class EntityRelationship(from: EntityColumn, to: EntityColumn, relationshipPath: Seq[String], alias: String, isArray: Boolean)
+  case class EntityJoin(from: EntityColumn, to: EntityColumn, relationshipPath: Seq[String], alias: String, isArray: Boolean)
 
   /**
     * This class represents the parts of the query an expression may add to the BigQuery query
     * @param fromTable the table that the data comes from. If there is no relationship then this table would come after
     *                  the FROM statement. If there is a relationship this comes after a JOIN statement
-    * @param relationship if this is a join, this specifies both sides of the ON statement
+    * @param join if this is a join, this specifies both sides of the ON statement
     * @param selectColumns the columns that are selected from fromTable. Order is important. The order in this list
     *                      is the order that the columns appear in the actual SQL query and the results. Due to the
     *                      use of STRUCTs we can't rely on the names of fields to extract values from the result and
     *                      must use indexes.
     */
-  case class SelectAndFrom(fromTable: EntityTable, relationship: scala.Option[EntityRelationship], selectColumns: Seq[EntityColumn])
+  case class SelectAndFrom(fromTable: EntityTable, join: scala.Option[EntityJoin], selectColumns: Seq[EntityColumn])
 }
 
 /**
@@ -389,7 +390,7 @@ trait DataRepoBigQuerySupport {
     // all elements of the tail eventually join back to the head (like that snake thing)
     val rootTableJoin = selectAndFroms.head
 
-    if (rootTableJoin.relationship.isDefined) {
+    if (rootTableJoin.join.isDefined) {
       throw new DataEntityException(s"expected rootTableJoin.relationship to be None")
     }
 
@@ -397,13 +398,14 @@ trait DataRepoBigQuerySupport {
     val rootFromFragment = rootTableJoin.fromTable.nameInQuery
 
     val (selectFragments, fromFragments, dedupFunctionDefs) = selectAndFroms.tail.map { selectAndFrom =>
-      val relationship = selectAndFrom.relationship.getOrElse(throw new DataEntityException("there should only be 1 join without a relationship"))
+      val relationship = selectAndFrom.join.getOrElse(throw new DataEntityException("there should only be 1 join without a relationship"))
       val (selectFragment, dedupFunctionDef) = if (selectAndFrom.selectColumns.isEmpty) {
         // there are no selected columns related to this join so we don't include anything in the select clause
         // but the join will still exist in the from clause as it is probably a part of a relationship path
         (None, None)
       } else {
-        val (dedupFunctionName, dedupFunctionDef) = dedupFunction(selectAndFrom)
+        val dedupFunctionName = nextAlias("dedup")
+        val dedupFunctionDef = dedupFunction(dedupFunctionName, selectAndFrom)
         (
           // important that selectAndFrom.selectColumns added in order so that the indexes in the result set are as expected
           scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(_.qualifiedName).mkString(", ")}))) ${relationship.alias}"),
@@ -438,8 +440,7 @@ trait DataRepoBigQuerySupport {
     * @param selectAndFrom
     * @return
     */
-  private[datarepo] def dedupFunction(selectAndFrom: SelectAndFrom): (String, String) = {
-    val dedupFunctionName = nextAlias("dedup")
+  private[datarepo] def dedupFunction(dedupFunctionName: String, selectAndFrom: SelectAndFrom): String = {
     val (arrayColumns, scalarColumns) = selectAndFrom.selectColumns.partition(_.isArray)
     val dedupFunctionDef = if (arrayColumns.nonEmpty) {
       val arrayColumnNames = arrayColumns.map(c => validateSql(c.column))
@@ -469,7 +470,7 @@ trait DataRepoBigQuerySupport {
          |));""".stripMargin
     }
 
-    dedupFunctionName -> dedupFunctionDef
+    dedupFunctionDef
   }
 
   /**
@@ -489,12 +490,12 @@ trait DataRepoBigQuerySupport {
     * @return
     */
   private[datarepo] def figureOutQueryStructureForExpressions(snapshotModel: SnapshotModel, fromTable: EntityTable, parsedExpressions: Set[ParsedEntityLookupExpression], entityNameColumn: String, traversedRelationships: Seq[String] = Seq.empty): Seq[SelectAndFrom] = {
-    def groupAndOrderByRelationshipName(parsedExpressions: Set[ParsedEntityLookupExpression]): Seq[(scala.Option[String], Set[ParsedEntityLookupExpression])] = {
-      parsedExpressions.groupBy(_.relationships.headOption).toSeq.sortBy { case (name, _) => name.getOrElse("") }
+    def groupAndOrderByRelationshipHead(parsedExpressions: Set[ParsedEntityLookupExpression]): Seq[(scala.Option[String], Set[ParsedEntityLookupExpression])] = {
+      parsedExpressions.groupBy(_.relationshipPath.headOption).toSeq.sortBy { case (name, _) => name.getOrElse("") }
     }
 
     // ordering is important here because it determines the order in which the joins are added in the final SQL
-    groupAndOrderByRelationshipName(parsedExpressions).flatMap {
+    groupAndOrderByRelationshipHead(parsedExpressions).flatMap {
       case (None, baseTableExpressions) =>
         val entityColumns = baseTableExpressions.map(expr => EntityColumn(snapshotModel, fromTable, expr.columnName)) +
           EntityColumn(fromTable, entityNameColumn, false)
@@ -506,51 +507,51 @@ trait DataRepoBigQuerySupport {
         val relationshipModel = getRelationshipModel(snapshotModel, relationshipName)
         // the given fromTable may be either the from or the to in the relationship model
         // depending on the direction the relationship is being traversed
-        val relationship = fromTable.name match {
+        val entityJoin = fromTable.name match {
           case forward if forward.equalsIgnoreCase(relationshipModel.getFrom.getTable) =>
             val fromColumn = EntityColumn(snapshotModel, fromTable, relationshipModel.getFrom.getColumn)
             val toColumn = EntityColumn(snapshotModel, EntityTable(snapshotModel, relationshipModel.getTo.getTable, nextAlias("entity")), relationshipModel.getTo.getColumn)
-            createEntityRelation(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)
+            createEntityJoin(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)
 
           case backward if backward.equalsIgnoreCase(relationshipModel.getTo.getTable) =>
             val fromColumn = EntityColumn(snapshotModel, fromTable, relationshipModel.getTo.getColumn)
             val toColumn = EntityColumn(snapshotModel, EntityTable(snapshotModel, relationshipModel.getFrom.getTable, nextAlias("entity")), relationshipModel.getFrom.getColumn)
-            createEntityRelation(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)
+            createEntityJoin(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)
 
           case _ => throw new DataEntityException(s"$fromTable does not exist in relationship ${relationshipModel.getName}")
         }
 
-        val popOffTheRelationshipHead = baseTableExpressions.map(ex => ex.copy(relationships = ex.relationships.tail))
-        val (noMoreRelationships, continueRecursing) = popOffTheRelationshipHead.partition(_.relationships.isEmpty)
+        val popOffTheRelationshipHead = baseTableExpressions.map(ex => ex.copy(relationshipPath = ex.relationshipPath.tail))
+        val (noMoreRelationships, continueRecursing) = popOffTheRelationshipHead.partition(_.relationshipPath.isEmpty)
 
         // Construct a SelectAndFrom with all columns in noMoreRelationships.
         // Note that noMoreRelationships may actually be empty, this is the case where no columns are selected from
         // the relation but it is still part of the path to get to a further related entity so still needs a join.
         // Append results of figureOutQueryStructureForExpressions called with continueRecursing
         // to continue walking the relationship path.
-        val columns = noMoreRelationships.map(expr => EntityColumn(snapshotModel, relationship.to.table, expr.columnName)) match {
+        val columns = noMoreRelationships.map(expr => EntityColumn(snapshotModel, entityJoin.to.table, expr.columnName)) match {
           case empty if empty.isEmpty  => Set.empty
           case someColumns =>
             // only add the datarepo id column if other columns exist
-            someColumns + EntityColumn(relationship.to.table, datarepoRowIdColumn, false)
+            someColumns + EntityColumn(entityJoin.to.table, datarepoRowIdColumn, false)
         }
 
         // sort columns by name for consistency in tests
-        Seq(SelectAndFrom(fromTable, scala.Option(relationship), columns.toSeq.sortBy(_.column))) ++
-          figureOutQueryStructureForExpressions(snapshotModel, relationship.to.table, continueRecursing, entityNameColumn, currentRelationshipPath)
+        Seq(SelectAndFrom(fromTable, scala.Option(entityJoin), columns.toSeq.sortBy(_.column))) ++
+          figureOutQueryStructureForExpressions(snapshotModel, entityJoin.to.table, continueRecursing, entityNameColumn, currentRelationshipPath)
     }
   }
 
-  private def createEntityRelation(snapshotModel: SnapshotModel, fromTable: EntityTable, relationshipModel: RelationshipModel, fromColumn: EntityColumn, toColumn: EntityColumn, relationshipPath: Seq[String]) = {
+  private def createEntityJoin(snapshotModel: SnapshotModel, fromTable: EntityTable, relationshipModel: RelationshipModel, fromColumn: EntityColumn, toColumn: EntityColumn, relationshipPath: Seq[String]) = {
     val isArray = isColumnArray(snapshotModel, fromTable, fromColumn)
-    EntityRelationship(fromColumn, toColumn, relationshipPath, nextAlias("rel"), isArray)
+    EntityJoin(fromColumn, toColumn, relationshipPath, nextAlias("rel"), isArray)
   }
 
   private def isColumnArray(snapshotModel: SnapshotModel, fromTable: EntityTable, fromColumn: EntityColumn) = {
     getTableModel(snapshotModel, fromTable.name).getColumns.asScala.find(_.getName == fromColumn.column).exists(_.isArrayOf)
   }
 
-  private def joinClause(relationship: EntityRelationship): String = {
+  private def joinClause(relationship: EntityJoin): String = {
     if (relationship.isArray) {
       // in this case the "from" column is an array so the join needs more fancy
       // note alias must not start with a number

@@ -5,7 +5,14 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionPar
 
 import scala.collection.JavaConverters._
 
-case class ParsedEntityLookupExpression(relationships: List[String], columnName: String, expression: LookupExpression)
+/**
+  * Encapsulates the information that we care about a lookup expression for the purpose of constructing a query
+  * @param relationshipPath the chain of relationship names in the expression: if the expression looks like
+  *                         this.(relationship_name.)*columnName, the relationshipPath is each relationship_name in order
+  * @param columnName last part of the expression
+  * @param expression the expression itself
+  */
+case class ParsedEntityLookupExpression(relationshipPath: Seq[String], columnName: String, expression: LookupExpression)
 
 class DataRepoEvaluateToAttributeVisitor() extends TerraExpressionBaseVisitor[Seq[ParsedEntityLookupExpression]] {
   override def defaultResult(): Seq[ParsedEntityLookupExpression] = Seq.empty
@@ -15,7 +22,7 @@ class DataRepoEvaluateToAttributeVisitor() extends TerraExpressionBaseVisitor[Se
   }
 
   override def visitEntityLookup(ctx: EntityLookupContext): Seq[ParsedEntityLookupExpression] = {
-    val relations = ctx.relation().asScala.toList
+    val relations = ctx.relation().asScala
     Seq(ParsedEntityLookupExpression(relations.map(_.attributeName().getText), ctx.attributeName().getText.toLowerCase, ctx.getText))
   }
 }

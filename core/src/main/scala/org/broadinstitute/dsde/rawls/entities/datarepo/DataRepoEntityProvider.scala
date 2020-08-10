@@ -293,28 +293,33 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     * @return Stream because it should not suck all the results from BigQuery into memory
     */
   private[datarepo] def transformQueryResultToExpressionAndResult(entityNameColumn: String, parsedExpressions: Set[ParsedEntityLookupExpression], selectAndFroms: Seq[SelectAndFrom], tableResult: TableResult): Stream[ExpressionAndResult] = {
-    val selectAndFromByRelationshipPath = selectAndFroms.map(sf => sf.relationship.map(_.relationshipPath).getOrElse(Seq.empty) -> sf).toMap
-    val relationshipAliasesByPath = selectAndFroms.flatMap(j => j.relationship.map(r => r.relationshipPath -> r.alias)).toMap
+    val selectAndFromByRelationshipPath = selectAndFroms.map(sf => sf.join.map(_.relationshipPath).getOrElse(Seq.empty) -> sf).toMap
+    val joinAliasesByRelationshipPath = selectAndFroms.flatMap(j => j.join.map(r => r.relationshipPath -> r.alias)).toMap
     for {
       resultRow <- tableResult.iterateAll().asScala.toStream // this is the streaming goodness
       parsedExpression <- parsedExpressions
     } yield {
+      // Each parsedExpression has a relationshipPath and columnName. relationshipPath should match a relationshipPath
+      // of one of the selectAndFroms and columnName should exist in selectColumns from that selectAndFrom.
+      // If parsedExpression.relationshipPath is empty then columnName is on the root entity.
+      // Using this information we can lookup the value for each parsedExpression in tableResult.
+
       // determine column index based on position of parsedExpression.columnName in SelectAndFrom.selectColumns
-      val columnIndex = selectAndFromByRelationshipPath(parsedExpression.relationships).selectColumns.map(_.column).indexOf(parsedExpression.columnName)
-      val attribute = relationshipAliasesByPath.get(parsedExpression.relationships) match {
+      val columnIndex = selectAndFromByRelationshipPath(parsedExpression.relationshipPath).selectColumns.map(_.column).indexOf(parsedExpression.columnName)
+      val attribute = joinAliasesByRelationshipPath.get(parsedExpression.relationshipPath) match {
         case None =>
           // this is a root level expression, e.g. this.foo, no alias required it should be at the top level of the row
           val field = tableResult.getSchema.getFields.get(columnIndex)
           val fieldValue = resultRow.get(columnIndex)
           fieldValueToAttribute(field, fieldValue)
-        case Some(relationshipAlias) =>
+        case Some(joinAlias) =>
           // this is a relation expressions, e.g. this.foo.bar, it should be an array of structs (i.e. repeated record) column
           // the name of the column is the relationshipAlias and the sub fields the names of the columns in the expressions
-          val field = tableResult.getSchema.getFields.get(relationshipAlias)
+          val field = tableResult.getSchema.getFields.get(joinAlias)
           assert(field.getMode == Mode.REPEATED, "expected result from relationship to be an array")
           assert(field.getType == LegacySQLTypeName.RECORD, "expected result from relationship to be a struct")
           val subField = field.getSubFields.get(columnIndex)
-          val attributeValues = resultRow.get(relationshipAlias).getRepeatedValue.asScala.map { struct =>
+          val attributeValues = resultRow.get(joinAlias).getRepeatedValue.asScala.map { struct =>
             val subFieldValue = struct.getRecordValue.get(columnIndex)
             fieldValueToAttribute(subField, subFieldValue)
           }.flatMap {

@@ -307,7 +307,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityRelationship(
+        scala.Option(EntityJoin(
           EntityColumn(rootEntityTable, joinColumnName, false),
           EntityColumn(dependentEntityTable, joinColumnName, false),
           Seq(relationshipName),
@@ -357,7 +357,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(dependentEntityTable, None, dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false))),
       SelectAndFrom(dependentEntityTable,
-        scala.Option(EntityRelationship(
+        scala.Option(EntityJoin(
           EntityColumn(dependentEntityTable, joinColumnName, false),
           EntityColumn(rootEntityTable, joinColumnName, false),
           List(relationshipName),
@@ -417,7 +417,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     result should contain theSameElementsInOrderAs List(
       SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityRelationship(
+        scala.Option(EntityJoin(
           EntityColumn(rootEntityTable, donorIdColumn, false),
           EntityColumn(middleEntityTable, donorIdColumn, false),
           Seq(relationshipName1),
@@ -426,7 +426,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         )),
         Seq.empty),
       SelectAndFrom(middleEntityTable,
-        scala.Option(EntityRelationship(
+        scala.Option(EntityJoin(
           EntityColumn(middleEntityTable, sampleIdColumn, false),
           EntityColumn(finalEntityTable, sampleIdColumn, false),
           Seq(relationshipName1, relationshipName2),
@@ -482,7 +482,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(rootEntityTable, None, Seq(EntityColumn(rootEntityTable, "string-field", false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityRelationship(
+        scala.Option(EntityJoin(
           EntityColumn(rootEntityTable, barIdColumn, false),
           EntityColumn(dependent2EntityTable, barIdColumn, false),
           Seq(relationshipName2),
@@ -491,7 +491,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         )),
         Seq(EntityColumn(dependent2EntityTable, datarepoRowIdColumn, false), EntityColumn(dependent2EntityTable, "table_2_col", false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityRelationship(
+        scala.Option(EntityJoin(
           EntityColumn(rootEntityTable, fooIdColumn, false),
           EntityColumn(dependent1EntityTable, fooIdColumn, false),
           Seq(relationshipName1),
@@ -541,7 +541,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(table, None, Seq(EntityColumn(table, F_STRING.getName, false))),
       // the actual to and from columns should not matter anymore
-      SelectAndFrom(relatedTable, Some(EntityRelationship(null, null, Seq(relationshipName), relatedAlias, false)), Seq(
+      SelectAndFrom(relatedTable, Some(EntityJoin(null, null, Seq(relationshipName), relatedAlias, false)), Seq(
         EntityColumn(relatedTable, F_BOOLEAN.getName, false),
         EntityColumn(relatedTable, F_STRING.getName, false),
         EntityColumn(relatedTable, F_INTEGER.getName, false)))
@@ -586,7 +586,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityRelationship(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
+        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
         Seq(EntityColumn(depTable, "zoe", false), EntityColumn(depTable, "bob", false)))
     )
 
@@ -609,7 +609,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityRelationship(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
+        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
         Seq(EntityColumn(depTable, "zoe", false), EntityColumn(depTable, "bob", false)))
     )
 
@@ -633,7 +633,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityRelationship(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
+        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
         Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", true), EntityColumn(depTable, datarepoRowIdColumn, false), EntityColumn(depTable, "another", false)))
     )
 
@@ -659,7 +659,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityRelationship(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
+        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
         Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", true), EntityColumn(depTable, datarepoRowIdColumn, false), EntityColumn(depTable, "another", false)))
     )
 
@@ -687,10 +687,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityRelationship(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
+        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
         Seq.empty),
       SelectAndFrom(depTable,
-        scala.Option(EntityRelationship(EntityColumn(depTable, "fk2", false), EntityColumn(depTable2, "fk2", false), Seq.empty, "bar", false)),
+        scala.Option(EntityJoin(EntityColumn(depTable, "fk2", false), EntityColumn(depTable2, "fk2", false), Seq.empty, "bar", false)),
         Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", false)))
     )
 
