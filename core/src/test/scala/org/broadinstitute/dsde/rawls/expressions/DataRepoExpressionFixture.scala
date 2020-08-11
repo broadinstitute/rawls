@@ -48,32 +48,32 @@ trait DataRepoExpressionFixture {
   val validInputExpressions: Seq[String] = validInputExpressionsWithNoRoot ++ validEntityInputExpressions
 
   val validEntityInputExpressionsWithRelationships: Seq[String] = Seq(
-    // forward reference to the second table
-    "this.rootTableToSecondTable.second_table_column",
-    "this.rootTableToSecondTable.second_third",
-    "this.rootTableToSecondTable.second_root",
-    """["foo","bar", this.rootTableToSecondTable.second_table_column]""",
-    """["a",{"more":{"elaborate":this.rootTableToSecondTable.second_table_column}}]""",
-    """{"more":{"elaborate":{"reference1": this.rootTableToSecondTable.second_table_column, "path":"gs://abc/123"}}}""",
-    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.second_table_column], false]""",
-    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.second_table_column], false, ["abc", this.rootTableToSecondTable.second_third]]""",
-    // backward reference to the second table
-    "this.secondTableToRootTable.second_table_column",
-    "this.secondTableToRootTable.second_third",
-    "this.secondTableToRootTable.second_root",
-    """["foo","bar", this.secondTableToRootTable.second_table_column]""",
-    """["a",{"more":{"elaborate":this.secondTableToRootTable.second_table_column}}]""",
-    """{"more":{"elaborate":{"reference1": this.secondTableToRootTable.second_table_column, "path":"gs://abc/123"}}}""",
-    """["foo", "bar", 123, ["array", this.secondTableToRootTable.second_table_column], false]""",
-    """["foo", "bar", 123, ["array", this.secondTableToRootTable.second_table_column], false, ["abc", this.secondTableToRootTable.second_third]]""",
-    // forward and backward references to the third table
-    "this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column",
-    "this.rootTableToSecondTable.thirdTableToSecondTable.third_second",
-    """["foo","bar", this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column]""",
-    """["a",{"more":{"elaborate":this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column}}]""",
-    """{"more":{"elaborate":{"reference1": this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column, "path":"gs://abc/123"}}}""",
-    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column], false]""",
-    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.thirdTableToSecondTable.third_table_column], false, ["abc", this.rootTableToSecondTable.thirdTableToSecondTable.third_second]]"""
+    // forward reference to the person table
+    "this.authorRelationship.person_id",
+    "this.authorRelationship.favorite_books",
+    "this.authorRelationship.name",
+    """["foo","bar", this.authorRelationship.person_id]""",
+    """["a",{"more":{"elaborate":this.authorRelationship.person_id}}]""",
+    """{"more":{"elaborate":{"reference1": this.authorRelationship.person_id, "path":"gs://abc/123"}}}""",
+    """["foo", "bar", 123, ["array", this.authorRelationship.person_id], false]""",
+    """["foo", "bar", 123, ["array", this.authorRelationship.person_id], false, ["abc", this.authorRelationship.favorite_books]]""",
+    // backward reference to the person table
+    "this.favoriteBooksRelationship.person_id",
+    "this.favoriteBooksRelationship.favorite_books",
+    "this.favoriteBooksRelationship.name",
+    """["foo","bar", this.favoriteBooksRelationship.person_id]""",
+    """["a",{"more":{"elaborate":this.favoriteBooksRelationship.person_id}}]""",
+    """{"more":{"elaborate":{"reference1": this.favoriteBooksRelationship.person_id, "path":"gs://abc/123"}}}""",
+    """["foo", "bar", 123, ["array", this.favoriteBooksRelationship.person_id], false]""",
+    """["foo", "bar", 123, ["array", this.favoriteBooksRelationship.person_id], false, ["abc", this.favoriteBooksRelationship.favorite_books]]""",
+    // forward reference to the person table, then a (backward) reference from person to publisher table
+    "this.authorRelationship.publisherOwnerRelationship.publisher_id",
+    "this.authorRelationship.publisherOwnerRelationship.owner",
+    """["foo","bar", this.authorRelationship.publisherOwnerRelationship.publisher_id]""",
+    """["a",{"more":{"elaborate":this.authorRelationship.publisherOwnerRelationship.publisher_id}}]""",
+    """{"more":{"elaborate":{"reference1": this.authorRelationship.publisherOwnerRelationship.publisher_id, "path":"gs://abc/123"}}}""",
+    """["foo", "bar", 123, ["array", this.authorRelationship.publisherOwnerRelationship.publisher_id], false]""",
+    """["foo", "bar", 123, ["array", this.authorRelationship.publisherOwnerRelationship.publisher_id], false, ["abc", this.authorRelationship.publisherOwnerRelationship.owner]]"""
 
 
   )
@@ -96,8 +96,8 @@ trait DataRepoExpressionFixture {
   // parseable input expressions that are invalid (don't fit the schema, relations, any other reason?)
   val invalidInputExpressions: Seq[String] = Seq(
     "this.column_does_not_exist",
-    "this.relationship_does_not_exist.second_table_column",
-    "this.rootTableToSecondTable.column_does_not_exist",
+    "this.relationship_does_not_exist.person_id",
+    "this.authorRelationship.column_does_not_exist",
     "this.library:cohort", // namespace:name is not allowed for BQ column/table names
     "this.library:cohort1",
     "this.arbitrary:whatever",
@@ -105,8 +105,8 @@ trait DataRepoExpressionFixture {
     """{"level1": "easy", "other-levels": {"level2": this.gvcf, "level3": [this.library:cohort, "extremely difficult", this.library:cohort.entity]}}""",
     """["foo", "bar", 123, ["array", this.gvcf, this.library:cohort], false]""",
     """["foo", "bar", 123, ["array", this.gvcf, [this.library:cohort]], false, ["abc", this.with-dash]]""",
-    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.second_root, this.rootTableToSecondTable.library:second_table_column], false]""",
-    """["foo", "bar", 123, ["array", this.rootTableToSecondTable.second_root, [this.rootTableToSecondTable.library:second_table_column]], false, ["abc", this.rootTableToSecondTable.second_third]]"""
+    """["foo", "bar", 123, ["array", this.authorRelationship.name, this.authorRelationship.library:person_id], false]""",
+    """["foo", "bar", 123, ["array", this.authorRelationship.name, [this.authorRelationship.library:person_id]], false, ["abc", this.authorRelationship.favorite_books]]"""
   )
 
   val badInputExpressionsWithRoot: Seq[String] = invalidInputExpressions ++ unparseableInputExpressions
@@ -163,18 +163,18 @@ trait DataRepoExpressionFixture {
     new TableModel().name(defaultFixtureRootTableName).columns(defaultFixtureRootTableColumns.map(new ColumnModel().name(_)).asJava)
   )
 
-  val rootTableName = "rootTable"
-  val rootTableColumns = List("root_table_column", "gvcf", "with-dash", "underscores_are_ok", "_", "case_sample", "root_second")
+  val bookTableName = "bookTable"
+  val bookTableColumns = List("book_id", "title", "author")
 
-  val secondTableName = "secondTable"
-  val secondTableColumns = List("second_table_column", "second_third", "second_root")
+  val personTableName = "personTable"
+  val personTableColumns = List("person_id", "name", "favorite_books")
 
-  val thirdTableName = "thirdTable"
-  val thirdTableColumns = List("third_table_column", "third_second")
+  val publisherTableName = "publisherTable"
+  val publisherTableColumns = List("publisher_id", "owner")
 
   val multipleTables: List[TableModel] = List(
-    new TableModel().name(rootTableName).columns(rootTableColumns.map(new ColumnModel().name(_)).asJava),
-    new TableModel().name(secondTableName).columns(secondTableColumns.map(new ColumnModel().name(_)).asJava),
-    new TableModel().name(thirdTableName).columns(thirdTableColumns.map(new ColumnModel().name(_)).asJava)
+    new TableModel().name(bookTableName).columns(bookTableColumns.map(new ColumnModel().name(_)).asJava),
+    new TableModel().name(personTableName).columns(personTableColumns.map(new ColumnModel().name(_)).asJava),
+    new TableModel().name(publisherTableName).columns(publisherTableColumns.map(new ColumnModel().name(_)).asJava)
   )
 }

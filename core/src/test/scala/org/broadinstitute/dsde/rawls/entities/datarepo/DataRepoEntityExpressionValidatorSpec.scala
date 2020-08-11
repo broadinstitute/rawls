@@ -62,26 +62,23 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     outputs = toExpressionMap(validOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
-  /* Set up for Relationships */
-  val toRootTableAndColumn: RelationshipTermModel = new RelationshipTermModel().table(rootTableName).column("root_table_column")
-  val toSecondTableAndColumn: RelationshipTermModel = new RelationshipTermModel().table(secondTableName).column("second_table_column")
-  val toThirdTableAndColumn: RelationshipTermModel = new RelationshipTermModel().table(thirdTableName).column("third_table_column")
-  val fromRootTableAndColumnToSecondTable: RelationshipTermModel = new RelationshipTermModel().table(rootTableName).column("root_second")
-  val fromSecondTableAndColumnToThirdTable: RelationshipTermModel = new RelationshipTermModel().table(secondTableName).column("second_third")
-  val fromSecondTableAndColumnToRootTable: RelationshipTermModel = new RelationshipTermModel().table(secondTableName).column("second_root")
-  val fromThirdTableAndColumnToSecondTable: RelationshipTermModel = new RelationshipTermModel().table(thirdTableName).column("third_second")
+  /* Set up for Relationships */ // todo: diagram?
+  val bookReference: RelationshipTermModel = new RelationshipTermModel().table(bookTableName).column("book_id")
+  val personReference: RelationshipTermModel = new RelationshipTermModel().table(personTableName).column("person_id")
+  val authorReference: RelationshipTermModel = new RelationshipTermModel().table(bookTableName).column("author")
+  val favoriteBooksReference: RelationshipTermModel = new RelationshipTermModel().table(personTableName).column("favorite_books")
+  val publisherOwnerReference: RelationshipTermModel = new RelationshipTermModel().table(publisherTableName).column("owner")
 
-  val rootTableToSecondTable: RelationshipModel = new RelationshipModel().name("rootTableToSecondTable").from(fromRootTableAndColumnToSecondTable).to(toSecondTableAndColumn)
-  val secondTableToThirdTable: RelationshipModel = new RelationshipModel().name("secondTableToThirdTable").from(fromSecondTableAndColumnToThirdTable).to(toThirdTableAndColumn)
-  val secondTableToRootTable: RelationshipModel = new RelationshipModel().name("secondTableToRootTable").from(fromSecondTableAndColumnToRootTable).to(toRootTableAndColumn)
-  val thirdTableToSecondTable: RelationshipModel = new RelationshipModel().name("thirdTableToSecondTable").from(fromThirdTableAndColumnToSecondTable).to(toSecondTableAndColumn)
+  val authorRelationship: RelationshipModel = new RelationshipModel().name("authorRelationship").from(authorReference).to(personReference)
+  val favoriteBooksRelationship: RelationshipModel = new RelationshipModel().name("favoriteBooksRelationship").from(favoriteBooksReference).to(bookReference)
+  val publisherOwnerRelationship: RelationshipModel = new RelationshipModel().name("publisherOwnerRelationship").from(publisherOwnerReference).to(personReference)
 
-  val relationships: List[RelationshipModel] = List(rootTableToSecondTable, secondTableToThirdTable, thirdTableToSecondTable, secondTableToRootTable)
+  val relationships: List[RelationshipModel] = List(authorRelationship, publisherOwnerRelationship, favoriteBooksRelationship)
 
   val providerWithMultipleTables: DataRepoEntityProvider = createTestProvider(snapshotModel = createSnapshotModel(multipleTables, relationships))
   val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
-  val allValidWithRelationships = MethodConfiguration("dsde", "methodConfigValidExprs", Some(rootTableName), prerequisites=None,
+  val allValidWithRelationships = MethodConfiguration("dsde", "methodConfigValidExprs", Some(bookTableName), prerequisites=None,
     inputs = toExpressionMap(validInputExpressionsWithRelationships),
     outputs = toExpressionMap(validOutputExpressions), // output is always saved in workspace attributes
     AgoraMethod("dsde", "three_step", 1))
