@@ -204,6 +204,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
           _ <- checkSubmissionSize(parsedExpressions, tableModel)
           entityNameColumn = pkFromSnapshotTable(tableModel)
           (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel, parsedExpressions, tableModel, entityNameColumn)
+          _ = logger.debug(s"expressions [${parsedExpressions.map(_.expression).mkString(", ")}] for snapshot id [${snapshotModel.getId} produced sql query ${bqQueryJobConfig.build().getQuery}")
           petKey <- getPetSAKey
           queryResults <- runBigQuery(bqQueryJobConfig, petKey)
         } yield {
