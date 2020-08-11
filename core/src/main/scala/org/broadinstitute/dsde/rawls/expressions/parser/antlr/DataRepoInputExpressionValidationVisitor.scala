@@ -33,14 +33,24 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
   // Valid DataRepo EntityLookups mean that each of the relationships exist and the final attribute exists as a column
   // on the final table
   private def validateEntityLookup(rootTableName: String, entityLookupContext: EntityLookupContext): Try[Unit] = {
-    (maybeFindTableInSnapshotModel(rootTableName), Option(entityLookupContext.attributeName().namespace())) match {
-      case (Success(rootTableModel), None) =>
-        val relations = entityLookupContext.relation().asScala.toList
-        traverseRelationsAndGetFinalTable(rootTableModel, relations).flatMap(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
-      case (Failure(regrets), _) => Failure(regrets)
-      case (_, Some(_)) => Failure(new RawlsExceptionWithErrorReport(
+    maybeFindTableInSnapshotModel(rootTableName) match {
+      case Success(rootTableModel) =>
+        validateEntityNamespace(entityLookupContext) match {
+          case Success(_) =>
+            val relations = entityLookupContext.relation().asScala.toList
+            traverseRelationsAndGetFinalTable(rootTableModel, relations).flatMap(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
+          case Failure(regrets) => Failure(regrets)
+        }
+      case Failure(regrets) => Failure(regrets)
+    }
+  }
+
+  private def validateEntityNamespace(entityLookupContext: EntityLookupContext): Try[Unit] = {
+    Option(entityLookupContext.attributeName().namespace()) match {
+      case Some(_) => Failure(new RawlsExceptionWithErrorReport(
         ErrorReport(StatusCodes.BadRequest, "Expressions with \"namespace: name\" are not valid with snapshots")
       ))
+      case None => Success()
     }
   }
 
