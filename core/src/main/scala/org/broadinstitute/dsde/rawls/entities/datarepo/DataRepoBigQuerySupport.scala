@@ -391,7 +391,7 @@ trait DataRepoBigQuerySupport {
     val rootTableJoin = selectAndFroms.head
 
     if (rootTableJoin.join.isDefined) {
-      throw new DataEntityException(s"expected rootTableJoin.relationship to be None")
+      throw new DataEntityException(s"expected rootTableJoin.join to be None")
     }
 
     val rootSelectFragment = (rootTableJoin.selectColumns).map(_.qualifiedName).mkString(", ")
