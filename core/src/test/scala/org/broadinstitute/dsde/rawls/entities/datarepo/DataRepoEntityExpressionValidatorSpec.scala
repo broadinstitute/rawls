@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import bio.terra.datarepo.model.{RelationshipModel, RelationshipTermModel}
 import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
@@ -62,20 +61,8 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     outputs = toExpressionMap(validOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
-  /* Set up for Relationships */ // todo: diagram?
-  val bookReference: RelationshipTermModel = new RelationshipTermModel().table(bookTableName).column("book_id")
-  val personReference: RelationshipTermModel = new RelationshipTermModel().table(personTableName).column("person_id")
-  val authorReference: RelationshipTermModel = new RelationshipTermModel().table(bookTableName).column("author")
-  val favoriteBooksReference: RelationshipTermModel = new RelationshipTermModel().table(personTableName).column("favorite_books")
-  val publisherOwnerReference: RelationshipTermModel = new RelationshipTermModel().table(publisherTableName).column("owner")
-
-  val authorRelationship: RelationshipModel = new RelationshipModel().name("authorRelationship").from(authorReference).to(personReference)
-  val favoriteBooksRelationship: RelationshipModel = new RelationshipModel().name("favoriteBooksRelationship").from(favoriteBooksReference).to(bookReference)
-  val publisherOwnerRelationship: RelationshipModel = new RelationshipModel().name("publisherOwnerRelationship").from(publisherOwnerReference).to(personReference)
-
-  val relationships: List[RelationshipModel] = List(authorRelationship, publisherOwnerRelationship, favoriteBooksRelationship)
-
-  val providerWithMultipleTables: DataRepoEntityProvider = createTestProvider(snapshotModel = createSnapshotModel(multipleTables, relationships))
+  /** Set up for Relationships */
+  val providerWithMultipleTables: DataRepoEntityProvider = createTestProvider(snapshotModel = createSnapshotModel(relationshipTables, relationships))
   val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
   val allValidWithRelationships = MethodConfiguration("dsde", "methodConfigValidExprs", Some(bookTableName), prerequisites=None,
@@ -157,7 +144,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
   }
 
   it should "fail if the relationship does not exist for relationship traversals" in {
-    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleTables, List.empty))
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(relationshipTables, List.empty))
     val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
     val validationResults = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
@@ -226,7 +213,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
   }
 
   it should "fail if the relationship does not exist for relationship traversals" in {
-    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(multipleTables, List.empty))
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(relationshipTables, List.empty))
     val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
     val validationResults = expressionValidatorWithMultipleTables.validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue

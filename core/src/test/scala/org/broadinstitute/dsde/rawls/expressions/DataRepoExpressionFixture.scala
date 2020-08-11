@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.expressions
 
-import bio.terra.datarepo.model.{ColumnModel, TableModel}
+import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, RelationshipTermModel, TableModel}
 
 import scala.collection.JavaConverters._
 
@@ -50,22 +50,22 @@ trait DataRepoExpressionFixture {
   val validEntityInputExpressionsWithRelationships: Seq[String] = Seq(
     // forward reference to the person table
     "this.authorRelationship.person_id",
-    "this.authorRelationship.favorite_books",
+    "this.authorRelationship.favorite_book",
     "this.authorRelationship.name",
     """["foo","bar", this.authorRelationship.person_id]""",
     """["a",{"more":{"elaborate":this.authorRelationship.person_id}}]""",
     """{"more":{"elaborate":{"reference1": this.authorRelationship.person_id, "path":"gs://abc/123"}}}""",
     """["foo", "bar", 123, ["array", this.authorRelationship.person_id], false]""",
-    """["foo", "bar", 123, ["array", this.authorRelationship.person_id], false, ["abc", this.authorRelationship.favorite_books]]""",
+    """["foo", "bar", 123, ["array", this.authorRelationship.person_id], false, ["abc", this.authorRelationship.favorite_book]]""",
     // backward reference to the person table
     "this.favoriteBooksRelationship.person_id",
-    "this.favoriteBooksRelationship.favorite_books",
+    "this.favoriteBooksRelationship.favorite_book",
     "this.favoriteBooksRelationship.name",
     """["foo","bar", this.favoriteBooksRelationship.person_id]""",
     """["a",{"more":{"elaborate":this.favoriteBooksRelationship.person_id}}]""",
     """{"more":{"elaborate":{"reference1": this.favoriteBooksRelationship.person_id, "path":"gs://abc/123"}}}""",
     """["foo", "bar", 123, ["array", this.favoriteBooksRelationship.person_id], false]""",
-    """["foo", "bar", 123, ["array", this.favoriteBooksRelationship.person_id], false, ["abc", this.favoriteBooksRelationship.favorite_books]]""",
+    """["foo", "bar", 123, ["array", this.favoriteBooksRelationship.person_id], false, ["abc", this.favoriteBooksRelationship.favorite_book]]""",
     // forward reference to the person table, then a (backward) reference from person to publisher table
     "this.authorRelationship.publisherOwnerRelationship.publisher_id",
     "this.authorRelationship.publisherOwnerRelationship.owner",
@@ -106,7 +106,7 @@ trait DataRepoExpressionFixture {
     """["foo", "bar", 123, ["array", this.gvcf, this.library:cohort], false]""",
     """["foo", "bar", 123, ["array", this.gvcf, [this.library:cohort]], false, ["abc", this.with-dash]]""",
     """["foo", "bar", 123, ["array", this.authorRelationship.name, this.authorRelationship.library:person_id], false]""",
-    """["foo", "bar", 123, ["array", this.authorRelationship.name, [this.authorRelationship.library:person_id]], false, ["abc", this.authorRelationship.favorite_books]]"""
+    """["foo", "bar", 123, ["array", this.authorRelationship.name, [this.authorRelationship.library:person_id]], false, ["abc", this.authorRelationship.favorite_book]]"""
   )
 
   val badInputExpressionsWithRoot: Seq[String] = invalidInputExpressions ++ unparseableInputExpressions
@@ -163,16 +163,40 @@ trait DataRepoExpressionFixture {
     new TableModel().name(defaultFixtureRootTableName).columns(defaultFixtureRootTableColumns.map(new ColumnModel().name(_)).asJava)
   )
 
+  /**
+    * Relationship tables
+    *
+    * Diagram for reference:
+    * +----------+         +-------------+         +---------------+
+    * |book table|         |person table |         |publisher table|
+    * |----------|         |-------------|         |---------------|
+    * |book_id   |<-------+|favorite book|         |publisher_id   |
+    * |title     |         |name         |         |name           |
+    * |author    |+------->|person_id    |<-------+|owner          |
+    * +----------+         +-------------+         +---------------+
+    */
   val bookTableName = "bookTable"
   val bookTableColumns = List("book_id", "title", "author")
 
   val personTableName = "personTable"
-  val personTableColumns = List("person_id", "name", "favorite_books")
+  val personTableColumns = List("person_id", "name", "favorite_book")
 
   val publisherTableName = "publisherTable"
-  val publisherTableColumns = List("publisher_id", "owner")
+  val publisherTableColumns = List("publisher_id", "name", "owner")
 
-  val multipleTables: List[TableModel] = List(
+  val bookReference: RelationshipTermModel = new RelationshipTermModel().table(bookTableName).column("book_id")
+  val personReference: RelationshipTermModel = new RelationshipTermModel().table(personTableName).column("person_id")
+  val authorReference: RelationshipTermModel = new RelationshipTermModel().table(bookTableName).column("author")
+  val favoriteBooksReference: RelationshipTermModel = new RelationshipTermModel().table(personTableName).column("favorite_book")
+  val publisherOwnerReference: RelationshipTermModel = new RelationshipTermModel().table(publisherTableName).column("owner")
+
+  val authorRelationship: RelationshipModel = new RelationshipModel().name("authorRelationship").from(authorReference).to(personReference)
+  val favoriteBooksRelationship: RelationshipModel = new RelationshipModel().name("favoriteBooksRelationship").from(favoriteBooksReference).to(bookReference)
+  val publisherOwnerRelationship: RelationshipModel = new RelationshipModel().name("publisherOwnerRelationship").from(publisherOwnerReference).to(personReference)
+
+  val relationships: List[RelationshipModel] = List(authorRelationship, publisherOwnerRelationship, favoriteBooksRelationship)
+
+  val relationshipTables: List[TableModel] = List(
     new TableModel().name(bookTableName).columns(bookTableColumns.map(new ColumnModel().name(_)).asJava),
     new TableModel().name(personTableName).columns(personTableColumns.map(new ColumnModel().name(_)).asJava),
     new TableModel().name(publisherTableName).columns(publisherTableColumns.map(new ColumnModel().name(_)).asJava)
