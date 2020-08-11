@@ -155,7 +155,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
     val validationResults = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
-    validationResults.invalidInputs.size shouldBe 23
+    validationResults.invalidInputs.size shouldBe validEntityInputExpressionsWithRelationships.length
     validationResults.invalidOutputs shouldBe 'empty
   }
 
@@ -164,7 +164,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
 
     val validationResults = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
-    validationResults.invalidInputs.size shouldBe 23
+    validationResults.invalidInputs.size shouldBe validEntityInputExpressionsWithRelationships.length
     validationResults.invalidOutputs shouldBe 'empty
   }
 
