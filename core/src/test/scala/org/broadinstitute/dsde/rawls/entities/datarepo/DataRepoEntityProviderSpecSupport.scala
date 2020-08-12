@@ -106,6 +106,7 @@ trait DataRepoEntityProviderSpecSupport {
       .relationships(relationships.asJava)
       .dataProject("unittest-dataproject")
       .name("unittest-name")
+      .relationships(relationships.asJava)
 
   /**
    * Mock for WorkspaceManagerDAO that allows the caller to specify behavior for the getDataReferenceByName method.

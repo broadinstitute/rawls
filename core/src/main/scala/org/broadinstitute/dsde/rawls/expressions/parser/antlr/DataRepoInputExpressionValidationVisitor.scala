@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
-import bio.terra.datarepo.model.{SnapshotModel, TableModel}
-import org.broadinstitute.dsde.rawls.RawlsException
+import akka.http.scaladsl.model.StatusCodes
+import bio.terra.datarepo.model.{RelationshipModel, SnapshotModel, TableModel}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{AttributeNameContext, EntityLookupContext, RelationContext}
+import org.broadinstitute.dsde.rawls.model.ErrorReport
 
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
@@ -22,7 +24,9 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
   override def visitEntityLookup(ctx: EntityLookupContext): Try[Unit] = {
     rootEntityType match {
       case Some(rootTableName) => validateEntityLookup(rootTableName, ctx)
-      case None => Failure(new RawlsException("Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."))
+      case None => Failure(new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
+      ))
     }
   }
 
@@ -30,11 +34,24 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
   // on the final table
   private def validateEntityLookup(rootTableName: String, entityLookupContext: EntityLookupContext): Try[Unit] = {
     maybeFindTableInSnapshotModel(rootTableName) match {
-      case Some(rootTableModel) => {
-        val relations = entityLookupContext.relation().asScala.toList
-        traverseRelationsAndGetFinalTable(rootTableModel, relations).flatMap(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
-      }
-      case None => Failure(new RawlsException(s"Root entity type [$rootTableName] is not a name of a table that exist within DataRepo Snapshot."))
+      case Success(rootTableModel) =>
+        validateEntityNamespace(entityLookupContext) match {
+          case Success(_) =>
+            val relations = entityLookupContext.relation().asScala.toList
+            traverseRelationsAndGetFinalTable(rootTableModel, relations).flatMap(finalTable => checkForAttributeOnTable(finalTable, entityLookupContext.attributeName()))
+          case Failure(regrets) => Failure(regrets)
+        }
+      case Failure(regrets) => Failure(regrets)
+    }
+  }
+
+  /** Namespaces are not valid in DataRepo expressions */
+  private def validateEntityNamespace(entityLookupContext: EntityLookupContext): Try[Unit] = {
+    Option(entityLookupContext.attributeName().namespace()) match {
+      case Some(_) => Failure(new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Expressions with \"namespace: name\" are not valid with snapshots")
+      ))
+      case None => Success()
     }
   }
 
@@ -44,20 +61,58 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     if (tableColumns.exists(_.getName == attributeName)) {
       Success()
     } else {
-      Failure(new RawlsException(s"Missing attribute `${attributeName}` on table `${tableModel.getName}`"))
+      Failure(new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, s"Column `${attributeName}` does not exist on table `${tableModel.getName}`")
+      ))
     }
   }
 
-  // TODO: CA-939 support relationships once that information is published by data repo
+  /** Recursive function to traverse relationships. @tailrec does not work due to the flatMap. The number of
+    * relationships is expected to be small.
+    */
   private def traverseRelationsAndGetFinalTable(currentTableModel: TableModel, relations: List[RelationContext]): Try[TableModel] = {
     relations match {
       case Nil => Success(currentTableModel)
-      case _ => Failure(new RawlsException(s"Relationships are not currently supported."))
+      case nextRelationContext :: remainingRelations => {
+        val nextRelationName = nextRelationContext.attributeName.name.getText
+        maybeGetNextTableFromRelation(currentTableModel, nextRelationName).flatMap(traverseRelationsAndGetFinalTable(_, remainingRelations))
+      }
     }
   }
 
-  private def maybeFindTableInSnapshotModel(tableName: String): Option[TableModel] = {
+  private def maybeFindTableInSnapshotModel(tableName: String): Try[TableModel] = {
     val snapshotTables = snapshotModel.getTables.asScala.toList
-    snapshotTables.find(_.getName == tableName)
+    snapshotTables.find(_.getName == tableName) match {
+      case None => Failure(new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, s"Table `$tableName` does not exist in snapshot")
+      ))
+      case Some(tableModel) => Success(tableModel)
+    }
+  }
+
+  private def maybeFindRelationshipInSnapshotModel(relationshipName: String): Try[RelationshipModel] = {
+    val snapshotRelationships = snapshotModel.getRelationships.asScala.toList
+    snapshotRelationships.find(_.getName == relationshipName) match {
+      case None => Failure(new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, s"Relationship `$relationshipName` does not exist in snapshot")
+      ))
+      case Some(relationshipModel) => Success(relationshipModel)
+    }
+  }
+
+  private def maybeGetNextTableFromRelation(fromTable: TableModel, relationshipName: String): Try[TableModel] = {
+    for {
+      relationshipModel <- maybeFindRelationshipInSnapshotModel(relationshipName)
+      nextTableName <- fromTable.getName match {
+        case forward if forward.equalsIgnoreCase(relationshipModel.getFrom.getTable) => Success(relationshipModel.getTo.getTable)
+        case backward if backward.equalsIgnoreCase(relationshipModel.getTo.getTable) => Success(relationshipModel.getFrom.getTable)
+        case _ => Failure(new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Table `$fromTable` does not exist in relationship `${relationshipModel.getName}``")
+        ))
+      }
+      nextTable <- maybeFindTableInSnapshotModel(nextTableName)
+    } yield {
+      nextTable
+    }
   }
 }

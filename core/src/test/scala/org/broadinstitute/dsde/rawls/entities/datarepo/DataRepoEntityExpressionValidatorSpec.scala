@@ -37,7 +37,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     GatherInputsResult(methodInputs.toSet, Set(), Set(), Set())
   }
 
-  val provider = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables))
+  val provider: DataRepoEntityProvider = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables))
   val expressionValidator: ExpressionValidator = provider.expressionValidator
 
   val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some(defaultFixtureRootTableName), prerequisites=None,
@@ -61,75 +61,111 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     outputs = toExpressionMap(validOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
+  /** Set up for Relationships */
+  val providerWithMultipleTables: DataRepoEntityProvider = createTestProvider(snapshotModel = createSnapshotModel(relationshipTables, relationships))
+  val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
+  val allValidWithRelationships = MethodConfiguration("dsde", "methodConfigValidExprs", Some(bookTableName), prerequisites=None,
+    inputs = toExpressionMap(validInputExpressionsWithRelationships),
+    outputs = toExpressionMap(validOutputExpressions), // output is always saved in workspace attributes
+    AgoraMethod("dsde", "three_step", 1))
+
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
   "validateMCExpressions" should "validate expressions in a MethodConfiguration with a root entity" in {
-    val actualValid = expressionValidator.validateMCExpressions(allValid, toGatherInputs(allValid.inputs)).futureValue
-    assertSameElements(validInputExpressions, actualValid.validInputs)
-    assertSameElements(validOutputExpressions, actualValid.validOutputs)
-    actualValid.invalidInputs shouldBe 'empty
-    actualValid.invalidOutputs shouldBe 'empty
+    val validationResults = expressionValidator.validateMCExpressions(allValid, toGatherInputs(allValid.inputs)).futureValue
+    assertSameElements(validInputExpressions, validationResults.validInputs)
+    assertSameElements(validOutputExpressions, validationResults.validOutputs)
+    validationResults.invalidInputs shouldBe 'empty
+    validationResults.invalidOutputs shouldBe 'empty
   }
 
   it should "validate expressions in a MethodConfiguration without a root entity" in {
-    val actualValidNoRoot = expressionValidator.validateMCExpressions(allValidNoRootMC, toGatherInputs(allValidNoRootMC.inputs)).futureValue
-    assertSameElements(validInputExpressionsWithNoRoot, actualValidNoRoot.validInputs)
-    assertSameElements(validWorkspaceOutputExpressions, actualValidNoRoot.validOutputs)
-    actualValidNoRoot.invalidInputs shouldBe 'empty
-    actualValidNoRoot.invalidOutputs shouldBe 'empty
+    val validationResultsNoRoot = expressionValidator.validateMCExpressions(allValidNoRootMC, toGatherInputs(allValidNoRootMC.inputs)).futureValue
+    assertSameElements(validInputExpressionsWithNoRoot, validationResultsNoRoot.validInputs)
+    assertSameElements(validWorkspaceOutputExpressions, validationResultsNoRoot.validOutputs)
+    validationResultsNoRoot.invalidInputs shouldBe 'empty
+    validationResultsNoRoot.invalidOutputs shouldBe 'empty
   }
 
   it should "detect invalid expressions in a MethodConfiguration with a root entity" in {
-    val actualInvalid = expressionValidator.validateMCExpressions(allInvalid, toGatherInputs(allInvalid.inputs)).futureValue
-    actualInvalid.validInputs shouldBe 'empty
-    actualInvalid.validOutputs shouldBe 'empty
-    actualInvalid.invalidInputs should have size badInputExpressionsWithRoot.size
-    actualInvalid.invalidOutputs should have size invalidOutputExpressions.size
+    val validationResults = expressionValidator.validateMCExpressions(allInvalid, toGatherInputs(allInvalid.inputs)).futureValue
+    validationResults.validInputs shouldBe 'empty
+    validationResults.validOutputs shouldBe 'empty
+    validationResults.invalidInputs should have size badInputExpressionsWithRoot.size
+    validationResults.invalidOutputs should have size invalidOutputExpressions.size
   }
 
   it should "detect invalid expressions in a MethodConfiguration without a root entity" in {
-    val actualInvalidNoRoot = expressionValidator.validateMCExpressions(allInvalidNoRootMC, toGatherInputs(allInvalidNoRootMC.inputs)).futureValue
-    actualInvalidNoRoot.validInputs shouldBe 'empty
-    actualInvalidNoRoot.validOutputs shouldBe 'empty
-    actualInvalidNoRoot.invalidInputs should have size badInputExpressionsWithNoRoot.size
-    actualInvalidNoRoot.invalidOutputs should have size invalidOutputExpressions.size
+    val validationResultsNoRoot = expressionValidator.validateMCExpressions(allInvalidNoRootMC, toGatherInputs(allInvalidNoRootMC.inputs)).futureValue
+    validationResultsNoRoot.validInputs shouldBe 'empty
+    validationResultsNoRoot.validOutputs shouldBe 'empty
+    validationResultsNoRoot.invalidInputs should have size badInputExpressionsWithNoRoot.size
+    validationResultsNoRoot.invalidOutputs should have size invalidOutputExpressions.size
   }
 
   it should "handle optional inputs" in {
     // fail if empty input is required
-    val actualOneEmpty = expressionValidator.validateMCExpressions(oneEmpty, toGatherInputs(oneEmpty.inputs)).futureValue
-    assertSameElements(validInputExpressions, actualOneEmpty.validInputs)
-    assertSameElements(validOutputExpressions, actualOneEmpty.validOutputs)
-    assertSameElements(Seq("this.empty"), actualOneEmpty.invalidInputs.keys)
-    actualOneEmpty.invalidOutputs shouldBe 'empty
-    actualOneEmpty.invalidInputs.size shouldBe 1
+    val validationResultsOneEmpty = expressionValidator.validateMCExpressions(oneEmpty, toGatherInputs(oneEmpty.inputs)).futureValue
+    assertSameElements(validInputExpressions, validationResultsOneEmpty.validInputs)
+    assertSameElements(validOutputExpressions, validationResultsOneEmpty.validOutputs)
+    assertSameElements(Seq("this.empty"), validationResultsOneEmpty.invalidInputs.keys)
+    validationResultsOneEmpty.invalidOutputs shouldBe 'empty
+    validationResultsOneEmpty.invalidInputs.size shouldBe 1
 
     // succeed if the empty input is optional
     val methodInputs = oneEmpty.inputs.map(toMethodInput)
     val emptyOptionalInput = Set(toMethodInput(emptyExpr))
     val optionalGatherInputs = GatherInputsResult(methodInputs.toSet diff emptyOptionalInput, emptyOptionalInput, Set(), Set())
 
-    val actualOptionalEmpty = expressionValidator.validateMCExpressions(oneEmpty, optionalGatherInputs).futureValue
-    assertSameElements(oneEmpty.inputs.keys, actualOptionalEmpty.validInputs)
-    assertSameElements(oneEmpty.outputs.keys, actualOptionalEmpty.validOutputs)
-    actualOptionalEmpty.invalidInputs shouldBe 'empty
-    actualOptionalEmpty.invalidOutputs shouldBe 'empty
+    val validationResultsEmpty = expressionValidator.validateMCExpressions(oneEmpty, optionalGatherInputs).futureValue
+    assertSameElements(oneEmpty.inputs.keys, validationResultsEmpty.validInputs)
+    assertSameElements(oneEmpty.outputs.keys, validationResultsEmpty.validOutputs)
+    validationResultsEmpty.invalidInputs shouldBe 'empty
+    validationResultsEmpty.invalidOutputs shouldBe 'empty
+  }
+
+  it should "validate the happy path for relationship traversals" in {
+    val validationResults = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    assertSameElements(validInputExpressionsWithRelationships, validationResults.validInputs)
+    assertSameElements(validOutputExpressions, validationResults.validOutputs)
+    validationResults.invalidInputs shouldBe 'empty
+    validationResults.invalidOutputs shouldBe 'empty
+  }
+
+  // should never get here if TDR is not buggy
+  it should "fail if the linked table does not exist for relationship traversals" in {
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables, relationships))
+    val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
+    val validationResults = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    validationResults.invalidInputs.size shouldBe validEntityInputExpressionsWithRelationships.length
+    validationResults.invalidOutputs shouldBe 'empty
+  }
+
+  it should "fail if the relationship does not exist for relationship traversals" in {
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(relationshipTables, List.empty))
+    val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
+    val validationResults = expressionValidatorWithMultipleTables.validateMCExpressions(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    validationResults.invalidInputs.size shouldBe validEntityInputExpressionsWithRelationships.length
+    validationResults.invalidOutputs shouldBe 'empty
   }
 
   "validateExpressionsForSubmission" should "succeed for valid expressions in a MethodConfiguration with a root entity" in {
-    val actualValid = expressionValidator.validateExpressionsForSubmission(allValid, toGatherInputs(allValid.inputs)).futureValue.get
-    assertSameElements(validInputExpressions, actualValid.validInputs)
-    assertSameElements(validOutputExpressions, actualValid.validOutputs)
-    actualValid.invalidInputs shouldBe 'empty
-    actualValid.invalidOutputs shouldBe 'empty
+    val validationResults = expressionValidator.validateExpressionsForSubmission(allValid, toGatherInputs(allValid.inputs)).futureValue.get
+    assertSameElements(validInputExpressions, validationResults.validInputs)
+    assertSameElements(validOutputExpressions, validationResults.validOutputs)
+    validationResults.invalidInputs shouldBe 'empty
+    validationResults.invalidOutputs shouldBe 'empty
   }
 
   it should "succeed for valid expressions in a MethodConfiguration without a root entity" in {
-    val actualValidNoRoot = expressionValidator.validateExpressionsForSubmission(allValidNoRootMC, toGatherInputs(allValidNoRootMC.inputs)).futureValue.get
-    assertSameElements(validInputExpressionsWithNoRoot, actualValidNoRoot.validInputs)
-    assertSameElements(validWorkspaceOutputExpressions, actualValidNoRoot.validOutputs)
-    actualValidNoRoot.invalidInputs shouldBe 'empty
-    actualValidNoRoot.invalidOutputs shouldBe 'empty
+    val validationResultsNoRoot = expressionValidator.validateExpressionsForSubmission(allValidNoRootMC, toGatherInputs(allValidNoRootMC.inputs)).futureValue.get
+    assertSameElements(validInputExpressionsWithNoRoot, validationResultsNoRoot.validInputs)
+    assertSameElements(validWorkspaceOutputExpressions, validationResultsNoRoot.validOutputs)
+    validationResultsNoRoot.invalidInputs shouldBe 'empty
+    validationResultsNoRoot.invalidOutputs shouldBe 'empty
   }
 
   it should "succeed for empty optional input expressions in a MethodConfiguration" in {
@@ -137,27 +173,53 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     val emptyOptionalInput = Set(toMethodInput(emptyExpr))
     val optionalGatherInputs = GatherInputsResult(methodInputs.toSet diff emptyOptionalInput, emptyOptionalInput, Set(), Set())
 
-    val actualOptionalEmpty = expressionValidator.validateExpressionsForSubmission(oneEmpty, optionalGatherInputs).futureValue.get
-    assertSameElements(oneEmpty.inputs.keys, actualOptionalEmpty.validInputs)
-    assertSameElements(oneEmpty.outputs.keys, actualOptionalEmpty.validOutputs)
-    actualOptionalEmpty.invalidInputs shouldBe 'empty
-    actualOptionalEmpty.invalidOutputs shouldBe 'empty
+    val validationResultsEmpty = expressionValidator.validateExpressionsForSubmission(oneEmpty, optionalGatherInputs).futureValue.get
+    assertSameElements(oneEmpty.inputs.keys, validationResultsEmpty.validInputs)
+    assertSameElements(oneEmpty.outputs.keys, validationResultsEmpty.validOutputs)
+    validationResultsEmpty.invalidInputs shouldBe 'empty
+    validationResultsEmpty.invalidOutputs shouldBe 'empty
+  }
+
+  it should "succeed for relationship traversals" in {
+    val validationResults = expressionValidatorWithMultipleTables.validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue.get
+    assertSameElements(validInputExpressionsWithRelationships, validationResults.validInputs)
+    assertSameElements(validOutputExpressions, validationResults.validOutputs)
+    validationResults.invalidInputs shouldBe 'empty
+    validationResults.invalidOutputs shouldBe 'empty
   }
 
   it should "fail for invalid expressions in a MethodConfiguration with a root entity" in {
-    val actualInvalid = expressionValidator.validateExpressionsForSubmission(allInvalid, toGatherInputs(allInvalid.inputs)).futureValue
-    actualInvalid shouldBe a [scala.util.Failure[_]]
+    val validationResults = expressionValidator.validateExpressionsForSubmission(allInvalid, toGatherInputs(allInvalid.inputs)).futureValue
+    validationResults shouldBe a [scala.util.Failure[_]]
   }
 
   it should "fail for invalid expressions in a MethodConfiguration without a root entity" in {
-    val actualInvalidNoRoot = expressionValidator.validateExpressionsForSubmission(allInvalidNoRootMC, toGatherInputs(allInvalidNoRootMC.inputs)).futureValue
-    actualInvalidNoRoot shouldBe a [scala.util.Failure[_]]
+    val validationResultsNoRoot = expressionValidator.validateExpressionsForSubmission(allInvalidNoRootMC, toGatherInputs(allInvalidNoRootMC.inputs)).futureValue
+    validationResultsNoRoot shouldBe a [scala.util.Failure[_]]
   }
 
   it should "fail for empty required input expressions in a MethodConfiguration" in {
-    val actualOneEmpty = expressionValidator.validateExpressionsForSubmission(oneEmpty, toGatherInputs(oneEmpty.inputs)).futureValue
-    actualOneEmpty shouldBe a [scala.util.Failure[_]]
+    val validationResultsOneEmpty = expressionValidator.validateExpressionsForSubmission(oneEmpty, toGatherInputs(oneEmpty.inputs)).futureValue
+    validationResultsOneEmpty shouldBe a [scala.util.Failure[_]]
   }
+
+  // should never get here if TDR is not buggy
+  it should "fail if the linked table does not exist for relationship traversals" in {
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(defaultFixtureTables, relationships))
+    val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
+    val validationResults = expressionValidatorWithMultipleTables.validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    validationResults shouldBe a [scala.util.Failure[_]]
+  }
+
+  it should "fail if the relationship does not exist for relationship traversals" in {
+    val providerWithMultipleTables = createTestProvider(snapshotModel = createSnapshotModel(relationshipTables, List.empty))
+    val expressionValidatorWithMultipleTables: ExpressionValidator = providerWithMultipleTables.expressionValidator
+
+    val validationResults = expressionValidatorWithMultipleTables.validateExpressionsForSubmission(allValidWithRelationships, toGatherInputs(allValidWithRelationships.inputs)).futureValue
+    validationResults shouldBe a [scala.util.Failure[_]]
+  }
+
 
   private val defaultRootEntity: Option[String] = Option("Sample")
 
@@ -180,6 +242,7 @@ class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComp
     assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "bonk.library:attribute").isFailure, "bonk.library:attribute should not parse correctly" )
     assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = s"this.${defaultRootEntity.get}${Attributable.entityIdAttributeSuffix}").isFailure, "this.sample_id should reject reserved attribute name" )
     assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "this.name").isFailure, "this.name should reject reserved attribute name" )
+    assert(expressionValidator.validateOutputExpr(defaultRootEntity)(expression = "this.invalid.name").isFailure, "this.invalid.name should not find invalid relationship" )
   }
 
   it should "fail for library entity output expressions" in {

@@ -1257,7 +1257,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
       }
       ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
-      ex.errorReport.message shouldBe "Validation errors: Invalid inputs: three_step.cgrep.pattern -> Root entity type [unknown] is not a name of a table that exist within DataRepo Snapshot."
+      ex.errorReport.message shouldBe "Validation errors: Invalid inputs: three_step.cgrep.pattern -> Table `unknown` does not exist in snapshot"
     }
   }
 
