@@ -45,6 +45,7 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     }
   }
 
+  /** Namespaces are not valid in DataRepo expressions */
   private def validateEntityNamespace(entityLookupContext: EntityLookupContext): Try[Unit] = {
     Option(entityLookupContext.attributeName().namespace()) match {
       case Some(_) => Failure(new RawlsExceptionWithErrorReport(
@@ -66,6 +67,9 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     }
   }
 
+  /** Recursive function to traverse relationships. @tailrec does not work due to the flatMap. The number of
+    * relationships is expected to be small.
+    */
   private def traverseRelationsAndGetFinalTable(currentTableModel: TableModel, relations: List[RelationContext]): Try[TableModel] = {
     relations match {
       case Nil => Success(currentTableModel)
