@@ -35,6 +35,8 @@ class DataRepoBigQuerySanitizationSpec extends FreeSpec with DataRepoBigQuerySup
 
 
   "DataRepoBigQuerySupport, when validating SQL strings, should" - {
+    import DataRepoBigQuerySupport.validateSql
+
     "pass legal strings untouched" in {
       val input = "thisIsALegalString"
       val expected = "thisIsALegalString"
