@@ -4,14 +4,14 @@ import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, ReferenceTypeEnum}
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, ReferenceTypeEnum}
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, DataRepoSnapshotList, DataRepoSnapshotReference, NamedDataRepoSnapshot, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
+import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, NamedDataRepoSnapshot, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
+import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -120,12 +120,12 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
-        val response = responseAs[DataRepoSnapshotReference]
+        val response = responseAs[DataReferenceDescription]
         assertResult(StatusCodes.Created) {
           status
         }
 
-        Get(s"${testData.wsName.path}/snapshots/${response.referenceId}") ~>
+        Get(s"${testData.wsName.path}/snapshots/${response.getReferenceId}") ~>
           sealRoute(services.snapshotRoutes) ~>
           check {
             assertResult(StatusCodes.OK) {
@@ -215,7 +215,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
-        val response = responseAs[DataRepoSnapshotReference]
+        val response = responseAs[DataReferenceDescription]
         assertResult(StatusCodes.Created) {status}
         Post(s"${testData.wsName.path}/snapshots", httpJson(
           NamedDataRepoSnapshot(
@@ -225,18 +225,18 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         )) ~>
           sealRoute(services.snapshotRoutes) ~>
           check {
-            val response = responseAs[DataRepoSnapshotReference]
+            val response = responseAs[DataReferenceDescription]
             assertResult(StatusCodes.Created) {status}
             // Then, list them both
             Get(s"${testData.wsName.path}/snapshots?offset=0&limit=10") ~>
               sealRoute(services.snapshotRoutes) ~>
               check {
-                val response = responseAs[DataRepoSnapshotList]
+                val response = responseAs[DataReferenceList]
                 assertResult(StatusCodes.OK) {status}
                 // Our mock doesn't guarantee order, so we just check that there are two
                 // elements, that one is named "foo", and that one is named "bar"
-                assert(response.snapshots.size == 2)
-                assertResult(Set("foo", "bar")) { response.snapshots.map(_.name).toSet }
+                assert(response.getResources.size == 2)
+                assertResult(Set("foo", "bar")) { response.getResources.asScala.map(_.getName).toSet }
               }
           }
       }
@@ -272,14 +272,14 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
-        val response = responseAs[DataRepoSnapshotReference]
+        val response = responseAs[DataReferenceDescription]
         assertResult(StatusCodes.Created) {status}
-        Delete(s"${testData.wsName.path}/snapshots/${response.referenceId}") ~>
+        Delete(s"${testData.wsName.path}/snapshots/${response.getReferenceId}") ~>
           sealRoute(services.snapshotRoutes) ~>
           check { assertResult(StatusCodes.NoContent) {status} }
 
         //verify that it was deleted
-        Delete(s"${testData.wsName.path}/snapshots/${response.referenceId}") ~>
+        Delete(s"${testData.wsName.path}/snapshots/${response.getReferenceId}") ~>
           sealRoute(services.snapshotRoutes) ~>
           check { assertResult(StatusCodes.NotFound) {status} }
       }
