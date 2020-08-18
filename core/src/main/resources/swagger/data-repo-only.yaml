@@ -143,7 +143,7 @@ paths:
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/DataRepoSnapshot'
+              $ref: '#/components/schemas/NamedDataRepoSnapshot'
         required: true
       responses:
         201:
@@ -164,7 +164,7 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      x-codegen-request-body-name: dataRepoSnapshot
+      x-codegen-request-body-name: namedDataRepoSnapshot
       security:
         - authorization:
             - openid
@@ -240,6 +240,17 @@ paths:
 components:
   schemas:
     DataRepoSnapshot:
+      description: A raw data repo snapshot reference from workspace manager.
+      type: object
+      required: [instanceName, snapshot]
+      properties:
+        instanceName:
+          description: The name of the Data Repo instance
+          type: string
+        snapshot:
+          description: The ID of the Data Repo snapshot
+          type: string
+    NamedDataRepoSnapshot:
       type: object
       properties:
         snapshotId:
@@ -261,8 +272,7 @@ components:
         referenceType:
           type: string
         reference:
-          type: object
-          properties: {}
+          $ref: '#/components/schemas/DataRepoSnapshot'
         cloningInstructions:
           type: string
       description: A Data Reference definition from Workspace Manager

@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.api.WorkspaceApi
 import bio.terra.workspace.client.ApiClient
-import bio.terra.workspace.model.{CloningInstructionsEnum, CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, DataReferenceList, DeleteWorkspaceRequestBody, ReferenceTypeEnum, WorkspaceDescription}
+import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.DataReferenceName
 
 import scala.concurrent.ExecutionContext
@@ -38,7 +38,7 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(folderManagerAccessToken).deleteWorkspace(new DeleteWorkspaceRequestBody().authToken(bodyAccessToken.token), workspaceId)
   }
 
-  override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceType: ReferenceTypeEnum, reference: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+  override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
     getWorkspaceApi(accessToken).createDataReference(new CreateDataReferenceRequestBody().name(name.value).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions), workspaceId)
   }
 

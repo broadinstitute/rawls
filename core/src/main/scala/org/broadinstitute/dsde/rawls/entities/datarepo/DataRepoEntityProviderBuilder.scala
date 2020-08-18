@@ -14,9 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, S
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport.TerraDataRepoSnapshotRequestFormat
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, TerraDataRepoSnapshotRequest}
-import spray.json._
+import org.broadinstitute.dsde.rawls.model.DataReferenceName
 
 import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
@@ -69,23 +67,23 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
     }
 
     // parse the raw reference value into a snapshot reference
-    val dataReference = Try(dataRef.getReference.parseJson.convertTo[TerraDataRepoSnapshotRequest]) match {
+    val dataReference = Try(dataRef.getReference) match {
       case Success(ref) => ref
       case Failure(err) => throw new DataEntityException(s"Could not parse reference value for $dataReferenceName: ${err.getMessage}", err)
     }
 
     // verify the instance matches our target instance
     // TODO: AS-321 is this the right place to validate this? We could add a "validateInstanceURL" method to the DAO itself, for instance
-    if (!dataReference.instanceName.equalsIgnoreCase(dataRepoDAO.getInstanceName)) {
-      logger.error(s"expected instance name ${dataRepoDAO.getInstanceName}, got ${dataReference.instanceName}")
+    if (!dataReference.getInstanceName.equalsIgnoreCase(dataRepoDAO.getInstanceName)) {
+      logger.error(s"expected instance name ${dataRepoDAO.getInstanceName}, got ${dataReference.getInstanceName}")
       throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected instance name value")
     }
 
     // verify snapshotId value is a UUID
-    Try(UUID.fromString(dataReference.snapshot)) match {
+    Try(UUID.fromString(dataReference.getSnapshot)) match {
       case Success(uuid) => uuid
       case Failure(ex) =>
-        logger.error(s"invalid UUID for snapshotId in reference: ${dataReference.snapshot}")
+        logger.error(s"invalid UUID for snapshotId in reference: ${dataReference.getSnapshot}")
         throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected snapshot value", ex)
     }
   }
