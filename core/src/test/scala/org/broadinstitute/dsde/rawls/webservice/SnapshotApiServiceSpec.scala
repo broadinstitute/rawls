@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, ReferenceTypeEnum}
+import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, NamedDataRepoSnapshot, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 class SnapshotApiServiceSpec extends ApiServiceSpec {
