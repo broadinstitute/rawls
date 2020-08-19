@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.test.api
 
-import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.UserPool
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
 import org.broadinstitute.dsde.workbench.service.{Rawls, Sam}
+import org.broadinstitute.dsde.workbench.service.test.AuthDomainMatcher
 import org.scalatest.{FreeSpec, Matchers}
 
 
