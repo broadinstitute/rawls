@@ -31,13 +31,13 @@ object DataReferenceModelJsonSupport {
     }
   }
 
+  // Only handling supported fields for now, resourceDescription and credentialId aren't used currently
   implicit object DataReferenceDescriptionFormat extends RootJsonFormat[DataReferenceDescription] {
     val REFERENCE_ID = "referenceId"
     val NAME = "name"
     val WORKSPACE_ID = "workspaceId"
     val REFERENCE_TYPE = "referenceType"
     val REFERENCE = "reference"
-    val CREDENTIAL_ID = "credentialId"
     val CLONING_INSTRUCTIONS = "cloningInstructions"
 
     def write(description: DataReferenceDescription) = JsObject(
@@ -46,27 +46,25 @@ object DataReferenceModelJsonSupport {
       WORKSPACE_ID -> JsString(description.getWorkspaceId.toString),
       REFERENCE_TYPE -> JsString(description.getReferenceType.toString),
       REFERENCE -> DataRepoSnapshotFormat.write(description.getReference),
-      CREDENTIAL_ID -> JsString(description.getCredentialId),
       CLONING_INSTRUCTIONS -> JsString(description.getCloningInstructions.toString)
     )
 
     def read(json: JsValue): DataReferenceDescription = {
-      json.asJsObject.getFields(REFERENCE_ID, NAME, WORKSPACE_ID, REFERENCE_TYPE, REFERENCE, CREDENTIAL_ID, CLONING_INSTRUCTIONS) match {
-        case Seq(JsString(referenceId), JsString(name), JsString(workspaceId), JsString(referenceType), JsObject(reference), JsString(credentialId), JsString(cloningInstructions)) =>
+      json.asJsObject.getFields(REFERENCE_ID, NAME, WORKSPACE_ID, REFERENCE_TYPE, REFERENCE, CLONING_INSTRUCTIONS) match {
+        case Seq(JsString(referenceId), JsString(name), JsString(workspaceId), JsString(referenceType), reference, JsString(cloningInstructions)) =>
           new DataReferenceDescription()
             .referenceId(UUID.fromString(referenceId))
             .name(name)
             .workspaceId(UUID.fromString(workspaceId))
             .referenceType(ReferenceTypeEnum.fromValue(referenceType))
-            .reference(DataRepoSnapshotFormat.read(reference.toJson))
-            .credentialId(credentialId)
+            .reference(DataRepoSnapshotFormat.read(reference))
             .cloningInstructions(CloningInstructionsEnum.fromValue(cloningInstructions))
         case _ => throw new DeserializationException("DataReferenceDescription expected")
       }
     }
   }
 
-  implicit object DataReferenceList extends RootJsonFormat[DataReferenceList] {
+  implicit object DataReferenceListFormat extends RootJsonFormat[DataReferenceList] {
     val RESOURCES = "resources"
 
     def write(refList: DataReferenceList) = JsObject(
