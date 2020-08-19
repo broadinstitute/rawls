@@ -66,11 +66,7 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
       throw new DataEntityException(s"Reference type value for $dataReferenceName is not of type ${ReferenceTypeEnum.DATA_REPO_SNAPSHOT.getValue}")
     }
 
-    // parse the raw reference value into a snapshot reference
-    val dataReference = Try(dataRef.getReference) match {
-      case Success(ref) => ref
-      case Failure(err) => throw new DataEntityException(s"Could not parse reference value for $dataReferenceName: ${err.getMessage}", err)
-    }
+    val dataReference = dataRef.getReference
 
     // verify the instance matches our target instance
     // TODO: AS-321 is this the right place to validate this? We could add a "validateInstanceURL" method to the DAO itself, for instance
