@@ -69,12 +69,12 @@ trait DataRepoEntityProviderSpecSupport {
                                workspaceId: UUID = wsId,
                                refInstanceName: String = dataRepoInstanceName,
                                refSnapshot: String = snapshot,
-                               refString: Option[DataRepoSnapshot] = None
+                               reference: Option[DataRepoSnapshot] = None
                               ): DataReferenceDescription = {
 
-    val dataRepoReference = refString match {
+    val dataRepoReference = reference match {
       case Some(s) => s
-      case None =>  new DataRepoSnapshot().instanceName(refInstanceName).snapshot(refSnapshot)
+      case None => new DataRepoSnapshot().instanceName(refInstanceName).snapshot(refSnapshot)
     }
 
     new DataReferenceDescription()
