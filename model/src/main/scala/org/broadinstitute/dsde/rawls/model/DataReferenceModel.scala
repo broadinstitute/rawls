@@ -5,28 +5,34 @@ import java.util.UUID
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
 import spray.json.DefaultJsonProtocol._
-import spray.json.{DeserializationException, JsArray, JsObject, JsString, JsValue, RootJsonFormat, enrichAny}
+import spray.json.{DeserializationException, JsArray, JsNull, JsObject, JsString, JsValue, RootJsonFormat, enrichAny}
 
 import scala.collection.JavaConverters._
 
 case class DataReferenceName(value: String) extends ValueObject
 case class NamedDataRepoSnapshot(name: DataReferenceName, snapshotId: String)
 
-object DataReferenceModelJsonSupport {
+object DataReferenceModelJsonSupport extends JsonSupport {
+  private def stringOrNull(in: Any): JsValue = in match {
+    case None => JsNull
+    case str: String => JsString(str)
+    case notStr => JsString(notStr.toString)
+  }
+
   implicit object DataRepoSnapshotFormat extends RootJsonFormat[DataRepoSnapshot] {
     val INSTANCE_NAME = "instanceName"
     val SNAPSHOT = "snapshot"
 
-    def write(snap: DataRepoSnapshot) = JsObject(
-      INSTANCE_NAME -> JsString(snap.getInstanceName),
-      SNAPSHOT -> JsString(snap.getSnapshot)
+    override def write(snap: DataRepoSnapshot) = JsObject(
+      INSTANCE_NAME -> stringOrNull(snap.getInstanceName),
+      SNAPSHOT -> stringOrNull(snap.getSnapshot)
     )
 
-    def read(json: JsValue) = {
+    override def read(json: JsValue) = {
       json.asJsObject.getFields(INSTANCE_NAME, SNAPSHOT) match {
         case Seq(JsString(instanceName), JsString(snapshot)) =>
           new DataRepoSnapshot().instanceName(instanceName).snapshot(snapshot)
-        case _ => throw new DeserializationException("DataRepoSnapshot expected")
+        case _ => throw DeserializationException("DataRepoSnapshot expected")
       }
     }
   }
@@ -40,26 +46,26 @@ object DataReferenceModelJsonSupport {
     val REFERENCE = "reference"
     val CLONING_INSTRUCTIONS = "cloningInstructions"
 
-    def write(description: DataReferenceDescription) = JsObject(
-      REFERENCE_ID -> JsString(description.getReferenceId.toString),
-      NAME -> JsString(description.getName),
-      WORKSPACE_ID -> JsString(description.getWorkspaceId.toString),
-      REFERENCE_TYPE -> JsString(description.getReferenceType.toString),
-      REFERENCE -> DataRepoSnapshotFormat.write(description.getReference),
-      CLONING_INSTRUCTIONS -> JsString(description.getCloningInstructions.toString)
+    override def write(description: DataReferenceDescription) = JsObject(
+      REFERENCE_ID -> stringOrNull(description.getReferenceId),
+      NAME -> stringOrNull(description.getName),
+      WORKSPACE_ID -> stringOrNull(description.getWorkspaceId),
+      REFERENCE_TYPE -> stringOrNull(description.getReferenceType),
+      REFERENCE -> description.getReference.toJson,
+      CLONING_INSTRUCTIONS -> stringOrNull(description.getCloningInstructions)
     )
 
-    def read(json: JsValue): DataReferenceDescription = {
+    override def read(json: JsValue): DataReferenceDescription = {
       json.asJsObject.getFields(REFERENCE_ID, NAME, WORKSPACE_ID, REFERENCE_TYPE, REFERENCE, CLONING_INSTRUCTIONS) match {
-        case Seq(JsString(referenceId), JsString(name), JsString(workspaceId), JsString(referenceType), reference, JsString(cloningInstructions)) =>
+        case Seq(referenceId, JsString(name), workspaceId, JsString(referenceType), reference, JsString(cloningInstructions)) =>
           new DataReferenceDescription()
-            .referenceId(UUID.fromString(referenceId))
+            .referenceId(referenceId.convertTo[UUID])
             .name(name)
-            .workspaceId(UUID.fromString(workspaceId))
+            .workspaceId(workspaceId.convertTo[UUID])
             .referenceType(ReferenceTypeEnum.fromValue(referenceType))
-            .reference(DataRepoSnapshotFormat.read(reference))
+            .reference(reference.convertTo[DataRepoSnapshot])
             .cloningInstructions(CloningInstructionsEnum.fromValue(cloningInstructions))
-        case _ => throw new DeserializationException("DataReferenceDescription expected")
+        case _ => throw DeserializationException("DataReferenceDescription expected")
       }
     }
   }
@@ -67,15 +73,15 @@ object DataReferenceModelJsonSupport {
   implicit object DataReferenceListFormat extends RootJsonFormat[DataReferenceList] {
     val RESOURCES = "resources"
 
-    def write(refList: DataReferenceList) = JsObject(
-      RESOURCES -> refList.getResources.asScala.toList.map(DataReferenceDescriptionFormat.write).toJson
+    override def write(refList: DataReferenceList) = JsObject(
+      RESOURCES -> refList.getResources.asScala.toList.toJson
     )
 
-    def read(json: JsValue): DataReferenceList = {
+    override def read(json: JsValue): DataReferenceList = {
       json.asJsObject.getFields(RESOURCES) match {
         case Seq(JsArray(resources)) =>
-          new DataReferenceList().resources(resources.map(DataReferenceDescriptionFormat.read).asJava)
-        case _ => throw new DeserializationException("DataReferenceList expected")
+          new DataReferenceList().resources(resources.map(_.convertTo[DataReferenceDescription]).asJava)
+        case _ => throw DeserializationException("DataReferenceList expected")
       }
     }
   }
