@@ -29,24 +29,21 @@ class DataReferenceModelSpec extends FreeSpec with Matchers {
 
     "JSON logic" - {
 
-      "Serialization" - {
-
-        "DataReferenceDescriptionList, which contains DataReferenceDescription, which contains DataRepoSnapshot" in {
-          val referenceId = UUID.randomUUID()
-          val workspaceId = UUID.randomUUID()
-          assertResult {
-            s"""{"resources":[{"referenceId": "$referenceId","name":"test-ref","workspaceId":"$workspaceId","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"cloningInstructions":"$NOTHING"}]}""".parseJson
-          } {
-            new DataReferenceList().resources(ArrayBuffer(
-              new DataReferenceDescription()
-                .referenceId(referenceId)
-                .name("test-ref")
-                .workspaceId(workspaceId)
-                .referenceType(DATA_REPO_SNAPSHOT)
-                .reference(new DataRepoSnapshot().instanceName("test-instance").snapshot("test-snapshot"))
-                .cloningInstructions(NOTHING)
-            ).asJava).toJson
-          }
+      "DataReferenceDescriptionList, which contains DataReferenceDescription, which contains DataRepoSnapshot" in {
+        val referenceId = UUID.randomUUID()
+        val workspaceId = UUID.randomUUID()
+        assertResult {
+          s"""{"resources":[{"referenceId": "$referenceId","name":"test-ref","workspaceId":"$workspaceId","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"cloningInstructions":"$NOTHING"}]}""".parseJson
+        } {
+          new DataReferenceList().resources(ArrayBuffer(
+            new DataReferenceDescription()
+              .referenceId(referenceId)
+              .name("test-ref")
+              .workspaceId(workspaceId)
+              .referenceType(DATA_REPO_SNAPSHOT)
+              .reference(new DataRepoSnapshot().instanceName("test-instance").snapshot("test-snapshot"))
+              .cloningInstructions(NOTHING)
+          ).asJava).toJson
         }
       }
 
