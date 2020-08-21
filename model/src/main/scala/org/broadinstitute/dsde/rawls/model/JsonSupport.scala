@@ -208,8 +208,8 @@ class JsonSupport {
     override def write(uuid: UUID) = JsString(uuid.toString)
     override def read(json: JsValue): UUID = json match {
       case JsString(str) =>
-        Try(UUID.fromString(str)).fold[UUID](t => throw DeserializationException(s"Couldn't parse $str into a UUID: ${t.toString}"), identity)
-      case x => throw DeserializationException(s"UUID can only be parsed from a string, got $x")
+        Try(UUID.fromString(str)).getOrElse(throw DeserializationException(s"Couldn't parse ${str.take(8)}... into a UUID"))
+      case x => throw DeserializationException(s"UUID can only be parsed from a string, got ${x.getClass.getName}")
     }
   }
 }

@@ -13,10 +13,10 @@ case class DataReferenceName(value: String) extends ValueObject
 case class NamedDataRepoSnapshot(name: DataReferenceName, snapshotId: String)
 
 object DataReferenceModelJsonSupport extends JsonSupport {
-  private def stringOrNull(in: Any): JsValue = in match {
+  def stringOrNull(in: Any): JsValue = Option(in) match {
     case None => JsNull
-    case str: String => JsString(str)
-    case notStr => JsString(notStr.toString)
+    case Some(str: String) => JsString(str)
+    case Some(notStr) => JsString(notStr.toString)
   }
 
   implicit object DataRepoSnapshotFormat extends RootJsonFormat[DataRepoSnapshot] {
