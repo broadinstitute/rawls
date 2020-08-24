@@ -1,9 +1,13 @@
 package org.broadinstitute.dsde.rawls.model
 
+import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.RawlsException
-import spray.json._
 import org.joda.time.DateTime
 import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
+import spray.json._
+
+import scala.util.Try
 
 //Mix in one of these with your AttributeFormat so you can serialize lists
 //This also needs mixing in with an AttributeFormat because they're symbiotic
@@ -197,6 +201,15 @@ class JsonSupport {
         case JsString(name) => construct(name)
         case x => throw new DeserializationException("invalid value: " + x)
       }
+    }
+  }
+
+  implicit object UUIDFormat extends JsonFormat[UUID] {
+    override def write(uuid: UUID) = JsString(uuid.toString)
+    override def read(json: JsValue): UUID = json match {
+      case JsString(str) =>
+        Try(UUID.fromString(str)).getOrElse(throw DeserializationException(s"Couldn't parse ${str.take(8)}... into a UUID"))
+      case x => throw DeserializationException(s"UUID can only be parsed from a string, got ${x.getClass.getName}")
     }
   }
 }

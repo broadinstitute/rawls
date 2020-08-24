@@ -4,8 +4,7 @@ import java.util.UUID
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, SnapshotModel, TableModel}
-import bio.terra.workspace.model.DataReferenceDescription
-import bio.terra.workspace.model.{CloningInstructionsEnum, ReferenceTypeEnum}
+import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataRepoSnapshot, ReferenceTypeEnum}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
@@ -13,7 +12,6 @@ import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, RawlsUserEmail, UserInfo, Workspace}
 import org.joda.time.DateTime
-import spray.json.{JsObject, JsString}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -71,12 +69,12 @@ trait DataRepoEntityProviderSpecSupport {
                                workspaceId: UUID = wsId,
                                refInstanceName: String = dataRepoInstanceName,
                                refSnapshot: String = snapshot,
-                               refString: Option[String] = None
+                               reference: Option[DataRepoSnapshot] = None
                               ): DataReferenceDescription = {
 
-    val dataRepoReference = refString match {
+    val dataRepoReference = reference match {
       case Some(s) => s
-      case None =>  JsObject.apply(("instanceName", JsString(refInstanceName)), ("snapshot", JsString(refSnapshot))).compactPrint
+      case None => new DataRepoSnapshot().instanceName(refInstanceName).snapshot(refSnapshot)
     }
 
     new DataReferenceDescription()
