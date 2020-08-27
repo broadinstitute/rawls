@@ -318,6 +318,51 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     )
   }
 
+  it should "handle case when there are no root table lookup expressions" in {
+    val joinColumnName = "donor_id"
+    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+      .columns(List("string-field", joinColumnName, "datarepo_row_id").map(new ColumnModel().name(_)).asJava)
+
+    val dependentTable = new TableModel().name("sample").primaryKey(null).rowCount(0)
+      .columns(List("another-string-field", joinColumnName, "datarepo_row_id").map(new ColumnModel().name(_)).asJava)
+
+    val relationshipName = "my_donor"
+    val relationship = new RelationshipModel()
+      .from(new RelationshipTermModel().table(dependentTable.getName).column(joinColumnName))
+      .to(new RelationshipTermModel().table(rootTable.getName).column(joinColumnName))
+      .name(relationshipName)
+
+    val testTables = List(rootTable, dependentTable)
+
+    val snapshotModel = createSnapshotModel(testTables, List(relationship))
+    val provider = createTestProvider(snapshotModel)
+
+    val rootTableName = rootTable.getName
+    val dependentTableName = dependentTable.getName
+    val dependentColumns = dependentTable.getColumns.asScala.map(_.getName).sorted
+
+    val parsedExpressions = dependentColumns.map { columnName =>
+      ParsedEntityLookupExpression(List(relationshipName), columnName, s"this.$relationshipName.$columnName")
+    }
+
+    val rootEntityTable = EntityTable(snapshotModel, rootTableName, "root")
+    val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, "entity_1")
+
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions.toSet, datarepoRowIdColumn)
+    result should contain theSameElementsInOrderAs Seq(
+      SelectAndFrom(rootEntityTable, None, Seq(EntityColumn(rootEntityTable, datarepoRowIdColumn, false))),
+      SelectAndFrom(rootEntityTable,
+        scala.Option(EntityJoin(
+          EntityColumn(rootEntityTable, joinColumnName, false),
+          EntityColumn(dependentEntityTable, joinColumnName, false),
+          Seq(relationshipName),
+          "rel_2",
+          false
+        )),
+        dependentColumns.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
+    )
+  }
+
   it should "handle relationship in the other direction" in {
     val joinColumnName = "donor_id"
     val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
