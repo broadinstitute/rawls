@@ -495,7 +495,7 @@ trait DataRepoBigQuerySupport {
     }
 
     // ordering is important here because it determines the order in which the joins are added in the final SQL
-    groupAndOrderByRelationshipHead(parsedExpressions).flatMap {
+    val selectAndFroms = groupAndOrderByRelationshipHead(parsedExpressions).flatMap {
       case (None, baseTableExpressions) =>
         val entityColumns = baseTableExpressions.map(expr => EntityColumn(snapshotModel, fromTable, expr.columnName)) +
           EntityColumn(fromTable, entityNameColumn, false)
@@ -539,6 +539,16 @@ trait DataRepoBigQuerySupport {
         // sort columns by name for consistency in tests
         Seq(SelectAndFrom(fromTable, scala.Option(entityJoin), columns.toSeq.sortBy(_.column))) ++
           figureOutQueryStructureForExpressions(snapshotModel, entityJoin.to.table, continueRecursing, entityNameColumn, currentRelationshipPath)
+    }
+
+    if (traversedRelationships.isEmpty && selectAndFroms.headOption.exists(_.join.isDefined)) {
+      // traversedRelationships is empty so this is the end of the top level recursive call
+      // the head of selectAndFroms has a join which means there is no expression that requires the root table
+      // however it is required that the first SelectAndFrom be from the root table so prepend one
+      // selecting just the datarepoRowIdColumn
+      SelectAndFrom(fromTable, None, Seq(EntityColumn(fromTable, datarepoRowIdColumn, false))) +: selectAndFroms
+    } else {
+      selectAndFroms
     }
   }
 
