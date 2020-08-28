@@ -535,11 +535,11 @@ trait DataRepoBigQuerySupport {
     }
 
     if (traversedRelationships.isEmpty && (selectAndFroms.isEmpty || selectAndFroms.headOption.exists(_.join.isDefined))) {
-      // traversedRelationships is empty so this is the end of the top level recursive call
+      // traversedRelationships is empty so this is the end of the top level recursive call.
       // selectAndFroms is empty OR
-      // the head of selectAndFroms has a join which means there is no expression that requires the root table
-      // However it is required that there is at least 1 SelectAndFrom and the first be from the root table
-      // so prepend one selecting just the entityNameColumn
+      // the head of selectAndFroms has a join which means there is no expression that selects from the root table.
+      // However the query structure requires that there is at least 1 SelectAndFrom and the first be from the root table
+      // so prepend one selecting just the entityNameColumn.
       SelectAndFrom(fromTable, None, Seq(EntityColumn(fromTable, entityNameColumn, false))) +: selectAndFroms
     } else {
       selectAndFroms
