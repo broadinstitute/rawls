@@ -324,15 +324,8 @@ trait DataRepoBigQuerySupport {
     */
   protected[datarepo] def queryConfigForExpressions(snapshotModel: SnapshotModel, parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel, entityNameColumn: String): (Seq[SelectAndFrom], QueryJobConfiguration.Builder) = {
     val rootEntityTable = EntityTable(snapshotModel, tableModel.getName, nextAlias("root"))
-    val selectAndFroms = if (parsedExpressions.isEmpty) {
-      // there is an edge case where there are no entity lookup expressions, namely all the inputs are either
-      // literals or workspace lookup expressions. In this case we just query for the id column so we end up
-      // getting 1 row per entity and still run 1 workflow per entity
-      val idColumn = EntityColumn(rootEntityTable, entityNameColumn, false)
-      Seq(SelectAndFrom(rootEntityTable, None, Seq(idColumn)))
-    } else {
-      figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, entityNameColumn)
-    }
+
+    val selectAndFroms = figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, entityNameColumn)
 
     val query: String = generateExpressionSQL(selectAndFroms)
 
@@ -495,7 +488,7 @@ trait DataRepoBigQuerySupport {
     }
 
     // ordering is important here because it determines the order in which the joins are added in the final SQL
-    groupAndOrderByRelationshipHead(parsedExpressions).flatMap {
+    val selectAndFroms = groupAndOrderByRelationshipHead(parsedExpressions).flatMap {
       case (None, baseTableExpressions) =>
         val entityColumns = baseTableExpressions.map(expr => EntityColumn(snapshotModel, fromTable, expr.columnName)) +
           EntityColumn(fromTable, entityNameColumn, false)
@@ -539,6 +532,17 @@ trait DataRepoBigQuerySupport {
         // sort columns by name for consistency in tests
         Seq(SelectAndFrom(fromTable, scala.Option(entityJoin), columns.toSeq.sortBy(_.column))) ++
           figureOutQueryStructureForExpressions(snapshotModel, entityJoin.to.table, continueRecursing, entityNameColumn, currentRelationshipPath)
+    }
+
+    if (traversedRelationships.isEmpty && (selectAndFroms.isEmpty || selectAndFroms.headOption.exists(_.join.isDefined))) {
+      // traversedRelationships is empty so this is the end of the top level recursive call.
+      // selectAndFroms is empty OR
+      // the head of selectAndFroms has a join which means there is no expression that selects from the root table.
+      // However the query structure requires that there is at least 1 SelectAndFrom and the first be from the root table
+      // so prepend one selecting just the entityNameColumn.
+      SelectAndFrom(fromTable, None, Seq(EntityColumn(fromTable, entityNameColumn, false))) +: selectAndFroms
+    } else {
+      selectAndFroms
     }
   }
 
