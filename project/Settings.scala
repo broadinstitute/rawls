@@ -58,7 +58,7 @@ object Settings {
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
     organization  := "org.broadinstitute.dsde",
     scalaVersion  := "2.12.10",
-    resolvers := (proxyResolvers ++ resolvers.value) ++= commonResolvers,
+    resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
     scalacOptions ++= commonCompilerSettings
   )
 
