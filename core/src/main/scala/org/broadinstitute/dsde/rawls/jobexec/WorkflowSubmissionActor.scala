@@ -8,6 +8,7 @@ import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.martha.DosResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -257,7 +258,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       val collected = emails.collect {
         case Some(email) => email
       }
-      logger.debug(s"resolveDosUriServiceAccounts found ${collected.size} emails for ${dosUris.size} DOS URIs")
+      logger.debug(s"resolveDosUriServiceAccounts found ${collected.size} emails for ${dosUris.size} DOS URIs") //
       collected
     }
   }
@@ -355,6 +356,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
       dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris, petUserInfo)
+      // For Jade, HCA, anyone who doesn't use Bond, we won't get an SA back and the following line is a no-op
+      // We still call Martha for those because we can verify the user has permission on the DRS object as
+      // early as possible, rather than letting the workflow launch and fail
+      // AEN 2020-09-08 [WA-325]
       _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("serviceAccount:"+_)))
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), Option(wfLabels), wfCollection, petUserInfo)
