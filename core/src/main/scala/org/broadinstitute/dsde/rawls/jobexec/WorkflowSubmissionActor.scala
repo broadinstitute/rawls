@@ -8,6 +8,7 @@ import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.martha.DosResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -29,7 +30,7 @@ object WorkflowSubmissionActor {
             methodRepoDAO: MethodRepoDAO,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
-            dosResolver: DosResolver,
+            dosResolver: DosResolver, //
             executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             credential: Credential,
@@ -63,7 +64,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              val dosResolver: DosResolver,
+                              val dosResolver: DosResolver, //
                               val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val credential: Credential,

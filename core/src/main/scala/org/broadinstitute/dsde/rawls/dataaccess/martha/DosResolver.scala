@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.dataaccess.martha
 
 import org.broadinstitute.dsde.rawls.model.UserInfo
 
