@@ -22,6 +22,9 @@ class MarthaDosResolver(marthaUrl: String)(implicit val system: ActorSystem, val
     import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
     import spray.json.DefaultJsonProtocol._
 
+    // TODO: when this goes to code review, make sure that logging these fields is OK with compliance
+    logger.info(s"Calling $marthaUrl to look up $dos on behalf of user ${userInfo.userEmail.value}")
+
     val content = Map("url" -> dos)
     val marthaResponse: Future[MarthaMinimalResponse] = Marshal(content).to[RequestEntity] flatMap { entity =>
       retry[MarthaMinimalResponse](when500) { () =>

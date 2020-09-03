@@ -356,6 +356,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
       dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris, petUserInfo)
+      // For Jade we won't get an SA back – does that mean we don't need to do this?
+      // What role does Martha play in Rawls <> Jade? Adam is confused 2020-09-03
+      // https://github.com/broadinstitute/cromwell/blob/53/centaur/src/main/resources/standardTestCases/drs_tests/drs_usa_jdr.inputs#L2
+      // Saloni does not understand why we need to add the SA to the project for RP either for Jade or the normal case (could have to do with HCA?) 2020-09-03
       _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("serviceAccount:"+_)))
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), Option(wfLabels), wfCollection, petUserInfo)
