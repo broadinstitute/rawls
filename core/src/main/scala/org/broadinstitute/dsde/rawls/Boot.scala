@@ -20,7 +20,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.config.{WDLParserConfig, _}
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.martha.{MarthaDosResolver, MarthaV3DrsResolver}
+import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaDosResolver
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
@@ -263,12 +263,14 @@ object Boot extends IOApp with LazyLogging {
         pubSubDAO,
         gcsConfig.getString("notifications.topicName")
       )
+
       val marthaConfig = conf.getConfig("martha")
-      val marthaVersion = marthaConfig.getInt("version")
+      val marthaVersion: Int = marthaConfig.getInt("version")
       val dosResolver = marthaVersion match {
-        case 2 => new MarthaDosResolver(marthaConfig.getString("baseUrl_v2")) //
-        case 3 => new MarthaV3DrsResolver(marthaConfig.getString("baseUrl_v3"))
+        case 2 => new MarthaDosResolver(marthaConfig.getString("baseUrl_v2"))
+        case 3 => new MarthaDosResolver(marthaConfig.getString("url_v3"))
       }
+
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
           slickDataSource,
