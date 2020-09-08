@@ -11,24 +11,6 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
-
-object MarthaDosResolver {
-  // Adapted from https://github.com/broadinstitute/martha/blob/dev/martha/martha_v3.js#L121
-  val jdrHostPattern = "jade.*\\.datarepo-.*\\.broadinstitute\\.org"
-
-  def isJDRDomain(dos: String): Boolean = {
-    import com.netaporter.uri.Uri.parse
-
-    val maybeMatch = for {
-      uri <- Try(parse(dos)).toOption
-      host <- uri.host
-    } yield host.matches(jdrHostPattern)
-
-    // If for some reason we can't analyze the URI, we assume it's not safe to ignore
-    maybeMatch getOrElse false
-  }
-}
 
 class MarthaDosResolver(marthaUrl: String, excludeJDRDomain: Boolean)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DosResolver with DsdeHttpDAO with Retry {
   import MarthaJsonSupport._
@@ -62,7 +44,7 @@ class MarthaDosResolver(marthaUrl: String, excludeJDRDomain: Boolean)(implicit v
   }
 
   override def dosServiceAccountEmail(dos: String, userInfo: UserInfo): Future[Option[String]] = {
-    if (excludeJDRDomain && MarthaDosResolver.isJDRDomain(dos)) {
+    if (excludeJDRDomain && MarthaUtils.isJDRDomain(dos)) {
       // Temporarily decline to look up TDR DRS objects in Martha because no SA is returned (no-op in Rawls)
       Future.successful(None)
     } else {

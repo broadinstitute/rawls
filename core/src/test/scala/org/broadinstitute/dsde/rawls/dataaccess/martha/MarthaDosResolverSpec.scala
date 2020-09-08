@@ -23,23 +23,23 @@ class MarthaDosResolverSpec extends FlatSpecLike with Matchers with BeforeAndAft
   behavior of "Martha DOS resolver"
 
   it should "return true for correct DEV JDR uri in isJDRDomain()" in {
-    MarthaDosResolver.isJDRDomain("drs://jade.datarepo-dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4") shouldBe true
+    MarthaUtils.isJDRDomain("drs://jade.datarepo-dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4") shouldBe true
   }
 
   it should "return false for look alike JDR uri in isJDRDomain()" in {
-    MarthaDosResolver.isJDRDomain("drs://jade-datarepo.dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4") shouldBe false
+    MarthaUtils.isJDRDomain("drs://jade-datarepo.dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4") shouldBe false
   }
 
   it should "return true for correct PROD JDR uri in isJDRDomain()" in {
-    MarthaDosResolver.isJDRDomain("drs://jade-terra.datarepo-prod.broadinstitute.org/v1_anything") shouldBe true
+    MarthaUtils.isJDRDomain("drs://jade-terra.datarepo-prod.broadinstitute.org/v1_anything") shouldBe true
   }
 
   it should "return false for non-JDR uri in isJDRDomain()" in {
-    MarthaDosResolver.isJDRDomain("drs://dg.712C/fa640b0e-9779-452f-99a6-16d833d15bd0") shouldBe false
+    MarthaUtils.isJDRDomain("drs://dg.712C/fa640b0e-9779-452f-99a6-16d833d15bd0") shouldBe false
   }
 
   it should "not explode on URI parse fail" in {
-    MarthaDosResolver.isJDRDomain("zardoz") shouldBe false
+    MarthaUtils.isJDRDomain("zardoz") shouldBe false
   }
 
   it should "not contact Martha for JDR uri" in {

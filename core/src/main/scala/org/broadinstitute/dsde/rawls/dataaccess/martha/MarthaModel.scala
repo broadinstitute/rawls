@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.martha
 
+import scala.util.Try
+
 // Both Martha v2 and v3 return a JSON that includes `googleServiceAccount` as a top-level key
 // The rest of the response in both versions is currently unused
 case class MarthaMinimalResponse(googleServiceAccount: Option[ServiceAccountPayload])
@@ -12,6 +14,23 @@ object MarthaJsonSupport {
   implicit val ServiceAccountEmailFormat = jsonFormat1(ServiceAccountEmail)
   implicit val MarthaV2ResponseDataFormat = jsonFormat1(ServiceAccountPayload)
   implicit val MarthaV2ResponseFormat = jsonFormat1(MarthaMinimalResponse)
+}
+
+object MarthaUtils {
+  // Adapted from https://github.com/broadinstitute/martha/blob/dev/martha/martha_v3.js#L121
+  val jdrHostPattern = "jade.*\\.datarepo-.*\\.broadinstitute\\.org"
+
+  def isJDRDomain(dos: String): Boolean = {
+    import com.netaporter.uri.Uri.parse
+
+    val maybeMatch = for {
+      uri <- Try(parse(dos)).toOption
+      host <- uri.host
+    } yield host.matches(jdrHostPattern)
+
+    // If for some reason we can't analyze the URI, we assume it's not safe to ignore
+    maybeMatch getOrElse false
+  }
 }
 
 /*
