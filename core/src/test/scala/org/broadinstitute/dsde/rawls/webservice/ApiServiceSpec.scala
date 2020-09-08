@@ -35,6 +35,7 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaDosResolver
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
@@ -144,7 +145,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
-    val dosResolver = new MarthaDosResolver(mockServer.mockServerBaseUrl)
+    val dosResolver = new MarthaDosResolver(mockServer.mockServerBaseUrl, excludeJDRDomain = false)
 
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
