@@ -7,8 +7,9 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
-import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class MarthaDosResolverSpec extends FlatSpecLike with Matchers with BeforeAndAfterAll {
 
@@ -48,7 +49,7 @@ class MarthaDosResolverSpec extends FlatSpecLike with Matchers with BeforeAndAft
     )
 
     assertResult(None) {
-      Await.result(actualResultFuture, Duration.Inf)
+      Await.result(actualResultFuture, 1 minute)
     }
   }
 
@@ -59,7 +60,7 @@ class MarthaDosResolverSpec extends FlatSpecLike with Matchers with BeforeAndAft
     )
 
     assertResult(Option("mr_bean@gmail.com")) {
-      Await.result(actualResultFuture, Duration.Inf)
+      Await.result(actualResultFuture, 1 minute)
     }
   }
 }

@@ -19,20 +19,14 @@ object MarthaDosResolver {
 
   def isJDRDomain(dos: String): Boolean = {
     import com.netaporter.uri.Uri.parse
-    val maybeUri = Try(parse(dos)).toOption
 
-    maybeUri match {
-      case Some(uri) =>
-        uri.host match {
-          case Some(host) => host.matches(jdrHostPattern)
-          case None =>
-            // If for some reason we can't analyze the URI, we assume it's not safe to ignore
-            false
-        }
-      case None =>
-        // If for some reason we can't analyze the URI, we assume it's not safe to ignore
-        false
-    }
+    val maybeMatch = for {
+      uri <- Try(parse(dos)).toOption
+      host <- uri.host
+    } yield host.matches(jdrHostPattern)
+
+    // If for some reason we can't analyze the URI, we assume it's not safe to ignore
+    maybeMatch getOrElse false
   }
 }
 
