@@ -436,7 +436,7 @@ object Boot extends IOApp with LazyLogging {
           importServiceDAO,
           appDependencies.googleStorageService,
           methodRepoDAO,
-          dosResolver, //
+          dosResolver,
           entityServiceConstructor,
           shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,

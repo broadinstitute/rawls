@@ -30,7 +30,7 @@ object WorkflowSubmissionActor {
             methodRepoDAO: MethodRepoDAO,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
-            dosResolver: DosResolver, //
+            dosResolver: DosResolver,
             executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             credential: Credential,
@@ -64,7 +64,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              val dosResolver: DosResolver, //
+                              val dosResolver: DosResolver,
                               val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val credential: Credential,
@@ -258,7 +258,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       val collected = emails.collect {
         case Some(email) => email
       }
-      logger.debug(s"resolveDosUriServiceAccounts found ${collected.size} emails for ${dosUris.size} DOS URIs")
+      logger.debug(s"resolveDosUriServiceAccounts found ${collected.size} emails for ${dosUris.size} DOS URIs") //
       collected
     }
   }
@@ -356,10 +356,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
       dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris, petUserInfo)
-      // For Jade we won't get an SA back – does that mean we don't need to do this?
-      // What role does Martha play in Rawls <> Jade? Adam is confused 2020-09-03
-      // https://github.com/broadinstitute/cromwell/blob/53/centaur/src/main/resources/standardTestCases/drs_tests/drs_usa_jdr.inputs#L2
-      // Saloni does not understand why we need to add the SA to the project for RP either for Jade or the normal case (could have to do with HCA?) 2020-09-03
+      // For Jade, HCA, anyone who doesn't use Bond, we won't get an SA back and the following line is a no-op
+      // We still call Martha for those because we can verify the user has permission on the DRS object as
+      // early as possible, rather than letting the workflow launch and fail
+      // AEN 2020-09-08 [WA-325]
       _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("serviceAccount:"+_)))
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), Option(wfLabels), wfCollection, petUserInfo)

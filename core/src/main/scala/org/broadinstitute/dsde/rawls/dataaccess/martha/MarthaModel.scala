@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.martha
 
-case class ServiceAccountEmail(client_email: String)
+// Both Martha v2 and v3 return a JSON that includes `googleServiceAccount` as a top-level key
+// The rest of the response in both versions is currently unused
+case class MarthaMinimalResponse(googleServiceAccount: Option[ServiceAccountPayload])
 case class ServiceAccountPayload(data: Option[ServiceAccountEmail])
-case class MarthaMinimalResponse(googleServiceAccount: Option[ServiceAccountPayload]) // Both Martha v2 and v3 return a JSON that includes `googleServiceAccount` as a top-level key
+case class ServiceAccountEmail(client_email: String)
 
 object MarthaJsonSupport {
   import spray.json.DefaultJsonProtocol._

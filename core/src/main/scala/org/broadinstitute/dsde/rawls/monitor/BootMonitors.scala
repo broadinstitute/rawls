@@ -37,7 +37,7 @@ object BootMonitors extends LazyLogging {
                    importServiceDAO: HttpImportServiceDAO,
                    googleStorage: GoogleStorageService[IO],
                    methodRepoDAO: MethodRepoDAO,
-                   dosResolver: DosResolver, //
+                   dosResolver: DosResolver,
                    entityService: (org.broadinstitute.dsde.rawls.model.UserInfo) => EntityService,
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
                    maxActiveWorkflowsTotal: Int,
@@ -149,7 +149,7 @@ object BootMonitors extends LazyLogging {
                                             gcsDAO: GoogleServicesDAO,
                                             samDAO: SamDAO,
                                             methodRepoDAO: MethodRepoDAO,
-                                            dosResolver: DosResolver, //
+                                            dosResolver: DosResolver,
                                             shardedExecutionServiceCluster: ExecutionServiceCluster,
                                             maxActiveWorkflowsTotal: Int,
                                             maxActiveWorkflowsPerUser: Int,
@@ -165,7 +165,7 @@ object BootMonitors extends LazyLogging {
         methodRepoDAO,
         gcsDAO,
         samDAO,
-        dosResolver, //
+        dosResolver,
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO.getBucketServiceAccountCredential,
