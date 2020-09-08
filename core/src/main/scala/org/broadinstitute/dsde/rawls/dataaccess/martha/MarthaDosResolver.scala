@@ -33,11 +33,16 @@ class MarthaDosResolver(marthaUrl: String)(implicit val system: ActorSystem, val
     }
 
     marthaResponse.map { resp =>
-      //FIXME: investigate changing the Martha response formats to not contain Option, since Martha should always return an email if provided a bearer token
-      val saEmail = resp.googleServiceAccount.flatMap(_.data.map(_.client_email))
-      if(saEmail.isEmpty) {
-        logger.warn(s"MarthaDosResolver.dosServiceAccountEmail returned no SA for dos URL $dos")
+      // The email field must remain an `Option` because DRS servers that do not use Bond (HCA, JDR) do not return a service account
+      // AEN 2020-09-08 [WA-325]
+      val saEmail: Option[String] = resp.googleServiceAccount.flatMap(_.data.map(_.client_email))
+
+      if (saEmail.isEmpty) {
+        logger.info(s"MarthaDosResolver.dosServiceAccountEmail returned no SA for dos URL $dos")
+      } else {
+        logger.info(s"MarthaDosResolver.dosServiceAccountEmail success, retrieved SA ${saEmail.getOrElse("Programmer error")} for object $dos on behalf of user ${userInfo.userEmail.value}")
       }
+
       saEmail
     }
   }
