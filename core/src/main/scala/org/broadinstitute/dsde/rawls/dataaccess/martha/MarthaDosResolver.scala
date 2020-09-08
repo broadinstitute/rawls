@@ -14,6 +14,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 object MarthaDosResolver {
+  // Adapted from https://github.com/broadinstitute/martha/blob/dev/martha/martha_v3.js#L121
   val jdrHostPattern = "jade.*\\.datarepo-.*\\.broadinstitute\\.org"
 
   def isJDRDomain(dos: String): Boolean = {
