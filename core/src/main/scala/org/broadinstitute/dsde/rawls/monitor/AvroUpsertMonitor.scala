@@ -263,7 +263,10 @@ class AvroUpsertMonitorActor(
     logger.info(s"asking to change import job $importId from $currentImportStatus to $newImportStatus ${errorMessage.getOrElse("")}")
     val updateImportStatus = UpdateImportStatus(importId.toString, newImportStatus.toString, currentImportStatus.map(_.toString), errorMessage)
     val attributes: Map[String, String] = updateImportStatus.toJson.asJsObject.fields.collect {
-      case (attName:String, attValue:JsString) => (attName, attValue.value)
+      case (attName:String, attValue:JsString) =>
+        // pubsub message attribute value limit is 1024 bytes, we'll use 1000 here to be safe
+        val usableValue = if (attValue.value.length < 1000) attValue.value else attValue.value.take(1000) + " ..."
+        (attName, usableValue)
     }
     importServicePubSubDAO.publishMessages(importStatusPubSubTopic, Seq(GooglePubSubDAO.MessageRequest("", attributes)))
   }
