@@ -403,9 +403,7 @@ trait EntityComponent {
             (entityType, EntityTypeMetadata(
               typesAndCounts.getOrElse(entityType, 0),
               entityType + Attributable.entityIdAttributeSuffix,
-              typesAndAttrs.getOrElse(entityType, Seq()).map {
-                case (ns:String, n:String) => AttributeName.toDelimitedName(AttributeName(ns, n))
-              } ))
+              typesAndAttrs.getOrElse(entityType, Seq()).map (AttributeName.toDelimitedName)))
           } toMap
         }
       }
@@ -420,7 +418,7 @@ trait EntityComponent {
     }
 
     // returns: Map[entityType, Seq[(attributeNamespace, attributeName)]]
-    private[slick] def getAttrNamesAndEntityTypes(workspaceContext: Workspace): ReadAction[Map[String, Seq[(String, String)]]] = {
+    private[slick] def getAttrNamesAndEntityTypes(workspaceContext: Workspace): ReadAction[Map[String, Seq[AttributeName]]] = {
       val typesAndAttrNames = for {
         entityRec <- findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID)
         attrib <- findActiveAttributesByEntityId(entityRec.id)
@@ -429,7 +427,9 @@ trait EntityComponent {
       }
 
       typesAndAttrNames.distinct.result map { result =>
-        CollectionUtils.groupByTuples(result)
+        CollectionUtils.groupByTuples (result.map {
+          case (entityType:String, (ns:String, n:String)) => (entityType, AttributeName(ns, n))
+        })
       }
     }
 

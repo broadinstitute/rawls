@@ -324,10 +324,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
         //...and handle that the values are all correct here.
-        testTypesAndAttrNames(eType).foreach { namespaceNamePair =>
-          namespaceNamePair._1 shouldBe "default"
+        testTypesAndAttrNames(eType).foreach { attrName =>
+          attrName.namespace shouldBe "default"
         }
-        assertSameElements(testTypesAndAttrNames(eType).map(x => x._2), attrNames)
+        assertSameElements(testTypesAndAttrNames(eType).map(_.name), attrNames)
       }
     }
   }
