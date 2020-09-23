@@ -406,6 +406,7 @@ trait WorkspaceComponent {
 
     def listWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[Workspace]] = {
       loadWorkspaces(workspaceIds, workspaceQuery). map { workspaceAndAttributesRecords =>
+        val wsAttRec = workspaceAndAttributesRecords
         val allWorkspaceRecords = workspaceAndAttributesRecords.map(_.workspaceRecord).distinct
 
         val workspacesWithAttributes = workspaceAndAttributesRecords.collect {
@@ -427,7 +428,7 @@ trait WorkspaceComponent {
         concatSqlActions(sql" AND s.STATUS in ", statusSql)
       }.getOrElse(sql" ")
 
-      val workspaceFilter = concatSqlActions(sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql"${id}"} ), sql")")
+      val workspaceFilter = concatSqlActions(sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql"${id.toString}"} ), sql")")
 
 
       val workspaceNamespaceFilter = workspaceQuery.billingProject.map { namespace =>
