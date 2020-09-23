@@ -120,7 +120,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
   def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
-  def ListWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span) = listWorkspaces(params, parentSpan)
+  def ListWorkspaces(params: WorkspaceFieldSpecs, workspaceQuery: WorkspaceQuery, parentSpan: Span) = listWorkspaces(params, workspaceQuery, parentSpan)
   def ListAllWorkspaces = listAllWorkspaces()
   def GetTags(query: Option[String]) = getTags(query)
   def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
@@ -479,7 +479,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span): Future[PerRequestMessage] = {
+  def listWorkspaces(params: WorkspaceFieldSpecs, workspaceQuery: WorkspaceQuery, parentSpan: Span): Future[PerRequestMessage] = {
 
     val s = startSpanWithParent("optionHandling", parentSpan)
 
@@ -524,8 +524,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         val query = for {
           submissionSummaryStats <- traceDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
-          workspaces <- traceDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs)))
+          workspaces <- traceDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, workspaceQuery))
         } yield (submissionSummaryStats, workspaces)
+
+        val sortedWorkspaces = query.map { case (submissionSummaryStats, workspaces) =>
+          workspaces.map { ws => ws}
+        }
 
         val results = traceDBIOWithParent("finalResults", parentSpan)(_ => query.map { case (submissionSummaryStats, workspaces) =>
           val policiesByWorkspaceId = accessLevelWorkspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
@@ -558,7 +562,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             }
 
             WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public)
-          }
+          }.sortBy( ws => (ws.workspace.name, ws.workspace.lastModified.getMillis, ws.workspace.createdBy, ws.accessLevel.toString))
         })
 
         results.map { responses =>

@@ -167,6 +167,17 @@ object SortDirections {
   def toSql(direction: SortDirection) = toString(direction)
 }
 case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
+case class WorkspaceQuery(page: Int,
+                          pageSize: Int,
+                          sortField: String = "name",
+                          sortDirection: SortDirections.SortDirection,
+                          filterTerms: Option[String],
+                          submissionStatuses: Option[Seq[String]],
+                          accessLevel: Option[String],
+                          billingProject: Option[String],
+                          workspaceName: Option[String],
+                          tags: Option[Seq[String]]
+                         )
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 

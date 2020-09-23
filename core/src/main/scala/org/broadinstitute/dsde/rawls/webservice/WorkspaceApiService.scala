@@ -15,6 +15,9 @@ import CustomDirectives._
 
 import scala.concurrent.ExecutionContext
 import io.opencensus.scala.akka.http.TracingDirective._
+import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
+
+import scala.util.{Failure, Success, Try}
 
 /**
   * Created by dvoet on 6/4/15.
@@ -40,10 +43,45 @@ trait WorkspaceApiService extends UserInfoDirectives {
         }
       } ~
         get {
-          parameterSeq { allParams =>
-            traceRequest { span =>
-              complete {
-                workspaceServiceConstructor(userInfo).ListWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+          // parameterSeq { allParams =>
+          traceRequest { span =>
+            parameterSeq { allParams =>
+              parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?, 'fields.?) { (page, pageSize, sortField, sortDirection, filterTerms, fields) =>
+                val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
+                val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+                val submissionStatuses = WorkspaceFieldSpecs.fromQueryParams(allParams, "submissionStatus")
+                val accessLevels = WorkspaceFieldSpecs.fromQueryParams(allParams, "accessLevels")
+                val billingProject = WorkspaceFieldSpecs.fromQueryParams(allParams, "billingProject")
+                val workspaceName = WorkspaceFieldSpecs.fromQueryParams(allParams, "workspaceName")
+                val tags = WorkspaceFieldSpecs.fromQueryParams(allParams, "tags")
+
+                val toIntTriesErrors = toIntTries.collect {
+                  case (k, Failure(t)) => s"$k must be a positive integer"
+                  case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
+                }
+                val sortDirectionError = (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
+                val multipleFieldsError = Seq(submissionStatuses, accessLevels, billingProject, workspaceName) collect {
+                  case fieldSpecs if (fieldSpecs.fields.isDefined && fieldSpecs.fields.get.size == 1) => s"Too many access levels specified: ${fieldSpecs.fields.get}"
+                }
+                val errors = toIntTriesErrors ++ sortDirectionError ++ multipleFieldsError
+
+                if (errors.isEmpty) {
+                  val workspaceQuery = WorkspaceQuery(toIntTries("page").get.getOrElse(1),
+                    toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"),
+                    sortDirectionTry.get,
+                    filterTerms,
+                    submissionStatuses.fields.map(_.toSeq),
+                    accessLevels.fields.get.headOption,
+                    billingProject.fields.get.headOption,
+                    workspaceName.fields.get.headOption,
+                    tags.fields.map(_.toSeq)
+                  )
+                  complete {
+                    workspaceServiceConstructor(userInfo).ListWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), workspaceQuery, span)
+                  }
+                } else {
+                  complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
+                }
               }
             }
           }

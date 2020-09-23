@@ -130,8 +130,10 @@ trait WorkspaceComponent {
 
   }
 
-  object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
+  object workspaceQuery extends TableQuery(new WorkspaceTable(_)) with RawSqlQuery {
     private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
+    val driver: JdbcProfile = WorkspaceComponent.this.driver
+
 
     def listAll(): ReadAction[Seq[Workspace]] = {
       loadWorkspaces(workspaceQuery)
@@ -200,8 +202,8 @@ trait WorkspaceComponent {
       loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
     }
 
-    def listByIds(workspaceIds: Seq[UUID], attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Seq[Workspace]] = {
-      loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
+    def listByIds(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[Workspace]] = {
+      listWorkspaces(workspaceIds, workspaceQuery)
     }
 
     def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] = {
@@ -384,6 +386,93 @@ trait WorkspaceComponent {
         }
       }
     }
+
+
+    // result structure from entity and attribute list raw sql
+    case class WorkspaceAndAttributesRecord(workspaceRecord: WorkspaceRecord, attributeRecord: Option[WorkspaceAttributeRecord], entityRef: Option[EntityRecord])
+
+    // tells slick how to convert a result row from a raw sql query to an instance of WorkspaceAndAttributesResult
+    implicit val getWorkspaceAndAttributesResult = GetResult { r =>
+      // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
+      val workspaceRecordResult = WorkspaceRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+
+      val idOption: Option[Long] = r.<<
+      val attributeRec = idOption.map(id => WorkspaceAttributeRecord(id, workspaceRecordResult.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+      val entityRecOption = idOption.map(id => EntityRecord(id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+      WorkspaceAndAttributesRecord(workspaceRecordResult, attributeRec, entityRecOption)
+    }
+
+    def listWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[Workspace]] = {
+      loadWorkspaces(workspaceIds, workspaceQuery). map { workspaceAndAttributesRecords =>
+        val allWorkspaceRecords = workspaceAndAttributesRecords.map(_.workspaceRecord).distinct
+
+        val workspacesWithAttributes = workspaceAndAttributesRecords.collect {
+          case WorkspaceAndAttributesRecord(workspaceRecord, Some(attributeRecord), entityRefOption) => ((workspaceRecord.id, attributeRecord), entityRefOption)
+        }
+
+        val attributesByWorkspaceId = workspaceAttributeQuery.unmarshalAttributes(workspacesWithAttributes)
+
+        allWorkspaceRecords.map { workspaceRec =>
+          unmarshalWorkspace(workspaceRec, attributesByWorkspaceId.getOrElse(workspaceRec.id, Map.empty))
+        }
+      }
+    }
+
+
+    private def loadWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[WorkspaceAndAttributesRecord]] = {
+      val submissionStatusFilter = workspaceQuery.submissionStatuses.map { statuses =>
+        val statusSql = reduceSqlActionsWithDelim( statuses.map { status => sql"${status}"} )
+        concatSqlActions(sql" AND s.STATUS in ", statusSql)
+      }.getOrElse(sql" ")
+
+      val workspaceFilter = concatSqlActions(sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql"${id}"} ), sql")")
+
+
+      val workspaceNamespaceFilter = workspaceQuery.billingProject.map { namespace =>
+        sql" AND w.namespace = ${ namespace } " }.getOrElse(sql" ")
+
+      val workspaceNameFilter = workspaceQuery.workspaceName.map { workspaceName =>
+        sql" AND w.name = ${ workspaceName } " }.getOrElse(sql" ")
+
+      val tagFilter = workspaceQuery.tags.map { tags =>
+        val tagSql = reduceSqlActionsWithDelim( tags.map { tag => sql"${tag}"})
+        concatSqlActions(sql"AND wa.value_string in ", tagSql)
+      }.getOrElse(sql" ")
+
+      //val ordering = sql" ORDER BY w.${workspaceQuery.sortField} ${workspaceQuery.sortDirection}"
+
+      def orderingComplex() = {
+        val sortField = workspaceQuery.sortField
+        val sortOrdering = Seq("name", "last_modified", "created_by")
+        val sortSql = sql"w.${sortField} "
+      }
+
+      val sqlString =
+        sql"""
+              SELECT * FROM WORKSPACE w
+                 LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
+                 LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
+                 LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id
+              WHERE w.id in
+           """
+
+      concatSqlActions(sqlString, workspaceFilter, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter).as[WorkspaceAndAttributesRecord]
+    }
+
+//    SELECT * FROM WORKSPACE w
+//    LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
+//    LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
+//    lEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id
+//    WHERE s.STATUS = 'Done' # Filter by submission status
+//      AND w.namespace = 'general-dev-billing-account' # Filter by google project / namespace
+//      AND w.name = 'jimmy data test' # Filter by workspace name
+//      AND (wa.value_boolean = 'testing' OR wa.VALUE_JSON = 'testing' OR wa.value_number = 'testing' OR wa.value_string = 'testing') # filter by workspace tags
+//      AND w.id in ( 0x0034103E09E64B50A34279AD8A691BD9 , 0x0045F55064664904816B8E3E2AE4FCB8 )  # List of ws that the user has access to
+//    AND (wa.namespace, wa.name) in (('tag','tags'), ('default','aa')) # filter by the namespace and name of workspace attributes. if returning all attributes, should be  w.id in ()
+//    ORDER BY w.created_date ASC # Sort by a field (might need to be more complicated).
+//    ;
 
     private def marshalNewWorkspace(workspace: Workspace) = {
       WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
