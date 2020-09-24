@@ -390,17 +390,20 @@ trait WorkspaceComponent {
 
 
     // result structure from entity and attribute list raw sql
-    case class WorkspaceAndAttributesRecord(workspaceRecord: WorkspaceRecord, attributeRecord: Option[WorkspaceAttributeRecord], entityRef: Option[EntityRecord])
+    case class WorkspaceAndAttributesRecord(workspaceRecord: WorkspaceRecord,
+                                            attributeRecord: Option[WorkspaceAttributeRecord],
+                                            entityRef: Option[EntityRecord])
 
     // tells slick how to convert a result row from a raw sql query to an instance of WorkspaceAndAttributesResult
     implicit val getWorkspaceAndAttributesResult = GetResult { r =>
       // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
       val workspaceRecordResult = WorkspaceRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
       println("WORKSPACERECORDRESULT: " + workspaceRecordResult.toString)
-      val idOption: Option[Long] = r.<<
-      val attributeRec = idOption.map(id => WorkspaceAttributeRecord(id, workspaceRecordResult.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+      val attributeIdOption: Option[Long] = r.<<
+      val attributeRec = attributeIdOption.map(id => WorkspaceAttributeRecord(id, workspaceRecordResult.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
-      val entityRecOption = idOption.map(id => EntityRecord(id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+      val entityIdOption: Option[Long] = r.<<
+      val entityRecOption = entityIdOption.map(id => EntityRecord(id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
       WorkspaceAndAttributesRecord(workspaceRecordResult, attributeRec, entityRecOption)
     }
@@ -475,7 +478,7 @@ trait WorkspaceComponent {
                      w.workflow_collection,
                      w.created_date,
                      w.last_modified,
-                     w.created_date,
+                     w.created_by,
                      w.is_locked,
                      w.record_version,
                      wa.id,
