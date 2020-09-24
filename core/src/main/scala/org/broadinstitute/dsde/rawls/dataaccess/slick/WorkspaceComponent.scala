@@ -6,6 +6,7 @@ import java.util.{Date, UUID}
 import cats.instances.int._
 import cats.instances.option._
 import cats.{Monoid, MonoidK}
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
@@ -130,7 +131,7 @@ trait WorkspaceComponent {
 
   }
 
-  object workspaceQuery extends TableQuery(new WorkspaceTable(_)) with RawSqlQuery {
+  object workspaceQuery extends TableQuery(new WorkspaceTable(_)) with RawSqlQuery with LazyLogging  {
     private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
     val driver: JdbcProfile = WorkspaceComponent.this.driver
 
@@ -395,7 +396,7 @@ trait WorkspaceComponent {
     implicit val getWorkspaceAndAttributesResult = GetResult { r =>
       // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
       val workspaceRecordResult = WorkspaceRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
-
+      println("WORKSPACERECORDRESULT: " + workspaceRecordResult.toString)
       val idOption: Option[Long] = r.<<
       val attributeRec = idOption.map(id => WorkspaceAttributeRecord(id, workspaceRecordResult.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
@@ -405,8 +406,14 @@ trait WorkspaceComponent {
     }
 
     def listWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[Workspace]] = {
-      loadWorkspaces(workspaceIds, workspaceQuery). map { workspaceAndAttributesRecords =>
+      logger.debug("WorkspaceComponent.listWorkspaces " + workspaceIds.toString() + " Query: " + workspaceQuery)
+      val lw = loadWorkspaces(workspaceIds, workspaceQuery)
+      val hi = "hi"
+      lw.map { workspaceAndAttributesRecords =>
+        val hi = 1
+        logger.debug("Now I'm HERE")
         val wsAttRec = workspaceAndAttributesRecords
+        logger.debug("wsAttRec " + wsAttRec.toString)
         val allWorkspaceRecords = workspaceAndAttributesRecords.map(_.workspaceRecord).distinct
 
         val workspacesWithAttributes = workspaceAndAttributesRecords.collect {
@@ -422,7 +429,7 @@ trait WorkspaceComponent {
     }
 
 
-    private def loadWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[WorkspaceAndAttributesRecord]] = {
+    def loadWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[WorkspaceAndAttributesRecord]] = {
       val submissionStatusFilter = workspaceQuery.submissionStatuses.map { statuses =>
         val statusSql = reduceSqlActionsWithDelim( statuses.map { status => sql"${status}"} )
         concatSqlActions(sql" AND s.STATUS in ", statusSql)
@@ -450,16 +457,60 @@ trait WorkspaceComponent {
         val sortSql = sql"w.${sortField} "
       }
 
+//      val sqlString =
+//        sql"""
+//              SELECT * FROM WORKSPACE w
+//                 LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
+//                 LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
+//                 LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id
+//              WHERE w.id in
+//           """
+
       val sqlString =
         sql"""
-              SELECT * FROM WORKSPACE w
+              SELECT w.namespace,
+                     w.name,
+                     w.id,
+                     w.bucket_name,
+                     w.workflow_collection,
+                     w.created_date,
+                     w.last_modified,
+                     w.created_date,
+                     w.is_locked,
+                     w.record_version,
+                     wa.id,
+                     wa.namespace,
+                     wa.name,
+                     wa.value_string,
+                     wa.value_number,
+                     wa.value_boolean,
+                     wa.VALUE_JSON,
+                     wa.value_entity_ref,
+                     wa.list_index,
+                     wa.list_length,
+                     wa.deleted,
+                     wa.deleted_date,
+                     e_ref.id,
+                     e_ref.name,
+                     e_ref.entity_type,
+                     e_ref.workspace_id,
+                     e_ref.record_version,
+                     e_ref.deleted,
+                     e_ref.deleted_date
+              FROM WORKSPACE w
                  LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
                  LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
                  LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id
-              WHERE w.id in
            """
 
-      concatSqlActions(sqlString, workspaceFilter, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter).as[WorkspaceAndAttributesRecord]
+      //val sqlAction = concatSqlActions(sqlString) //, workspaceFilter, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter)
+      logger.debug("SQLACTION: ")
+      logger.debug(sqlString.toString)
+      logger.debug(sqlString.unitPConv.toString)
+      val wsAtts = sqlString.as[WorkspaceAndAttributesRecord]
+      logger.debug("WSATTS: ")
+      logger.debug(wsAtts.toString)
+      wsAtts
     }
 
 //    SELECT * FROM WORKSPACE w

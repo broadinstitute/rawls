@@ -26,6 +26,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
+import io.opencensus.scala.Tracing.startSpan
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -687,6 +688,20 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //Check if entities on workspace exist
     assertResult(0) {
       runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "list workspaces" in withTestDataServices { services =>
+    //check that the workspace exists
+    assertWorkspaceResult(Option(testData.workspaceMixedSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName7))
+    }
+    val s = startSpan("listWorkspace")
+
+    val res = Await.result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(Some(Set())), WorkspaceQuery(1, 10, "name", SortDirections.Ascending, None, None, None, None, None, None), s), Duration.Inf)
+
+    assertResult(1) {
+      res
     }
   }
 

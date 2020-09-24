@@ -71,9 +71,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
                     sortDirectionTry.get,
                     filterTerms,
                     submissionStatuses.fields.map(_.toSeq),
-                    accessLevels.fields.get.headOption,
-                    billingProject.fields.get.headOption,
-                    workspaceName.fields.get.headOption,
+                    accessLevels.fields.map(_.head),
+                    billingProject.fields.map(_.head),
+                    workspaceName.fields.map(_.head),
                     tags.fields.map(_.toSeq)
                   )
                   complete {

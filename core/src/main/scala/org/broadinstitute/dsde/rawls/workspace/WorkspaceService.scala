@@ -505,7 +505,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     s.setStatus(Status.OK)
     s.end()
 
-    for {
+    val res = for {
       workspacePolicies <- traceWithParent("getPolicies", parentSpan)(_ => samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
       // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
       // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
@@ -548,7 +548,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               )
             }
           }
-          workspaces.map { workspace =>
+          println("WORKSPACES: " + workspaces.toString)
+          val wss = workspaces.map { workspace =>
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
@@ -563,6 +564,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public)
           }.sortBy( ws => (ws.workspace.name, ws.workspace.lastModified.getMillis, ws.workspace.createdBy, ws.accessLevel.toString))
+          println("SORTEDWS: " + wss.toString)
+          wss
         })
 
         results.map { responses =>
@@ -575,6 +578,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }, TransactionIsolation.ReadCommitted)
     } yield result
+    println("PRINT " + res)
+    res
   }
 
   private def getWorkspaceSubmissionStats(workspaceContext: Workspace, dataAccess: DataAccess): ReadAction[WorkspaceSubmissionStats] = {
