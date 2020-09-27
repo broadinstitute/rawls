@@ -398,7 +398,7 @@ trait WorkspaceComponent {
     implicit val getWorkspaceAndAttributesResult = GetResult { r =>
       // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
       val workspaceRecordResult = WorkspaceRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
-      println("WORKSPACERECORDRESULT: " + workspaceRecordResult.toString)
+      //println("WORKSPACERECORDRESULT: " + workspaceRecordResult.toString)
       val attributeIdOption: Option[Long] = r.<<
       val attributeRec = attributeIdOption.map(id => WorkspaceAttributeRecord(id, workspaceRecordResult.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
@@ -409,14 +409,14 @@ trait WorkspaceComponent {
     }
 
     def listWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[Workspace]] = {
-      logger.debug("WorkspaceComponent.listWorkspaces " + workspaceIds.toString() + " Query: " + workspaceQuery)
+      println("WorkspaceComponent.listWorkspaces " + workspaceIds.toString() + " Query: " + workspaceQuery)
       val lw = loadWorkspaces(workspaceIds, workspaceQuery)
       val hi = "hi"
       lw.map { workspaceAndAttributesRecords =>
         val hi = 1
-        logger.debug("Now I'm HERE")
+        println("Now I'm HERE")
         val wsAttRec = workspaceAndAttributesRecords
-        logger.debug("wsAttRec " + wsAttRec.toString)
+        println("wsAttRec " + wsAttRec.toString)
         val allWorkspaceRecords = workspaceAndAttributesRecords.map(_.workspaceRecord).distinct
 
         val workspacesWithAttributes = workspaceAndAttributesRecords.collect {
@@ -438,7 +438,7 @@ trait WorkspaceComponent {
         concatSqlActions(sql" AND s.STATUS in ", statusSql)
       }.getOrElse(sql" ")
 
-      val workspaceFilter = concatSqlActions(sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql"${id.toString}"} ), sql")")
+      val workspaceFilter = concatSqlActions(sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql" UNHEX(REPLACE(${id.toString}, '-','')) "} ), sql")")
 
 
       val workspaceNamespaceFilter = workspaceQuery.billingProject.map { namespace =>
@@ -459,15 +459,6 @@ trait WorkspaceComponent {
         val sortOrdering = Seq("name", "last_modified", "created_by")
         val sortSql = sql"w.${sortField} "
       }
-
-//      val sqlString =
-//        sql"""
-//              SELECT * FROM WORKSPACE w
-//                 LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
-//                 LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
-//                 LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id
-//              WHERE w.id in
-//           """
 
       val sqlString =
         sql"""
@@ -504,15 +495,15 @@ trait WorkspaceComponent {
                  LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
                  LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
                  LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id
+              WHERE w.id in
            """
 
-      //val sqlAction = concatSqlActions(sqlString) //, workspaceFilter, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter)
-      logger.debug("SQLACTION: ")
-      logger.debug(sqlString.toString)
-      logger.debug(sqlString.unitPConv.toString)
-      val wsAtts = sqlString.as[WorkspaceAndAttributesRecord]
-      logger.debug("WSATTS: ")
-      logger.debug(wsAtts.toString)
+      val sqlAction = concatSqlActions(sqlString, workspaceFilter, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter)
+      println("SQLACTION: ")
+      println(sqlAction.toString)
+      val wsAtts = sqlAction.as[WorkspaceAndAttributesRecord]
+      println("WSATTS: ")
+      println(wsAtts.toString)
       wsAtts
     }
 
