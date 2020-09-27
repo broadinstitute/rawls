@@ -562,7 +562,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               None
             }
             WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public)
-          }  //.sortBy( ws => (ws.workspace.name, ws.workspace.lastModified.getMillis, ws.workspace.createdBy, ws.accessLevel.toString))
+          }.sortBy( ws => (ws.workspace.name, ws.workspace.lastModified.getMillis, ws.workspace.createdBy, ws.accessLevel.toString))
         })
 
         results.map { responses =>

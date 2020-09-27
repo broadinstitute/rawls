@@ -691,17 +691,38 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  private def checkWorkspaceListTestWorkspacesExist = {
+    assertWorkspaceResult(Option(testData.workspaceList1)) {
+      runAndWait(workspaceQuery.findByName(testData.workspaceListName1))
+    }
+    assertWorkspaceResult(Option(testData.workspaceList2)) {
+      runAndWait(workspaceQuery.findByName(testData.workspaceListName1))
+    }
+    assertWorkspaceResult(Option(testData.workspaceList3)) {
+      runAndWait(workspaceQuery.findByName(testData.workspaceListName1))
+    }
+    assertWorkspaceResult(Option(testData.workspaceList4)) {
+      runAndWait(workspaceQuery.findByName(testData.workspaceListName1))
+    }
+    assertWorkspaceResult(Option(testData.workspaceList5)) {
+      runAndWait(workspaceQuery.findByName(testData.workspaceListName1))
+    }
+    assertWorkspaceResult(Option(testData.workspaceList6)) {
+      runAndWait(workspaceQuery.findByName(testData.workspaceListName1))
+    }
+    assertWorkspaceResult(Option(testData.workspaceList7)) {
+      runAndWait(workspaceQuery.findByName(testData.workspaceListName1))
+    }
+  }
+
   it should "list workspaces" in withTestDataServices { services =>
     //check that the workspace exists
-    assertWorkspaceResult(Option(testData.workspaceMixedSubmissions)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName7))
-    }
+    checkWorkspaceListTestWorkspacesExist
+
     val s = startSpan("listWorkspace")
 
-    val res = Await.result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(Some(Set())), WorkspaceQuery(1, 10, "name", SortDirections.Ascending, None, None, None, None, None, None), s), Duration.Inf)
-
-    assertResult(1) {
-      res
+    assertResult(List(testData.workspaceList1, testData.workspaceList2, testData.workspaceList3, testData.workspaceList4, testData.workspaceList5, testData.workspaceList6, testData.workspaceList7)) {
+      Await.result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(Some(Set())), WorkspaceQuery(1, 10, "name", SortDirections.Ascending, None, None, None, None, None, None), s), Duration.Inf)
     }
   }
 
