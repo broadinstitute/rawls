@@ -64,6 +64,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
     (submissionDate map { d: DateTime =>
       //subtract a day so we never have to deal with timezones
       val date_start = d.minusDays(1).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
+      // search up to 2 weeks later (TODO: justify this time duration) to minimize BQ costs
       val date_end = d.plusDays(14).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
       s"""AND _PARTITIONDATE BETWEEN "$date_start" AND "$date_end""""
     }).getOrElse("")
