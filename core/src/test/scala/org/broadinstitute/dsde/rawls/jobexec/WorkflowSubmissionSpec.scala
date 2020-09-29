@@ -26,6 +26,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -44,7 +45,15 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   val mockSamDAO = new MockSamDAO(slickDataSource)
   val dosServiceAccount = "serviceaccount@foo.com"
   val differentDosServiceAccount = "differentserviceaccount@foo.com"
-  val mockDosResolver: DosResolver = (v: String, userInfo: UserInfo) => Future.successful(if (v.contains("different")) Some(differentDosServiceAccount) else Some(dosServiceAccount))
+  val mockDosResolver: DosResolver = (drsUrl: String, userInfo: UserInfo) => {
+    Future.successful {
+      drsUrl match {
+        case u if (u.contains("different")) => Some(differentDosServiceAccount)
+        case u if (u.contains("jade.datarepo")) => None
+        case _ => Some(dosServiceAccount)
+      }
+    }
+  }
   private val requesterPaysRole = "requesterPays"
 
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
@@ -365,6 +374,87 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       // Verify
       mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
+    }
+  }
+
+  it should "resolve DRS URIs containing Jade Data Repo urls when submitting workflows" in withDefaultTestDatabase {
+    val data = testData
+    // Set up system under test
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
+      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(data.workspace) { ctx =>
+      // Create test submission data
+      val sample = Entity("sample", "Sample", Map())
+      val sampleSet = Entity("sampleset", "sample_set",
+        Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
+      val inputResolutions = Seq(
+        SubmissionValidationValue(Option(AttributeString("drs://foo/bar")), None, "test_input_dos"),
+        SubmissionValidationValue(
+          Option(AttributeValueList(Seq(
+            AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_abc-123"),
+            AttributeString("drs://different"),
+            AttributeString("drs://foo/bar3")))
+          ),
+          None,
+          "test_input_dos_array"
+        ))
+      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
+        Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
+
+      runAndWait(entityQuery.save(ctx, sample))
+      runAndWait(entityQuery.save(ctx, sampleSet))
+      runAndWait(submissionQuery.create(ctx, submissionDos))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
+
+      // Submit workflow!
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      // Verify
+      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
+    }
+  }
+
+  it should "resolve DRS URIs containing only Jade Data Repo urls when submitting workflows" in withDefaultTestDatabase {
+    val data = testData
+    // Set up system under test
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
+      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(data.workspace) { ctx =>
+      // Create test submission data
+      val sample = Entity("sample", "Sample", Map())
+      val sampleSet = Entity("sampleset", "sample_set",
+        Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
+      val inputResolutions = Seq(
+        SubmissionValidationValue(Option(AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_abc-123")), None, "test_input_dos"),
+        SubmissionValidationValue(
+          Option(AttributeValueList(Seq(
+            AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_abc-345"),
+            AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_abc-678"),
+            AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_def-123")))
+          ),
+          None,
+          "test_input_dos_array"
+        ))
+      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
+        Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
+
+      runAndWait(entityQuery.save(ctx, sample))
+      runAndWait(entityQuery.save(ctx, sampleSet))
+      runAndWait(submissionQuery.create(ctx, submissionDos))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
+
+      // Submit workflow!
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      // Verify
+      // since no SA was returned from Martha for JDR urls, requester pays role was never added to the polices. Hence it should be empty
+      mockGoogleServicesDAO.policies shouldBe TrieMap.empty[RawlsBillingProjectName, Map[String, Set[String]]]
     }
   }
 
