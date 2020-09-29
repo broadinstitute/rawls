@@ -16,7 +16,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class MarthaResolver(marthaUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DosResolver with DsdeHttpDAO with Retry {
 
-  // the list of fields we want in Martha response
+  // the list of fields we want in Martha response. More info can be found here: https://github.com/broadinstitute/martha#martha-v3
   private val MarthaRequestFieldsKey: Array[String] = Array("googleServiceAccount")
 
   val http: HttpExt = Http(system)

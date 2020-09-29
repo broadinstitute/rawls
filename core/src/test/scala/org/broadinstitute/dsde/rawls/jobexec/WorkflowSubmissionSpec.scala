@@ -413,7 +413,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
+      val expectedClientEmail = List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
+      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs expectedClientEmail
     }
   }
 
