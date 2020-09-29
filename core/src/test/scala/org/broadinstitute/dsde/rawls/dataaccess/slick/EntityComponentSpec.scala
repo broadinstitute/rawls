@@ -335,10 +335,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     runAndWait(workspaceQuery.save(workspace))
     val workspaceContext = workspace
 
+    // this entity also tests that namespaced and default attributes of the same name are tracked separately
     val entity1 = Entity("entity1", "type1", Map(
+      AttributeName.fromDelimitedName("tag:hello") -> AttributeString("world"),
       AttributeName.fromDelimitedName("tag:ihaveanamespace") -> AttributeString("foo"),
       AttributeName.fromDelimitedName("tag:ialsohaveanamespace") -> AttributeString("bar"),
-      AttributeName.fromDelimitedName("iamdefault") -> AttributeString("baz")
+      AttributeName.fromDelimitedName("iamdefault") -> AttributeString("baz"),
+      AttributeName.fromDelimitedName("hello") -> AttributeString("moon"),
     ))
 
     val entity2 = Entity("entity2", "type2", Map(
@@ -352,7 +355,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     runAndWait(entityQuery.save(workspaceContext, entity2))
 
     val desiredTypesAndAttrNames = Map(
-      "type1" -> Seq("tag:ihaveanamespace", "tag:ialsohaveanamespace", "iamdefault"),
+      "type1" -> Seq("tag:hello", "tag:ihaveanamespace", "tag:ialsohaveanamespace", "iamdefault", "hello"),
       "type2" -> Seq("tag:morenamespacing", "tag:evenmorenamespacing", "iamdefault", "moredefault"),
     )
 
