@@ -265,8 +265,12 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val marthaConfig = conf.getConfig("martha")
-      val excludeJDRDomain: Boolean = marthaConfig.getOrElse("exclude_JDR_Domain", false)
-      val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl_v2"), excludeJDRDomain)
+      val marthaMetadataUrl =
+        marthaConfig
+          .getAs[String]("baseUrl")
+          .map(_ + "/martha_v3")
+          .getOrElse(marthaConfig.getString("baseUrl_v2"))
+      val dosResolver = new MarthaDosResolver(marthaMetadataUrl)
 
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(

@@ -22,3 +22,6 @@ automation/src/test/resources/
 .bloop/
 .metals/
 project/.bloop/
+
+.DS_Store
+*~
