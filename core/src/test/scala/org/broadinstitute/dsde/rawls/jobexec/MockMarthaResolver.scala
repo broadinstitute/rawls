@@ -11,22 +11,22 @@ class MockMarthaResolver(marthaUrl: String)
                         (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext)
   extends MarthaResolver(marthaUrl) {
 
-  val dosServiceAccount = "serviceaccount@foo.com"
-  val dosSAEmail: ServiceAccountEmail = ServiceAccountEmail(dosServiceAccount)
-  val dosSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(dosSAEmail))
-  val dosSAMinimalResponse: MarthaMinimalResponse = MarthaMinimalResponse(Option(dosSAPayload))
+  val drsServiceAccount = "serviceaccount@foo.com"
+  val drsSAEmail: ServiceAccountEmail = ServiceAccountEmail(drsServiceAccount)
+  val drsSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(drsSAEmail))
+  val drsSAMinimalResponse: MarthaMinimalResponse = MarthaMinimalResponse(Option(drsSAPayload))
 
-  val differentDosServiceAccount = "differentserviceaccount@foo.com"
-  val differentDosSAEmail: ServiceAccountEmail = ServiceAccountEmail(differentDosServiceAccount)
-  val differentDosSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(differentDosSAEmail))
-  val differentDosSAMinimalResponse: MarthaMinimalResponse = MarthaMinimalResponse(Option(differentDosSAPayload))
+  val differentDrsServiceAccount = "differentserviceaccount@foo.com"
+  val differentDrsSAEmail: ServiceAccountEmail = ServiceAccountEmail(differentDrsServiceAccount)
+  val differentDrsSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(differentDrsSAEmail))
+  val differentDrsSAMinimalResponse: MarthaMinimalResponse = MarthaMinimalResponse(Option(differentDrsSAPayload))
 
   override def resolveDrsThroughMartha(drsUrl: String, userInfo: UserInfo): Future[MarthaMinimalResponse] = {
     Future.successful{
       drsUrl match {
-        case u if u.contains("different") => differentDosSAMinimalResponse
+        case u if u.contains("different") => differentDrsSAMinimalResponse
         case u if u.contains("jade.datarepo") => MarthaMinimalResponse(None)
-        case _ => dosSAMinimalResponse
+        case _ => drsSAMinimalResponse
       }
     }
   }

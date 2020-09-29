@@ -13,17 +13,17 @@ import scala.language.postfixOps
 
 class MarthaResolverSpec extends FlatSpecLike with Matchers with BeforeAndAfterAll {
 
-  implicit val mockActorSystem: ActorSystem = ActorSystem("MockMarthaDosResolver")
+  implicit val mockActorSystem: ActorSystem = ActorSystem("MockMarthaResolver")
   implicit val mockMaterializer: ActorMaterializer = ActorMaterializer()
   implicit val mockExecutionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
-  val mockMarthaDosResolver = new MockMarthaResolver(marthaUrl = "https://martha_v2_url", excludeJDRDomain = true)
+  val mockMarthaResolver = new MockMarthaResolver(marthaUrl = "https://martha_v2_url", excludeJDRDomain = true)
   val mockUserInfo: UserInfo = UserInfo(RawlsUserEmail("mr_bean@gmail.com"), OAuth2BearerToken("foo"), 0, RawlsUserSubjectId("abc123"))
 
   behavior of "MarthaResolver"
 
   it should "return no client email for JDR uri" in {
-    val actualResultFuture = mockMarthaDosResolver.dosServiceAccountEmail(
+    val actualResultFuture = mockMarthaResolver.drsServiceAccountEmail(
       drsUrl = MockMarthaResolver.jdrDevUrl,
       userInfo = mockUserInfo
     )
@@ -34,7 +34,7 @@ class MarthaResolverSpec extends FlatSpecLike with Matchers with BeforeAndAfterA
   }
 
   it should "return client email for non-JDR uri" in {
-    val actualResultFuture = mockMarthaDosResolver.dosServiceAccountEmail(
+    val actualResultFuture = mockMarthaResolver.drsServiceAccountEmail(
       drsUrl = MockMarthaResolver.dgUrl,
       userInfo = mockUserInfo
     )

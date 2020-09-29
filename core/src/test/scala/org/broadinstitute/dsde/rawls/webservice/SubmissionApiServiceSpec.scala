@@ -90,7 +90,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       services.methodRepoDAO,
       services.gcsDAO,
       services.samDAO,
-      services.dosResolver,
+      services.drsResolver,
       MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName), slickDataSource),
       10,
       services.gcsDAO.getPreparedMockGoogleCredential(),

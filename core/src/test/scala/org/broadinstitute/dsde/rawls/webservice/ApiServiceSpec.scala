@@ -145,7 +145,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
-    val dosResolver = new MarthaResolver(mockServer.mockServerBaseUrl)
+    val drsResolver = new MarthaResolver(mockServer.mockServerBaseUrl)
 
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,

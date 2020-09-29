@@ -72,7 +72,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
       workbenchMetricBaseName = workbenchMetricBaseName)
     val samDAO = mockSamDAO
-    val dosResolver = mockMarthaResolver
+    val drsResolver = mockMarthaResolver
   }
 
   class TestWorkflowSubmissionWithMockExecSvc(
@@ -331,7 +331,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       // Verify
       mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs
-        List("serviceAccount:" + mockMarthaResolver.dosServiceAccount, "serviceAccount:" + mockMarthaResolver.differentDosServiceAccount)
+        List("serviceAccount:" + mockMarthaResolver.drsServiceAccount, "serviceAccount:" + mockMarthaResolver.differentDrsServiceAccount)
     }
   }
 
@@ -351,20 +351,20 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutions = Seq(
         SubmissionValidationValue(Option(AttributeString("drs://foo/bar")), None, "test_input_dos"),
         SubmissionValidationValue(Option(AttributeValueList(Seq(AttributeString("drs://foo/bar1"), AttributeString("drs://different"), AttributeString("drs://foo/bar3")))), None, "test_input_dos_array"))
-      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
+      val submissionDrs = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
         Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
 
       runAndWait(entityQuery.save(ctx, sample))
       runAndWait(entityQuery.save(ctx, sampleSet))
-      runAndWait(submissionQuery.create(ctx, submissionDos))
-      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
+      runAndWait(submissionQuery.create(ctx, submissionDrs))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDrs, data.workspace)
 
       // Submit workflow!
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
       mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs
-        List("serviceAccount:" + mockMarthaResolver.dosServiceAccount, "serviceAccount:" + mockMarthaResolver.differentDosServiceAccount)
+        List("serviceAccount:" + mockMarthaResolver.drsServiceAccount, "serviceAccount:" + mockMarthaResolver.differentDrsServiceAccount)
     }
   }
 
@@ -392,19 +392,19 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
           None,
           "test_input_dos_array"
         ))
-      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
+      val submissionDrs = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
         Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
 
       runAndWait(entityQuery.save(ctx, sample))
       runAndWait(entityQuery.save(ctx, sampleSet))
-      runAndWait(submissionQuery.create(ctx, submissionDos))
-      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
+      runAndWait(submissionQuery.create(ctx, submissionDrs))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDrs, data.workspace)
 
       // Submit workflow!
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      val expectedClientEmail = List("serviceAccount:" + mockMarthaResolver.dosServiceAccount, "serviceAccount:" + mockMarthaResolver.differentDosServiceAccount)
+      val expectedClientEmail = List("serviceAccount:" + mockMarthaResolver.drsServiceAccount, "serviceAccount:" + mockMarthaResolver.differentDrsServiceAccount)
       mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs expectedClientEmail
     }
   }
@@ -433,13 +433,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
           None,
           "test_input_dos_array"
         ))
-      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
+      val submissionDrs = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
         Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
 
       runAndWait(entityQuery.save(ctx, sample))
       runAndWait(entityQuery.save(ctx, sampleSet))
-      runAndWait(submissionQuery.create(ctx, submissionDos))
-      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
+      runAndWait(submissionQuery.create(ctx, submissionDrs))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDrs, data.workspace)
 
       // Submit workflow!
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
