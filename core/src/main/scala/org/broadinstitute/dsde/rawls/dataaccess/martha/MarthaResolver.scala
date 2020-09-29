@@ -22,17 +22,19 @@ class MarthaResolver(marthaUrl: String)(implicit val system: ActorSystem, val ma
   val http: HttpExt = Http(system)
   val httpClientUtils: HttpClientUtilsStandard = HttpClientUtilsStandard()
 
-  override def dosServiceAccountEmail(drsUrl: String, userInfo: UserInfo): Future[Option[String]] = {
+  def resolveDrsThroughMartha(drsUrl: String, userInfo: UserInfo): Future[MarthaMinimalResponse] = {
+    // Evan idea 2020-09-08:
+    // Have Rawls call an "SA-only" endpoint in Martha because it doesn't need any URI info (calls Bond but not overloaded DRS servers)
     val requestObj = MarthaRequest(drsUrl, MarthaRequestFieldsKey)
-    val marthaResponse: Future[MarthaMinimalResponse] = Marshal(requestObj).to[RequestEntity] flatMap { entity =>
+    Marshal(requestObj).to[RequestEntity] flatMap { entity =>
       retry[MarthaMinimalResponse](when500) { () =>
         executeRequestWithToken[MarthaMinimalResponse](userInfo.accessToken)(Post(marthaUrl, entity))
       }
     }
+  }
 
-    // Evan idea 2020-09-08:
-    // Have Rawls call an "SA-only" endpoint in Martha because it doesn't need any URI info (calls Bond but not overloaded DRS servers)
-    marthaResponse.map { resp =>
+  override def dosServiceAccountEmail(drsUrl: String, userInfo: UserInfo): Future[Option[String]] = {
+    resolveDrsThroughMartha(drsUrl, userInfo).map { resp =>
       // The email field must remain an `Option` because DRS servers that do not use Bond (HCA, JDR) do not return a service account
       // AEN 2020-09-08 [WA-325]
       val saEmail: Option[String] = resp.googleServiceAccount.flatMap(_.data.map(_.client_email))

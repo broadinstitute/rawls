@@ -9,7 +9,6 @@ import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.martha.MockMarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch, WorkflowBatch}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
