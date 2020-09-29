@@ -1820,7 +1820,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         DBIO.from(for {
           resource <- {
             val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerPolicyEmail), Set.empty, Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner))
-            val ownerPolicy = SamWorkspacePolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamWorkspaceRoles.owner))
+            val ownerPolicy =
+              if (workspaceRequest.onlyAddBillingProjectOwner.getOrElse(false))
+                SamWorkspacePolicyNames.owner -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.owner))
+              else
+                SamWorkspacePolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamWorkspaceRoles.owner))
             val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.writer))
             val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.reader))
             val shareReaderPolicy = SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.shareReader))
@@ -1865,40 +1869,41 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
+    traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(s0 => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, s0) {
+      traceDBIOWithParent("maybe requireBillingProjectOwnerAccess", s0) (s1 => requireBillingProjectOwnerAccess(workspaceRequest) {
+        traceDBIOWithParent("findByName", s1)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
+          case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
+          case None =>
+            val workspaceId = UUID.randomUUID.toString
+            val bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
 
-    traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)( s1 => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, s1) {
-      traceDBIOWithParent("findByName", s1)( _=> dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
-        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
-        case None =>
-          val workspaceId = UUID.randomUUID.toString
-          val bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
+            // add the workspace id to the span so we can find and correlate it later with other services
+            s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
 
-          // add the workspace id to the span so we can find and correlate it later with other services
-          s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
+            traceDBIOWithParent("getPolicySyncStatus", s1)(_ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { projectOwnerPolicyEmail =>
+              traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
+                for {
+                  //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
+                  //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
+                  //will never change, which would eliminate the call to sam entirely
+                  policyEmails <- DBIO.successful(policyMap.map { case (policyName, policyEmail) =>
+                    if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
+                      // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+                      // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+                      // the limit of 2000
+                      Option(WorkspaceAccessLevels.ProjectOwner -> projectOwnerPolicyEmail)
+                    } else {
+                      WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
+                    }
+                  }.flatten.toMap)
 
-          traceDBIOWithParent("getPolicySyncStatus", s1)( _ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { projectOwnerPolicyEmail =>
-            traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
-              for {
-                //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
-                //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
-                //will never change, which would eliminate the call to sam entirely
-                policyEmails <- DBIO.successful(policyMap.map { case (policyName, policyEmail) =>
-                  if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
-                    // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-                    // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-                    // the limit of 2000
-                    Option(WorkspaceAccessLevels.ProjectOwner -> projectOwnerPolicyEmail)
-                  } else {
-                    WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
-                }
-                  }.flatten.toMap )
-
-                _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, RawlsBillingProjectName(workspaceRequest.namespace), policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3)))
-                response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
-              } yield response
-            })
-          }
-      }
+                  _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, RawlsBillingProjectName(workspaceRequest.namespace), policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3)))
+                  response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
+                } yield response
+              })
+            }
+        }
+      })
     })
   }
 

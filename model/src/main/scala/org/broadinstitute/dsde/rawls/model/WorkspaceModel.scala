@@ -4,16 +4,16 @@ import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
-import org.joda.time.DateTime
-import com.netaporter.uri.Uri.parse
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
+import com.netaporter.uri.Uri.parse
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.joda.time.DateTime
 import spray.json._
-import UserModelJsonSupport.ManagedGroupRefFormat
 
 import scala.util.Try
 
@@ -86,7 +86,8 @@ case class WorkspaceRequest (
                               name: String,
                               attributes: AttributeMap,
                               authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
-                              copyFilesWithPrefix: Option[String] = None
+                              copyFilesWithPrefix: Option[String] = None,
+                              onlyAddBillingProjectOwner: Option[Boolean] = None
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -620,9 +621,9 @@ object AttributeStringifier {
 case class WorkspaceTag(tag: String, count: Int)
 
 class WorkspaceJsonSupport extends JsonSupport {
-  import spray.json.DefaultJsonProtocol._
-  import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
   import DataReferenceModelJsonSupport.DataReferenceNameFormat
+  import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
+  import spray.json.DefaultJsonProtocol._
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
     override def write(dir: SortDirection): JsValue = JsString(SortDirections.toString(dir))
@@ -646,7 +647,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityFormat = jsonFormat3(Entity)
 
-  implicit val WorkspaceRequestFormat = jsonFormat5(WorkspaceRequest)
+  implicit val WorkspaceRequestFormat = jsonFormat6(WorkspaceRequest)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
