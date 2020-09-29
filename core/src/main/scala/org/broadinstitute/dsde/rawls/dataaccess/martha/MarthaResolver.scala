@@ -30,6 +30,8 @@ class MarthaResolver(marthaUrl: String)(implicit val system: ActorSystem, val ma
       }
     }
 
+    // Evan idea 2020-09-08:
+    // Have Rawls call an "SA-only" endpoint in Martha because it doesn't need any URI info (calls Bond but not overloaded DRS servers)
     marthaResponse.map { resp =>
       // The email field must remain an `Option` because DRS servers that do not use Bond (HCA, JDR) do not return a service account
       // AEN 2020-09-08 [WA-325]
