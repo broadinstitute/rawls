@@ -167,20 +167,28 @@ object SortDirections {
   def toSql(direction: SortDirection) = toString(direction)
 }
 case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
-case class WorkspaceQuery(page: Int,
-                          pageSize: Int,
+case class WorkspaceQuery(page: Int = 1,
+                          pageSize: Int = 100,
                           sortField: String = "name",
-                          sortDirection: SortDirections.SortDirection,
-                          filterTerms: Option[String],
-                          submissionStatuses: Option[Seq[String]],
-                          accessLevel: Option[String],
-                          billingProject: Option[String],
-                          workspaceName: Option[String],
-                          tags: Option[Seq[String]]
+                          sortDirection: SortDirections.SortDirection = SortDirections.Ascending,
+                          searchTerm: Option[String] = None,
+                          submissionStatuses: Option[Seq[String]] = None,
+                          accessLevel: Option[String] = None,
+                          billingProject: Option[String] = None,
+                          workspaceName: Option[String] = None,
+                          tags: Option[Seq[String]] = None
                          )
+
+case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
+                                 workspace: WorkspaceDetails,
+                                 workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
+                                 public: Boolean)
+
+case class WorkspaceQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 
+case class WorkspaceQueryResponse(parameters: WorkspaceQuery, resultMetadata: WorkspaceQueryResultMetadata, results: Seq[WorkspaceListResponse])
 case class EntityQueryResponse(parameters: EntityQuery, resultMetadata: EntityQueryResultMetadata, results: Seq[Entity])
 
 case class EntityCopyResponse(entitiesCopied: Seq[AttributeEntityReference], hardConflicts: Seq[EntityHardConflict], softConflicts: Seq[EntitySoftConflict])
@@ -442,10 +450,10 @@ case class MethodRepoConfigurationExport(
                                          source: MethodConfigurationName
                                          )
 
-case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
-                                 workspace: WorkspaceDetails,
-                                 workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
-                                 public: Boolean)
+//case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
+//                                 workspace: WorkspaceDetails,
+//                                 workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
+//                                 public: Boolean)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
@@ -756,6 +764,14 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodInputsOutputsFormat = jsonFormat2(MethodInputsOutputs)
 
   implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
+
+
+  implicit val WorkspaceQueryFormat = jsonFormat10(WorkspaceQuery)
+
+  implicit val WorkspaceQueryResultMetadataFormat = jsonFormat3(WorkspaceQueryResultMetadata)
+
+  implicit val WorkspaceQueryResponseFormat = jsonFormat3(WorkspaceQueryResponse)
+
 
   implicit object StatusCodeFormat extends JsonFormat[StatusCode] {
     override def write(code: StatusCode): JsValue = JsNumber(code.intValue)

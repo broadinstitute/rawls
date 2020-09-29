@@ -3425,40 +3425,60 @@ paths:
             type: array
             items:
               type: string
-        - name: page
-          in: query
-          description: Page number, 1-indexed (default 1)
-          schema:
-            minimum: 1
-            type: number
-            default: 1
-        - name: pageSize
-          in: query
-          description: Page size (default 10)
-          schema:
-            minimum: 1
-            type: number
-            default: 10
-        - name: sortField
-          in: query
-          description: Sort field (default "name")
-          schema:
+
+/api/workspaces/workspaceQuery:
+  get:
+    tags:
+      - workspaces
+    summary: List workspaces
+    description: |
+      List all workspaces to which you have access, optionally filtered to only the specified fields. See the get-workspace API at GET /api/workspaces/{workspaceNamespace}/{workspaceName} to retrieve additional information about a given workspace.
+    operationId: listWorkspaces
+    parameters:
+      - name: fields
+        in: query
+        description: |
+          When specified, include only these keys in the response payload and exclude other keys. Accepts a comma-delimited list of values. To include a nested key, specify the key's path using a dot delimiter; for example, to include {"workspace": {"attributes": {}}}, specify "workspace.attributes". Legal values are any first-level key in the response, any first-level key inside the {"workspace": {}} object, and any first-level key inside the {"workspace": {"attributes": {}}} object. If omitted, will return the full response payload.
+        style: form
+        explode: false
+        schema:
+          type: array
+          items:
             type: string
-            default: name
-        - name: sortDirection
-          in: query
-          description: Sort direction (asc or desc, default asc)
-          schema:
-            type: string
-            default: asc
-            enum:
-              - asc
-              - desc
-        - name: filterTerms
-          in: query
-          description: Filter terms
-          schema:
-            type: string
+      - name: page
+        in: query
+        description: Page number, 1-indexed (default 1)
+        schema:
+          minimum: 1
+          type: number
+          default: 1
+      - name: pageSize
+        in: query
+        description: Page size (default 10)
+        schema:
+          minimum: 1
+          type: number
+          default: 10
+      - name: sortField
+        in: query
+        description: Sort field (default "name")
+        schema:
+          type: string
+          default: name
+      - name: sortDirection
+        in: query
+        description: Sort direction (asc or desc, default asc)
+        schema:
+          type: string
+          default: asc
+          enum:
+            - asc
+            - desc
+      - name: searchTerm
+        in: query
+        description: Search namespace and name
+        schema:
+          type: string
 
       responses:
         200:

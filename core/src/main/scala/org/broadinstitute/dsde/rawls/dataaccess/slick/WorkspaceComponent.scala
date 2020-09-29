@@ -203,10 +203,6 @@ trait WorkspaceComponent {
       loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
     }
 
-    def listByIds(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[Workspace]] = {
-      listWorkspaces(workspaceIds, workspaceQuery)
-    }
-
     def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] = {
       findByNamespaceQuery(namespaceName).size.result
     }
@@ -408,15 +404,11 @@ trait WorkspaceComponent {
       WorkspaceAndAttributesRecord(workspaceRecordResult, attributeRec, entityRecOption)
     }
 
-    def listWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[Workspace]] = {
+    def listWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[(Int, Int, Seq[Workspace])] = {
       println("WorkspaceComponent.listWorkspaces " + workspaceIds.toString() + " Query: " + workspaceQuery)
       val lw = loadWorkspaces(workspaceIds, workspaceQuery)
-      val hi = "hi"
-      lw.map { workspaceAndAttributesRecords =>
-        val hi = 1
-        println("Now I'm HERE")
+      lw.map { case (unfilteredCount, filteredCount, workspaceAndAttributesRecords) =>
         val wsAttRec = workspaceAndAttributesRecords
-        println("wsAttRec " + wsAttRec.toString)
         val allWorkspaceRecords = workspaceAndAttributesRecords.map(_.workspaceRecord).distinct
 
         val workspacesWithAttributes = workspaceAndAttributesRecords.collect {
@@ -425,21 +417,21 @@ trait WorkspaceComponent {
 
         val attributesByWorkspaceId = workspaceAttributeQuery.unmarshalAttributes(workspacesWithAttributes)
 
-        allWorkspaceRecords.map { workspaceRec =>
+        val workspaces = allWorkspaceRecords.map { workspaceRec =>
           unmarshalWorkspace(workspaceRec, attributesByWorkspaceId.getOrElse(workspaceRec.id, Map.empty))
         }
+        (unfilteredCount, filteredCount, workspaces)
       }
     }
 
 
-    def loadWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[Seq[WorkspaceAndAttributesRecord]] = {
+    def loadWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[(Int, Int, Seq[WorkspaceAndAttributesRecord])] = {
       val submissionStatusFilter = workspaceQuery.submissionStatuses.map { statuses =>
         val statusSql = reduceSqlActionsWithDelim( statuses.map { status => sql"${status}"} )
         concatSqlActions(sql" AND s.STATUS in ", statusSql)
       }.getOrElse(sql" ")
 
-      val workspaceFilter = concatSqlActions(sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql" UNHEX(REPLACE(${id.toString}, '-','')) "} ), sql")")
-
+      val workspaceUUIDList = concatSqlActions(sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql" UNHEX(REPLACE(${id.toString}, '-','')) "} ), sql")")
 
       val workspaceNamespaceFilter = workspaceQuery.billingProject.map { namespace =>
         sql" AND w.namespace = ${ namespace } " }.getOrElse(sql" ")
@@ -452,12 +444,27 @@ trait WorkspaceComponent {
         concatSqlActions(sql"AND wa.value_string in ", tagSql)
       }.getOrElse(sql" ")
 
-      //val ordering = sql" ORDER BY w.${workspaceQuery.sortField} ${workspaceQuery.sortDirection}"
+      // This is different from namespace and workspace name, which do an exact match
+      val searchNamespaceAndNameFilter = {
+        workspaceQuery.searchTerm.map { searchTerm =>
+          val sqlSearchTerm = '%' + searchTerm + '%'
+          sql" AND (w.namespace LIKE ${sqlSearchTerm} OR w.name LIKE ${sqlSearchTerm} "
+        }.getOrElse(sql" ")
+      }
 
-      def orderingComplex() = {
-        val sortField = workspaceQuery.sortField
-        val sortOrdering = Seq("name", "last_modified", "created_by")
-        val sortSql = sql"w.${sortField} "
+
+      def ordering = {
+        // ToDo: Check that sortField is defined sortDirection is defaulted to ascending
+        val sortField = "w." + workspaceQuery.sortField
+        val sortDirection = SortDirections.toSql(workspaceQuery.sortDirection)
+        val sortOrdering = Seq("w.name", "w.last_modified", "w.created_by").filterNot( _ == sortField)
+        val sqlOrdering = reduceSqlActionsWithDelim( sortOrdering.map { field => sql" ${field} "})
+        concatSqlActions(sql" order by ${sortField} ${sortDirection}, ", sqlOrdering)
+      }
+
+      def limitOffset = {
+        val offset = (workspaceQuery.page - 1) * workspaceQuery.pageSize
+        sql" limit ${workspaceQuery.pageSize} offset ${offset}"
       }
 
       val sqlString =
@@ -498,27 +505,12 @@ trait WorkspaceComponent {
               WHERE w.id in
            """
 
-      val sqlAction = concatSqlActions(sqlString, workspaceFilter, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter)
-      println("SQLACTION: ")
-      println(sqlAction.toString)
-      val wsAtts = sqlAction.as[WorkspaceAndAttributesRecord]
-      println("WSATTS: ")
-      println(wsAtts.toString)
-      wsAtts
+      for {
+        filteredCount <- concatSqlActions(sql"select count(1) from (", sqlString, workspaceUUIDList, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql")").as[Int]
+        unfilteredCount <- concatSqlActions(sql"select count(1) from (", sqlString, workspaceUUIDList, sql")").as[Int]
+        page <- concatSqlActions(sqlString, workspaceUUIDList, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, ordering, limitOffset).as[WorkspaceAndAttributesRecord]
+      } yield (unfilteredCount.head, filteredCount.head, page)
     }
-
-//    SELECT * FROM WORKSPACE w
-//    LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
-//    LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
-//    lEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id
-//    WHERE s.STATUS = 'Done' # Filter by submission status
-//      AND w.namespace = 'general-dev-billing-account' # Filter by google project / namespace
-//      AND w.name = 'jimmy data test' # Filter by workspace name
-//      AND (wa.value_boolean = 'testing' OR wa.VALUE_JSON = 'testing' OR wa.value_number = 'testing' OR wa.value_string = 'testing') # filter by workspace tags
-//      AND w.id in ( 0x0034103E09E64B50A34279AD8A691BD9 , 0x0045F55064664904816B8E3E2AE4FCB8 )  # List of ws that the user has access to
-//    AND (wa.namespace, wa.name) in (('tag','tags'), ('default','aa')) # filter by the namespace and name of workspace attributes. if returning all attributes, should be  w.id in ()
-//    ORDER BY w.created_date ASC # Sort by a field (might need to be more complicated).
-//    ;
 
     private def marshalNewWorkspace(workspace: Workspace) = {
       WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
