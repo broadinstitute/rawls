@@ -417,7 +417,6 @@ trait EntityComponent {
       }
     }
 
-    // returns: Map[entityType, Seq[(attributeNamespace, attributeName)]]
     private[slick] def getAttrNamesAndEntityTypes(workspaceContext: Workspace): ReadAction[Map[String, Seq[AttributeName]]] = {
       val typesAndAttrNames = for {
         entityRec <- findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID)
