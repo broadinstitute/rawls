@@ -3406,6 +3406,7 @@ paths:
             - email
             - profile
       x-codegen-request-body-name: catalogUpdates
+
   /api/workspaces:
     get:
       tags:
@@ -3425,61 +3426,6 @@ paths:
             type: array
             items:
               type: string
-
-/api/workspaces/workspaceQuery:
-  get:
-    tags:
-      - workspaces
-    summary: List workspaces
-    description: |
-      List all workspaces to which you have access, optionally filtered to only the specified fields. See the get-workspace API at GET /api/workspaces/{workspaceNamespace}/{workspaceName} to retrieve additional information about a given workspace.
-    operationId: listWorkspaces
-    parameters:
-      - name: fields
-        in: query
-        description: |
-          When specified, include only these keys in the response payload and exclude other keys. Accepts a comma-delimited list of values. To include a nested key, specify the key's path using a dot delimiter; for example, to include {"workspace": {"attributes": {}}}, specify "workspace.attributes". Legal values are any first-level key in the response, any first-level key inside the {"workspace": {}} object, and any first-level key inside the {"workspace": {"attributes": {}}} object. If omitted, will return the full response payload.
-        style: form
-        explode: false
-        schema:
-          type: array
-          items:
-            type: string
-      - name: page
-        in: query
-        description: Page number, 1-indexed (default 1)
-        schema:
-          minimum: 1
-          type: number
-          default: 1
-      - name: pageSize
-        in: query
-        description: Page size (default 10)
-        schema:
-          minimum: 1
-          type: number
-          default: 10
-      - name: sortField
-        in: query
-        description: Sort field (default "name")
-        schema:
-          type: string
-          default: name
-      - name: sortDirection
-        in: query
-        description: Sort direction (asc or desc, default asc)
-        schema:
-          type: string
-          default: asc
-          enum:
-            - asc
-            - desc
-      - name: searchTerm
-        in: query
-        description: Search namespace and name
-        schema:
-          type: string
-
       responses:
         200:
           description: Successful Request
@@ -3562,6 +3508,118 @@ paths:
             - email
             - profile
       x-codegen-request-body-name: workspaceJson
+
+  /api/workspaces/workspaceQuery:
+    get:
+      tags:
+        - workspaces
+      summary: Paginated List workspaces by query
+      description: |
+        List all workspaces to which you have access, optionally filtered to only the specified fields. Unlike GET /api/workspaces, this endpoint returns a paginated list of workspaces. It is also filterable and sortable.
+        Filters parameters
+          billingProject
+        See the get-workspace API at GET /api/workspaces/{workspaceNamespace}/{workspaceName} to retrieve additional information about a given workspace.
+      operationId: queryWorkspaces
+      parameters:
+        - name: fields
+          in: query
+          description: |
+            When specified, include only these keys in the response payload and exclude other keys. Accepts a comma-delimited list of values. To include a nested key, specify the key's path using a dot delimiter; for example, to include {"workspace": {"attributes": {}}}, specify "workspace.attributes". Legal values are any first-level key in the response, any first-level key inside the {"workspace": {}} object, and any first-level key inside the {"workspace": {"attributes": {}}} object. If omitted, will return the full response payload.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: page
+          in: query
+          description: Page number, 1-indexed (default 1)
+          schema:
+            minimum: 1
+            type: number
+            default: 1
+        - name: pageSize
+          in: query
+          description: Page size (default 10)
+          schema:
+            minimum: 1
+            type: number
+            default: 10
+        - name: sortField
+          in: query
+          description: Sort field (default "name")
+          schema:
+            type: string
+            default: name
+        - name: sortDirection
+          in: query
+          description: Sort direction (asc or desc, default asc)
+          schema:
+            type: string
+            default: asc
+            enum:
+              - asc
+              - desc
+        - name: searchTerm
+          in: query
+          description: Search namespace and name
+          schema:
+            type: string
+        - name: submissionStatuses
+          in: query
+          description: Filter by a submission status
+          schema:
+            type: string
+        - name: accessLevel
+          in: query
+          description: Filter by an access level
+          schema:
+            type: string
+        - name: billingProject
+          in: query
+          description: Filter by billing project
+          schema:
+            type: string
+        - name: workspaceName
+          in: query
+          description: Filter by workspace name
+          schema:
+            type: string
+        - name: tags
+          in: query
+          description: Filter by workspace tags
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceQueryResponse'
+        400:
+          description: Unrecognized query parameters
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
+
   /api/workspaces/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -5681,6 +5739,74 @@ components:
         workspaceSubmissionStats:
           $ref: '#/components/schemas/WorkspaceSubmissionStats'
       description: ""
+    WorkspaceQuery:
+      type: object
+      properties:
+        page:
+          type: number
+          description: page number, 1-indexed positive integer
+        pageSize:
+          type: number
+          description: count of items per page, positive integer
+        sortField:
+          type: string
+          description: field to sort by
+        sortDirection:
+          type: string
+          description: asc or desc
+        filterTerms:
+          type: string
+          description: terms to filter results by
+        submissionStatuses:
+          type: string
+          description: Filter by a submission status
+        accessLevel:
+          type: string
+          description: Filter by an access level
+        billingProject:
+          type: string
+          description: Filter by billing project
+        workspaceName:
+          type: string
+          description: Filter by workspace name
+        tags:
+          description: Filter by workspace tags
+          type: array
+          items:
+            type: string
+      description: ""
+    WorkspaceQueryResultMetadata:
+      required:
+        - filteredCount
+        - filteredPageCount
+        - unfilteredCount
+      type: object
+      properties:
+        unfilteredCount:
+          type: number
+          description: count of results before filtering
+        filteredCount:
+          type: number
+          description: count of results after filtering
+        filteredPageCount:
+          type: number
+          description: count of pages after filtering; honors pageSize parameter
+      description: ""
+    WorkspaceQueryResponse:
+      required:
+        - parameters
+        - resultMetadata
+        - results
+      type: object
+      properties:
+        parameters:
+          $ref: '#/components/schemas/WorkspaceQuery'
+        resultMetadata:
+          $ref: '#/components/schemas/WorkspaceQueryResultMetadata'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceListResponse'
     WorkspaceBucketOptions:
       required:
         - requesterPays
