@@ -324,11 +324,46 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
         //...and handle that the values are all correct here.
-        testTypesAndAttrNames(eType).foreach { attrName =>
-          attrName.namespace shouldBe "default"
-        }
-        assertSameElements(testTypesAndAttrNames(eType).map(_.name), attrNames)
+        assertSameElements(testTypesAndAttrNames(eType).map(AttributeName.toDelimitedName), attrNames)
       }
+    }
+  }
+
+  it should "list all entity types with their namespaced attribute names" in withEmptyTestDatabase {
+    val workspaceId: UUID = UUID.randomUUID()
+    val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
+    runAndWait(workspaceQuery.save(workspace))
+    val workspaceContext = workspace
+
+    val entity1 = Entity("entity1", "type1", Map(
+      AttributeName.fromDelimitedName("tag:ihaveanamespace") -> AttributeString("foo"),
+      AttributeName.fromDelimitedName("tag:ialsohaveanamespace") -> AttributeString("bar"),
+      AttributeName.fromDelimitedName("iamdefault") -> AttributeString("baz")
+    ))
+
+    val entity2 = Entity("entity2", "type2", Map(
+      AttributeName.fromDelimitedName("tag:morenamespacing") -> AttributeNumber(1),
+      AttributeName.fromDelimitedName("tag:evenmorenamespacing") -> AttributeNumber(2),
+      AttributeName.fromDelimitedName("iamdefault") -> AttributeNumber(3),
+      AttributeName.fromDelimitedName("moredefault") -> AttributeNumber(4)
+    ))
+
+    runAndWait(entityQuery.save(workspaceContext, entity1))
+    runAndWait(entityQuery.save(workspaceContext, entity2))
+
+    val desiredTypesAndAttrNames = Map(
+      "type1" -> Seq("tag:ihaveanamespace", "tag:ialsohaveanamespace", "iamdefault"),
+      "type2" -> Seq("tag:morenamespacing", "tag:evenmorenamespacing", "iamdefault", "moredefault"),
+    )
+
+    //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
+    //so we test the existence of all keys correctly here...
+    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext))
+    assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
+
+    desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
+      //...and handle that the values are all correct here.
+      assertSameElements(testTypesAndAttrNames(eType).map(AttributeName.toDelimitedName), attrNames)
     }
   }
 
