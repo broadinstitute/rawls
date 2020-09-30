@@ -400,7 +400,10 @@ trait EntityComponent {
       typesAndCountsQ flatMap { typesAndCounts =>
         typesAndAttrsQ map { typesAndAttrs =>
           (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
-            (entityType, EntityTypeMetadata( typesAndCounts.getOrElse(entityType, 0), entityType + Attributable.entityIdAttributeSuffix, typesAndAttrs.getOrElse(entityType, Seq()) ))
+            (entityType, EntityTypeMetadata(
+              typesAndCounts.getOrElse(entityType, 0),
+              entityType + Attributable.entityIdAttributeSuffix,
+              typesAndAttrs.getOrElse(entityType, Seq()).map (AttributeName.toDelimitedName)))
           } toMap
         }
       }
@@ -414,16 +417,18 @@ trait EntityComponent {
       }
     }
 
-    private[slick] def getAttrNamesAndEntityTypes(workspaceContext: Workspace): ReadAction[Map[String, Seq[String]]] = {
+    private[slick] def getAttrNamesAndEntityTypes(workspaceContext: Workspace): ReadAction[Map[String, Seq[AttributeName]]] = {
       val typesAndAttrNames = for {
         entityRec <- findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID)
         attrib <- findActiveAttributesByEntityId(entityRec.id)
       } yield {
-        (entityRec.entityType, attrib.name)
+        (entityRec.entityType, (attrib.namespace, attrib.name))
       }
 
       typesAndAttrNames.distinct.result map { result =>
-        CollectionUtils.groupByTuples(result)
+        CollectionUtils.groupByTuples (result.map {
+          case (entityType:String, (ns:String, n:String)) => (entityType, AttributeName(ns, n))
+        })
       }
     }
 
