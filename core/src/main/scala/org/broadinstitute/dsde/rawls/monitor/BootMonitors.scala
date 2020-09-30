@@ -6,7 +6,7 @@ import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.martha.DosResolver
+import org.broadinstitute.dsde.rawls.dataaccess.martha.DrsResolver
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
@@ -37,7 +37,7 @@ object BootMonitors extends LazyLogging {
                    importServiceDAO: HttpImportServiceDAO,
                    googleStorage: GoogleStorageService[IO],
                    methodRepoDAO: MethodRepoDAO,
-                   dosResolver: DosResolver,
+                   drsResolver: DrsResolver,
                    entityService: (org.broadinstitute.dsde.rawls.model.UserInfo) => EntityService,
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
                    maxActiveWorkflowsTotal: Int,
@@ -73,7 +73,7 @@ object BootMonitors extends LazyLogging {
     )
 
     //Boot workflow submission actors
-    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver)
+    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, drsResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver)
 
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
@@ -149,7 +149,7 @@ object BootMonitors extends LazyLogging {
                                             gcsDAO: GoogleServicesDAO,
                                             samDAO: SamDAO,
                                             methodRepoDAO: MethodRepoDAO,
-                                            dosResolver: DosResolver,
+                                            drsResolver: DrsResolver,
                                             shardedExecutionServiceCluster: ExecutionServiceCluster,
                                             maxActiveWorkflowsTotal: Int,
                                             maxActiveWorkflowsPerUser: Int,
@@ -165,7 +165,7 @@ object BootMonitors extends LazyLogging {
         methodRepoDAO,
         gcsDAO,
         samDAO,
-        dosResolver,
+        drsResolver,
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO.getBucketServiceAccountCredential,

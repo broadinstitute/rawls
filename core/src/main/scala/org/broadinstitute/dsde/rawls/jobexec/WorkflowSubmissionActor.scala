@@ -8,7 +8,7 @@ import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.martha.DosResolver
+import org.broadinstitute.dsde.rawls.dataaccess.martha.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -30,7 +30,7 @@ object WorkflowSubmissionActor {
             methodRepoDAO: MethodRepoDAO,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
-            dosResolver: DosResolver,
+            dosResolver: DrsResolver,
             executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             credential: Credential,
@@ -64,7 +64,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              val dosResolver: DosResolver,
+                              val drsResolver: DrsResolver,
                               val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val credential: Credential,
@@ -117,7 +117,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val methodRepoDAO: MethodRepoDAO
   val googleServicesDAO: GoogleServicesDAO
   val samDAO: SamDAO
-  val dosResolver: DosResolver
+  val drsResolver: DrsResolver
   val executionServiceCluster: ExecutionServiceCluster
   val batchSize: Int
   val credential: Credential
@@ -251,14 +251,14 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     })
   }
 
-  private def resolveDosUriServiceAccounts(dosUris: Set[String], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Set[String]] = {
-    Future.traverse(dosUris) { dosUri =>
-      dosResolver.dosServiceAccountEmail(dosUri, userInfo)
+  private def resolveDrsUriServiceAccounts(drsUris: Set[String], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Set[String]] = {
+    Future.traverse(drsUris) { drsUri =>
+      drsResolver.drsServiceAccountEmail(drsUri, userInfo)
     }.map { emails =>
       val collected = emails.collect {
         case Some(email) => email
       }
-      logger.debug(s"resolveDosUriServiceAccounts found ${collected.size} emails for ${dosUris.size} DOS URIs")
+      logger.debug(s"resolveDrsUriServiceAccounts found ${collected.size} emails for ${drsUris.size} DRS URIs")
       collected
     }
   }
@@ -269,9 +269,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       inputResolutions <- workflow.inputResolutions
       attribute <- inputResolutions.value.toSeq // toSeq makes the for comp work
       dosAttributeValue <- attribute match {
-        case AttributeString(s) if s.matches(dosResolver.dosUriPattern) => Seq(s)
+        case AttributeString(s) if s.matches(drsResolver.dosDrsUriPattern) => Seq(s)
         case AttributeValueList(valueList) => valueList.collect {
-          case AttributeString(s) if s.value.matches(dosResolver.dosUriPattern) => s
+          case AttributeString(s) if s.value.matches(drsResolver.dosDrsUriPattern) => s
         }
         case _ => Seq.empty
       }
@@ -355,7 +355,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
-      dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris, petUserInfo)
+      dosServiceAccounts <- resolveDrsUriServiceAccounts(dosUris, petUserInfo)
       // For Jade, HCA, anyone who doesn't use Bond, we won't get an SA back and the following line is a no-op
       // We still call Martha for those because we can verify the user has permission on the DRS object as
       // early as possible, rather than letting the workflow(s) launch and fail
