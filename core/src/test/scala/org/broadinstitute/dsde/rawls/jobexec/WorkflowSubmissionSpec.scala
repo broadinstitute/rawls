@@ -12,7 +12,8 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch, WorkflowBatch}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.MockMarthaResolver._
+import org.broadinstitute.dsde.rawls.mock.{MockMarthaResolver, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -331,7 +332,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       // Verify
       mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs
-        List("serviceAccount:" + mockMarthaResolver.drsServiceAccount, "serviceAccount:" + mockMarthaResolver.differentDrsServiceAccount)
+        List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
     }
   }
 
@@ -364,7 +365,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       // Verify
       mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs
-        List("serviceAccount:" + mockMarthaResolver.drsServiceAccount, "serviceAccount:" + mockMarthaResolver.differentDrsServiceAccount)
+        List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
     }
   }
 
@@ -404,7 +405,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      val expectedClientEmail = List("serviceAccount:" + mockMarthaResolver.drsServiceAccount, "serviceAccount:" + mockMarthaResolver.differentDrsServiceAccount)
+      val expectedClientEmail = List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
       mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs expectedClientEmail
     }
   }
