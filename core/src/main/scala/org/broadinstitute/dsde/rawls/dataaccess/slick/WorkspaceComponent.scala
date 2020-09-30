@@ -407,6 +407,7 @@ trait WorkspaceComponent {
     def listWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[(Int, Int, Seq[Workspace])] = {
       println("WorkspaceComponent.listWorkspaces " + workspaceIds.toString() + " Query: " + workspaceQuery)
       val lw = loadWorkspaces(workspaceIds, workspaceQuery)
+      println("loadWorkspaces: " + lw.toString)
       lw.map { case (unfilteredCount, filteredCount, workspaceAndAttributesRecords) =>
         val wsAttRec = workspaceAndAttributesRecords
         val allWorkspaceRecords = workspaceAndAttributesRecords.map(_.workspaceRecord).distinct
@@ -420,18 +421,21 @@ trait WorkspaceComponent {
         val workspaces = allWorkspaceRecords.map { workspaceRec =>
           unmarshalWorkspace(workspaceRec, attributesByWorkspaceId.getOrElse(workspaceRec.id, Map.empty))
         }
+        println("STUFF " + unfilteredCount + filteredCount + workspaces)
         (unfilteredCount, filteredCount, workspaces)
+
       }
     }
 
 
     def loadWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[(Int, Int, Seq[WorkspaceAndAttributesRecord])] = {
+      println("inside loadWorkspaces: " + workspaceIds + " " + workspaceQuery)
       val submissionStatusFilter = workspaceQuery.submissionStatuses.map { statuses =>
         val statusSql = reduceSqlActionsWithDelim( statuses.map { status => sql"${status}"} )
         concatSqlActions(sql" AND s.STATUS in ", statusSql)
       }.getOrElse(sql" ")
 
-      val workspaceUUIDList = concatSqlActions(sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql" UNHEX(REPLACE(${id.toString}, '-','')) "} ), sql")")
+      val workspaceUUIDList = concatSqlActions(sql"WHERE w.id in", sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql" UNHEX(REPLACE(${id.toString}, '-','')) "} ), sql")")
 
       val workspaceNamespaceFilter = workspaceQuery.billingProject.map { namespace =>
         sql" AND w.namespace = ${ namespace } " }.getOrElse(sql" ")
@@ -498,18 +502,32 @@ trait WorkspaceComponent {
                      e_ref.record_version,
                      e_ref.deleted,
                      e_ref.deleted_date
-              FROM WORKSPACE w
-                 LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
-                 LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
-                 LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id
-              WHERE w.id in
            """
+      val fromAndJoins = sql""" FROM WORKSPACE w
+                         LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
+                         LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
+                         LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id """
 
       for {
-        filteredCount <- concatSqlActions(sql"select count(1) from (", sqlString, workspaceUUIDList, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql")").as[Int]
-        unfilteredCount <- concatSqlActions(sql"select count(1) from (", sqlString, workspaceUUIDList, sql")").as[Int]
-        page <- concatSqlActions(sqlString, workspaceUUIDList, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, ordering, limitOffset).as[WorkspaceAndAttributesRecord]
-      } yield (unfilteredCount.head, filteredCount.head, page)
+        filteredCount <- {
+          val thing = concatSqlActions(sql"SELECT count(1) FROM (SELECT * FROM WORKSPACE w ", workspaceUUIDList, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql") ws").as[Int]
+          println("filtered Count: " + thing.statements)
+          thing }
+        unfilteredCount <- {
+          val thing = concatSqlActions(sql"SELECT count(1) FROM (SELECT * FROM WORKSPACE w ", workspaceUUIDList, sql") ws").as[Int]
+          println("SQL " + concatSqlActions(sql"SELECT count(1) FROM (SELECT * FROM WORKSPACE w ", workspaceUUIDList, sql") ws"))
+          println("unfiltered Count: " + thing.statements)
+          thing
+        }
+        page <- {
+          val thing = concatSqlActions(sqlString, fromAndJoins, workspaceUUIDList, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, ordering, limitOffset).as[WorkspaceAndAttributesRecord]
+          println("page: " + thing.statements)
+          thing
+        }
+      } yield {
+        println("loadWorkspace: " + unfilteredCount.head + " " + filteredCount.head + " " + page.toString)
+        (unfilteredCount.head, filteredCount.head, page)
+      }
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {

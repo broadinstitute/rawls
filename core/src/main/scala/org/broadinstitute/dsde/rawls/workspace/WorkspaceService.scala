@@ -481,11 +481,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def listWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span): Future[PerRequestMessage] = {
+    println("listWorkspaces")
+    println("  params: " + params.toString)
+    println("  parentSpan: " + parentSpan.toString)
     for {
       (options, submissionStatsEnabled, attributesEnabled) <- Future.successful( start(params, parentSpan) )
       (_, _, _, sortedWorkspaceListResponses) <- listWorkspaces(params: WorkspaceFieldSpecs, WorkspaceQuery(), submissionStatsEnabled, attributesEnabled, parentSpan: Span)
-    } yield if (!options.nonEmpty) RequestComplete(StatusCodes.OK,  sortedWorkspaceListResponses) else RequestComplete(StatusCodes.OK, deepFilterJsValue(sortedWorkspaceListResponses.toJson, options))
-
+    } yield {
+      println("  options: " + options.toString)
+      println("  submissionStatsEnabled: " + submissionStatsEnabled.toString)
+      println("  attributesEnabled: " + attributesEnabled.toString)
+      println("  sortedWorkspaceListResponses: " + sortedWorkspaceListResponses.toString)
+      if (!options.nonEmpty) RequestComplete(StatusCodes.OK, sortedWorkspaceListResponses) else RequestComplete(StatusCodes.OK, deepFilterJsValue(sortedWorkspaceListResponses.toJson, options))
+    }
   }
 
   def listWorkspacesPaginated(params: WorkspaceFieldSpecs, workspaceQuery: WorkspaceQuery, parentSpan: Span): Future[PerRequestMessage] = {
@@ -525,12 +533,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def listWorkspaces(params: WorkspaceFieldSpecs, workspaceQuery: WorkspaceQuery, submissionStatsEnabled: Boolean, attributesEnabled: Boolean, parentSpan: Span): Future[(WorkspaceQuery, Int, Int, Seq[WorkspaceListResponse])] = {
-
+    println("NOW WE'RE HERE")
     for {
       workspacePolicies <- traceWithParent("getPolicies", parentSpan)(_ => samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
       // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
       // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
-
       accessLevelWorkspacePolicies = workspacePolicies.filter(p =>
         WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty &&
         Try(UUID.fromString(p.resourceId)).isSuccess &&
@@ -550,7 +557,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         val query = for {
           submissionSummaryStats <- traceDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
           (unfilteredCount, filteredCount, workspaces) <- traceDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listWorkspaces(accessLevelWorkspacePolicyUUIDs, workspaceQuery))
-        } yield (unfilteredCount, filteredCount, workspaces, submissionSummaryStats)
+        } yield {
+          println("workspaces: " + workspaces)
+          (unfilteredCount, filteredCount, workspaces, submissionSummaryStats)
+        }
+
 
         traceDBIOWithParent("finalResults", parentSpan)(_ => query.map { case (unfilteredCount, filteredCount, workspaces, submissionSummaryStats) =>
           val policiesByWorkspaceId = accessLevelWorkspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
