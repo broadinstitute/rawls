@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite 
+errors="1" failures="0" hostname="wm5c7-912" name="org.scalatest.DeferredAbortedSuite" tests="0" time="0.001" timestamp="2020-10-01T16:47:37">
+  <properties>
+    <property name="jline.esc.timeout" value="0"> </property>
+    <property name="jna.platform.library.path" value="/usr/lib:/usr/lib">
+    </property>
+    <property name="java.runtime.name" value="OpenJDK Runtime Environment">
+    </property>
+    <property name="java.vm.version" value="11.0.8+10"> </property>
+    <property 
+    name="sun.boot.library.path" value="/Library/Java/JavaVirtualMachines/adoptopenjdk-11.jdk/Contents/Home/lib">
+</property>
+    <property name="gopherProxySet" value="false"> </property>
+    <property name="java.vm.vendor" value="AdoptOpenJDK"> </property>
+    <property name="java.vendor.url" value="https://adoptopenjdk.net/">
+    </property>
+    <property name="path.separator" value=":"> </property>
+    <property name="jna.loaded" value="true"> </property>
+    <property name="java.vm.name" value="OpenJDK 64-Bit Server VM"> </property>
+    <property name="sun.os.patch.level" value="unknown"> </property>
+    <property name="user.country" value="US"> </property>
+    <property name="sun.java.launcher" value="SUN_STANDARD"> </property>
+    <property name="jna.nosys" value="true"> </property>
+    <property 
+    name="java.vm.specification.name" value="Java Virtual Machine Specification">
+</property>
+    <property name="user.dir" value="/Users/rasch/p/rawls/automation">
+    </property>
+    <property name="java.vm.compressedOopsMode" value="Zero based"> </property>
+    <property name="java.runtime.version" value="11.0.8+10"> </property>
+    <property name="java.awt.graphicsenv" value="sun.awt.CGraphicsEnvironment">
+    </property>
+    <property name="os.arch" value="x86_64"> </property>
+    <property 
+    name="java.io.tmpdir" value="/var/folders/q3/jmlp_49j2xz2kfr4l86wmj5cwf6kfs/T/">
+</property>
+    <property name="line.separator" value=" "> </property>
+    <property name="java.vm.specification.vendor" value="Oracle Corporation">
+    </property>
+    <property name="os.name" value="Mac OS X"> </property>
+    <property name="sun.jnu.encoding" value="UTF-8"> </property>
+    <property 
+    name="scala.ext.dirs" value="/Users/rasch/.sbt/0.13/java9-rt-ext-adoptopenjdk_11_0_8">
+</property>
+    <property 
+    name="jnidispatch.path" value="/var/folders/q3/jmlp_49j2xz2kfr4l86wmj5cwf6kfs/T/jna-108284809/jna14594645947764825576.tmp">
+</property>
+    <property 
+    name="java.library.path" value="/Users/rasch/Library/Java/Extensions:/Library/Java/Extensions:/Network/Library/Java/Extensions:/System/Library/Java/Extensions:/usr/lib/java:.">
+</property>
+    <property name="jdk.debug" value="release"> </property>
+    <property name="java.class.version" value="55.0"> </property>
+    <property 
+    name="java.specification.name" value="Java Platform API Specification">
+</property>
+    <property 
+    name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers">
+</property>
+    <property name="os.version" value="10.14.6"> </property>
+    <property name="user.home" value="/Users/rasch"> </property>
+    <property name="user.timezone" value="America/New_York"> </property>
+    <property name="java.awt.printerjob" value="sun.lwawt.macosx.CPrinterJob">
+    </property>
+    <property name="file.encoding" value="UTF-8"> </property>
+    <property name="java.specification.version" value="11"> </property>
+    <property name="user.name" value="rasch"> </property>
+    <property 
+    name="java.class.path" value="/usr/local/Cellar/sbt/1.1.2/libexec/bin/sbt-launch.jar">
+</property>
+    <property name="jline.shutdownhook" value="false"> </property>
+    <property name="java.vm.specification.version" value="11"> </property>
+    <property name="sun.arch.data.model" value="64"> </property>
+    <property 
+    name="sun.java.command" value="/usr/local/Cellar/sbt/1.1.2/libexec/bin/sbt-launch.jar -Dheadless=true testOnly -- -l ProdTest">
+</property>
+    <property 
+    name="java.home" value="/Library/Java/JavaVirtualMachines/adoptopenjdk-11.jdk/Contents/Home">
+</property>
+    <property name="user.language" value="en"> </property>
+    <property name="java.specification.vendor" value="Oracle Corporation">
+    </property>
+    <property name="awt.toolkit" value="sun.lwawt.macosx.LWCToolkit">
+    </property>
+    <property name="java.vm.info" value="mixed mode"> </property>
+    <property name="java.version" value="11.0.8"> </property>
+    <property name="java.vendor" value="AdoptOpenJDK"> </property>
+    <property name="file.separator" value="/"> </property>
+    <property name="java.version.date" value="2020-07-14"> </property>
+    <property 
+    name="java.vendor.url.bug" value="https://github.com/AdoptOpenJDK/openjdk-support/issues">
+</property>
+    <property name="sun.io.unicode.encoding" value="UnicodeBig"> </property>
+    <property name="sun.cpu.endian" value="little"> </property>
+    <property name="java.vendor.version" value="AdoptOpenJDK"> </property>
+    <property name="headless" value="true"> </property>
+    <property name="sun.cpu.isalist" value=""> </property>
+  </properties>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -264,9 +264,8 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("notifications.topicName")
       )
 
-      val marthaConfig: Config = conf.getConfig("martha")
-      val marthaBaseUrl: Option[String] = marthaConfig.getStringOption("baseUrl")
-      val marthaUrl = marthaBaseUrl.map(_ + "/martha_v3").getOrElse(marthaConfig.getString("baseUrl_v2"))
+      val marthaBaseUrl: String = conf.getConfig("martha").getString("baseUrl")
+      val marthaUrl: String = marthaBaseUrl.flatMap(_ + "/martha_v3")
       val marthaResolver = new MarthaResolver(marthaUrl)
 
       val userServiceConstructor: (UserInfo) => UserService =
