@@ -324,6 +324,28 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
       }
   }
 
+
+  ///////////
+
+  "WorkspaceApi paginated list-workspaces" should "return default response for no specified fields, filters or sort order" in withTestWorkspacesApiServices { services =>
+    Get("/workspaces/workspaceQuery") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        val dateTime = currentTime()
+        assertResult(2) {
+          result.results.length
+        }
+
+      }
+  }
+
+  ///////////
+
   /** Workspaces are returned in database row order. This order is deterministic for repeated runs against
     * the same static data in the DB ... but repeated runs of this spec each re-insert data to the DB,
     * which result in different row orders. We cannot predict row order ahead of time - we'd need to add a

@@ -501,7 +501,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       (options, submissionStatsEnabled, attributesEnabled) <- Future.successful( start(params, parentSpan) )
       (workspaceQuery, unfilteredCount, filteredCount, sortedWorkspaceListResponses) <- listWorkspaces(params: WorkspaceFieldSpecs, workspaceQuery: WorkspaceQuery, submissionStatsEnabled, attributesEnabled, parentSpan: Span)
       workspaceQueryResponse = createWorkspaceQueryResponse(workspaceQuery, unfilteredCount, filteredCount, sortedWorkspaceListResponses)
-    } yield if (!options.nonEmpty) RequestComplete(StatusCodes.OK,  workspaceQueryResponse) else RequestComplete(StatusCodes.OK, deepFilterJsValue(workspaceQueryResponse.toJson, options))
+    } yield {
+      println("OPTIONS EMPTY? " + options.isEmpty)
+      println("OPTIONS " + options)
+
+      val res = if (options.isEmpty) RequestComplete(StatusCodes.OK,  workspaceQueryResponse)
+      else {
+        val newOptions =  options.map("results."+ _) ++: Set("parameters", "resultMetadata", "results")
+        println("NEW OPTIONS " + newOptions)
+        RequestComplete(StatusCodes.OK, deepFilterJsValue(workspaceQueryResponse.toJson, newOptions))
+      }
+      println("RESPONSE")
+      println(res)
+      res
+    }
   }
 
   def start(params: WorkspaceFieldSpecs, parentSpan: Span) = {
@@ -599,6 +612,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             workspaceListResponses.sortBy( ws => (WorkspaceAccessLevels.all.indexOf(ws.accessLevel)))
           else workspaceListResponses
 
+          println("END listworkspaces")
+          println("END workspaceQuery: " + workspaceQuery)
+          println("END unfilteredCount: " + unfilteredCount)
+          println("END filteredCount: " + filteredCount)
+          println("END sortedWorkspaceListResponses: " + sortedWorkspaceListResponses)
+
           (workspaceQuery, unfilteredCount, filteredCount, sortedWorkspaceListResponses)
         })
       }, TransactionIsolation.ReadCommitted)
@@ -610,7 +629,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     if (filteredCount > 0 && query.page > pageCount) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page} is greater than the number of pages $pageCount"))
     } else {
-      WorkspaceQueryResponse(query, WorkspaceQueryResultMetadata(unfilteredCount, filteredCount, pageCount), page)
+      val result = WorkspaceQueryResponse(query, WorkspaceQueryResultMetadata(unfilteredCount, filteredCount, pageCount), page)
+      println("WSQueryResponse")
+      println(result.toString)
+      result
     }
   }
 
