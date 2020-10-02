@@ -11,6 +11,7 @@ import io.circe.yaml.syntax._
 import io.circe.{yaml, _}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
+import org.webjars.WebJarAssetLocator
 
 import scala.util.{Failure, Success, Try}
 
@@ -18,7 +19,7 @@ import scala.util.{Failure, Success, Try}
   * Created by dvoet on 7/18/17.
   */
 trait SwaggerRoutes extends LazyLogging {
-  private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/3.25.0"
+  private val swaggerUiPath = new WebJarAssetLocator().getFullPath("swagger-ui-dist", "index.html").replace("/index.html", "")
 
   val swaggerConfig: SwaggerConfig
 

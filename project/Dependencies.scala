@@ -75,7 +75,8 @@ object Dependencies {
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.3.0"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
-  val swaggerUI: ModuleID =       "org.webjars"                   % "swagger-ui"            % "3.25.0"
+  val swaggerUI: ModuleID =       "org.webjars.npm"               % "swagger-ui-dist"       % "3.34.0"
+  val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats"                 % "0.9.0"
@@ -207,6 +208,7 @@ object Dependencies {
     akkaHttp,
     akkaStream,
     swaggerUI,
+    webjarsLocator,
     circeYAML,
     circeFS2,
     commonsJEXL,
