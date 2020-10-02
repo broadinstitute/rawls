@@ -168,7 +168,7 @@ object SortDirections {
 }
 case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
 case class WorkspaceQuery(page: Int = 1,
-                          pageSize: Int = 100,
+                          pageSize: Int = 10,
                           sortField: String = "name",
                           sortDirection: SortDirections.SortDirection = SortDirections.Ascending,
                           searchTerm: Option[String] = None,

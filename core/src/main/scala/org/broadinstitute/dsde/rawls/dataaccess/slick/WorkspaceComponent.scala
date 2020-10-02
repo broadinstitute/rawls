@@ -430,26 +430,33 @@ trait WorkspaceComponent {
 
     def loadWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[(Int, Int, Seq[WorkspaceAndAttributesRecord])] = {
       println("inside loadWorkspaces: " + workspaceIds + " " + workspaceQuery)
-      val submissionStatusFilter = workspaceQuery.submissionStatuses.map { statuses =>
+      def submissionStatusFilter = workspaceQuery.submissionStatuses.map { statuses =>
         val statusSql = reduceSqlActionsWithDelim( statuses.map { status => sql"${status}"} )
         concatSqlActions(sql" AND s.STATUS in ", statusSql)
       }.getOrElse(sql" ")
 
-      val workspaceUUIDList = concatSqlActions(sql"WHERE w.id in", sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql" UNHEX(REPLACE(${id.toString}, '-','')) "} ), sql")")
+      def workspaceUUIDList = {
+        val sqlWhere = sql" WHERE "
+        val sqlWhereClause = if (workspaceIds.isEmpty) sql" FALSE "
+        else {
+          concatSqlActions( sql" w.id in ", sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql" UNHEX(REPLACE(${id.toString}, '-','')) "} ), sql")")
+        }
+        concatSqlActions(sqlWhere, sqlWhereClause)
+      }
 
-      val workspaceNamespaceFilter = workspaceQuery.billingProject.map { namespace =>
+      def workspaceNamespaceFilter = workspaceQuery.billingProject.map { namespace =>
         sql" AND w.namespace = ${ namespace } " }.getOrElse(sql" ")
 
-      val workspaceNameFilter = workspaceQuery.workspaceName.map { workspaceName =>
+      def workspaceNameFilter = workspaceQuery.workspaceName.map { workspaceName =>
         sql" AND w.name = ${ workspaceName } " }.getOrElse(sql" ")
 
-      val tagFilter = workspaceQuery.tags.map { tags =>
+      def tagFilter = workspaceQuery.tags.map { tags =>
         val tagSql = reduceSqlActionsWithDelim( tags.map { tag => sql"${tag}"})
         concatSqlActions(sql"AND wa.value_string in ", tagSql)
       }.getOrElse(sql" ")
 
       // This is different from namespace and workspace name, which do an exact match
-      val searchNamespaceAndNameFilter = {
+      def searchNamespaceAndNameFilter = {
         workspaceQuery.searchTerm.map { searchTerm =>
           val sqlSearchTerm = '%' + searchTerm + '%'
           sql" AND (w.namespace LIKE ${sqlSearchTerm} OR w.name LIKE ${sqlSearchTerm} "

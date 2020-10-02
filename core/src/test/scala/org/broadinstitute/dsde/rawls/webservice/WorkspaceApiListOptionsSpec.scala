@@ -139,6 +139,12 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
     }
   }
 
+  def withTestWorkspacesApiServicesEmptyDatabase[T](testCode: TestApiService => T): T = {
+    withCustomTestDatabase(emptyData) { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
 
   "WorkspaceApi list-workspaces with fields param" should "return full response if no fields param" in withTestWorkspacesApiServices { services =>
     Get("/workspaces") ~>
@@ -343,6 +349,127 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
       }
   }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for specified fields, and no filters or sort order" in withTestWorkspacesApiServices { services =>
+    Get("/workspaces/workspaceQuery?page=1&pageSize=10&sortField=name&sortDirection=asc") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+        println(result)
+
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return no workspaces when the user has no access to any workspaces" in withTestWorkspacesApiServicesEmptyDatabase { services =>
+    Get("/workspaces/workspaceQuery") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(WorkspaceQueryResponse(WorkspaceQuery(1,10,"name",SortDirections.Ascending,None,None,None,None,None,None),WorkspaceQueryResultMetadata(0,0,0),List())) {
+          responseAs[WorkspaceQueryResponse]
+        }
+      }
+  }
+
+
+//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a search term on namespace and name" in withTestWorkspacesApiServices { services =>
+//    Get("/workspaces/workspaceQuery") ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.OK) {
+//          status
+//        }
+//        val result = responseAs[WorkspaceQueryResponse]
+//
+//        val dateTime = currentTime()
+//        assertResult(2) {
+//          result.results.length
+//        }
+//
+//      }
+//  }
+//
+//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a filter on billing project" in withTestWorkspacesApiServices { services =>
+//    Get("/workspaces/workspaceQuery") ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.OK) {
+//          status
+//        }
+//        val result = responseAs[WorkspaceQueryResponse]
+//
+//        val dateTime = currentTime()
+//        assertResult(2) {
+//          result.results.length
+//        }
+//
+//      }
+//  }
+//
+//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a filter on submisstionStatus" in withTestWorkspacesApiServices { services =>
+//    Get("/workspaces/workspaceQuery") ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.OK) {
+//          status
+//        }
+//        val result = responseAs[WorkspaceQueryResponse]
+//
+//        val dateTime = currentTime()
+//        assertResult(2) {
+//          result.results.length
+//        }
+//
+//      }
+//  }
+//
+//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a filter on accessLevel" in withTestWorkspacesApiServices { services =>
+//    Get("/workspaces/workspaceQuery") ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.OK) {
+//          status
+//        }
+//        val result = responseAs[WorkspaceQueryResponse]
+//
+//        val dateTime = currentTime()
+//        assertResult(2) {
+//          result.results.length
+//        }
+//
+//      }
+//  }
+//
+//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a filter on workspaceName" in withTestWorkspacesApiServices { services =>
+//    Get("/workspaces/workspaceQuery") ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.OK) {
+//          status
+//        }
+//        val result = responseAs[WorkspaceQueryResponse]
+//
+//        val dateTime = currentTime()
+//        assertResult(2) {
+//          result.results.length
+//        }
+//
+//      }
+//  }
+
+  //more tests on sorting, direction
+
+  // more tests on combo of filter search and sorting and specified fields
+
+  // tests on page and pageSize
+
+  // tests on exceptions
+
 
   ///////////
 
