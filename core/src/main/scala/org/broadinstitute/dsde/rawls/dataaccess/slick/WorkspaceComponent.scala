@@ -478,18 +478,36 @@ trait WorkspaceComponent {
         sql" limit ${workspaceQuery.pageSize} offset ${offset}"
       }
 
+      val sqlInnerSelect =
+        sql"""
+          SELECT w.id,
+             w.namespace,
+             w.name,
+             w.id AS workpace_id,
+            w.bucket_name,
+            w.workflow_collection,
+            w.created_date,
+            w.last_modified,
+            w.created_by,
+            w.is_locked,
+            w.record_version
+          FROM WORKSPACE w
+          LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
+          LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
+           """
+
       val sqlString =
         sql"""
-              SELECT w.namespace,
-                     w.name,
-                     w.id,
-                     w.bucket_name,
-                     w.workflow_collection,
-                     w.created_date,
-                     w.last_modified,
-                     w.created_by,
-                     w.is_locked,
-                     w.record_version,
+              SELECT ws.namespace,
+                     ws.name,
+                     ws.id,
+                     ws.bucket_name,
+                     ws.workflow_collection,
+                     ws.created_date,
+                     ws.last_modified,
+                     ws.created_by,
+                     ws.is_locked,
+                     ws.record_version,
                      wa.id,
                      wa.namespace,
                      wa.name,
@@ -509,10 +527,10 @@ trait WorkspaceComponent {
                      e_ref.record_version,
                      e_ref.deleted,
                      e_ref.deleted_date
+              FROM
            """
-      val fromAndJoins = sql""" FROM WORKSPACE w
-                         LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
-                         LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
+      val fromAndJoins = sql"""
+                         LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on ws.id = wa.owner_id
                          LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id """
 
       for {
@@ -527,7 +545,8 @@ trait WorkspaceComponent {
           thing
         }
         page <- {
-          val thing = concatSqlActions(sqlString, fromAndJoins, workspaceUUIDList, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, ordering, limitOffset).as[WorkspaceAndAttributesRecord]
+//          val thing = concatSqlActions(sqlString, fromAndJoins, workspaceUUIDList, submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, ordering, limitOffset).as[WorkspaceAndAttributesRecord]
+          val thing = concatSqlActions(sqlString, sql" (", sqlInnerSelect, workspaceUUIDList,  submissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql" GROUP BY w.id", ordering,  limitOffset, sql")  ws ", fromAndJoins).as[WorkspaceAndAttributesRecord]
           println("page: " + thing.statements)
           thing
         }
@@ -536,6 +555,58 @@ trait WorkspaceComponent {
         (unfilteredCount.head, filteredCount.head, page)
       }
     }
+
+
+//    SELECT
+//    ws.namespace,
+//    ws.name,
+//    ws.id AS workpace_id,
+//    ws.bucket_name,
+//    ws.workflow_collection,
+//    ws.created_date,
+//    ws.last_modified,
+//    ws.created_by,
+//    ws.is_locked,
+//    ws.record_version,
+//    wa.id AS workspace_attribute_id,
+//    wa.namespace,
+//    wa.name,
+//    wa.value_string,
+//    wa.value_number,
+//    wa.value_boolean,
+//    wa.VALUE_JSON,
+//    wa.value_entity_ref,
+//    wa.list_index,
+//    wa.list_length,
+//    wa.deleted,
+//    wa.deleted_date,
+//    e_ref.id AS entity_reference_id,
+//    e_ref.name,
+//    e_ref.entity_type,
+//    e_ref.workspace_id,
+//    e_ref.record_version,
+//    e_ref.deleted,
+//    e_ref.deleted_date
+//    FROM
+//    (SELECT w.id,
+//    w.namespace,
+//    w.name,
+//    w.id AS workpace_id,
+//    w.bucket_name,
+//    w.workflow_collection,
+//    w.created_date,
+//    w.last_modified,
+//    w.created_by,
+//    w.is_locked,
+//    w.record_version
+//    FROM WORKSPACE w
+//    LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id
+//    LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
+//    WHERE w.id in ( UNHEX(REPLACE('0037751e-c970-4c83-864f-6f78c4bc2677', '-','')) , UNHEX(REPLACE('b39e3463-3367-4289-abda-f8ac8e2676f8', '-','')) )
+//    GROUP BY w.id
+//    ORDER BY w.name, w.last_modified, w.created_by limit 2 offset 0) ws
+//    LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on ws.id = wa.owner_id
+//    LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id;
 
     private def marshalNewWorkspace(workspace: Workspace) = {
       WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)

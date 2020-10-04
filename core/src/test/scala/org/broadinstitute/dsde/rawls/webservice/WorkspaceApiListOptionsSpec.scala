@@ -49,6 +49,122 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
     }
   }
 
+  class PaginatedListTestWorkspaces() extends TestData {
+    val userOwner = RawlsUser(UserInfo(testData.userOwner.userEmail, OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
+
+    val workspaceName1 = WorkspaceName("a-billing-project", "g-ws-name")
+    val workspaceName2 = WorkspaceName("b-billing-project", "f-ws-name")
+    val workspaceName3 = WorkspaceName("c-billing-project", "e-ws-name")
+    val workspaceName4 = WorkspaceName("d-billing-project", "d-ws-name")
+    val workspaceName5 = WorkspaceName("e-billing-project", "c-ws-name")
+    val workspaceName6 = WorkspaceName("f-billing-project", "b-ws-name")
+    val workspaceName7 = WorkspaceName("g-billing-project", "a-ws-name")
+
+    val attributesForWorkspace1 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withTagsNS() -> AttributeString("tag2"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
+    val attributesForWorkspace2 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withTagsNS() -> AttributeString("tag2"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
+    val attributesForWorkspace3 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withTagsNS() -> AttributeString("tag2"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
+    val attributesForWorkspace4 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
+    val attributesForWorkspace5 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
+    val attributesForWorkspace6 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
+    val attributesForWorkspace7 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
+
+    val billingProject1 = RawlsBillingProject(RawlsBillingProjectName(workspaceName1.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val billingProject2 = RawlsBillingProject(RawlsBillingProjectName(workspaceName2.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val billingProject3 = RawlsBillingProject(RawlsBillingProjectName(workspaceName3.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val billingProject4 = RawlsBillingProject(RawlsBillingProjectName(workspaceName4.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val billingProject5 = RawlsBillingProject(RawlsBillingProjectName(workspaceName5.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val billingProject6 = RawlsBillingProject(RawlsBillingProjectName(workspaceName6.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val billingProject7 = RawlsBillingProject(RawlsBillingProjectName(workspaceName7.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
+
+    val workspace1 =  makeWorkspaceWithUsers(billingProject1, workspaceName1.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "e-testUser", attributesForWorkspace1, false)
+    val workspace2 =  makeWorkspaceWithUsers(billingProject2, workspaceName2.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "c-testUser", attributesForWorkspace2, false)
+    val workspace3 =  makeWorkspaceWithUsers(billingProject3, workspaceName3.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "b-testUser", attributesForWorkspace3, false)
+    val workspace4 =  makeWorkspaceWithUsers(billingProject4, workspaceName4.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "a-testUser", attributesForWorkspace4, false)
+    val workspace5 =  makeWorkspaceWithUsers(billingProject5, workspaceName5.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "f-testUser", attributesForWorkspace5, false)
+    val workspace6 =  makeWorkspaceWithUsers(billingProject6, workspaceName6.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "d-testUser", attributesForWorkspace6, false)
+    val workspace7 =  makeWorkspaceWithUsers(billingProject7, workspaceName7.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "g-testUser", attributesForWorkspace7, false)
+    val workspaceList = List(workspace1, workspace2, workspace3, workspace4, workspace5, workspace6, workspace7)
+
+    val sample1 = Entity("sample1", "sample", Map.empty)
+    val sample2 = Entity("sample2", "sample", Map.empty)
+    val sample3 = Entity("sample3", "sample", Map.empty)
+    val sample4 = Entity("sample4", "sample", Map.empty)
+    val sample5 = Entity("sample5", "sample", Map.empty)
+    val sample6 = Entity("sample6", "sample", Map.empty)
+    val sampleSet = Entity("sampleset", "sample_set", Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
+      sample1.toReference,
+      sample2.toReference,
+      sample3.toReference
+    ))))
+
+    val methodConfig = MethodConfiguration("dsde", "testConfig", Some("Sample"), None, Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(workspaceName1.namespace, "method-a", 1))
+    val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, workspaceName1)
+    val submissionTemplate = createTestSubmission(workspace1, methodConfig, sampleSet, WorkbenchEmail(userOwner.userEmail.value),
+      Seq(sample1, sample2, sample3), Map(sample1 -> testData.inputResolutions, sample2 -> testData.inputResolutions, sample3 -> testData.inputResolutions),
+      Seq(sample4, sample5, sample6), Map(sample4 -> testData.inputResolutions2, sample5 -> testData.inputResolutions2, sample6 -> testData.inputResolutions2))
+
+    val submissionSuccess = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Done,
+      workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Succeeded))
+    )
+    val submissionFail = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Done,
+      workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Failed))
+    )
+    val submissionRunning1 = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Submitted,
+      workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Running))
+    )
+    val submissionRunning2 = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Submitted,
+      workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Running))
+    )
+
+    override def save() = {
+      DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject1),
+        rawlsBillingProjectQuery.create(billingProject2),
+        rawlsBillingProjectQuery.create(billingProject3),
+        rawlsBillingProjectQuery.create(billingProject4),
+        rawlsBillingProjectQuery.create(billingProject5),
+        rawlsBillingProjectQuery.create(billingProject6),
+        rawlsBillingProjectQuery.create(billingProject7),
+
+        workspaceQuery.save(workspace1),
+        workspaceQuery.save(workspace2),
+        workspaceQuery.save(workspace3),
+        workspaceQuery.save(workspace4),
+        workspaceQuery.save(workspace5),
+        workspaceQuery.save(workspace6),
+        workspaceQuery.save(workspace7),
+
+
+        withWorkspaceContext(workspace1) { ctx =>
+          DBIO.seq(
+            entityQuery.save(ctx, sample1),
+            entityQuery.save(ctx, sample2),
+            entityQuery.save(ctx, sample3),
+            entityQuery.save(ctx, sample4),
+            entityQuery.save(ctx, sample5),
+            entityQuery.save(ctx, sample6),
+            entityQuery.save(ctx, sampleSet),
+
+            methodConfigurationQuery.create(ctx, methodConfig),
+
+            submissionQuery.create(ctx, submissionSuccess),
+            submissionQuery.create(ctx, submissionFail),
+            submissionQuery.create(ctx, submissionRunning1),
+            submissionQuery.create(ctx, submissionRunning2)
+          )
+        }
+      ).withPinnedSession
+    }
+  }
+
   class TestWorkspaces() extends TestData {
     val userOwner = RawlsUser(UserInfo(testData.userOwner.userEmail, OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
 
@@ -333,6 +449,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   ///////////
 
+  // default values, return workspaces
   "WorkspaceApi paginated list-workspaces" should "return default response for no specified fields, filters or sort order" in withTestWorkspacesApiServices { services =>
     Get("/workspaces/workspaceQuery") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -350,6 +467,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
       }
   }
 
+  // specify default values, return workspaces
   "WorkspaceApi paginated list-workspaces" should "return workspaces for specified fields, and no filters or sort order" in withTestWorkspacesApiServices { services =>
     Get("/workspaces/workspaceQuery?page=1&pageSize=10&sortField=name&sortDirection=asc") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -377,22 +495,22 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
   }
 
 
-//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a search term on namespace and name" in withTestWorkspacesApiServices { services =>
-//    Get("/workspaces/workspaceQuery") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK) {
-//          status
-//        }
-//        val result = responseAs[WorkspaceQueryResponse]
-//
-//        val dateTime = currentTime()
-//        assertResult(2) {
-//          result.results.length
-//        }
-//
-//      }
-//  }
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a search term on namespace and name" in withTestWorkspacesApiServices { services =>
+    Get("/workspaces/workspaceQuery") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        val dateTime = currentTime()
+        assertResult(2) {
+          result.results.length
+        }
+
+      }
+  }
 //
 //  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a filter on billing project" in withTestWorkspacesApiServices { services =>
 //    Get("/workspaces/workspaceQuery") ~>

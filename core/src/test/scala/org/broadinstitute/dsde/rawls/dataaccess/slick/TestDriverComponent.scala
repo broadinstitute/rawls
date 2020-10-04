@@ -293,28 +293,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     // Test copying configs between workspaces
     val (workspaceConfigCopyDestination) = makeWorkspaceWithUsers(billingProject, wsNameConfigCopyDestination.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val workspaceListName1 = WorkspaceName("a-billing-project", "g-ws-name")
-    val workspaceListName2 = WorkspaceName("b-billing-project", "f-ws-name")
-    val workspaceListName3 = WorkspaceName("c-billing-project", "e-ws-name")
-    val workspaceListName4 = WorkspaceName("d-billing-project", "d-ws-name")
-    val workspaceListName5 = WorkspaceName("e-billing-project", "c-ws-name")
-    val workspaceListName6 = WorkspaceName("f-billing-project", "b-ws-name")
-    val workspaceListName7 = WorkspaceName("g-billing-project", "a-ws-name")
-    val attributesForWorkspace1 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withTagsNS() -> AttributeString("tag2"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace2 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withTagsNS() -> AttributeString("tag2"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace3 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withTagsNS() -> AttributeString("tag2"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace4 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace5 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace6 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace7 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val (workspaceList1) =  makeWorkspaceWithUsers(RawlsBillingProject(RawlsBillingProjectName(workspaceListName1.namespace), "testBucketUrl", CreationStatuses.Ready, None, None), workspaceListName1.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "e-testUser", attributesForWorkspace1, false)
-    val (workspaceList2) =  makeWorkspaceWithUsers(RawlsBillingProject(RawlsBillingProjectName(workspaceListName2.namespace), "testBucketUrl", CreationStatuses.Ready, None, None), workspaceListName2.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "c-testUser", attributesForWorkspace2, false)
-    val (workspaceList3) =  makeWorkspaceWithUsers(RawlsBillingProject(RawlsBillingProjectName(workspaceListName3.namespace), "testBucketUrl", CreationStatuses.Ready, None, None), workspaceListName3.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "b-testUser", attributesForWorkspace3, false)
-    val (workspaceList4) =  makeWorkspaceWithUsers(RawlsBillingProject(RawlsBillingProjectName(workspaceListName4.namespace), "testBucketUrl", CreationStatuses.Ready, None, None), workspaceListName4.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "a-testUser", attributesForWorkspace4, false)
-    val (workspaceList5) =  makeWorkspaceWithUsers(RawlsBillingProject(RawlsBillingProjectName(workspaceListName5.namespace), "testBucketUrl", CreationStatuses.Ready, None, None), workspaceListName5.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "f-testUser", attributesForWorkspace5, false)
-    val (workspaceList6) =  makeWorkspaceWithUsers(RawlsBillingProject(RawlsBillingProjectName(workspaceListName6.namespace), "testBucketUrl", CreationStatuses.Ready, None, None), workspaceListName6.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "d-testUser", attributesForWorkspace6, false)
-    val (workspaceList7) =  makeWorkspaceWithUsers(RawlsBillingProject(RawlsBillingProjectName(workspaceListName7.namespace), "testBucketUrl", CreationStatuses.Ready, None, None), workspaceListName7.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "g-testUser", attributesForWorkspace7, false)
-
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
@@ -839,14 +817,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceInterleavedSubmissions,
       workspaceWorkflowFailureMode,
       workspaceToTestGrant,
-      workspaceConfigCopyDestination,
-      workspaceList1,
-      workspaceList2,
-      workspaceList3,
-      workspaceList4,
-      workspaceList5,
-      workspaceList6,
-      workspaceList7)
+      workspaceConfigCopyDestination)
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
 
     override def save() = {

@@ -26,7 +26,6 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
-import io.opencensus.scala.Tracing.startSpan
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -691,41 +690,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  private def checkWorkspaceListTestWorkspacesExist = {
-    assertWorkspaceResult(Option(testData.workspaceList1)) {
-      runAndWait(workspaceQuery.findByName(testData.workspaceListName1))
-    }
-    assertWorkspaceResult(Option(testData.workspaceList2)) {
-      runAndWait(workspaceQuery.findByName(testData.workspaceListName2))
-    }
-    assertWorkspaceResult(Option(testData.workspaceList3)) {
-      runAndWait(workspaceQuery.findByName(testData.workspaceListName3))
-    }
-    assertWorkspaceResult(Option(testData.workspaceList4)) {
-      runAndWait(workspaceQuery.findByName(testData.workspaceListName4))
-    }
-    assertWorkspaceResult(Option(testData.workspaceList5)) {
-      runAndWait(workspaceQuery.findByName(testData.workspaceListName5))
-    }
-    assertWorkspaceResult(Option(testData.workspaceList6)) {
-      runAndWait(workspaceQuery.findByName(testData.workspaceListName6))
-    }
-    assertWorkspaceResult(Option(testData.workspaceList7)) {
-      runAndWait(workspaceQuery.findByName(testData.workspaceListName7))
-    }
-  }
-
-  it should "list workspaces" in withTestDataServices { services =>
-    //check that the workspace exists
-    checkWorkspaceListTestWorkspacesExist
-
-    val s = startSpan("listWorkspace")
-
-   // assert(List(testData.workspaceList1, testData.workspaceList2, testData.workspaceList3, testData.workspaceList4, testData.workspaceList5, testData.workspaceList6, testData.workspaceList7)) {
-      Await.result(services.workspaceService.listWorkspaces(WorkspaceFieldSpecs(Some(Set())), s), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, Vector[Seq[WorkspaceListResponse]])]]
-    //}
-  }
-
   it should "delete a workspace with mixed submissions" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceMixedSubmissions)) {
@@ -822,8 +786,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     // searching for with no query should return all tags
     val res6 = Await.result(services.workspaceService.getTags(None), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-    assertResult(Vector(WorkspaceTag("tag2",3), WorkspaceTag("cantaloupe",2), WorkspaceTag("tag1",2), WorkspaceTag("buffalo",1), WorkspaceTag("cancer",1))) {
-      res6.response._2
+    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("buffalo", 1), WorkspaceTag("cancer", 1))) {      res6.response._2
     }
 
     // remove tags
