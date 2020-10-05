@@ -10,6 +10,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import slick.jdbc.TransactionIsolation
+import org.mockito.Mockito.RETURNS_SMART_NULLS
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

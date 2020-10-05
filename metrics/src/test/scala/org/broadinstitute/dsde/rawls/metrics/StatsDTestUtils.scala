@@ -7,6 +7,7 @@ import com.readytalk.metrics.{StatsD, StatsDReporter}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder}
 import org.scalatest.concurrent.Eventually
+import org.mockito.Mockito.RETURNS_SMART_NULLS
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._

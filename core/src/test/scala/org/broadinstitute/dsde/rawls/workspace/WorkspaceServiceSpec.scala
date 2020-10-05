@@ -33,7 +33,7 @@ import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
-import org.mockito.Mockito.verify
+import org.mockito.Mockito.{verify, RETURNS_SMART_NULLS}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
