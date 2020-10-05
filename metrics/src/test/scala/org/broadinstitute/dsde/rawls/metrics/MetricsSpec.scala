@@ -32,7 +32,7 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
 
   before {
     test = new TestInstrumented
-    statsD = mock[StatsD]
+    statsD = mock[StatsD](RETURNS_SMART_NULLS)
     reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)

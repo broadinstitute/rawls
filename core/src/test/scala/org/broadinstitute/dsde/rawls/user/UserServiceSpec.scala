@@ -28,7 +28,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
   val defaultCromwellBucketUrl: String = "bucket-url"
   val defaultBillingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("test-bp")
   val defaultBillingProject: RawlsBillingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.Ready, None, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
-  val defaultMockSamDAO: SamDAO = mock[SamDAO]
+  val defaultMockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val testConf: Config = ConfigFactory.load()
 
@@ -74,7 +74,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
 
       runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val mockGcsDAO = mock[GoogleServicesDAO]
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.getGoogleProject(project.projectName)).thenReturn(Future.successful(new Project().setProjectNumber(42L)))
       val folderId = "folders/1234567"
       when(mockGcsDAO.getFolderId(defaultServicePerimeterName.value.split("/").last)).thenReturn(Future.successful(Option(folderId)))
@@ -122,7 +122,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val mockSamDAO = mock[SamDAO]
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter, urlEncodedDefaultServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(false))
 
@@ -140,7 +140,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val mockSamDAO = mock[SamDAO]
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter, urlEncodedDefaultServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(false))
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(true))
 
@@ -160,12 +160,12 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val petSAJson = "petJson"
       runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val mockSamDAO = mock[SamDAO]
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
       when(mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(userIdInfo)))
       when(mockSamDAO.getPetServiceAccountKeyForUser(project.projectName.value, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
 
-      val mockGcsDAO = mock[GoogleServicesDAO]
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(userInfo))
       when(mockGcsDAO.deleteProject(project.projectName)).thenReturn(Future.successful())
       when(mockSamDAO.deleteUserPetServiceAccount(project.projectName.value, userInfo)).thenReturn(Future.successful())
@@ -202,7 +202,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       runAndWait(rawlsBillingProjectQuery.create(project))
       runAndWait(workspaceQuery.save(workspace))
 
-      val mockSamDAO = mock[SamDAO]
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO)
@@ -219,7 +219,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val mockSamDAO = mock[SamDAO]
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, defaultBillingProjectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(false))
 
       val userService = getUserService(dataSource, mockSamDAO)

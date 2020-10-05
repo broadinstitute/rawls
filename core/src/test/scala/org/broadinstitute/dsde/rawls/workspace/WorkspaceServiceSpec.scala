@@ -82,7 +82,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
     val samDAO = new MockSamDAO(dataSource)
     val gpsDAO = new MockGooglePubSubDAO
-    val workspaceManagerDAO = mock[MockWorkspaceManagerDAO]
+    val workspaceManagerDAO = mock[MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
     val notificationTopic = "test-notification-topic"

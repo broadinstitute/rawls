@@ -57,8 +57,8 @@ class CoordinatedDataSourceAccessSpec
   forAll(tests) { (description, function, expected) =>
     it should description in {
       val testProbe = TestProbe("CoordinatedDataSourceAccessProbe")
-      val mockSlickDataSource = mock[SlickDataSource]
-      val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]]
+      val mockSlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+      val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]](RETURNS_SMART_NULLS)
       val testAccess = new CoordinatedDataSourceAccess(
         slickDataSource = mockSlickDataSource,
         dataSourceActor = testProbe.ref,

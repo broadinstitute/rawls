@@ -34,7 +34,7 @@ class NotificationSpec extends ApiServiceSpec {
   }
 
   case class TestApiServiceMokitoSam(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser {
-    override val samDAO: SamDAO = mock[SamDAO]
+    override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   }
 
   def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = testData.userOwner)(testCode: TestApiService => T): T = {

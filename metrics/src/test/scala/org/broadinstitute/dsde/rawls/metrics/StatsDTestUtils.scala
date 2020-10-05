@@ -21,7 +21,7 @@ trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
   def clearRegistries(): Unit = SharedMetricRegistries.getOrCreate("default").removeMatching(MetricFilter.ALL)
 
   protected def withStatsD[T](testCode: => T)(verify: Seq[(String, String)] => Unit = _ => ()): T = {
-    val statsD = mock[StatsD]
+    val statsD = mock[StatsD](RETURNS_SMART_NULLS)
     clearRegistries()
     val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .convertRatesTo(TimeUnit.SECONDS)
