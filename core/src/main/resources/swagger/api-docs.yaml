@@ -5507,6 +5507,7 @@ components:
         onlyAddBillingProjectOwner:
           type: boolean
           description: Optional, false if not specified. If true, the workspace is created with a Billing Project owner but no workspace owner. Requires being a Billing Project owner.
+          default: false
       description: ""
     WorkspaceRequestClone:
       required:
@@ -5536,6 +5537,7 @@ components:
         onlyAddBillingProjectOwner:
           type: boolean
           description: Optional, false if not specified. If true, the workspace is created with a Billing Project owner but no workspace owner. Requires being a Billing Project owner.
+          default: false
       description: ""
     BucketUsageResponse:
       required:
