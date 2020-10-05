@@ -46,8 +46,8 @@ class UncoordinatedDataSourceAccessSpec
 
   forAll(tests) { (description, function, expected) =>
     it should description in {
-      val mockSlickDataSource = mock[SlickDataSource]
-      val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]]
+      val mockSlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+      val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]](RETURNS_SMART_NULLS)
       val transactionIsolation = TransactionIsolation.RepeatableRead
       when(mockSlickDataSource.inTransaction(mockDataAccessFunction, transactionIsolation))
         .thenReturn(Future(function()))

@@ -282,7 +282,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       withDataOp: (SlickDataSource => T) => T,
       executionServiceDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName),
       bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
-      dataRepoDAO: DataRepoDAO = mock[DataRepoDAO]): T = {
+      dataRepoDAO: DataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS)): T = {
 
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
@@ -1106,7 +1106,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
   def dataRepoSubmissionTest[T](tableData: Map[String, String])(test: (WorkspaceService, MethodConfiguration, UUID) => T) = {
     val tableResult: TableResult = prepareBqData(tableData)
 
-    val dataRepoDAO = mock[DataRepoDAO]
+    val dataRepoDAO = mock[DataRepoDAO](RETURNS_SMART_NULLS)
 
     val snapshotUUID: UUID = UUID.randomUUID()
     val tableName = "table1"

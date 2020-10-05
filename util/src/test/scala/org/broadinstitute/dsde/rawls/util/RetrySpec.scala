@@ -168,7 +168,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
     * @return mock SLF4JLogger
     */
   private def setUpMockLogger: SLF4JLogger = {
-    val mockLogger = mock[SLF4JLogger]
+    val mockLogger = mock[SLF4JLogger](RETURNS_SMART_NULLS)
     when(mockLogger.isInfoEnabled).thenReturn(true)
     mockLogger
   }

@@ -64,8 +64,8 @@ class CoordinatedDataSourceActorSpec
       val timeout = 5.seconds
       val testActor = TestActorRef(CoordinatedDataSourceActor.props())
       implicit val implicitAskTimeout: Timeout = Timeout(timeout * 2)
-      val mockSlickDataSource = mock[SlickDataSource]
-      val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]]
+      val mockSlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+      val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]](RETURNS_SMART_NULLS)
       val transactionIsolation = TransactionIsolation.RepeatableRead
       when(mockSlickDataSource.inTransaction(mockDataAccessFunction, transactionIsolation))
         .thenReturn(Future(function()))
@@ -96,8 +96,8 @@ class CoordinatedDataSourceActorSpec
     val numTested = 100
     implicit val implicitAskTimeout: Timeout = Timeout(individualWaitTimeout * numTested * 2)
     val testActor = TestActorRef(CoordinatedDataSourceActor.props())
-    val mockSlickDataSource = mock[SlickDataSource]
-    val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]]
+    val mockSlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]](RETURNS_SMART_NULLS)
     val transactionIsolation = TransactionIsolation.RepeatableRead
 
     val quickening = new Quickening(individualSleep)
@@ -129,9 +129,9 @@ class CoordinatedDataSourceActorSpec
     val numTested = 100
     implicit val implicitAskTimeout: Timeout = Timeout(individualWaitTimeout * numTested * 2) // Lots of time to wait
     val testActor = TestActorRef(CoordinatedDataSourceActor.props())
-    val mockSlickDataSource = mock[SlickDataSource]
-    val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]]
-    val slowDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]]
+    val mockSlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]](RETURNS_SMART_NULLS)
+    val slowDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]](RETURNS_SMART_NULLS)
     val transactionIsolation = TransactionIsolation.RepeatableRead
 
     val quickening = new Quickening(individualSleep)

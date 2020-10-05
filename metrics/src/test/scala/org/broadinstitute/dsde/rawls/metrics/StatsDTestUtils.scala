@@ -7,6 +7,7 @@ import com.readytalk.metrics.{StatsD, StatsDReporter}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder}
 import org.scalatest.concurrent.Eventually
+import org.mockito.Mockito.RETURNS_SMART_NULLS
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -21,7 +22,7 @@ trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
   def clearRegistries(): Unit = SharedMetricRegistries.getOrCreate("default").removeMatching(MetricFilter.ALL)
 
   protected def withStatsD[T](testCode: => T)(verify: Seq[(String, String)] => Unit = _ => ()): T = {
-    val statsD = mock[StatsD]
+    val statsD = mock[StatsD](RETURNS_SMART_NULLS)
     clearRegistries()
     val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .convertRatesTo(TimeUnit.SECONDS)

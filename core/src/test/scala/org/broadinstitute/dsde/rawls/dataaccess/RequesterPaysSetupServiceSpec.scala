@@ -13,7 +13,7 @@ class RequesterPaysSetupServiceSpec extends FlatSpec with Matchers with MockitoS
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Seconds)))
 
   private def setupServices(dataSource: SlickDataSource) = {
-    val mockBondApiDAO = mock[BondApiDAO]
+    val mockBondApiDAO = mock[BondApiDAO](RETURNS_SMART_NULLS)
     val gcsDAO = new MockGoogleServicesDAO("foo")
     new RequesterPaysSetupService(dataSource, gcsDAO, mockBondApiDAO, "rp/role")
   }

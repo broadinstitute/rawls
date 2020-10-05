@@ -283,7 +283,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def mockMethodRepoDAO: MethodRepoDAO = {
-    val dao = mock[MethodRepoDAO]
+    val dao = mock[MethodRepoDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus(any[ExecutionContext])
     } thenReturn Future.successful(HealthMonitor.OkStatus)
@@ -291,7 +291,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def exceptionalMethodRepoDAO: MethodRepoDAO = {
-    val dao = mock[MethodRepoDAO]
+    val dao = mock[MethodRepoDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus(any[ExecutionContext])
     } thenReturn Future.failed(new Exception("test exception"))
@@ -299,7 +299,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def timedOutMethodRepoDAO: MethodRepoDAO = {
-    val dao = mock[MethodRepoDAO]
+    val dao = mock[MethodRepoDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus(any[ExecutionContext])
     } thenReturn Future {
@@ -310,7 +310,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def failingMethodRepoDAO: MethodRepoDAO = {
-    val dao = mock[MethodRepoDAO]
+    val dao = mock[MethodRepoDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus(any[ExecutionContext])
     } thenReturn Future.successful(SubsystemStatus(false, Some(List("agora failed"))))
@@ -318,7 +318,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def mockSamDAO: SamDAO = {
-    val dao = mock[SamDAO]
+    val dao = mock[SamDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus()
     } thenReturn Future.successful(HealthMonitor.OkStatus)
@@ -326,7 +326,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def failingSamDAO: SamDAO = {
-    val dao = mock[SamDAO]
+    val dao = mock[SamDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus()
     } thenReturn Future.successful(SubsystemStatus(false, Option(List("""{"some": "json"}"""))))
@@ -334,7 +334,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def mockExecutionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = {
-    val dao = mock[ExecutionServiceDAO]
+    val dao = mock[ExecutionServiceDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus()
     } thenReturn Future.successful(okExecSubsytems)
@@ -343,12 +343,12 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def failingExecutionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = {
-    val happyDao = mock[ExecutionServiceDAO]
+    val happyDao = mock[ExecutionServiceDAO](RETURNS_SMART_NULLS)
     when {
       happyDao.getStatus()
     } thenReturn Future.successful(okExecSubsytems)
 
-    val sadDao = mock[ExecutionServiceDAO]
+    val sadDao = mock[ExecutionServiceDAO](RETURNS_SMART_NULLS)
     when {
       sadDao.getStatus()
     } thenReturn Future.successful(sadExecSubsystems)
