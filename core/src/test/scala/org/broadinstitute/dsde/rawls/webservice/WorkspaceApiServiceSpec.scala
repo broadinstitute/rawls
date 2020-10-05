@@ -340,6 +340,70 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     runMultipleAndWait(100)(generator)
   }
 
+  it should "return 201 for post to workspaces with onlyAddBillingProjectOwner" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      Map.empty,
+      onlyAddBillingProjectOwner = Option(true)
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+        assertResult(newWorkspace) {
+          val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty), onlyAddBillingProjectOwner = Option(true))
+        }
+        assertResult(newWorkspace) {
+          val ws = responseAs[WorkspaceDetails]
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes.getOrElse(Map()), Option(Set.empty), onlyAddBillingProjectOwner = Option(true))
+        }
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "return 403 for post to workspaces with onlyAddBillingProjectOwner without BP owner permissions" in withTestDataApiServicesMockitoSam { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      Map.empty,
+      onlyAddBillingProjectOwner = Option(true)
+    )
+
+    // User has BP user role, but not owner role
+    when(services.samDAO.listUserRolesForResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+      ArgumentMatchers.eq(testData.billingProject.projectName.value),
+      any[UserInfo]
+    )).thenReturn(Future.successful(Set[SamResourceRole](SamProjectRoles.workspaceCreator, SamProjectRoles.batchComputeUser)))
+
+    // User has BP user permissions and therefore can create workspaces
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+      ArgumentMatchers.eq(testData.billingProject.projectName.value),
+      ArgumentMatchers.eq(SamBillingProjectActions.createWorkspace),
+      any[UserInfo]
+    )).thenReturn(Future.successful(true))
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, responseAs[String]) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(newWorkspace.namespace))
+      }
+  }
+
   it should "get a workspace" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -874,6 +938,80 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val expected = expectedHttpRequestMetrics("post", wsPathForRequestMetrics, StatusCodes.Created.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
+  }
+
+  it should "clone a workspace with onlyAddBillingProjectOwner" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, onlyAddBillingProjectOwner = Option(true))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
+            }
+          }
+        }
+
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "return 403 for clone workspace with onlyAddBillingProjectOwner without BP owner permissions" in withTestDataApiServicesMockitoSam { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, onlyAddBillingProjectOwner = Option(true))
+
+    // User has read permissions on existing workspace
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      ArgumentMatchers.eq(SamWorkspaceActions.read),
+      any[UserInfo]
+    )).thenReturn(Future.successful(true))
+
+    when(services.samDAO.getResourceAuthDomain(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      any[UserInfo]
+    )).thenReturn(Future.successful(Seq.empty))
+
+    // User has BP user role, but not owner role
+    when(services.samDAO.listUserRolesForResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+      ArgumentMatchers.eq(testData.billingProject.projectName.value),
+      any[UserInfo]
+    )).thenReturn(Future.successful(Set[SamResourceRole](SamProjectRoles.workspaceCreator, SamProjectRoles.batchComputeUser)))
+
+    // User has BP user permissions and therefore can create workspaces
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+      ArgumentMatchers.eq(testData.billingProject.projectName.value),
+      ArgumentMatchers.eq(SamBillingProjectActions.createWorkspace),
+      any[UserInfo]
+    )).thenReturn(Future.successful(true))
+
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, responseAs[String]) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(workspaceCopy.namespace))
+      }
   }
 
   it should "return 409 Conflict on clone if the destination already exists" in withTestDataApiServices { services =>

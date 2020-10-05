@@ -102,7 +102,7 @@ trait WorkspaceSupport {
           userIsBillingProjectOwner = billingProjectRoles.contains(SamProjectRoles.owner)
           response <- userIsBillingProjectOwner match {
             case true => op
-            case false => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"Missing ${SamProjectRoles.owner} role on the billing project.")))
+            case false => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"Missing ${SamProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'.")))
           }
         } yield response
       case _ =>
