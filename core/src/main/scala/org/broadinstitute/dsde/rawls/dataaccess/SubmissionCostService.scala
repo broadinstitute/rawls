@@ -21,17 +21,17 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
 
   val stringParamType = new QueryParameterType().setType("STRING")
 
-  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], workspaceNamespace: String, submissionDate: Option[DateTime]): Future[Map[String, Float]] = {
+  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], workspaceNamespace: String, submissionDate: DateTime, endDate: DateTime): Future[Map[String, Float]] = {
     if( workflowIds.isEmpty ) {
       Future.successful(Map.empty[String, Float])
     } else {
       for {
         //try looking up the workflows via the submission ID.
         //this makes for a smaller query string (though no faster).
-        submissionCosts <- executeSubmissionCostsQuery(submissionId, workspaceNamespace, submissionDate)
+        submissionCosts <- executeSubmissionCostsQuery(submissionId, workspaceNamespace, submissionDate, endDate)
         //if that doesn't return anything, fall back to
         fallbackCosts <- if (submissionCosts.size() == 0)
-          executeWorkflowCostsQuery(workflowIds, workspaceNamespace, submissionDate)
+          executeWorkflowCostsQuery(workflowIds, workspaceNamespace, submissionDate, endDate)
         else
           Future.successful(submissionCosts)
       } yield {
@@ -43,8 +43,9 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
 
   def getWorkflowCost(workflowId: String,
                       workspaceNamespace: String,
-                      submissionDate: Option[DateTime]): Future[Map[String, Float]] = {
-    executeWorkflowCostsQuery(Seq(workflowId), workspaceNamespace, submissionDate) map extractCostResults
+                      submissionDate: DateTime,
+                      endDate: DateTime): Future[Map[String, Float]] = {
+    executeWorkflowCostsQuery(Seq(workflowId), workspaceNamespace, submissionDate, endDate) map extractCostResults
   }
 
   /*
@@ -60,17 +61,17 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
     }
   }
 
-  private def partitionDateClause(submissionDate: Option[DateTime]): String = {
-    (submissionDate map { d: DateTime =>
-      //subtract a day so we never have to deal with timezones
-      val date_start = d.minusDays(1).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
-      // search up to 2 weeks later (TODO: justify this time duration) to minimize BQ costs
-      val date_end = d.plusDays(14).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
-      s"""AND _PARTITIONDATE BETWEEN "$date_start" AND "$date_end""""
-    }).getOrElse("")  // TODO: return error rather than scan with no date restriction
+  private def partitionDateClause(submissionDate: DateTime, endDate: DateTime): String = {
+    // subtract a day so we never have to deal with timezones
+    val date_start = submissionDate.minusDays(1).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
+    // add a day so we never have to deal with timezones
+    val date_end = endDate.plusDays(1).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
+
+    s"""AND _PARTITIONDATE BETWEEN "$date_start" AND "$date_end""""
   }
 
-  private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String, submissionDate: Option[DateTime]): Future[util.List[TableRow]] = {
+  private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String,
+                                          submissionDate: DateTime, endDate: DateTime): Future[util.List[TableRow]] = {
 
     val querySql: String =
       s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
@@ -79,7 +80,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
       |WHERE blabels.value = "terra-$submissionId"
       |AND wflabels.key = "cromwell-workflow-id"
       |AND project.id = ?
-      |${partitionDateClause(submissionDate)}
+      |${partitionDateClause(submissionDate, endDate)}
       |GROUP BY wflabels.key, workflowId""".stripMargin
 
     val namespaceParam =
@@ -101,7 +102,8 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
    * Queries BigQuery for compute costs associated with the workflowIds.
    */
   private def executeWorkflowCostsQuery(workflowIds: Seq[String],
-                                        workspaceNamespace: String, submissionDate: Option[DateTime]): Future[util.List[TableRow]] = {
+                                        workspaceNamespace: String,
+                                        submissionDate: DateTime, endDate: DateTime): Future[util.List[TableRow]] = {
     workflowIds match {
       case Seq() => Future.successful(Seq.empty.asJava)
       case ids =>
@@ -111,7 +113,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
               |FROM `$tableName`, UNNEST(labels) as labels
               |WHERE project.id = ?
               |AND labels.key LIKE "cromwell-workflow-id"
-              |${partitionDateClause(submissionDate)}
+              |${partitionDateClause(submissionDate, endDate)}
               |GROUP BY labels.key, workflowId
               |HAVING $subquery""".stripMargin
 

@@ -90,6 +90,19 @@ object WorkspaceService {
     } yield jobId
   }
 
+  private[workspace] def getSubmissionEndDate(submission: Submission, workflowID: Option[String]): DateTime = {
+    val workflows = submission.workflows.filter(workflow => WorkflowStatuses.terminalStatuses.contains(workflow.status))
+    val workflows2 = workflowID match {
+      case Some(value) => workflows.filter(workflow => workflow.workflowId.contains(value))
+      case None => workflows
+    }
+    if (workflows2.isEmpty) {
+      // add a fixed number of days
+      submission.submissionDate.plusDays(31) // possibly configure?
+    } else {
+      workflows2.map(_.statusLastChangedDate).maxBy(_.getMillis)
+    }
+  }
 }
 
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
@@ -1443,7 +1456,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     submissionWithoutCosts flatMap {
       case (submission) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, Option(submission.submissionDate))) map {
+        toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, submission.submissionDate, WorkspaceService.getSubmissionEndDate(submission))) map {
           case Failure(ex) =>
             logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
             RequestComplete((StatusCodes.OK, submission))
@@ -1542,7 +1555,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // we don't need the Execution Service ID, but we do need to confirm the Workflow is in one for this Submission
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, userInfo, optExecId)
-      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, Option(submission.submissionDate))
+      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, submission.submissionDate, WorkspaceService.getSubmissionEndDate(submission))
     } yield RequestComplete(StatusCodes.OK, WorkflowCost(workflowId, costs.get(workflowId)))
   }
 
