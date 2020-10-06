@@ -403,7 +403,7 @@ trait EntityComponent {
             (entityType, EntityTypeMetadata(
               typesAndCounts.getOrElse(entityType, 0),
               entityType + Attributable.entityIdAttributeSuffix,
-              typesAndAttrs.getOrElse(entityType, Seq()).map (AttributeName.toDelimitedName)))
+              typesAndAttrs.getOrElse(entityType, Seq()).map (AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
           } toMap
         }
       }
