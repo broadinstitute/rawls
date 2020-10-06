@@ -67,7 +67,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
       // search up to 2 weeks later (TODO: justify this time duration) to minimize BQ costs
       val date_end = d.plusDays(14).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
       s"""AND _PARTITIONDATE BETWEEN "$date_start" AND "$date_end""""
-    }).getOrElse("")
+    }).getOrElse("")  // TODO: return error rather than scan with no date restriction
   }
 
   private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String, submissionDate: Option[DateTime]): Future[util.List[TableRow]] = {
