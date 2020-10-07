@@ -33,7 +33,7 @@ import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
-import org.mockito.Mockito.verify
+import org.mockito.Mockito.{verify, RETURNS_SMART_NULLS}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
@@ -82,7 +82,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
     val samDAO = new MockSamDAO(dataSource)
     val gpsDAO = new MockGooglePubSubDAO
-    val workspaceManagerDAO = mock[MockWorkspaceManagerDAO]
+    val workspaceManagerDAO = mock[MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
 
     val notificationTopic = "test-notification-topic"

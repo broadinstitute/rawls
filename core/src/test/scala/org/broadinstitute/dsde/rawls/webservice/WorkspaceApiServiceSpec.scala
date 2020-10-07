@@ -87,7 +87,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   def withApiServicesMockitoSam[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
-      override val samDAO: SamDAO = mock[SamDAO]
+      override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     }
     try {
       testCode(apiService)

@@ -10,6 +10,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import slick.jdbc.TransactionIsolation
+import org.mockito.Mockito.RETURNS_SMART_NULLS
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -57,8 +58,8 @@ class CoordinatedDataSourceAccessSpec
   forAll(tests) { (description, function, expected) =>
     it should description in {
       val testProbe = TestProbe("CoordinatedDataSourceAccessProbe")
-      val mockSlickDataSource = mock[SlickDataSource]
-      val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]]
+      val mockSlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+      val mockDataAccessFunction = mock[DataAccess => ReadWriteAction[Any]](RETURNS_SMART_NULLS)
       val testAccess = new CoordinatedDataSourceAccess(
         slickDataSource = mockSlickDataSource,
         dataSourceActor = testProbe.ref,

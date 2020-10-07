@@ -69,7 +69,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
       runAndWait(rawlsBillingProjectQuery.create(newBillingProject))
       runAndWait(rawlsBillingProjectQuery.create(existingBillingProject))
 
-      val mockAcmDAO = mock[AccessContextManagerDAO]
+      val mockAcmDAO = mock[AccessContextManagerDAO](RETURNS_SMART_NULLS)
       when(mockAcmDAO.overwriteProjectsInServicePerimeter(ArgumentMatchers.any[ServicePerimeterName], ArgumentMatchers.any[Seq[String]])).thenReturn(Future.successful(new Operation().setDone(false).setName("test-op-id")))
 
       val mockGcsDAO = new MockGoogleServicesDAO("test", accessContextManagerDAO = mockAcmDAO)
@@ -108,7 +108,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
       runAndWait(rawlsBillingProjectQuery.create(billingProject2))
       runAndWait(rawlsBillingProjectQuery.create(billingProject3))
 
-      val mockAcmDAO = mock[AccessContextManagerDAO]
+      val mockAcmDAO = mock[AccessContextManagerDAO](RETURNS_SMART_NULLS)
 
       val otherPerimeterOpId = "add-to-other-perimeter"
       when(mockAcmDAO.overwriteProjectsInServicePerimeter(otherServicePerimeter, Seq(projectNumber3.value))).thenReturn(Future.successful(new Operation().setDone(false).setName(otherPerimeterOpId)))
@@ -258,7 +258,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
 
-      val mockAcmDAO = mock[AccessContextManagerDAO]
+      val mockAcmDAO = mock[AccessContextManagerDAO](RETURNS_SMART_NULLS)
       when(mockAcmDAO.overwriteProjectsInServicePerimeter(defaultServicePerimeterName, Seq(number.value))).thenReturn(Future.failed(new Exception("this failed")))
 
       val mockGcsDAO = new MockGoogleServicesDAO("test", accessContextManagerDAO = mockAcmDAO)

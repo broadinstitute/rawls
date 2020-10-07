@@ -1072,7 +1072,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  // metadata attribute name sequences have undefined ordering, so can't compare directly
+  // metadata attribute name sequences should be returned in case-insensitive string order
   def assertMetadataMapsEqual(a: Map[String, EntityTypeMetadata], b: Map[String, EntityTypeMetadata]): Unit = {
     assert(a.size == b.size, "Maps are not equal: sizes differ")
     assertSameElements(a.keySet, b.keySet)
@@ -1081,15 +1081,15 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val bMeta = b(key)
       assert(aMeta.count == bMeta.count, s"Map counts differ for Entity Type $key")
       assert(aMeta.idName == bMeta.idName, s"ID names counts differ for Entity Type $key")
-      assertSameElements(aMeta.attributeNames, bMeta.attributeNames)
+      aMeta.attributeNames should contain theSameElementsInOrderAs bMeta.attributeNames
     }
   }
 
   val expectedMetadataMap: Map[String, EntityTypeMetadata] = Map(
-    "Sample" -> EntityTypeMetadata(8, "Sample_id", Seq("quot", "somefoo", "thingies", "type", "whatsit", "confused", "tumortype", "cycle")),
+    "Sample" -> EntityTypeMetadata(8, "Sample_id", Seq("confused", "cycle", "quot", "somefoo", "thingies", "tumortype", "type", "whatsit")),
     "Aliquot" -> EntityTypeMetadata(2, "Aliquot_id", Seq()),
     "Pair" -> EntityTypeMetadata(2, "Pair_id", Seq("case", "control", "whatsit")),
-    "SampleSet" -> EntityTypeMetadata(5, "SampleSet_id", Seq("samples", "hasSamples")),
+    "SampleSet" -> EntityTypeMetadata(5, "SampleSet_id", Seq("hasSamples", "samples")),
     "PairSet" -> EntityTypeMetadata(1, "PairSet_id", Seq("pairs")),
     "Individual" -> EntityTypeMetadata(2, "Individual_id", Seq("sset"))
   )

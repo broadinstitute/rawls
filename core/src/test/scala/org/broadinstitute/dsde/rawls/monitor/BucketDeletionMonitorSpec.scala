@@ -39,7 +39,7 @@ class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) w
     runAndWait(pendingBucketDeletionQuery.save(nonEmptyBucketName))
     runAndWait(pendingBucketDeletionQuery.save(errorBucketName))
 
-    val mockGoogleServicesDAO = mock[GoogleServicesDAO]
+    val mockGoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
     when(mockGoogleServicesDAO.deleteBucket(emptyBucketName)).thenReturn(Future.successful(true))
     when(mockGoogleServicesDAO.deleteBucket(nonEmptyBucketName)).thenReturn(Future.successful(false))
     when(mockGoogleServicesDAO.deleteBucket(errorBucketName)).thenReturn(Future.failed(new RuntimeException(":(")))
