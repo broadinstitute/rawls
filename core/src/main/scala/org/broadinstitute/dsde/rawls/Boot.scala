@@ -265,7 +265,7 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val marthaBaseUrl: String = conf.getConfig("martha").getString("baseUrl")
-      val marthaUrl: String = marthaBaseUrl.flatMap(_ + "/martha_v3")
+      val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
       val marthaResolver = new MarthaResolver(marthaUrl)
 
       val userServiceConstructor: (UserInfo) => UserService =
