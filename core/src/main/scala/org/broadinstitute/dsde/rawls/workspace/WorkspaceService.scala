@@ -90,17 +90,20 @@ object WorkspaceService {
     } yield jobId
   }
 
-  private[workspace] def getSubmissionEndDate(submission: Submission, workflowID: Option[String]): DateTime = {
-    val workflows = submission.workflows.filter(workflow => WorkflowStatuses.terminalStatuses.contains(workflow.status))
-    val workflows2 = workflowID match {
-      case Some(value) => workflows.filter(workflow => workflow.workflowId.contains(value))
-      case None => workflows
+  private[workspace] def getSubmissionDoneDate(submission: Submission, workflowID: Option[String]): Option[DateTime] = {
+    // find all worklfows that have finished
+    val terminalWorkflows = submission.workflows.filter(workflow => WorkflowStatuses.terminalStatuses.contains(workflow.status))
+    // if a workflowID was submitted, limit the list to that workflow
+    val workflows = workflowID match {
+      case Some(workflowID) => terminalWorkflows.filter(workflow => workflow.workflowId.contains(workflowID))
+      case None => terminalWorkflows
     }
-    if (workflows2.isEmpty) {
-      // add a fixed number of days
-      submission.submissionDate.plusDays(31) // possibly configure?
+    if (workflows.isEmpty) {
+      // return nothing
+      None
     } else {
-      workflows2.map(_.statusLastChangedDate).maxBy(_.getMillis)
+      // use the latest date the workflow(s) reached a terminal status
+      Some(workflows.map(_.statusLastChangedDate).maxBy(_.getMillis))
     }
   }
 }
@@ -1456,7 +1459,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     submissionWithoutCosts flatMap {
       case (submission) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, submission.submissionDate, WorkspaceService.getSubmissionEndDate(submission))) map {
+        val submissionDoneDate: Option[DateTime] = WorkspaceService.getSubmissionDoneDate(submission, None)
+        toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, submission.submissionDate, submissionDoneDate)) map {
           case Failure(ex) =>
             logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
             RequestComplete((StatusCodes.OK, submission))
@@ -1555,7 +1559,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // we don't need the Execution Service ID, but we do need to confirm the Workflow is in one for this Submission
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, userInfo, optExecId)
-      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, submission.submissionDate, WorkspaceService.getSubmissionEndDate(submission))
+      val submissionDoneDate: Option[DateTime] = WorkspaceService.getSubmissionDoneDate(submission, Some(workflowId))
+      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, submission.submissionDate, submissionDoneDate)
     } yield RequestComplete(StatusCodes.OK, WorkflowCost(workflowId, costs.get(workflowId)))
   }
 

@@ -288,6 +288,7 @@ object Boot extends IOApp with LazyLogging {
         SubmissionCostService.constructor(
           gcsConfig.getString("billingExportTableName"),
           gcsConfig.getString("serviceProject"),
+          gcsConfig.getInt("billingSearchWindowDays"),
           bigQueryDAO
         )
 

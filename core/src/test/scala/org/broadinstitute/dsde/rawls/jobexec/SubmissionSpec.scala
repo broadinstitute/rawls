@@ -69,7 +69,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
   val mockServer = RemoteServicesMockServer()
 
   val bigQueryDAO = new MockGoogleBigQueryDAO
-  val mockSubmissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
+  val mockSubmissionCostService = new MockSubmissionCostService("test", "test", 31, bigQueryDAO)
 
   override def beforeAll(): Unit = {
     super.beforeAll()

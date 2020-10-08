@@ -118,7 +118,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     )_
 
     val bigQueryDAO = new MockGoogleBigQueryDAO
-    val submissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
+    val submissionCostService = new MockSubmissionCostService("test", "test", 31, bigQueryDAO)
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2

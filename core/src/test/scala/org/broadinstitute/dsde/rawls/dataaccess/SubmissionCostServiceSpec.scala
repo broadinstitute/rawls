@@ -15,7 +15,7 @@ import scala.language.postfixOps
 class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   implicit val actorSystem = ActorSystem("SubmissionCostServiceSpec")
   val mockBigQueryDAO = new MockGoogleBigQueryDAO
-  val submissionCostService = SubmissionCostService.constructor("test", "test", mockBigQueryDAO)
+  val submissionCostService = SubmissionCostService.constructor("test", "test", 31, mockBigQueryDAO)
 
   val rows = List(
     new TableRow().setF(List(new TableCell().setV("wfKey"), new TableCell().setV("wf1"), new TableCell().setV(1.32f)).asJava),
@@ -38,7 +38,7 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
    */
   it should "bypass BigQuery with no workflow IDs" in {
     assertResult(Map.empty) {
-      Await.result(submissionCostService.getSubmissionCosts("submission-id", Seq.empty, "test", new DateTime(), new DateTime()), 1 minute)
+      Await.result(submissionCostService.getSubmissionCosts("submission-id", Seq.empty, "test", new DateTime(), Some(new DateTime())), 1 minute)
     }
   }
 }
