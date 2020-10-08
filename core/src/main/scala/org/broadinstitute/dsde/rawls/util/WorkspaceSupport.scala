@@ -94,8 +94,8 @@ trait WorkspaceSupport {
     } yield response
   }
 
-  def requireBillingProjectOwnerAccess[T](workspaceRequest: WorkspaceRequest, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    workspaceRequest.onlyAddBillingProjectOwner match {
+  def maybeRequireBillingProjectOwnerAccess[T](workspaceRequest: WorkspaceRequest, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+    workspaceRequest.noWorkspaceOwner match {
       case Some(true) =>
         for {
           billingProjectRoles <- traceDBIOWithParent("listUserRolesForResource", parentSpan)(_ => DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, userInfo)))

@@ -360,12 +360,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     runMultipleAndWait(100)(generator)
   }
 
-  it should "return 201 for post to workspaces with onlyAddBillingProjectOwner" in withTestDataApiServices { services =>
+  it should "return 201 for post to workspaces with noWorkspaceOwner" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
       Map.empty,
-      onlyAddBillingProjectOwner = Option(true)
+      noWorkspaceOwner = Option(true)
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
@@ -376,11 +376,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty), onlyAddBillingProjectOwner = Option(true))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty), noWorkspaceOwner = Option(true))
         }
         assertResult(newWorkspace) {
           val ws = responseAs[WorkspaceDetails]
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes.getOrElse(Map()), Option(Set.empty), onlyAddBillingProjectOwner = Option(true))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes.getOrElse(Map()), Option(Set.empty), noWorkspaceOwner = Option(true))
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
@@ -404,12 +404,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Await.result(populateAcl, Duration.Inf)
   }
 
-  it should "have an empty owner policy when creating a workspace with onlyAddBillingProjectOwner" in withTestDataApiServicesCustomizableMockSam { services =>
+  it should "have an empty owner policy when creating a workspace with noWorkspaceOwner" in withTestDataApiServicesCustomizableMockSam { services =>
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
       Map.empty,
-      onlyAddBillingProjectOwner = Option(true)
+      noWorkspaceOwner = Option(true)
     )
 
     populateBillingProjectPolicies(services)
@@ -432,12 +432,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 for post to workspaces with onlyAddBillingProjectOwner without BP owner permissions" in withTestDataApiServicesMockitoSam { services =>
+  it should "return 403 for post to workspaces with noWorkspaceOwner without BP owner permissions" in withTestDataApiServicesMockitoSam { services =>
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
       Map.empty,
-      onlyAddBillingProjectOwner = Option(true)
+      noWorkspaceOwner = Option(true)
     )
 
     // User has BP user role, but not owner role
@@ -1003,8 +1003,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "clone a workspace with onlyAddBillingProjectOwner" in withTestDataApiServices { services =>
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, onlyAddBillingProjectOwner = Option(true))
+  it should "clone a workspace with noWorkspaceOwner" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, noWorkspaceOwner = Option(true))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1033,8 +1033,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "have an empty owner policy when cloning a workspace with onlyAddBillingProjectOwner" in withTestDataApiServicesCustomizableMockSam { services =>
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, onlyAddBillingProjectOwner = Option(true))
+  it should "have an empty owner policy when cloning a workspace with noWorkspaceOwner" in withTestDataApiServicesCustomizableMockSam { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, noWorkspaceOwner = Option(true))
     populateBillingProjectPolicies(services)
     val expectedOwnerPolicyEmail = ""
 
@@ -1054,8 +1054,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 for clone workspace with onlyAddBillingProjectOwner without BP owner permissions" in withTestDataApiServicesMockitoSam { services =>
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, onlyAddBillingProjectOwner = Option(true))
+  it should "return 403 for clone workspace with noWorkspaceOwner without BP owner permissions" in withTestDataApiServicesMockitoSam { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, noWorkspaceOwner = Option(true))
 
     // User has read permissions on existing workspace
     when(services.samDAO.userHasAction(

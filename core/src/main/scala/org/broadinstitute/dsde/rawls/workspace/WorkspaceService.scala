@@ -1820,11 +1820,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         DBIO.from(for {
           resource <- {
             val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerPolicyEmail), Set.empty, Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner))
-            val ownerPolicy =
-              if (workspaceRequest.onlyAddBillingProjectOwner.getOrElse(false))
-                SamWorkspacePolicyNames.owner -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.owner))
-              else
-                SamWorkspacePolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamWorkspaceRoles.owner))
+            val ownerPolicyMembership: Set[WorkbenchEmail] = if (workspaceRequest.noWorkspaceOwner.getOrElse(false)) {
+              Set.empty
+            } else {
+              Set(WorkbenchEmail(userInfo.userEmail.value))
+            }
+            val ownerPolicy = SamWorkspacePolicyNames.owner -> SamPolicy(ownerPolicyMembership, Set.empty, Set(SamWorkspaceRoles.owner))
             val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.writer))
             val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.reader))
             val shareReaderPolicy = SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.shareReader))
@@ -1869,8 +1870,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-    traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(s0 => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, s0) {
-      traceDBIOWithParent("maybe requireBillingProjectOwnerAccess", s0) (s1 => requireBillingProjectOwnerAccess(workspaceRequest) {
+    traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(s1 => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, s1) {
+      traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", s1) (_ => maybeRequireBillingProjectOwnerAccess(workspaceRequest) {
         traceDBIOWithParent("findByName", s1)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
           case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
           case None =>

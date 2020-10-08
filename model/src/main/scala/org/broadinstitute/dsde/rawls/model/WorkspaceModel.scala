@@ -87,7 +87,7 @@ case class WorkspaceRequest (
                               attributes: AttributeMap,
                               authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
                               copyFilesWithPrefix: Option[String] = None,
-                              onlyAddBillingProjectOwner: Option[Boolean] = None
+                              noWorkspaceOwner: Option[Boolean] = None
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
