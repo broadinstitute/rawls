@@ -91,9 +91,9 @@ object WorkspaceService {
   }
 
   private[workspace] def getSubmissionDoneDate(submission: Submission, workflowID: Option[String]): Option[DateTime] = {
-    // find all worklfows that have finished
+    // find all workflows that have finished
     val terminalWorkflows = submission.workflows.filter(workflow => WorkflowStatuses.terminalStatuses.contains(workflow.status))
-    // if a workflowID was submitted, limit the list to that workflow
+    // optionally limit the list to a specific workflowID
     val workflows = workflowID match {
       case Some(workflowID) => terminalWorkflows.filter(workflow => workflow.workflowId.contains(workflowID))
       case None => terminalWorkflows
