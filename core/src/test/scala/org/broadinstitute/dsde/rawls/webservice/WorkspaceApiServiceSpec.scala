@@ -17,13 +17,14 @@ import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.model.headers._
-import org.broadinstitute.dsde.rawls.mock.MockSamDAO
+import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -48,6 +49,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
+
+  case class TestApiServiceCustomizableMockSam(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser {
+    override val samDAO: CustomizableMockSamDAO = new CustomizableMockSamDAO(dataSource)
+  }
 
   def withApiServices[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
@@ -127,6 +132,21 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   def withLockedWorkspaceApiServices[T](user: String)(testCode: TestApiService => T): T = {
     withCustomTestDatabase(new LockedWorkspace) { dataSource: SlickDataSource =>
       withApiServicesSecure(dataSource, user)(testCode)
+    }
+  }
+
+  def withApiServicesCustomizableMockSam[T](dataSource: SlickDataSource, user: String = testData.userProjectOwner.userEmail.value)(testCode: TestApiServiceCustomizableMockSam => T): T = {
+    val apiService = new TestApiServiceCustomizableMockSam(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
+  def withTestDataApiServicesCustomizableMockSam[T](testCode: TestApiServiceCustomizableMockSam => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServicesCustomizableMockSam(dataSource)(testCode)
     }
   }
 
@@ -365,6 +385,49 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
           header("Location")
+        }
+      }
+  }
+
+  private def toUserInfo(user: RawlsUser) = UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
+  private def populateBillingProjectPolicies(services: TestApiServiceCustomizableMockSam, workspace: Workspace = testData.workspace) = {
+    val populateAcl = for {
+      _ <- services.samDAO.registerUser(toUserInfo(testData.userProjectOwner))
+
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.billingProject, workspace.namespace, SamBillingProjectPolicyNames.owner,
+        SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamBillingProjectActions.createWorkspace), Set(SamProjectRoles.owner)), userInfo)
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.reader,
+        SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamWorkspaceActions.read), Set(SamWorkspaceRoles.reader)), userInfo)
+
+    } yield ()
+
+    Await.result(populateAcl, Duration.Inf)
+  }
+
+  it should "have an empty owner policy when creating a workspace with onlyAddBillingProjectOwner" in withTestDataApiServicesCustomizableMockSam { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      Map.empty,
+      onlyAddBillingProjectOwner = Option(true)
+    )
+
+    populateBillingProjectPolicies(services)
+
+    val expectedOwnerPolicyEmail = ""
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+        // check the workspace owner policy
+        assertResult(expectedOwnerPolicyEmail) {
+          val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
+          val policiesWithNameAndEmail = Await.result(services.samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, ws.workspaceId, userInfo), Duration.Inf)
+          val actualOwnerPolicyEmail = policiesWithNameAndEmail.find(_.policyName == SamWorkspacePolicyNames.owner).get.email.value
+          actualOwnerPolicyEmail
         }
       }
   }
@@ -966,6 +1029,27 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
           header("Location")
+        }
+      }
+  }
+
+  it should "have an empty owner policy when cloning a workspace with onlyAddBillingProjectOwner" in withTestDataApiServicesCustomizableMockSam { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, onlyAddBillingProjectOwner = Option(true))
+    populateBillingProjectPolicies(services)
+    val expectedOwnerPolicyEmail = ""
+
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+
+        assertResult(expectedOwnerPolicyEmail) {
+          val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          val policiesWithNameAndEmail = Await.result(services.samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, ws.workspaceId, userInfo), Duration.Inf)
+          val actualOwnerPolicyEmail = policiesWithNameAndEmail.find(_.policyName == SamWorkspacePolicyNames.owner).get.email.value
+          actualOwnerPolicyEmail
         }
       }
   }

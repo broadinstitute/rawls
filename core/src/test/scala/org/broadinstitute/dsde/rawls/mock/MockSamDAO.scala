@@ -140,6 +140,16 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     }
   }
 
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, resourcePolicies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[SamCreateResourceResponse] = {
+    // save each policy
+    resourcePolicies.map { case(samResourcePolicyName, samPolicy) =>
+      overwritePolicy(resourceTypeName, resourceId, samResourcePolicyName, samPolicy, userInfo)
+    }
+
+    super.createResourceFull(resourceTypeName, resourceId, resourcePolicies, authDomain, userInfo)
+  }
+
+
   override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {
     val newMap = new TrieMap[SamResourcePolicyName, SamPolicyWithNameAndEmail]()
     val mapToUpdate = policies.putIfAbsent((resourceTypeName, resourceId), newMap) match {
