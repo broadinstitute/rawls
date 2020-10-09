@@ -30,7 +30,7 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     }
   }
 
-  it should "return the expected string for generateSubmissionCostsQuery with an existing end date input" in {
+  it should "return the expected string for generateSubmissionCostsQuery with an existing terminal status date input" in {
     val submissionDate = new DateTime(0)  // 1970-01-01
     val terminalStatusDate = Option(new DateTime(2020, 10, 9, 13, 31))
     val expected =
@@ -47,7 +47,7 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     }
   }
 
-  it should "return the expected string for generateSubmissionCostsQuery with no end date input" in {
+  it should "return the expected string for generateSubmissionCostsQuery with no terminal status date input" in {
     val submissionDate = new DateTime(0)  // 1970-01-01
     val terminalStatusDate = None
     val expected =
@@ -64,7 +64,7 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     }
   }
 
-  it should "return the expected string for generateWorkflowCostsQuery with an existing end date input" in {
+  it should "return the expected string for generateWorkflowCostsQuery with an existing terminal status date input" in {
     val submissionDate = new DateTime(0)  // 1970-01-01
     val terminalStatusDate = Option(new DateTime(2020, 10, 9, 13, 31))
     val expected =
@@ -80,7 +80,7 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     }
   }
 
-  it should "return the expected string for generateWorkflowCostsQuery with no end date input" in {
+  it should "return the expected string for generateWorkflowCostsQuery with no terminal status date input" in {
     val submissionDate = new DateTime(0)  // 1970-01-01
     val terminalStatusDate = None
     val expected =
