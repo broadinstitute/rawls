@@ -78,14 +78,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
                                           submissionDate: DateTime, submissionDoneDate: Option[DateTime]): Future[util.List[TableRow]] = {
 
     val querySql: String =
-      s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
-      |FROM `$tableName` as billing, UNNEST(labels) as wflabels
-      |CROSS JOIN UNNEST(billing.labels) as blabels
-      |WHERE blabels.value = "terra-$submissionId"
-      |AND wflabels.key = "cromwell-workflow-id"
-      |AND project.id = ?
-      |${partitionDateClause(submissionDate, submissionDoneDate)}
-      |GROUP BY wflabels.key, workflowId""".stripMargin
+      generateSubmissionCostsQuery(submissionId, submissionDate, submissionDoneDate)
 
     val namespaceParam =
       new QueryParameter()
@@ -103,8 +96,8 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
   }
 
   /*
-   * Queries BigQuery for compute costs associated with the workflowIds.
-   */
+     * Queries BigQuery for compute costs associated with the workflowIds.
+     */
   private def executeWorkflowCostsQuery(workflowIds: Seq[String],
                                         workspaceNamespace: String,
                                         submissionDate: DateTime,
@@ -114,13 +107,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
       case ids =>
         val subquery = ids.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
         val querySql: String =
-          s"""|SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
-              |FROM `$tableName`, UNNEST(labels) as labels
-              |WHERE project.id = ?
-              |AND labels.key LIKE "cromwell-workflow-id"
-              |${partitionDateClause(submissionDate, submissionDoneDate)}
-              |GROUP BY labels.key, workflowId
-              |HAVING $subquery""".stripMargin
+          generateWorkflowCostsQuery(submissionDate, submissionDoneDate, subquery)
 
         val namespaceParam =
           new QueryParameter()
@@ -141,6 +128,27 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
           Option(result.getRows).getOrElse(List.empty[TableRow].asJava)
         }
     }
+  }
+
+  def generateSubmissionCostsQuery(submissionId: String, submissionDate: DateTime, submissionDoneDate: Option[DateTime]): String = {
+    s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
+       |FROM `$tableName` as billing, UNNEST(labels) as wflabels
+       |CROSS JOIN UNNEST(billing.labels) as blabels
+       |WHERE blabels.value = "terra-$submissionId"
+       |AND wflabels.key = "cromwell-workflow-id"
+       |AND project.id = ?
+       |${partitionDateClause(submissionDate, submissionDoneDate)}
+       |GROUP BY wflabels.key, workflowId""".stripMargin
+  }
+
+  def generateWorkflowCostsQuery(submissionDate: DateTime, submissionDoneDate: Option[DateTime], subquery: String): String = {
+    s"""|SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
+        |FROM `$tableName`, UNNEST(labels) as labels
+        |WHERE project.id = ?
+        |AND labels.key LIKE "cromwell-workflow-id"
+        |${partitionDateClause(submissionDate, submissionDoneDate)}
+        |GROUP BY labels.key, workflowId
+        |HAVING $subquery""".stripMargin
   }
 
   private def executeBigQuery(querySql: String, queryParams: List[QueryParameter]): Future[GetQueryResultsResponse] = {

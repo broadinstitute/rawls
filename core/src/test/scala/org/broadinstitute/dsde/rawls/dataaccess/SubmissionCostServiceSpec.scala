@@ -30,6 +30,72 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     }
   }
 
+  it should "return the expected string for generateSubmissionCostsQuery with an existing end date input" in {
+    val submissionDate = new DateTime(0)  // 1970-01-01
+    val terminalStatusDate = Option(new DateTime(2020, 10, 9, 13, 31))
+    val expected =
+      """SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
+        |FROM `test` as billing, UNNEST(labels) as wflabels
+        |CROSS JOIN UNNEST(billing.labels) as blabels
+        |WHERE blabels.value = "terra-submission-id"
+        |AND wflabels.key = "cromwell-workflow-id"
+        |AND project.id = ?
+        |AND _PARTITIONDATE BETWEEN "1969-12-30" AND "2020-10-10"
+        |GROUP BY wflabels.key, workflowId""".stripMargin
+    assertResult(expected) {
+      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
+    }
+  }
+
+  it should "return the expected string for generateSubmissionCostsQuery with no end date input" in {
+    val submissionDate = new DateTime(0)  // 1970-01-01
+    val terminalStatusDate = None
+    val expected =
+      """SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
+        |FROM `test` as billing, UNNEST(labels) as wflabels
+        |CROSS JOIN UNNEST(billing.labels) as blabels
+        |WHERE blabels.value = "terra-submission-id"
+        |AND wflabels.key = "cromwell-workflow-id"
+        |AND project.id = ?
+        |AND _PARTITIONDATE BETWEEN "1969-12-30" AND "1970-01-31"
+        |GROUP BY wflabels.key, workflowId""".stripMargin
+    assertResult(expected) {
+      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
+    }
+  }
+
+  it should "return the expected string for generateWorkflowCostsQuery with an existing end date input" in {
+    val submissionDate = new DateTime(0)  // 1970-01-01
+    val terminalStatusDate = Option(new DateTime(2020, 10, 9, 13, 31))
+    val expected =
+      """SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
+        |FROM `test`, UNNEST(labels) as labels
+        |WHERE project.id = ?
+        |AND labels.key LIKE "cromwell-workflow-id"
+        |AND _PARTITIONDATE BETWEEN "1969-12-30" AND "2020-10-10"
+        |GROUP BY labels.key, workflowId
+        |HAVING some having clause""".stripMargin
+    assertResult(expected) {
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause")
+    }
+  }
+
+  it should "return the expected string for generateWorkflowCostsQuery with no end date input" in {
+    val submissionDate = new DateTime(0)  // 1970-01-01
+    val terminalStatusDate = None
+    val expected =
+      """SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
+        |FROM `test`, UNNEST(labels) as labels
+        |WHERE project.id = ?
+        |AND labels.key LIKE "cromwell-workflow-id"
+        |AND _PARTITIONDATE BETWEEN "1969-12-30" AND "1970-01-31"
+        |GROUP BY labels.key, workflowId
+        |HAVING some having clause""".stripMargin
+    assertResult(expected) {
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause")
+    }
+  }
+
   /*
     `MockGoogleBigQueryDAO` will throw an exception if the parameters passed to startParameterizedQuery
     are not equal to the fields `testProject`, `testParamQuery`, `testParameters` and `testParameterMode`.
