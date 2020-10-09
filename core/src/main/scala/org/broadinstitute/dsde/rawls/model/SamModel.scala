@@ -41,6 +41,7 @@ object SamProjectRoles {
   val batchComputeUser = SamResourceRole("batch-compute-user")
   val notebookUser = SamResourceRole("notebook-user")
   val owner = SamResourceRole("owner")
+  // if you're looking for a user role, check `def addUserToBillingProject` for the relevant project roles that make up a project user.
 }
 
 object SamWorkflowCollectionRoles {

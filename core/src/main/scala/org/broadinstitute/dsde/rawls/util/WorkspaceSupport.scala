@@ -5,7 +5,7 @@ import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -92,6 +92,23 @@ trait WorkspaceSupport {
           DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
       }
     } yield response
+  }
+
+  def maybeRequireBillingProjectOwnerAccess[T](workspaceRequest: WorkspaceRequest, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+    workspaceRequest.noWorkspaceOwner match {
+      case Some(true) =>
+        for {
+          billingProjectRoles <- traceDBIOWithParent("listUserRolesForResource", parentSpan)(_ => DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, userInfo)))
+          userIsBillingProjectOwner = billingProjectRoles.contains(SamProjectRoles.owner)
+          response <- userIsBillingProjectOwner match {
+            case true => op
+            case false => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"Missing ${SamProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'.")))
+          }
+        } yield response
+      case _ =>
+        op
+    }
+
   }
 
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
