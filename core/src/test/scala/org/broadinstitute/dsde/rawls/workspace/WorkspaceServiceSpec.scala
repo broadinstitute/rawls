@@ -33,7 +33,8 @@ import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
-import org.mockito.Mockito.{verify, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify}
+import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
@@ -42,7 +43,7 @@ import scala.util.Try
 
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
-class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll {
+class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll with TableDrivenPropertyChecks {
   import driver.api._
 
   val workspace = Workspace(
@@ -1035,6 +1036,43 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl"
     )
   }
+
+  // test getTerminalStatusDate
+  private val workflowFinishingTomorrow = testData.submissionMixed.workflows.head.copy(statusLastChangedDate = testDate.plusDays(1))
+  private val submissionMixedDates = testData.submissionMixed.copy(
+    workflows = workflowFinishingTomorrow +: testData.submissionMixed.workflows.tail
+  )
+  private val getTerminalStatusDateTests = Table(
+    ("description", "submission", "workflowId", "expectedOutput"),
+    ("submission containing one completed workflow, no workflowId input",
+      testData.submissionSuccessful1, None, Option(testDate)),
+    ("submission containing one completed workflow, with workflowId input",
+      testData.submissionSuccessful1, testData.submissionSuccessful1.workflows.head.workflowId, Option(testDate)),
+    ("submission containing one completed workflow, with nonexistent workflowId input",
+      testData.submissionSuccessful1, Option("thisWorkflowIdDoesNotExist"), None),
+    ("submission containing several workflows with one finishing tomorrow, no workflowId input",
+      submissionMixedDates, None, Option(testDate.plusDays(1))),
+    ("submission containing several workflows, with workflowId input for workflow finishing tomorrow",
+      submissionMixedDates, submissionMixedDates.workflows.head.workflowId, Option(testDate.plusDays(1))),
+    ("submission containing several workflows, with workflowId input for workflow finishing today",
+      submissionMixedDates, submissionMixedDates.workflows(2).workflowId, Option(testDate)),
+    ("submission containing several workflows, with workflowId input for workflow not finished",
+      submissionMixedDates, submissionMixedDates.workflows.last.workflowId, None),
+    ("aborted submission, no workflowId input",
+      testData.submissionAborted1, None, Option(testDate)),
+    ("aborted submission, with workflowId input",
+      testData.submissionAborted1, testData.submissionAborted1.workflows.head.workflowId, Option(testDate)),
+    ("in progress submission, no workflowId input",
+      testData.submissionSubmitted, None, None),
+    ("in progress submission, with workflowId input",
+      testData.submissionSubmitted, testData.submissionSubmitted.workflows.head.workflowId, None),
+  )
+  forAll(getTerminalStatusDateTests) {(description, submission, workflowId, expectedOutput) =>
+    it should s"run getTerminalStatusDate test for $description" in {
+      assertResult(WorkspaceService.getTerminalStatusDate(submission, workflowId))(expectedOutput)
+    }
+  }
+
 
   it should "204 on add linked service accounts to workspace" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
