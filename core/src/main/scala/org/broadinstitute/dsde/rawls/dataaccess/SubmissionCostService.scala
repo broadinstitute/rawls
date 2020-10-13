@@ -64,13 +64,13 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
   private def partitionDateClause(submissionDate: DateTime, terminalStatusDate: Option[DateTime]): String = {
     // subtract a day so we never have to deal with timezones
     val windowStartDate = submissionDate.minusDays(1).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
-    val windowEndDate = terminalStatusDate match {
-      // add a day so we never have to deal with timezones
-      case Some(terminalStatusDate) => terminalStatusDate.plusDays(1).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
+    val windowEndDate = terminalStatusDate
       // if this submission has no date at which it reached terminal state, use the default window from config
-      case None => submissionDate.plusDays(billingSearchWindowDays).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
-    }
-
+      .getOrElse(submissionDate.plusDays(billingSearchWindowDays))
+      // add a day so we never have to deal with timezones
+      .plusDays(1)
+      .toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
+    
     s"""AND _PARTITIONDATE BETWEEN "$windowStartDate" AND "$windowEndDate""""
   }
 
