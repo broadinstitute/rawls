@@ -31,16 +31,18 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   }
 
   it should "return the expected string for generateSubmissionCostsQuery with an existing terminal status date input" in {
-    val submissionDate = new DateTime(0)  // 1970-01-01
-    val terminalStatusDate = Option(new DateTime(2020, 10, 9, 13, 31))
+    val submissionDate = new DateTime(0, DateTimeZone.UTC)  // 1970-01-01
+    val terminalStatusDate = Option(new DateTime(2020, 10, 9, 13, 31, DateTimeZone.UTC))
+    val expectedStartDateString = "1969-12-31"  // submissionDate - 1 day
+    val expectedEndDateString = "2020-10-10"  // terminalStatusDate + 1 day
     val expected =
-      """SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
+      s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
         |FROM `test` as billing, UNNEST(labels) as wflabels
         |CROSS JOIN UNNEST(billing.labels) as blabels
         |WHERE blabels.value = "terra-submission-id"
         |AND wflabels.key = "cromwell-workflow-id"
         |AND project.id = ?
-        |AND _PARTITIONDATE BETWEEN "1969-12-30" AND "2020-10-10"
+        |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY wflabels.key, workflowId""".stripMargin
     assertResult(expected) {
       submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
@@ -48,16 +50,18 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   }
 
   it should "return the expected string for generateSubmissionCostsQuery with no terminal status date input" in {
-    val submissionDate = new DateTime(0)  // 1970-01-01
+    val submissionDate = new DateTime(0, DateTimeZone.UTC)  // 1970-01-01
     val terminalStatusDate = None
+    val expectedStartDateString = "1969-12-31"  // submissionDate - 1 day
+    val expectedEndDateString = "1970-02-02"  // submissionDate + 31 day + 1 day
     val expected =
-      """SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
+      s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
         |FROM `test` as billing, UNNEST(labels) as wflabels
         |CROSS JOIN UNNEST(billing.labels) as blabels
         |WHERE blabels.value = "terra-submission-id"
         |AND wflabels.key = "cromwell-workflow-id"
         |AND project.id = ?
-        |AND _PARTITIONDATE BETWEEN "1969-12-30" AND "1970-01-31"
+        |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY wflabels.key, workflowId""".stripMargin
     assertResult(expected) {
       submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
@@ -65,14 +69,16 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   }
 
   it should "return the expected string for generateWorkflowCostsQuery with an existing terminal status date input" in {
-    val submissionDate = new DateTime(0)  // 1970-01-01
-    val terminalStatusDate = Option(new DateTime(2020, 10, 9, 13, 31))
+    val submissionDate = new DateTime(0, DateTimeZone.UTC)  // 1970-01-01
+    val terminalStatusDate = Option(new DateTime(2020, 10, 9, 13, 31, DateTimeZone.UTC))
+    val expectedStartDateString = "1969-12-31"  // submissionDate - 1 day
+    val expectedEndDateString = "2020-10-10"  // terminalStatusDate + 1 day
     val expected =
-      """SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
+      s"""SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
         |FROM `test`, UNNEST(labels) as labels
         |WHERE project.id = ?
         |AND labels.key LIKE "cromwell-workflow-id"
-        |AND _PARTITIONDATE BETWEEN "1969-12-30" AND "2020-10-10"
+        |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY labels.key, workflowId
         |HAVING some having clause""".stripMargin
     assertResult(expected) {
@@ -81,14 +87,16 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   }
 
   it should "return the expected string for generateWorkflowCostsQuery with no terminal status date input" in {
-    val submissionDate = new DateTime(0)  // 1970-01-01
+    val submissionDate = new DateTime(0, DateTimeZone.UTC)  // 1970-01-01
     val terminalStatusDate = None
+    val expectedStartDateString = "1969-12-31"  // submissionDate - 1 day
+    val expectedEndDateString = "1970-02-02"  // submissionDate + 31 day + 1 day
     val expected =
-      """SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
+      s"""SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
         |FROM `test`, UNNEST(labels) as labels
         |WHERE project.id = ?
         |AND labels.key LIKE "cromwell-workflow-id"
-        |AND _PARTITIONDATE BETWEEN "1969-12-30" AND "1970-01-31"
+        |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY labels.key, workflowId
         |HAVING some having clause""".stripMargin
     assertResult(expected) {
