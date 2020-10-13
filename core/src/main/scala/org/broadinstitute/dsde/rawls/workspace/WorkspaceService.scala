@@ -1558,7 +1558,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // we don't need the Execution Service ID, but we do need to confirm the Workflow is in one for this Submission
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, userInfo, optExecId)
-      submissionDoneDate = WorkspaceService.getTerminalStatusDate(submission, Some(workflowId))
+      submissionDoneDate = WorkspaceService.getTerminalStatusDate(submission, Option(workflowId))
       costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, submission.submissionDate, submissionDoneDate)
     } yield RequestComplete(StatusCodes.OK, WorkflowCost(workflowId, costs.get(workflowId)))
   }
