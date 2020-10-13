@@ -11,7 +11,9 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.joda.time.DateTime
 import spray.json._
 
@@ -82,6 +84,25 @@ object AttributeName {
   }
 }
 
+object WorkspaceVersions {
+  sealed trait WorkspaceVersion extends ValueObject
+
+  case object V1 extends WorkspaceVersion {
+    override val value: String = "v1"
+  }
+  case object V2 extends WorkspaceVersion {
+    override val value: String = "v2"
+  }
+
+  def fromString(versionString: String): Option[WorkspaceVersion] = {
+    versionString match {
+      case V1.value => Option(V1)
+      case V2.value => Option(V2)
+      case _ => None
+    }
+  }
+}
+
 case class WorkspaceRequest (
                               namespace: String,
                               name: String,
@@ -105,12 +126,31 @@ case class Workspace(
                       lastModified: DateTime,
                       createdBy: String,
                       attributes: AttributeMap,
-                      isLocked: Boolean = false
+                      isLocked: Boolean,
+                      workspaceVersion: WorkspaceVersion,
+                      googleProject: String
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
+}
+
+object Workspace {
+  /** convenience constructor that defaults workspace version to v1 and google project to namespace */
+  def apply(namespace: String,
+           name: String,
+           workspaceId: String,
+           bucketName: String,
+           workflowCollectionName: Option[String],
+           createdDate: DateTime,
+           lastModified: DateTime,
+           createdBy: String,
+           attributes: AttributeMap,
+           isLocked: Boolean = false): Workspace = {
+    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, namespace)
+  }
+
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -455,8 +495,10 @@ case class WorkspaceDetails(namespace: String,
                             createdBy: String,
                             attributes: Option[AttributeMap],
                             isLocked: Boolean = false,
-                            authorizationDomain: Option[Set[ManagedGroupRef]]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked)
+                            authorizationDomain: Option[Set[ManagedGroupRef]],
+                            workspaceVersion: WorkspaceVersion,
+                            googleProject: String) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject)
 }
 
 
@@ -524,7 +566,9 @@ object WorkspaceDetails {
       workspace.createdBy,
       if (useAttributes) Option(workspace.attributes) else None,
       workspace.isLocked,
-      optAuthorizationDomain
+      optAuthorizationDomain,
+      workspace.workspaceVersion,
+      workspace.googleProject
     )
   }
 }
@@ -644,6 +688,19 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
+  implicit object WorkspaceVersionFormat extends JsonFormat[WorkspaceVersion] {
+    override def write(wv: WorkspaceVersion): JsValue = JsString(wv.value)
+
+    override def read(json: JsValue): WorkspaceVersion = json match {
+      case JsString(versionString) => WorkspaceVersions.fromString(versionString) match {
+        case Some(version) => version
+        case None =>throw DeserializationException("unexpected version string")
+      }
+      case _ => throw DeserializationException("unexpected version json type")
+    }
+  }
+
+
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
 
   implicit val EntityFormat = jsonFormat3(Entity)
@@ -726,7 +783,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat11(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat13(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
