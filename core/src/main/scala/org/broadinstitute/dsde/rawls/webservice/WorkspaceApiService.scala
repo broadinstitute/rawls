@@ -56,47 +56,55 @@ trait WorkspaceApiService extends UserInfoDirectives {
     } ~
       path( "workspaces" / "workspaceQuery"){
         get {
-          // parameterSeq { allParams =>
           traceRequest { span =>
-            parameterSeq { allParams =>
-              parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?, 'fields.?) { (page, pageSize, sortField, sortDirection, filterTerms, fields) =>
-                val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
-                val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
-                val submissionStatuses = WorkspaceFieldSpecs.fromQueryParams(allParams, "submissionStatus")
-                val accessLevels = WorkspaceFieldSpecs.fromQueryParams(allParams, "accessLevels")
-                val billingProject = WorkspaceFieldSpecs.fromQueryParams(allParams, "billingProject")
-                val workspaceName = WorkspaceFieldSpecs.fromQueryParams(allParams, "workspaceName")
-                val tags = WorkspaceFieldSpecs.fromQueryParams(allParams, "tags")
+             parameterSeq { allParams =>
+               val page = WorkspaceFieldSpecs.fromQueryParams(allParams, "page").fields.map(_.head)
+               val pageSize = WorkspaceFieldSpecs.fromQueryParams(allParams, "pageSize").fields.map(_.head)
+               val sortField = WorkspaceFieldSpecs.fromQueryParams(allParams, "sortField").fields.map(_.head)
+               val sortDirection = WorkspaceFieldSpecs.fromQueryParams(allParams, "sortDirection").fields.map(_.head)
+               val fields = WorkspaceFieldSpecs.fromQueryParams(allParams, "fields").fields.map(_.head)
+               val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
+               val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+               val submissionStatusesStrings = WorkspaceFieldSpecs.fromQueryParams(allParams, "lastSubmissionStatuses").fields.map(_.toSeq)
+               val submissionStatusesTry = Try(submissionStatusesStrings.map(_.map(sub => LastSubmissionStatusRequests.withName(sub))))
+               val accessLevelString = WorkspaceFieldSpecs.fromQueryParams(allParams, "accessLevel").fields.map(_.head)
+               val accessLevelTry = Try(accessLevelString.map(WorkspaceAccessLevels.withName(_)))
+               val billingProject = WorkspaceFieldSpecs.fromQueryParams(allParams, "billingProject")
+               val workspaceName = WorkspaceFieldSpecs.fromQueryParams(allParams, "workspaceName")
+               val searchTerm = WorkspaceFieldSpecs.fromQueryParams(allParams, "searchTerm")
+               val tags = WorkspaceFieldSpecs.fromQueryParams(allParams, "tags")
 
-                val toIntTriesErrors = toIntTries.collect {
-                  case (k, Failure(t)) => s"$k must be a positive integer"
-                  case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
-                }
-                val sortDirectionError = (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
-                val multipleFieldsError = Seq(submissionStatuses, accessLevels, billingProject, workspaceName) collect {
-                  case fieldSpecs if (fieldSpecs.fields.isDefined && fieldSpecs.fields.get.size == 1) => s"Too many access levels specified: ${fieldSpecs.fields.get}"
-                }
-                val errors = toIntTriesErrors ++ sortDirectionError ++ multipleFieldsError
+               val toIntTriesErrors = toIntTries.collect {
+                 case (k, Failure(t)) => s"$k must be a positive integer"
+                 case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
+               }
+               val sortDirectionError = (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
+               val multipleFieldsError = Seq(searchTerm, billingProject, workspaceName) collect {
+                 case fieldSpecs if (fieldSpecs.fields.isDefined && fieldSpecs.fields.get.size > 1) => s"Too many access levels specified: ${fieldSpecs.fields.get}"
+               }
+               val lastSubmissionStatuesError = (if (submissionStatusesTry.isFailure) Seq(submissionStatusesTry.failed.get.getMessage) else Seq.empty)
+               val accessLevelError = (if (accessLevelTry.isFailure) Seq(accessLevelTry.failed.get.getMessage) else Seq.empty)
 
-                if (errors.isEmpty) {
-                  val workspaceQuery = WorkspaceQuery(toIntTries("page").get.getOrElse(1),
-                    toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"),
-                    sortDirectionTry.get,
-                    filterTerms,
-                    submissionStatuses.fields.map(_.toSeq),
-                    accessLevels.fields.map(_.head),
-                    billingProject.fields.map(_.head),
-                    workspaceName.fields.map(_.head),
-                    tags.fields.map(_.toSeq)
-                  )
-                  complete {
-                    workspaceServiceConstructor(userInfo).ListWorkspacesPaginated(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), workspaceQuery, span)
-                  }
-                } else {
-                  complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
-                }
-              }
-            }
+               val errors = toIntTriesErrors ++ sortDirectionError ++ multipleFieldsError ++ lastSubmissionStatuesError ++ accessLevelError
+
+               if (errors.isEmpty) {
+                 val workspaceQuery = WorkspaceQuery(toIntTries("page").get.getOrElse(1),
+                   toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"),
+                   sortDirectionTry.get,
+                   searchTerm.fields.map(_.head),
+                   submissionStatusesTry.get,
+                   accessLevelTry.get,
+                   billingProject.fields.map(_.head),
+                   workspaceName.fields.map(_.head),
+                   tags.fields.map(_.toSeq)
+                 )
+                 complete {
+                   workspaceServiceConstructor(userInfo).ListWorkspacesPaginated(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), workspaceQuery, span)
+                 }
+               } else {
+                 complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
+               }
+             }
           }
         }
       } ~

@@ -10,14 +10,16 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{WorkspaceListResponse, _}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import scala.collection.immutable._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 
 class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
@@ -51,23 +53,27 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   class PaginatedListTestWorkspaces() extends TestData {
     val userOwner = RawlsUser(UserInfo(testData.userOwner.userEmail, OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
+    val userReader = RawlsUser(UserInfo(testData.userReader.userEmail, OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
 
-    val workspaceName1 = WorkspaceName("a-billing-project", "g-ws-name")
-    val workspaceName2 = WorkspaceName("b-billing-project", "f-ws-name")
-    val workspaceName3 = WorkspaceName("c-billing-project", "e-ws-name")
+    val workspaceNameEmpty = WorkspaceName("a-billing-project","empty-ws-name")
+    val workspaceName1 = WorkspaceName("g-billing-project", "a-ws-name")
+    val workspaceName2 = WorkspaceName("f-billing-project", "b-ws-name")
+    val workspaceName3 = WorkspaceName("e-billing-project", "c-ws-name")
     val workspaceName4 = WorkspaceName("d-billing-project", "d-ws-name")
-    val workspaceName5 = WorkspaceName("e-billing-project", "c-ws-name")
-    val workspaceName6 = WorkspaceName("f-billing-project", "b-ws-name")
-    val workspaceName7 = WorkspaceName("g-billing-project", "a-ws-name")
+    val workspaceName5 = WorkspaceName("c-billing-project", "e-ws-name")
+    val workspaceName6 = WorkspaceName("b-billing-project", "f-ws-name")
+    val workspaceName7 = WorkspaceName("a-billing-project", "g-ws-name")
 
-    val attributesForWorkspace1 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withTagsNS() -> AttributeString("tag2"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace2 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withTagsNS() -> AttributeString("tag2"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace3 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withTagsNS() -> AttributeString("tag2"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace4 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace5 = Map(AttributeName.withTagsNS() -> AttributeString("tag1"), AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
-    val attributesForWorkspace6 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
+    // ToDo: Remove attributes ?
+    val attributesForWorkspace1 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"), AttributeName.withTagsNS() -> AttributeValueList(Vector(AttributeString("tag1"),AttributeString("tag2"))))
+    val attributesForWorkspace2 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"), AttributeName.withTagsNS() -> AttributeValueList(Vector(AttributeString("tag1"),AttributeString("tag2"))))
+    val attributesForWorkspace3 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"), AttributeName.withTagsNS() -> AttributeValueList(Vector(AttributeString("tag1"),AttributeString("tag2"))))
+    val attributesForWorkspace4 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"), AttributeName.withTagsNS() -> AttributeValueList(Vector(AttributeString("tag1"))))
+    val attributesForWorkspace5 = Map(AttributeName.withTagsNS() -> AttributeValueList(Vector(AttributeString("tag1"))))
+    val attributesForWorkspace6 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"), AttributeName.withTagsNS() -> AttributeValueList(Vector(AttributeString("tag2"))))
     val attributesForWorkspace7 = Map(AttributeName.withDefaultNS("att1") -> AttributeString("val1"))
 
+    val billingProjectEmpty = RawlsBillingProject(RawlsBillingProjectName(workspaceNameEmpty.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
     val billingProject1 = RawlsBillingProject(RawlsBillingProjectName(workspaceName1.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
     val billingProject2 = RawlsBillingProject(RawlsBillingProjectName(workspaceName2.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
     val billingProject3 = RawlsBillingProject(RawlsBillingProjectName(workspaceName3.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
@@ -76,13 +82,14 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
     val billingProject6 = RawlsBillingProject(RawlsBillingProjectName(workspaceName6.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
     val billingProject7 = RawlsBillingProject(RawlsBillingProjectName(workspaceName7.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
 
-    val workspace1 =  makeWorkspaceWithUsers(billingProject1, workspaceName1.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "e-testUser", attributesForWorkspace1, false)
-    val workspace2 =  makeWorkspaceWithUsers(billingProject2, workspaceName2.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "c-testUser", attributesForWorkspace2, false)
-    val workspace3 =  makeWorkspaceWithUsers(billingProject3, workspaceName3.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "b-testUser", attributesForWorkspace3, false)
-    val workspace4 =  makeWorkspaceWithUsers(billingProject4, workspaceName4.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "a-testUser", attributesForWorkspace4, false)
-    val workspace5 =  makeWorkspaceWithUsers(billingProject5, workspaceName5.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "f-testUser", attributesForWorkspace5, false)
-    val workspace6 =  makeWorkspaceWithUsers(billingProject6, workspaceName6.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "d-testUser", attributesForWorkspace6, false)
-    val workspace7 =  makeWorkspaceWithUsers(billingProject7, workspaceName7.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), currentTime(), currentTime(), "g-testUser", attributesForWorkspace7, false)
+    val workspace0 =  makeWorkspaceWithUsers(billingProjectEmpty, workspaceNameEmpty.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), testDate, testDate, "e-testUser", Map(), false)
+    val workspace1 =  makeWorkspaceWithUsers(billingProject1, workspaceName1.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), testDate, testDate, "e-testUser", attributesForWorkspace1, false)
+    val workspace2 =  makeWorkspaceWithUsers(billingProject2, workspaceName2.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), testDate, testDate, "c-testUser", attributesForWorkspace2, false)
+    val workspace3 =  makeWorkspaceWithUsers(billingProject3, workspaceName3.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), testDate, testDate, "b-testUser", attributesForWorkspace3, false)
+    val workspace4 =  makeWorkspaceWithUsers(billingProject4, workspaceName4.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), testDate, testDate, "a-testUser", attributesForWorkspace4, false)
+    val workspace5 =  makeWorkspaceWithUsers(billingProject5, workspaceName5.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), testDate, testDate, "f-testUser", attributesForWorkspace5, false)
+    val workspace6 =  makeWorkspaceWithUsers(billingProject6, workspaceName6.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), testDate, testDate, "d-testUser", attributesForWorkspace6, false)
+    val workspace7 =  makeWorkspaceWithUsers(billingProject7, workspaceName7.name, UUID.randomUUID().toString, "bucketName", Some("workflow-collection"), testDate, testDate, "g-testUser", attributesForWorkspace7, false)
     val workspaceList = List(workspace1, workspace2, workspace3, workspace4, workspace5, workspace6, workspace7)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
@@ -91,6 +98,8 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
     val sample4 = Entity("sample4", "sample", Map.empty)
     val sample5 = Entity("sample5", "sample", Map.empty)
     val sample6 = Entity("sample6", "sample", Map.empty)
+    val sample7 = Entity("sample7", "sample", Map.empty)
+    val sample8 = Entity("sample7", "sample", Map.empty)
     val sampleSet = Entity("sampleset", "sample_set", Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
       sample1.toReference,
       sample2.toReference,
@@ -103,25 +112,41 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
       Seq(sample1, sample2, sample3), Map(sample1 -> testData.inputResolutions, sample2 -> testData.inputResolutions, sample3 -> testData.inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> testData.inputResolutions2, sample5 -> testData.inputResolutions2, sample6 -> testData.inputResolutions2))
 
-    val submissionSuccess = submissionTemplate.copy(
+    def submissionSuccess = submissionTemplate.copy(
       submissionId = UUID.randomUUID().toString,
       status = SubmissionStatuses.Done,
       workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Succeeded))
     )
-    val submissionFail = submissionTemplate.copy(
+    def submissionFail = submissionTemplate.copy(
       submissionId = UUID.randomUUID().toString,
       status = SubmissionStatuses.Done,
       workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Failed))
     )
-    val submissionRunning1 = submissionTemplate.copy(
+    def submissionRunning1 = submissionTemplate.copy(
       submissionId = UUID.randomUUID().toString,
       status = SubmissionStatuses.Submitted,
       workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Running))
     )
-    val submissionRunning2 = submissionTemplate.copy(
+    def submissionRunning2 = submissionTemplate.copy(
       submissionId = UUID.randomUUID().toString,
       status = SubmissionStatuses.Submitted,
       workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Running))
+    )
+
+    val workflowFailed = Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Failed, testDate.plusHours(1), Some(sample7.toReference), testData.inputResolutions)
+
+    def submissionMixed1 = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Done,
+      workflows = submissionTemplate.workflows :+ workflowFailed
+    )
+
+    val workflowSubmitted = Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Submitted, testDate.plusHours(2), Some(sample7.toReference), testData.inputResolutions)
+
+    def submissionMixed2 = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Done,
+      workflows = submissionTemplate.workflows :+ workflowSubmitted
     )
 
     override def save() = {
@@ -134,6 +159,7 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
         rawlsBillingProjectQuery.create(billingProject6),
         rawlsBillingProjectQuery.create(billingProject7),
 
+        workspaceQuery.save(workspace0),
         workspaceQuery.save(workspace1),
         workspaceQuery.save(workspace2),
         workspaceQuery.save(workspace3),
@@ -142,8 +168,28 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
         workspaceQuery.save(workspace6),
         workspaceQuery.save(workspace7),
 
-
         withWorkspaceContext(workspace1) { ctx =>
+          DBIO.seq(
+            entityQuery.save(ctx, sample1),
+            entityQuery.save(ctx, sample2),
+            entityQuery.save(ctx, sample3),
+            entityQuery.save(ctx, sample4),
+            entityQuery.save(ctx, sample5),
+            entityQuery.save(ctx, sample6),
+            entityQuery.save(ctx, sample7),
+            entityQuery.save(ctx, sampleSet),
+
+            methodConfigurationQuery.create(ctx, methodConfig),
+
+            submissionQuery.create(ctx, submissionSuccess),
+            submissionQuery.create(ctx, submissionFail),
+            submissionQuery.create(ctx, submissionRunning1),
+            submissionQuery.create(ctx, submissionRunning2),
+            submissionQuery.create(ctx, submissionMixed1)
+          )
+        },
+
+          withWorkspaceContext(workspace3) { ctx =>
           DBIO.seq(
             entityQuery.save(ctx, sample1),
             entityQuery.save(ctx, sample2),
@@ -155,10 +201,55 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
             methodConfigurationQuery.create(ctx, methodConfig),
 
-            submissionQuery.create(ctx, submissionSuccess),
-            submissionQuery.create(ctx, submissionFail),
-            submissionQuery.create(ctx, submissionRunning1),
-            submissionQuery.create(ctx, submissionRunning2)
+            submissionQuery.create(ctx, submissionSuccess)
+          )
+        },
+
+        withWorkspaceContext(workspace4) { ctx =>
+          DBIO.seq(
+            entityQuery.save(ctx, sample1),
+            entityQuery.save(ctx, sample2),
+            entityQuery.save(ctx, sample3),
+            entityQuery.save(ctx, sample4),
+            entityQuery.save(ctx, sample5),
+            entityQuery.save(ctx, sample6),
+            entityQuery.save(ctx, sample7),
+            entityQuery.save(ctx, sampleSet),
+
+            methodConfigurationQuery.create(ctx, methodConfig),
+
+            submissionQuery.create(ctx, submissionMixed2)
+          )
+        },
+
+          withWorkspaceContext(workspace5) { ctx =>
+          DBIO.seq(
+            entityQuery.save(ctx, sample1),
+            entityQuery.save(ctx, sample2),
+            entityQuery.save(ctx, sample3),
+            entityQuery.save(ctx, sample4),
+            entityQuery.save(ctx, sample5),
+            entityQuery.save(ctx, sample6),
+            entityQuery.save(ctx, sampleSet),
+
+            methodConfigurationQuery.create(ctx, methodConfig),
+
+            submissionQuery.create(ctx, submissionFail)
+          )
+        },
+        withWorkspaceContext(workspace7) { ctx =>
+          DBIO.seq(
+            entityQuery.save(ctx, sample1),
+            entityQuery.save(ctx, sample2),
+            entityQuery.save(ctx, sample3),
+            entityQuery.save(ctx, sample4),
+            entityQuery.save(ctx, sample5),
+            entityQuery.save(ctx, sample6),
+            entityQuery.save(ctx, sampleSet),
+
+            methodConfigurationQuery.create(ctx, methodConfig),
+
+            submissionQuery.create(ctx, submissionRunning1)
           )
         }
       ).withPinnedSession
@@ -248,10 +339,55 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
   }
 
   val testWorkspaces = new TestWorkspaces
+  val paginatedListTestWorkspaces = new PaginatedListTestWorkspaces
 
   def withTestWorkspacesApiServices[T](testCode: TestApiService => T): T = {
     withCustomTestDatabase(testWorkspaces) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
+    }
+  }
+
+
+  val userWriterNoCompute = RawlsUserEmail("writer-access-no-compute")
+  val userWriterNoComputeOnProject = RawlsUserEmail("writer-access-no-compute-on-project")
+
+  def withApiServicesSecure[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
+    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
+      override val samDAO: MockSamDAO = new MockSamDAO(dataSource) {
+        override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
+          val result = userInfo.userEmail match {
+            case testData.userOwner.userEmail => true
+            case testData.userProjectOwner.userEmail => true
+            case testData.userWriter.userEmail => Set(SamWorkspaceActions.read, SamWorkspaceActions.write, SamWorkspaceActions.compute, SamBillingProjectActions.launchBatchCompute).contains(action)
+            case `userWriterNoCompute` => Set(SamWorkspaceActions.read, SamWorkspaceActions.write).contains(action)
+            case `userWriterNoComputeOnProject` => Set(SamWorkspaceActions.read, SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(action)
+            case testData.userReader.userEmail => Set(SamWorkspaceActions.read).contains(action)
+            case _ => false
+          }
+          Future.successful(result)
+        }
+      }
+    }
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
+//  def withTestDataApiServicesAndUser[T](user: String)(testCode: TestApiService => T): T = {
+//    withCustomTestDatabase(paginatedListTestWorkspaces) { dataSource: SlickDataSource =>
+//      withApiServicesSecure(dataSource, user) { services =>
+//        testCode(services)
+//      }
+//    }
+//  }
+
+  def withTestWorkspacesApiServicesForPaginatedWorkspaces[T](user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
+    withCustomTestDatabase(paginatedListTestWorkspaces) { dataSource: SlickDataSource =>
+      withApiServicesSecure(dataSource, user) { services =>
+        testCode(services)
+      }
     }
   }
 
@@ -449,26 +585,46 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
   ///////////
 
+  // DONE
   // default values, return workspaces
-  "WorkspaceApi paginated list-workspaces" should "return default response for no specified fields, filters or sort order" in withTestWorkspacesApiServices { services =>
+  "WorkspaceApi paginated list-workspaces" should "return default response for no specified fields, filters or sort order" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
     Get("/workspaces/workspaceQuery") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
+
         val result = responseAs[WorkspaceQueryResponse]
 
-        val dateTime = currentTime()
-        assertResult(2) {
-          result.results.length
+        assertResult(WorkspaceQuery()) {
+          result.parameters
         }
 
+        assertResult(WorkspaceQueryResultMetadata(8,8,1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None,None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false))
+
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
       }
   }
 
+  // DONE
   // specify default values, return workspaces
-  "WorkspaceApi paginated list-workspaces" should "return workspaces for specified fields, and no filters or sort order" in withTestWorkspacesApiServices { services =>
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for specified fields, and no filters or sort order" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
     Get("/workspaces/workspaceQuery?page=1&pageSize=10&sortField=name&sortDirection=asc") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -476,11 +632,35 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
           status
         }
         val result = responseAs[WorkspaceQueryResponse]
-        println(result)
 
+        assertResult(WorkspaceQuery()) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 8, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None,None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false))
+
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
       }
+
   }
 
+  // DONE
+  // No workspaces
   "WorkspaceApi paginated list-workspaces" should "return no workspaces when the user has no access to any workspaces" in withTestWorkspacesApiServicesEmptyDatabase { services =>
     Get("/workspaces/workspaceQuery") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -495,8 +675,10 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
   }
 
 
-  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a search term on namespace and name" in withTestWorkspacesApiServices { services =>
-    Get("/workspaces/workspaceQuery") ~>
+  // DONE
+  // Search term  - searching on namespace and name
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a search term on namespace and name" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?searchTerm=f") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -504,16 +686,436 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
         }
         val result = responseAs[WorkspaceQueryResponse]
 
+        assertResult(WorkspaceQuery(searchTerm = Some("f"))) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 2, 1)) {
+          result.resultMetadata
+        }
+
         val dateTime = currentTime()
-        assertResult(2) {
-          result.results.length
+        val expectedResult = List(WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false))
+
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
         }
 
       }
   }
+
+  // DONE
+  // Filter billing project
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for a filter on billing project" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?billingProject=e-billing-project") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(billingProject = Some("e-billing-project"))) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 1, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Some(testDate), None, 0)), false))
+
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+      }
+  }
+
+  // Filter billing project
+  "WorkspaceApi paginated list-workspaces" should "return two workspaces for a filter on billing project" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?billingProject=a-billing-project") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(billingProject = Some("a-billing-project"))) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 2, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false))
+
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+      }
+  }
+
+
+
+  // DONE
+  // Filter on submission Status
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for a filter on lastSubmissionStatuses" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?lastSubmissionStatuses=Succeeded") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(lastSubmissionStatuses = Some(List(LastSubmissionStatusRequests.Succeeded)))) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 1, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false))
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for two filters on lastSubmissionStatuses" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?lastSubmissionStatuses=Succeeded,Running") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(lastSubmissionStatuses = Some(List(LastSubmissionStatusRequests.Succeeded, LastSubmissionStatusRequests.Running)))) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 3, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false))
+
+          assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for a filter on accessLevel" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?accessLevel=Owner") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(accessLevel = Some(WorkspaceAccessLevels.withName("Owner")))) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 8, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None,None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false))
+
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+
+      }
+  }
+
+//  // ToDo: Remove reader stuff? Just test sorting and filtering on access level elsewhere?
+//  "WorkspaceApi paginated list-workspaces" should "return workspaces for a filter on project owner accessLevels" in withTestWorkspacesApiServicesForPaginatedWorkspaces(testData.userReader.userEmail.value) { services =>
+//    Get("/workspaces/workspaceQuery?accessLevel=Reader") ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.OK) {
+//          status
+//        }
+//        val result = responseAs[WorkspaceQueryResponse]
+//        println("RESULT: " + result.toString)
 //
-//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a filter on billing project" in withTestWorkspacesApiServices { services =>
-//    Get("/workspaces/workspaceQuery") ~>
+//      }
+//  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for a filter on workspaceName" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?workspaceName=b-ws-name") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(workspaceName = Some("b-ws-name"))) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 1, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false))
+
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+
+
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for a filter on one workspace tag" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?tags=tag1") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(tags = Some(Seq("tag1")))) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 5, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+        )
+
+          assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces for a filter on two workspace tags" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?tags=tag1,tag2") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(tags = Some(Seq("tag1", "tag2")))) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 6, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+        )
+          assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces sorted by workspace name descending" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?sortField=name&sortDirection=desc") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(sortField = "name", sortDirection = SortDirections.Descending)) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 8, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None,None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false)
+        ).reverse
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces sorted by last modified date ascending" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?sortField=lastModified&sortDirection=asc") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(sortField = "lastModified", sortDirection = SortDirections.Ascending)) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 8, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None,None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false)
+        )
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces sorted by createdBy ascending" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?sortField=createdBy") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(sortField = "createdBy")) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8, 8, 1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None,None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false)
+        )
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces sorted by access level descending" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?sortField=accessLevel") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val result = responseAs[WorkspaceQueryResponse]
+
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return workspaces on page 2" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?page=2&pageSize=3") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(page = 2, pageSize = 3)) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8,8,3)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None,None, 0)), false),
+       )
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+
+      }
+  }
+
+//  "WorkspaceApi paginated list-workspaces" should "return workspaces for filters on billing project and submission status, sorted by last modified" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+//    Get("/workspaces/workspaceQuery?billingProject=&last") ~>
 //      sealRoute(services.workspaceRoutes) ~>
 //      check {
 //        assertResult(StatusCodes.OK) {
@@ -521,72 +1123,135 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 //        }
 //        val result = responseAs[WorkspaceQueryResponse]
 //
-//        val dateTime = currentTime()
-//        assertResult(2) {
-//          result.results.length
-//        }
-//
-//      }
-//  }
-//
-//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a filter on submisstionStatus" in withTestWorkspacesApiServices { services =>
-//    Get("/workspaces/workspaceQuery") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK) {
-//          status
-//        }
-//        val result = responseAs[WorkspaceQueryResponse]
-//
-//        val dateTime = currentTime()
-//        assertResult(2) {
-//          result.results.length
-//        }
-//
-//      }
-//  }
-//
-//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a filter on accessLevel" in withTestWorkspacesApiServices { services =>
-//    Get("/workspaces/workspaceQuery") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK) {
-//          status
-//        }
-//        val result = responseAs[WorkspaceQueryResponse]
-//
-//        val dateTime = currentTime()
-//        assertResult(2) {
-//          result.results.length
-//        }
-//
-//      }
-//  }
-//
-//  "WorkspaceApi paginated list-workspaces" should "return workspaces for with a filter on workspaceName" in withTestWorkspacesApiServices { services =>
-//    Get("/workspaces/workspaceQuery") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK) {
-//          status
-//        }
-//        val result = responseAs[WorkspaceQueryResponse]
-//
-//        val dateTime = currentTime()
-//        assertResult(2) {
-//          result.results.length
-//        }
-//
 //      }
 //  }
 
-  //more tests on sorting, direction
+  // ToDo: Not getting error message???
+  "WorkspaceApi paginated list-workspaces" should "return error for 0 page size" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?pageSize=0") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
 
-  // more tests on combo of filter search and sorting and specified fields
 
-  // tests on page and pageSize
+  "WorkspaceApi paginated list-workspaces" should "return error for non-int pageSize" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?pageSize=hi") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
 
-  // tests on exceptions
+  "WorkspaceApi paginated list-workspaces" should "return error for non-int page" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?page=hi") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return error for page 0" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?page=0") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return error for illegal submission status" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?lastSubmissionStatuses=notAStatus") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return error for illegal access level" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?accessLevel=wizard") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return error for empty search term" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?searchTerm=") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery(searchTerm = Seq())) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8,8,1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None,None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false))
+
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+      }
+  }
+
+  "WorkspaceApi paginated list-workspaces" should "return error for empty name" in withTestWorkspacesApiServicesForPaginatedWorkspaces() { services =>
+    Get("/workspaces/workspaceQuery?name=") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+
+        val result = responseAs[WorkspaceQueryResponse]
+
+        assertResult(WorkspaceQuery()) {
+          result.parameters
+        }
+
+        assertResult(WorkspaceQueryResultMetadata(8,8,1)) {
+          result.resultMetadata
+        }
+
+        val dateTime = currentTime()
+        val expectedResult = List(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace1.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate.plusHours(1)), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace3.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace4.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace5.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace0.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None,None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace6.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(paginatedListTestWorkspaces.workspace7.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 1)), false))
+
+        assertResult(expectedResult) {
+          result.results.map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+        }
+      }
+  }
 
 
   ///////////

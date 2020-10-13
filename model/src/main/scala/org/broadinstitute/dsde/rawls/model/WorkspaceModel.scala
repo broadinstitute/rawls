@@ -14,6 +14,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
 import spray.json._
+import UserModelJsonSupport.ManagedGroupRefFormat
+import org.broadinstitute.dsde.rawls.model.LastSubmissionStatusRequests.LastSubmissionStatusRequest
 
 import scala.util.Try
 
@@ -166,14 +168,37 @@ object SortDirections {
 
   def toSql(direction: SortDirection) = toString(direction)
 }
+
+
+object LastSubmissionStatusRequests {
+  sealed trait LastSubmissionStatusRequest extends RawlsEnumeration[LastSubmissionStatusRequest] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): LastSubmissionStatusRequest = LastSubmissionStatusRequests.withName(name)
+  }
+
+  def withName(name: String): LastSubmissionStatusRequest = {
+    name match {
+      case "Succeeded" => Succeeded
+      case "Running" => Running
+      case "Failed" => Failed
+      case _ => throw new RawlsException(s"invalid last submission status [${name}]")
+    }
+  }
+
+  case object Succeeded extends LastSubmissionStatusRequest
+  case object Running extends LastSubmissionStatusRequest
+  case object Failed extends LastSubmissionStatusRequest
+
+}
+
 case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
 case class WorkspaceQuery(page: Int = 1,
                           pageSize: Int = 10,
                           sortField: String = "name",
                           sortDirection: SortDirections.SortDirection = SortDirections.Ascending,
                           searchTerm: Option[String] = None,
-                          submissionStatuses: Option[Seq[String]] = None,
-                          accessLevel: Option[String] = None,
+                          lastSubmissionStatuses: Option[Seq[LastSubmissionStatusRequest]] = None,
+                          accessLevel: Option[WorkspaceAccessLevel] = None,
                           billingProject: Option[String] = None,
                           workspaceName: Option[String] = None,
                           tags: Option[Seq[String]] = None
@@ -650,6 +675,16 @@ class WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): SortDirection = json match {
       case JsString(dir) => SortDirections.fromString(dir)
+      case _ => throw DeserializationException("unexpected json type")
+    }
+  }
+
+
+  implicit object LastSubmissionRequestFormat extends JsonFormat[LastSubmissionStatusRequest] {
+    override def write(sub: LastSubmissionStatusRequest): JsValue = JsString(sub.toString)
+
+    override def read(json: JsValue): LastSubmissionStatusRequest = json match {
+      case JsString(sub) => LastSubmissionStatusRequests.withName(sub)
       case _ => throw DeserializationException("unexpected json type")
     }
   }

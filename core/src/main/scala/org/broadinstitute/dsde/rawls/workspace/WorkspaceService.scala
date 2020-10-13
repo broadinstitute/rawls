@@ -481,43 +481,27 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def listWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span): Future[PerRequestMessage] = {
-    println("listWorkspaces")
-    println("  params: " + params.toString)
-    println("  parentSpan: " + parentSpan.toString)
     for {
-      (options, submissionStatsEnabled, attributesEnabled) <- Future.successful( start(params, parentSpan) )
+      (options, submissionStatsEnabled, attributesEnabled) <- Future.successful( getOptions(params, parentSpan) )
       (_, _, _, sortedWorkspaceListResponses) <- listWorkspaces(params: WorkspaceFieldSpecs, WorkspaceQuery(), submissionStatsEnabled, attributesEnabled, parentSpan: Span)
-    } yield {
-      println("  options: " + options.toString)
-      println("  submissionStatsEnabled: " + submissionStatsEnabled.toString)
-      println("  attributesEnabled: " + attributesEnabled.toString)
-      println("  sortedWorkspaceListResponses: " + sortedWorkspaceListResponses.toString)
-      if (!options.nonEmpty) RequestComplete(StatusCodes.OK, sortedWorkspaceListResponses) else RequestComplete(StatusCodes.OK, deepFilterJsValue(sortedWorkspaceListResponses.toJson, options))
-    }
+    } yield if (!options.nonEmpty) RequestComplete(StatusCodes.OK, sortedWorkspaceListResponses) else RequestComplete(StatusCodes.OK, deepFilterJsValue(sortedWorkspaceListResponses.toJson, options))
   }
 
   def listWorkspacesPaginated(params: WorkspaceFieldSpecs, workspaceQuery: WorkspaceQuery, parentSpan: Span): Future[PerRequestMessage] = {
     for {
-      (options, submissionStatsEnabled, attributesEnabled) <- Future.successful( start(params, parentSpan) )
+      (options, submissionStatsEnabled, attributesEnabled) <- Future.successful( getOptions(params, parentSpan) )
       (workspaceQuery, unfilteredCount, filteredCount, sortedWorkspaceListResponses) <- listWorkspaces(params: WorkspaceFieldSpecs, workspaceQuery: WorkspaceQuery, submissionStatsEnabled, attributesEnabled, parentSpan: Span)
       workspaceQueryResponse = createWorkspaceQueryResponse(workspaceQuery, unfilteredCount, filteredCount, sortedWorkspaceListResponses)
     } yield {
-      println("OPTIONS EMPTY? " + options.isEmpty)
-      println("OPTIONS " + options)
-
-      val res = if (options.isEmpty) RequestComplete(StatusCodes.OK,  workspaceQueryResponse)
+      if (options.isEmpty) RequestComplete(StatusCodes.OK,  workspaceQueryResponse)
       else {
         val newOptions =  options.map("results."+ _) ++: Set("parameters", "resultMetadata", "results")
-        println("NEW OPTIONS " + newOptions)
         RequestComplete(StatusCodes.OK, deepFilterJsValue(workspaceQueryResponse.toJson, newOptions))
       }
-      println("RESPONSE")
-      println(res)
-      res
     }
   }
 
-  def start(params: WorkspaceFieldSpecs, parentSpan: Span) = {
+  private def getOptions(params: WorkspaceFieldSpecs, parentSpan: Span) = {
 
     val s = startSpanWithParent("optionHandling", parentSpan)
 
@@ -546,7 +530,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def listWorkspaces(params: WorkspaceFieldSpecs, workspaceQuery: WorkspaceQuery, submissionStatsEnabled: Boolean, attributesEnabled: Boolean, parentSpan: Span): Future[(WorkspaceQuery, Int, Int, Seq[WorkspaceListResponse])] = {
-    println("NOW WE'RE HERE")
     for {
       workspacePolicies <- traceWithParent("getPolicies", parentSpan)(_ => samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
       // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
@@ -554,8 +537,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       accessLevelWorkspacePolicies = workspacePolicies.filter(p =>
         WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty &&
         Try(UUID.fromString(p.resourceId)).isSuccess &&
-          (if (workspaceQuery.accessLevel.nonEmpty && WorkspaceAccessLevels.withPolicyName(workspaceQuery.accessLevel.get).nonEmpty)
-            WorkspaceAccessLevels.withPolicyName(workspaceQuery.accessLevel.get).get.toPolicyName.get == p.accessPolicyName.value.toLowerCase()
+          (if (workspaceQuery.accessLevel.nonEmpty && WorkspaceAccessLevels.withPolicyName(workspaceQuery.accessLevel.get.toString).nonEmpty)
+            WorkspaceAccessLevels.withPolicyName(workspaceQuery.accessLevel.get.toString).get.toPolicyName.get == p.accessPolicyName.value.toLowerCase()
           else true)
       )
       accessLevelWorkspacePolicyUUIDs = accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq
@@ -568,15 +551,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
 
         val query = for {
-          submissionSummaryStats <- traceDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
-          (unfilteredCount, filteredCount, workspaces) <- traceDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listWorkspaces(accessLevelWorkspacePolicyUUIDs, workspaceQuery))
+          //submissionSummaryStats <- traceDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
+          (unfilteredCount, filteredCount, workspacesAndSubmissionStats) <- traceDBIOWithParent("listWorkspacesQuery", parentSpan)(_ => dataAccess.workspaceQuery.listWorkspaces(accessLevelWorkspacePolicyUUIDs, workspaceQuery))
         } yield {
-          println("workspaces: " + workspaces)
-          (unfilteredCount, filteredCount, workspaces, submissionSummaryStats)
+          println("workspaces: " + workspacesAndSubmissionStats)
+          (unfilteredCount, filteredCount, workspacesAndSubmissionStats)
         }
 
 
-        traceDBIOWithParent("finalResults", parentSpan)(_ => query.map { case (unfilteredCount, filteredCount, workspaces, submissionSummaryStats) =>
+        traceDBIOWithParent("finalResults", parentSpan)(_ => query.map { case (unfilteredCount, filteredCount, workspacesAndSubmissionStats) =>
           val policiesByWorkspaceId = accessLevelWorkspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
             workspaceId -> policies.reduce { (p1, p2) =>
               val betterAccessPolicyName = (WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value), WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value)) match {
@@ -594,7 +577,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             }
           }
 
-          val workspaceListResponses = workspaces.map { workspace =>
+          val workspaceListResponses = workspacesAndSubmissionStats.map { case (workspace, submissionStats) =>
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
@@ -602,7 +585,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled)
             // remove submission stats if they were not requested
             val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
-              Option(submissionSummaryStats(wsId))
+              Option(submissionStats)
             } else {
               None
             }
@@ -621,7 +604,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           (workspaceQuery, unfilteredCount, filteredCount, sortedWorkspaceListResponses)
         })
       }, TransactionIsolation.ReadCommitted)
-    } yield result
+    } yield {
+      println("WORKSPACE POLICIES: " + workspacePolicies.toString)
+      result
+    }
   }
 
   def createWorkspaceQueryResponse(query: WorkspaceQuery, unfilteredCount: Int, filteredCount: Int, page: Seq[WorkspaceListResponse]): WorkspaceQueryResponse = {
