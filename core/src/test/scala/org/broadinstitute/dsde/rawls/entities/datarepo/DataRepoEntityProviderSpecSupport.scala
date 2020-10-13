@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, M
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, RawlsUserEmail, UserInfo, Workspace}
-import org.joda.time.DateTime
+import org.joda.time. DateTime
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -29,7 +29,7 @@ trait DataRepoEntityProviderSpecSupport {
   val snapshot: String = UUID.randomUUID().toString
 
   // default Workspace object, mostly irrelevant for DataRepoEntityProviderSpec but necessary to exist
-  val workspace = new Workspace("namespace", "name", wsId.toString, "bucketName", None,
+  val workspace = Workspace("namespace", "name", wsId.toString, "bucketName", None,
     DateTime.now(), DateTime.now(), "createdBy", Map.empty, false)
 
   // defaults for DataRepoEntityProviderConfig
