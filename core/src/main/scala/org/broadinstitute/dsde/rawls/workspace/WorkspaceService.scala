@@ -90,6 +90,21 @@ object WorkspaceService {
     } yield jobId
   }
 
+  private[workspace] def getTerminalStatusDate(submission: Submission, workflowID: Option[String]): Option[DateTime] = {
+    // find all workflows that have finished
+    val terminalWorkflows = submission.workflows.filter(workflow => WorkflowStatuses.terminalStatuses.contains(workflow.status))
+    // optionally limit the list to a specific workflowID
+    val workflows = workflowID match {
+      case Some(_) => terminalWorkflows.filter(_.workflowId == workflowID)
+      case None => terminalWorkflows
+    }
+    if (workflows.isEmpty) {
+      None
+    } else {
+      // use the latest date the workflow(s) reached a terminal status
+      Option(workflows.map(_.statusLastChangedDate).maxBy(_.getMillis))
+    }
+  }
 }
 
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
@@ -1443,7 +1458,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     submissionWithoutCosts flatMap {
       case (submission) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, Option(submission.submissionDate))) map {
+        val submissionDoneDate: Option[DateTime] = WorkspaceService.getTerminalStatusDate(submission, None)
+        toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, submission.submissionDate, submissionDoneDate)) map {
           case Failure(ex) =>
             logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
             RequestComplete((StatusCodes.OK, submission))
@@ -1542,7 +1558,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // we don't need the Execution Service ID, but we do need to confirm the Workflow is in one for this Submission
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, userInfo, optExecId)
-      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, Option(submission.submissionDate))
+      submissionDoneDate = WorkspaceService.getTerminalStatusDate(submission, Option(workflowId))
+      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, submission.submissionDate, submissionDoneDate)
     } yield RequestComplete(StatusCodes.OK, WorkflowCost(workflowId, costs.get(workflowId)))
   }
 
