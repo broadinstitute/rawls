@@ -434,8 +434,6 @@ trait WorkspaceComponent {
 
 
     def loadWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[(Int, Int, Seq[WorkspaceAndAttributesRecord])] = {
-      println("inside loadWorkspaces: " + workspaceIds + " " + workspaceQuery)
-
       def workspaceUUIDList = {
         val sqlWhere = sql" WHERE "
         val sqlWhereClause = if (workspaceIds.isEmpty) sql" FALSE "
@@ -491,7 +489,7 @@ trait WorkspaceComponent {
         sql" limit ${workspaceQuery.pageSize} offset ${offset}"
       }
 
-      val sqlString =
+      val sqlSelect =
         sql"""
               SELECT ws.namespace,
                      ws.name,
@@ -558,9 +556,9 @@ trait WorkspaceComponent {
                                                        MAX(if (workflow_status = '#${WorkflowStatuses.Failed.toString}', max_date, null)) AS last_failed,
                                                        MAX(submission_active_count) AS running_submission_count,
                                                        (CASE
-                                                         when MAX(submission_active_count) > 0 then 'Running'
-                                                         when MAX(if (workflow_status = 'Succeeded', max_date, 0)) > MAX(if (workflow_status = 'Failed', max_date, 0)) then 'Succeeded'
-                                                         when MAX(if (workflow_status = 'Succeeded', max_date, 0)) < MAX(if (workflow_status = 'Failed', max_date, 0)) then 'Failed'
+                                                         when MAX(submission_active_count) > 0 then '#{LastSubmissionStatusRequest.Running.toString}'
+                                                         when MAX(if (workflow_status = '#{LastSubmissionStatusRequest.Succeeded.toString}', max_date, 0)) > MAX(if (workflow_status = '#{LastSubmissionStatusRequest.Failed.toString}', max_date, 0)) then 'Succeeded'
+                                                         when MAX(if (workflow_status = '#{LastSubmissionStatusRequest.Succeeded.toString}', max_date, 0)) < MAX(if (workflow_status = '#{LastSubmissionStatusRequest.Failed.toString}', max_date, 0)) then 'Failed'
                                                          else null END) AS last_submission_status
                                                 FROM
                                                     (SELECT w.id AS workspace_id,
@@ -581,28 +579,9 @@ trait WorkspaceComponent {
                          LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on ws.id = wa.owner_id
                          LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id """
       for {
-        filteredCount <- {
-          val thing = concatSqlActions(sql"SELECT count(1) FROM (SELECT w.id FROM WORKSPACE w ", wsAttSubmissionJoins, substatssql, workspaceUUIDList, lastSubmissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql" GROUP BY w.id ", sql") ws").as[Int]
-          println("filtered Count: " + thing.statements)
-          thing
-        }
-//        unfilteredCount <- {
-          // TODO: should this actually do the select in case there are UUIDs that don't have a record in the workspace table
-//          val thing = concatSqlActions(sql"SELECT count(1) FROM (SELECT * FROM WORKSPACE w ", workspaceUUIDList, sql") ws").as[Int]
-//          println("SQL " + concatSqlActions(sql"SELECT count(1) FROM (SELECT * FROM WORKSPACE w ", workspaceUUIDList, sql") ws"))
-//          val thing  = workspaceIds.length
-//          println("unfiltered Count: " + thing)
-//          thing
-//        }
-        page <- {
-          val thing = concatSqlActions(sqlString, sql" (", sqlInnerSelect, wsAttSubmissionJoins, substatssql, workspaceUUIDList, lastSubmissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql" GROUP BY w.id", ordering("w"),  limitOffset, sql")  ws ", fromAndJoins, ordering("ws")).as[WorkspaceAndAttributesRecord]
-          println("page: " + thing.statements)
-          println("page STRING: " + thing.toString)
-          thing
-        }
+        filteredCount <- concatSqlActions(sql"SELECT count(1) FROM (SELECT w.id FROM WORKSPACE w ", wsAttSubmissionJoins, substatssql, workspaceUUIDList, lastSubmissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql" GROUP BY w.id ", sql") ws").as[Int]
+        page <- concatSqlActions(sqlSelect, sql" (", sqlInnerSelect, wsAttSubmissionJoins, substatssql, workspaceUUIDList, lastSubmissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql" GROUP BY w.id", ordering("w"),  limitOffset, sql")  ws ", fromAndJoins, ordering("ws")).as[WorkspaceAndAttributesRecord]
       } yield {
-        println("HI")
-        println("loadWorkspace: hi " +  workspaceIds.length + " " + filteredCount.head + " " + page.toString)
         (workspaceIds.length, filteredCount.head, page)
       }
     }

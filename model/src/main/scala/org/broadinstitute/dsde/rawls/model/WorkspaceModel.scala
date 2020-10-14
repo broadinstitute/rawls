@@ -201,7 +201,8 @@ case class WorkspaceQuery(page: Int = 1,
                           accessLevel: Option[WorkspaceAccessLevel] = None,
                           billingProject: Option[String] = None,
                           workspaceName: Option[String] = None,
-                          tags: Option[Seq[String]] = None
+                          tags: Option[Seq[String]] = None,
+                          fields: WorkspaceFieldSpecs
                          )
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,

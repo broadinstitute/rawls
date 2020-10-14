@@ -62,7 +62,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
                val pageSize = WorkspaceFieldSpecs.fromQueryParams(allParams, "pageSize").fields.map(_.head)
                val sortField = WorkspaceFieldSpecs.fromQueryParams(allParams, "sortField").fields.map(_.head)
                val sortDirection = WorkspaceFieldSpecs.fromQueryParams(allParams, "sortDirection").fields.map(_.head)
-               val fields = WorkspaceFieldSpecs.fromQueryParams(allParams, "fields").fields.map(_.head)
+               val fields = WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
                val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
                val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
                val submissionStatusesStrings = WorkspaceFieldSpecs.fromQueryParams(allParams, "lastSubmissionStatuses").fields.map(_.toSeq)
@@ -96,10 +96,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
                    accessLevelTry.get,
                    billingProject.fields.map(_.head),
                    workspaceName.fields.map(_.head),
-                   tags.fields.map(_.toSeq)
+                   tags.fields.map(_.toSeq),
+                   fields
                  )
                  complete {
-                   workspaceServiceConstructor(userInfo).ListWorkspacesPaginated(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), workspaceQuery, span)
+                   workspaceServiceConstructor(userInfo).ListWorkspacesPaginated(workspaceQuery, span)
                  }
                } else {
                  complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
