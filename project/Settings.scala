@@ -53,6 +53,10 @@ object Settings {
     }
   )
 
+  val cross212and213 = Seq(
+    crossScalaVersions := List("2.12.11", "2.13.2")
+  )
+
   //common settings for all sbt subprojects
   val commonSettings =
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
@@ -73,7 +77,7 @@ object Settings {
   //the full list of settings for the rawlsModel project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
   //thus commonSettings needs to be added first.
-  val modelSettings = commonSettings ++ List(
+  val modelSettings = cross212and213 ++ commonSettings ++ List(
     name := "rawls-model",
     libraryDependencies ++= modelDependencies
   ) ++ versionSettings ++ publishSettings
