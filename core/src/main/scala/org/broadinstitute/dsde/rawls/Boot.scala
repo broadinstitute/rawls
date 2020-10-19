@@ -254,8 +254,6 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getStringList("projectTemplate.owners").asScala
       val projectEditors =
         gcsConfig.getStringList("projectTemplate.editors").asScala
-      val projectOwnerGrantableRoles =
-        gcsConfig.getStringList("projectTemplate.ownerGrantableRoles")
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
       val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
@@ -274,7 +272,6 @@ object Boot extends IOApp with LazyLogging {
           gcsDAO,
           notificationDAO,
           samDAO,
-          projectOwnerGrantableRoles.asScala,
           requesterPaysRole,
           dmConfig,
           projectTemplate
@@ -310,7 +307,6 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-      val defaultBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultBackend"))
 
       val wdlParsingConfig = WDLParserConfig(conf.getConfig("wdl-parsing"))
       def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
@@ -445,7 +441,6 @@ object Boot extends IOApp with LazyLogging {
           requesterPaysRole,
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
-          defaultBackend,
           methodConfigResolver
         )
       } else

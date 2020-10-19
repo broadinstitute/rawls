@@ -61,7 +61,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val requesterPaysRole: String = requesterPaysRole,
     val useWorkflowCollectionField: Boolean = false,
     val useWorkflowCollectionLabel: Boolean = false,
-    val defaultBackend: CromwellBackend = CromwellBackend("PAPIv2"),
     val methodConfigResolver: MethodConfigResolver = methodConfigResolver) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
@@ -247,13 +246,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             google_compute_service_account = "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
             user_service_account_json =
             """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""",
-            auth_bucket = testData.billingProject.cromwellAuthBucketUrl,
             final_workflow_log_dir =
               s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
             default_runtime_attributes = Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
             read_from_cache = false,
             delete_intermediate_output_files = false,
-            backend = CromwellBackend("PAPIv2"),
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
@@ -331,7 +328,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs
+      mockGoogleServicesDAO.policies(ctx.googleProject)(requesterPaysRole) should contain theSameElementsAs
         List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
     }
   }
@@ -364,7 +361,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs
+      mockGoogleServicesDAO.policies(ctx.googleProject)(requesterPaysRole) should contain theSameElementsAs
         List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
     }
   }
@@ -406,7 +403,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       // Verify
       val expectedClientEmail = List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
-      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.namespace))(requesterPaysRole) should contain theSameElementsAs expectedClientEmail
+      mockGoogleServicesDAO.policies(ctx.googleProject)(requesterPaysRole) should contain theSameElementsAs expectedClientEmail
     }
   }
 
@@ -532,7 +529,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockMarthaResolver,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
-        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"),
+        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false,
         methodConfigResolver)
       )
 
@@ -573,7 +570,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockMarthaResolver,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"),
+        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false,
         methodConfigResolver)
       )
 

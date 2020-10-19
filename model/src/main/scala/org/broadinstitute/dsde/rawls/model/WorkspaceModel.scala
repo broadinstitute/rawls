@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefF
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.workbench.model.ValueObject
+import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
 import org.joda.time.DateTime
 import spray.json._
 
@@ -101,6 +101,10 @@ object WorkspaceVersions {
       case _ => None
     }
   }
+
+  def fromStringThrows(versionString: String): WorkspaceVersion = {
+    fromString(versionString).getOrElse(throw new RawlsException(s"unexpected version string ${versionString}, acceptable values are ${V1.value} or ${V2.value}"))
+  }
 }
 
 case class WorkspaceRequest (
@@ -116,6 +120,8 @@ case class WorkspaceRequest (
   def path: String = toWorkspaceName.path
 }
 
+case class GoogleProjectId(value: String) extends ValueObject
+
 case class Workspace(
                       namespace: String,
                       name: String,
@@ -128,7 +134,8 @@ case class Workspace(
                       attributes: AttributeMap,
                       isLocked: Boolean,
                       workspaceVersion: WorkspaceVersion,
-                      googleProject: String
+                      googleProject: GoogleProjectId,
+                      googleProjectNumber: Option[GoogleProjectNumber]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -137,7 +144,7 @@ case class Workspace(
 }
 
 object Workspace {
-  /** convenience constructor that defaults workspace version to v1 and google project to namespace */
+  /** convenience constructor that defaults workspace version to v1, google project to namespace and google project number to None */
   def apply(namespace: String,
            name: String,
            workspaceId: String,
@@ -148,7 +155,7 @@ object Workspace {
            createdBy: String,
            attributes: AttributeMap,
            isLocked: Boolean = false): Workspace = {
-    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, namespace)
+    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace), None)
   }
 
 }
@@ -497,8 +504,9 @@ case class WorkspaceDetails(namespace: String,
                             isLocked: Boolean = false,
                             authorizationDomain: Option[Set[ManagedGroupRef]],
                             workspaceVersion: WorkspaceVersion,
-                            googleProject: String) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject)
+                            googleProject: GoogleProjectId,
+                            googleProjectNumber: Option[GoogleProjectNumber]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber)
 }
 
 
@@ -568,7 +576,8 @@ object WorkspaceDetails {
       workspace.isLocked,
       optAuthorizationDomain,
       workspace.workspaceVersion,
-      workspace.googleProject
+      workspace.googleProject,
+      workspace.googleProjectNumber
     )
   }
 }
@@ -769,6 +778,10 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   }
 
+  implicit val GoogleProjectIdFormat = ValueObjectFormat(GoogleProjectId)
+
+  implicit val GoogleProjectNumberFormat = ValueObjectFormat(GoogleProjectNumber)
+
   implicit val MethodConfigurationFormat = jsonFormat11(MethodConfiguration)
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
@@ -783,7 +796,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat13(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat14(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

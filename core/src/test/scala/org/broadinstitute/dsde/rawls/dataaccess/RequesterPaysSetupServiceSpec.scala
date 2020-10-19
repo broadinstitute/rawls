@@ -57,12 +57,12 @@ class RequesterPaysSetupServiceSpec extends FlatSpec with Matchers with MockitoS
     when(service.bondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
 
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe false
-    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace.toWorkspaceName).futureValue shouldBe List(expectedEmail)
+    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace).futureValue shouldBe List(expectedEmail)
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.billingProject.projectName) shouldBe Some(Map(service.requesterPaysRole -> Set("serviceAccount:" + expectedEmail.client_email)))
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProject) shouldBe Some(Map(service.requesterPaysRole -> Set("serviceAccount:" + expectedEmail.client_email)))
 
     // second call should not fail
-    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace.toWorkspaceName).futureValue shouldBe List(expectedEmail)
+    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace).futureValue shouldBe List(expectedEmail)
   }
 
   "revokeUserFromWorkspace" should "unlink" in withMinimalTestDatabaseAndServices { service =>
@@ -75,16 +75,16 @@ class RequesterPaysSetupServiceSpec extends FlatSpec with Matchers with MockitoS
 
     // add user to mock google bindings
     val initialBindings = Map(service.requesterPaysRole -> Set("serviceAccount:" + expectedEmail.client_email))
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.billingProject.projectName, initialBindings)
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.workspace.googleProject, initialBindings)
 
     // remove use from 1 workspace and check that it did not get removed from google bindings
-    service.revokeUserFromWorkspace(userInfo.userEmail, minimalTestData.workspace.toWorkspaceName).futureValue shouldBe List(expectedEmail)
+    service.revokeUserFromWorkspace(userInfo.userEmail, minimalTestData.workspace).futureValue shouldBe List(expectedEmail)
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.billingProject.projectName) shouldBe Some(initialBindings)
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProject) shouldBe Some(initialBindings)
 
     // remove use from other workspace and check that it did get removed from google bindings
-    service.revokeUserFromWorkspace(userInfo.userEmail, minimalTestData.workspace2.toWorkspaceName).futureValue shouldBe List(expectedEmail)
+    service.revokeUserFromWorkspace(userInfo.userEmail, minimalTestData.workspace2).futureValue shouldBe List(expectedEmail)
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe false
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.billingProject.projectName) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProject) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
   }
 }

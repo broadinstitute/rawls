@@ -191,9 +191,6 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
         projects match {
           case Seq() => fail("project does not exist in db")
           case Seq(project) =>
-            assertResult("gs://" + services.gcsDAO.getCromwellAuthBucketName(projectName)) {
-              project.cromwellAuthBucketUrl
-            }
           case _ => fail("too many projects")
         }
       }
@@ -201,7 +198,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
 
   it should "rollback billing project inserts when there is a google error" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource, new MockGoogleServicesDAO("test") {
-      override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
+      override def createProject(projectName: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
         Future.failed(new Exception("test exception"))
       }
     }) { services =>

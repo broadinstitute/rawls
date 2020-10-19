@@ -146,7 +146,7 @@ class HttpGoogleServicesDAO(
 
   //we only have to do this once, because there's only one DM project
   lazy val getDeploymentManagerSAEmail: Future[String] = {
-    getGoogleProject(RawlsBillingProjectName(deploymentMgrProject))
+    getGoogleProject(GoogleProjectId(deploymentMgrProject))
       .map( p => s"${p.getProjectNumber}@cloudservices.gserviceaccount.com")
   }
 
@@ -186,7 +186,7 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  override def setupWorkspace(userInfo: UserInfo, projectName: RawlsBillingProjectName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, projectName: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
     def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
@@ -244,30 +244,7 @@ class HttpGoogleServicesDAO(
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
   }
 
-  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    val bucketName = getCromwellAuthBucketName(billingProject)
-    retryWithRecoverWhen500orGoogleError(
-      () => {
-        val bucketAcls = List(
-          newBucketAccessControl("project-editors-" + projectNumber, "OWNER"),
-          newBucketAccessControl("project-owners-" + projectNumber, "OWNER")) ++
-          authBucketReaders.map(email => newBucketAccessControl(makeGroupEntityString(email.value), "READER")).toList
-
-        val defaultObjectAcls = List(
-          newObjectAccessControl("project-editors-" + projectNumber, "OWNER"),
-          newObjectAccessControl("project-owners-" + projectNumber, "OWNER")) ++
-          authBucketReaders.map(email => newObjectAccessControl(makeGroupEntityString(email.value), "READER")).toList
-
-        val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls.asJava).setDefaultObjectAcl(defaultObjectAcls.asJava)
-        val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(billingProject.value, bucket)
-        executeGoogleRequest(inserter)
-
-        bucketName
-      }) { case t: HttpResponseException if t.getStatusCode == 409 => bucketName }
-  }
-
-  def grantReadAccess(billingProject: RawlsBillingProjectName,
+  def grantReadAccess(billingProject: GoogleProjectId,
                       bucketName: String,
                       authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
@@ -292,7 +269,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def createStorageLogsBucket(billingProject: RawlsBillingProjectName): Future[String] = {
+  def createStorageLogsBucket(billingProject: GoogleProjectId): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
     val bucketName = getStorageLogsBucketName(billingProject)
     logger debug s"storage log bucket: $bucketName"
@@ -387,7 +364,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getBucketUsage(projectName: RawlsBillingProjectName, bucketName: String, maxResults: Option[Long]): Future[BigInt] = {
+  override def getBucketUsage(projectName: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BigInt] = {
     implicit val service = GoogleInstrumentedService.Storage
 
     def usageFromLogObject(o: StorageObject): Future[BigInt] = {
@@ -750,7 +727,7 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  override def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project] = {
+  override def getGoogleProject(projectName: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
     val credential = getDeploymentManagerAccountCredential
 
@@ -761,7 +738,7 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  def getDMConfigYamlString(projectName: RawlsBillingProjectName, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
+  def getDMConfigYamlString(projectName: GoogleProjectId, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
     import DeploymentManagerJsonSupport._
     import cats.syntax.either._
     import io.circe.yaml.syntax._
@@ -775,7 +752,7 @@ class HttpGoogleServicesDAO(
    * Set the deployment policy to "abandon" -- i.e. allows the created project to persist even if the deployment is deleted --
    * and then delete the deployment. There's a limit of 1000 deployments so this is important to do.
    */
-  override def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit] = {
+  override def cleanupDMProject(projectName: GoogleProjectId): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -788,7 +765,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
+  def projectToDM(projectName: GoogleProjectId) = s"dm-${projectName.value}"
 
 
   def parseTemplateLocation(path: String): Option[TemplateLocation] = {
@@ -802,7 +779,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
+  override def createProject(projectName: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -903,7 +880,7 @@ class HttpGoogleServicesDAO(
     *                       which will be handled appropriately when sent to google.
     * @return true if google was called to update policies, false otherwise
     */
-  override protected def updatePolicyBindings(projectName: RawlsBillingProjectName)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
+  override protected def updatePolicyBindings(projectName: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
     val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
@@ -934,15 +911,7 @@ class HttpGoogleServicesDAO(
     } yield updated
   }
 
-  override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = {
-    addPolicyBindings(projectName, Map(s"roles/$role" -> Set(s"group:${groupEmail.value}")))
-  }
-
-  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = {
-    removePolicyBindings(projectName, Map(s"roles/$role" -> Set(s"group:${groupEmail.value}")))
-  }
-
-  override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {
+  override def deleteProject(projectName: GoogleProjectId): Future[Unit]= {
     implicit val service = GoogleInstrumentedService.Billing
     val billingServiceAccountCredential = getBillingServiceAccountCredential
     val resMgr = getCloudResourceManager(billingServiceAccountCredential)
@@ -963,9 +932,9 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def projectUsageExportBucketName(projectName: RawlsBillingProjectName) = s"${projectName.value}-usage-export"
+  def projectUsageExportBucketName(projectName: GoogleProjectId) = s"${projectName.value}-usage-export"
 
-  override def getBucketDetails(bucketName: String, project: RawlsBillingProjectName): Future[WorkspaceBucketOptions] = {
+  override def getBucketDetails(bucketName: String, project: GoogleProjectId): Future[WorkspaceBucketOptions] = {
     implicit val service = GoogleInstrumentedService.Storage
     val cloudStorage = getStorage(getBucketServiceAccountCredential)
     for {
@@ -1149,7 +1118,7 @@ class HttpGoogleServicesDAO(
     retryWhen500orGoogleError(() => { executeGoogleFetch(getter) { is => f(is) } })
   }
 
-  override def addProjectToFolder(projectName: RawlsBillingProjectName, folderId: String): Future[Unit] = {
+  override def addProjectToFolder(projectName: GoogleProjectId, folderId: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
     val cloudResourceManager = getCloudResourceManager(getBillingServiceAccountCredential)
 

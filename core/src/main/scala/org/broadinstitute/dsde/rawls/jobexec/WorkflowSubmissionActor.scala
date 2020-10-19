@@ -44,9 +44,8 @@ object WorkflowSubmissionActor {
             requesterPaysRole: String,
             useWorkflowCollectionField: Boolean,
             useWorkflowCollectionLabel: Boolean,
-            defaultBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, methodConfigResolver))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -78,7 +77,6 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val requesterPaysRole: String,
                               val useWorkflowCollectionField: Boolean,
                               val useWorkflowCollectionLabel: Boolean,
-                              val defaultBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
@@ -128,7 +126,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
   val useWorkflowCollectionLabel: Boolean
-  val defaultBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
 
   import dataSource.dataAccess.driver.api._
@@ -190,7 +187,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                         submissionId: UUID,
                         userEmail: RawlsUserEmail,
                         petSAJson: String,
-                        billingProject: RawlsBillingProject,
                         useCallCache: Boolean,
                         deleteIntermediateOutputFiles: Boolean,
                         workflowFailureMode: Option[WorkflowFailureMode]
@@ -203,16 +199,14 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
-      workspace.namespace,
+      workspace.googleProject,
       userEmail.value,
       petSAEmail,
       petSAJson,
-      billingProject.cromwellAuthBucketUrl,
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
       runtimeOptions,
       useCallCache,
       deleteIntermediateOutputFiles,
-      billingProject.cromwellBackend.getOrElse(defaultBackend),
       workflowFailureMode,
       google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
     )
@@ -300,21 +294,18 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         wfRecs <- getWorkflowRecordBatch(workflowIds, dataAccess)
         workflowBatch <- reifyWorkflowRecords(wfRecs, dataAccess)
 
-        //The workspace's billing project
-        billingProject <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace)).map(_.get)
-
         //the method configuration, in order to get the wdl
         methodConfig <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId).map(_.get)
       } yield {
-        (wfRecs, workflowBatch, billingProject, methodConfig)
+        (wfRecs, workflowBatch, methodConfig)
       }
     }
 
     val workflowBatchFuture = for {
       //yank things from the db. note this future has already started running and we're just waiting on it here
-      (wfRecs, workflowBatch, billingProject, methodConfig) <- dbThingsFuture
+      (wfRecs, workflowBatch, methodConfig) <- dbThingsFuture
 
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, RawlsUserEmail(submissionRec.submitterEmail))
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceRec.googleProject, RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
 
       wdl <- getWdl(methodConfig, petUserInfo)
@@ -325,7 +316,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         submissionId = submissionRec.id,
         userEmail = RawlsUserEmail(submissionRec.submitterEmail),
         petSAJson = petSAJson,
-        billingProject = billingProject,
         useCallCache = submissionRec.useCallCache,
         deleteIntermediateOutputFiles = submissionRec.deleteIntermediateOutputFiles,
         workflowFailureMode = WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode)
@@ -360,7 +350,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // We still call Martha for those because we can verify the user has permission on the DRS object as
       // early as possible, rather than letting the workflow(s) launch and fail
       // AEN 2020-09-08 [WA-325]
-      _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("serviceAccount:"+_)))
+      _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(GoogleProjectId(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("serviceAccount:"+_)))
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), Option(wfLabels), wfCollection, petUserInfo)
     } yield {

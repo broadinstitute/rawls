@@ -245,7 +245,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
           // determine which functions to use for the various part of the response
           def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
-            traceWithParent("getBucketDetails",s1)(_ =>  gcsDAO.getBucketDetails(workspaceContext.bucketName, RawlsBillingProjectName(workspaceContext.namespace)).map(Option(_)))
+            traceWithParent("getBucketDetails",s1)(_ =>  gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProject).map(Option(_)))
           } else {
             noFuture
           }
@@ -311,7 +311,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        DBIO.from(gcsDAO.getBucketDetails(workspaceContext.bucketName, RawlsBillingProjectName(workspaceContext.namespace))) map { details =>
+        DBIO.from(gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProject)) map { details =>
           RequestComplete(StatusCodes.OK, details)
         }
       }
@@ -869,7 +869,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, email, userInfo)
             }
 
-            _ <- revokeRequesterPaysForLinkedSAs(workspaceName, policyRemovals, policyAdditions)
+            _ <- revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
 
             _ <- maybeShareProjectComputePolicy(policyAdditions, workspaceName)
 
@@ -893,12 +893,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     * removals from applicable policies then removing all the additions to applicable policies. Revoke linked SAs for
     * all resulting users.
     *
-    * @param workspaceName
+    * @param workspace
     * @param policyRemovals
     * @param policyAdditions
     * @return
     */
-  private def revokeRequesterPaysForLinkedSAs(workspaceName: WorkspaceName, policyRemovals: Set[(SamResourcePolicyName, String)], policyAdditions: Set[(SamResourcePolicyName, String)]): Future[Unit] = {
+  private def revokeRequesterPaysForLinkedSAs(workspace: Workspace, policyRemovals: Set[(SamResourcePolicyName, String)], policyAdditions: Set[(SamResourcePolicyName, String)]): Future[Unit] = {
     val applicablePolicies = Set(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer)
     val applicableRemovals = policyRemovals.collect {
       case (policy, email) if applicablePolicies.contains(policy) => RawlsUserEmail(email)
@@ -906,7 +906,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val applicableAdditions = policyAdditions.collect {
       case (policy, email) if applicablePolicies.contains(policy) => RawlsUserEmail(email)
     }
-    Future.traverse(applicableRemovals -- applicableAdditions) { emailToRevoke => requesterPaysSetupService.revokeUserFromWorkspace(emailToRevoke, workspaceName) }.void
+    Future.traverse(applicableRemovals -- applicableAdditions) { emailToRevoke => requesterPaysSetupService.revokeUserFromWorkspace(emailToRevoke, workspace) }.void
   }
 
   private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate], existingAcls: Set[WorkspaceACLUpdate]) = {
@@ -1729,7 +1729,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.write) {
         //if we get here, we passed all the hoops, otherwise an exception would have been thrown
 
-        gcsDAO.getBucketUsage(RawlsBillingProjectName(workspaceName.namespace), workspaceContext.bucketName).map { usage =>
+        gcsDAO.getBucketUsage(workspaceContext.googleProject, workspaceContext.bucketName).map { usage =>
           RequestComplete(BucketUsageResponse(usage))
         }
       }
@@ -1772,15 +1772,23 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case Some(workspace) => Future.successful(workspace)
       }
       _ <- accessCheck(workspace, SamWorkspaceActions.compute, ignoreLock = false)
-      _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, workspaceName)
+      _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, workspace)
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }
   }
 
   def disableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    // note that this does not throw an error if the workspace does not exist
+    // the user may no longer have access to the workspace so we can't confirm it exists
+    // but the user does have the right
     for {
-      _ <- requesterPaysSetupService.revokeUserFromWorkspace(userInfo.userEmail, workspaceName)
+      maybeWorkspace <- dataSource.inTransaction { dataaccess =>
+        dataaccess.workspaceQuery.findByName(workspaceName)
+      }
+      _ <- Future.traverse(maybeWorkspace.toList) { workspace =>
+        requesterPaysSetupService.revokeUserFromWorkspace(userInfo.userEmail, workspace)
+      }
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }
@@ -1915,7 +1923,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                     }
                   }.flatten.toMap)
 
-                  _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, RawlsBillingProjectName(workspaceRequest.namespace), policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3)))
+                  _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProject, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3)))
                   response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
                 } yield response
               })
