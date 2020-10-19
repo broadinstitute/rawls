@@ -4,14 +4,13 @@ import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
-import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, Rawls, WorkspaceAccessLevel}
-import org.scalatest.{FreeSpec, Matchers}
-
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 import scala.util.Try
 
 
-class AuthDomainGroupApiSpec extends FreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures {
+class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures {
 
   /*
   * Unless otherwise declared, this auth token will be used for API calls.

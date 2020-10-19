@@ -6,11 +6,11 @@ import org.broadinstitute.dsde.workbench.config.UserPool
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
 import org.broadinstitute.dsde.workbench.service.test.RandomUtil
-import org.scalatest.{FreeSpec, Matchers}
 import spray.json.{JsValue, JsonParser}
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-
-class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLogging with BillingFixtures with RandomUtil
+class MethodConfigApiSpec extends AnyFreeSpec with WorkspaceFixtures with LazyLogging with BillingFixtures with RandomUtil
   with MethodFixtures with Matchers {
 
   /*

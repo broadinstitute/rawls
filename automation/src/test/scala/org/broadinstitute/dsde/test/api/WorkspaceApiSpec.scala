@@ -14,15 +14,16 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.scalatest.{FreeSpecLike, Matchers}
 import org.scalatest.concurrent.Eventually
+import org.scalatest.freespec.AnyFreeSpecLike
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 import spray.json._
 import DefaultJsonProtocol._
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation
-class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
+class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with MethodFixtures {
 
