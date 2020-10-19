@@ -1,6 +1,7 @@
 import Dependencies._
 import sbt.Keys._
 import sbt._
+import scalafix.sbt.ScalafixPlugin.autoImport.scalafixSemanticdb
 
 object Settings {
 
@@ -14,7 +15,8 @@ object Settings {
   //coreDefaultSettings + defaultConfigs = the now deprecated defaultSettings
   val commonBuildSettings = Defaults.coreDefaultSettings ++ Defaults.defaultConfigs ++ Seq(
     javaOptions += "-Xmx2G",
-    javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
+    javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+    addCompilerPlugin(scalafixSemanticdb)
   )
 
   val commonCompilerSettings = Seq(
@@ -40,7 +42,7 @@ object Settings {
   val commonSettings =
     commonBuildSettings ++ testSettings ++ List(
     organization  := "org.broadinstitute.dsde.firecloud",
-    scalaVersion  := "2.12.6",
+    scalaVersion  := "2.12.12",
     resolvers ++= commonResolvers,
     scalacOptions ++= commonCompilerSettings
   )
