@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, M
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, RawlsUserEmail, UserInfo, Workspace}
-import org.joda.time. DateTime
+import org.joda.time.DateTime
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}

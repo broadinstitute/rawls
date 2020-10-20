@@ -694,7 +694,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     override def read(json: JsValue): WorkspaceVersion = json match {
       case JsString(versionString) => WorkspaceVersions.fromString(versionString) match {
         case Some(version) => version
-        case None =>throw DeserializationException("unexpected version string")
+        case None => throw DeserializationException("unexpected version string")
       }
       case _ => throw DeserializationException("unexpected version json type")
     }
