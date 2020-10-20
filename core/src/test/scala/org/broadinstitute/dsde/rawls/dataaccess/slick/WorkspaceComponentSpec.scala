@@ -28,7 +28,10 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
         AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
         AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
         AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
-      false)
+      false,
+      WorkspaceVersions.V2,
+      "test_google_project"
+    )
 
     assertResult(None) {
       runAndWait(workspaceQuery.findById(workspaceId.toString))

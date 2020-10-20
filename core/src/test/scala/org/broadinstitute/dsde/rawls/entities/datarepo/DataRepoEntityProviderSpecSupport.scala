@@ -29,7 +29,7 @@ trait DataRepoEntityProviderSpecSupport {
   val snapshot: String = UUID.randomUUID().toString
 
   // default Workspace object, mostly irrelevant for DataRepoEntityProviderSpec but necessary to exist
-  val workspace = new Workspace("namespace", "name", wsId.toString, "bucketName", None,
+  val workspace = Workspace("namespace", "name", wsId.toString, "bucketName", None,
     DateTime.now(), DateTime.now(), "createdBy", Map.empty, false)
 
   // defaults for DataRepoEntityProviderConfig

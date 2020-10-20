@@ -28,7 +28,9 @@ case class WorkspaceRecord(
   lastModified: Timestamp,
   createdBy: String,
   isLocked: Boolean,
-  recordVersion: Long) {
+  recordVersion: Long,
+  workspaceVersion: String,
+  googleProject: String) {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
 }
 
@@ -53,10 +55,12 @@ trait WorkspaceComponent {
     def createdBy = column[String]("created_by", O.Length(254))
     def isLocked = column[Boolean]("is_locked")
     def recordVersion = column[Long]("record_version")
+    def workspaceVersion = column[String]("workspace_version")
+    def googleProject = column[String]("google_project")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProject) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   /** raw/optimized SQL queries for working with workspace attributes
@@ -386,11 +390,11 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProject)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked)
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromString(workspaceRec.workspaceVersion).getOrElse(throw new RawlsException(s"unexpected version string ${workspaceRec.workspaceVersion}")), workspaceRec.googleProject)
     }
   }
 

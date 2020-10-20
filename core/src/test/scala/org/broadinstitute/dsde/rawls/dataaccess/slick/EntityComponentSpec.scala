@@ -448,7 +448,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   class BugTestData extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
-    val workspace = new Workspace(wsName.namespace, wsName.name, UUID.randomUUID.toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID.toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
     val sample1 = new Entity("sample1", "Sample",
       Map(AttributeName.withDefaultNS("aliquot") -> AttributeEntityReference("Aliquot", "aliquot1")))
