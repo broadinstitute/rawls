@@ -104,6 +104,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       "requesterPays",
       false,
       false,
+      CromwellBackend("PAPIv2"),
       methodConfigResolver
     ))
 

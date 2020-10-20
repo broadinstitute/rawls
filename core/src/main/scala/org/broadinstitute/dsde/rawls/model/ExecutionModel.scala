@@ -7,8 +7,8 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, Sta
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
+import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat, WorkbenchEmail}
 import org.joda.time.DateTime
 import spray.json._
 
@@ -76,9 +76,13 @@ case class ExecutionServiceWorkflowOptions(
   default_runtime_attributes: Option[JsValue],
   read_from_cache: Boolean,
   delete_intermediate_output_files: Boolean,
+  backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
   google_labels: Map[String, String] = Map.empty
 )
+
+// current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
+final case class CromwellBackend(value: String) extends ValueObject
 
 case class ExecutionServiceLabelResponse(
   id: String,
@@ -288,6 +292,8 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFailureModeFormat = rawlsEnumerationFormat(WorkflowFailureModes.withName)
 
+  implicit val CromwellBackendFormat = ValueObjectFormat(CromwellBackend)
+
   implicit object ExecutionOutputFormat extends RootJsonFormat[OutputType] {
     override def write(obj: OutputType): JsValue = obj match {
       case Left(attribute) => attributeFormat.write(attribute)
@@ -372,7 +378,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat11(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat12(ExecutionServiceWorkflowOptions)
 
   implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 

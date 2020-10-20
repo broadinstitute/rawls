@@ -307,6 +307,7 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
+      val defaultBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultBackend"))
 
       val wdlParsingConfig = WDLParserConfig(conf.getConfig("wdl-parsing"))
       def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
@@ -441,6 +442,7 @@ object Boot extends IOApp with LazyLogging {
           requesterPaysRole,
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
+          defaultBackend,
           methodConfigResolver
         )
       } else

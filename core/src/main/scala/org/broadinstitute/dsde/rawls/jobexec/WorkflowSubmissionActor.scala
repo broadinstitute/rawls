@@ -44,8 +44,9 @@ object WorkflowSubmissionActor {
             requesterPaysRole: String,
             useWorkflowCollectionField: Boolean,
             useWorkflowCollectionLabel: Boolean,
+            defaultBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, methodConfigResolver))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -77,6 +78,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val requesterPaysRole: String,
                               val useWorkflowCollectionField: Boolean,
                               val useWorkflowCollectionLabel: Boolean,
+                              val defaultBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
@@ -126,6 +128,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
   val useWorkflowCollectionLabel: Boolean
+  val defaultBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
 
   import dataSource.dataAccess.driver.api._
@@ -187,6 +190,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                         submissionId: UUID,
                         userEmail: RawlsUserEmail,
                         petSAJson: String,
+                        billingProject: RawlsBillingProject,
                         useCallCache: Boolean,
                         deleteIntermediateOutputFiles: Boolean,
                         workflowFailureMode: Option[WorkflowFailureMode]
@@ -207,6 +211,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       runtimeOptions,
       useCallCache,
       deleteIntermediateOutputFiles,
+      billingProject.cromwellBackend.getOrElse(defaultBackend),
       workflowFailureMode,
       google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
     )
@@ -294,16 +299,19 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         wfRecs <- getWorkflowRecordBatch(workflowIds, dataAccess)
         workflowBatch <- reifyWorkflowRecords(wfRecs, dataAccess)
 
+        //The workspace's billing project
+        billingProject <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace)).map(_.get)
+
         //the method configuration, in order to get the wdl
         methodConfig <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId).map(_.get)
       } yield {
-        (wfRecs, workflowBatch, methodConfig)
+        (wfRecs, workflowBatch, billingProject, methodConfig)
       }
     }
 
     val workflowBatchFuture = for {
       //yank things from the db. note this future has already started running and we're just waiting on it here
-      (wfRecs, workflowBatch, methodConfig) <- dbThingsFuture
+      (wfRecs, workflowBatch, billingProject, methodConfig) <- dbThingsFuture
 
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(GoogleProjectId(workspaceRec.googleProject), RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
@@ -316,6 +324,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         submissionId = submissionRec.id,
         userEmail = RawlsUserEmail(submissionRec.submitterEmail),
         petSAJson = petSAJson,
+        billingProject = billingProject,
         useCallCache = submissionRec.useCallCache,
         deleteIntermediateOutputFiles = submissionRec.deleteIntermediateOutputFiles,
         workflowFailureMode = WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode)
