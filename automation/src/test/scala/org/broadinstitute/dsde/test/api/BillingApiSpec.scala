@@ -17,12 +17,12 @@ import org.broadinstitute.dsde.workbench.service.SamModel._
 import scala.concurrent.duration.DurationLong
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Minutes, Seconds, Span}
-import org.scalatest.{FreeSpec, Matchers}
-
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 import scala.util.Try
 
 //noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol
-class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures with Matchers with Eventually
+class BillingApiSpec extends AnyFreeSpec with BillingFixtures with MethodFixtures with Matchers with Eventually
   with TestReporterFixture with LazyLogging {
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))

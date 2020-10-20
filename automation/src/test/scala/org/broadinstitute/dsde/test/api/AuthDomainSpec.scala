@@ -6,11 +6,13 @@ import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRo
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, RestException, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Seconds, Span}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFixtures with WorkspaceFixtures with GroupFixtures with RandomUtil with Eventually with BeforeAndAfterAll {
+class AuthDomainSpec extends AnyFlatSpec with Matchers with CleanUp with BillingFixtures with WorkspaceFixtures with GroupFixtures with RandomUtil with Eventually with BeforeAndAfterAll {
   
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(150, Seconds)), interval = scaled(Span(2, Seconds)))
 

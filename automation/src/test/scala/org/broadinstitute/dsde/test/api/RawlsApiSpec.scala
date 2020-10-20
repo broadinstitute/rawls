@@ -21,7 +21,6 @@ import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Minutes, Seconds, Span}
-import org.scalatest.{FreeSpecLike, Matchers}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -29,9 +28,11 @@ import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import org.scalatest.freespec.AnyFreeSpecLike
+import org.scalatest.matchers.should.Matchers
 
 //noinspection ScalaUnnecessaryParentheses,JavaAccessorEmptyParenCall,ScalaUnusedSymbol
-class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
+class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures with RawlsTestSuite with MethodFixtures {
 

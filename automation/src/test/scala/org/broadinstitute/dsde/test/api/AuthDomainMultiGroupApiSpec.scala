@@ -8,13 +8,15 @@ import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRo
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, Rawls, WorkspaceAccessLevel}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import spray.json.{JsValue, JsonParser}
 
 import scala.util.Try
 
 
-class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceFixtures with BillingFixtures
+class AuthDomainMultiGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFixtures with BillingFixtures
   with GroupFixtures with Eventually {
 
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(150, Seconds)), interval = scaled(Span(10, Seconds)))

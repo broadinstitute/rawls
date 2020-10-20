@@ -7,10 +7,11 @@ import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
 import org.broadinstitute.dsde.workbench.service.{Rawls, Sam}
-import org.scalatest.{FreeSpec, Matchers}
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.must.Matchers
 
 
-class AuthDomainGroupRoleSpec extends FreeSpec with WorkspaceFixtures with BillingFixtures with GroupFixtures with Matchers {
+class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with BillingFixtures with GroupFixtures with Matchers {
 
   "removing permissions from workspace with auth domain" - {
 
