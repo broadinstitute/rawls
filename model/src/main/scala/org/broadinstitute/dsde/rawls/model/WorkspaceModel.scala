@@ -134,8 +134,7 @@ case class Workspace(
                       attributes: AttributeMap,
                       isLocked: Boolean,
                       workspaceVersion: WorkspaceVersion,
-                      googleProject: GoogleProjectId,
-                      googleProjectNumber: Option[GoogleProjectNumber]
+                      googleProject: GoogleProjectId
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -144,7 +143,7 @@ case class Workspace(
 }
 
 object Workspace {
-  /** convenience constructor that defaults workspace version to v1, google project to namespace and google project number to None */
+  /** convenience constructor that defaults workspace version to v1 and google project to namespace */
   def apply(namespace: String,
            name: String,
            workspaceId: String,
@@ -155,7 +154,7 @@ object Workspace {
            createdBy: String,
            attributes: AttributeMap,
            isLocked: Boolean = false): Workspace = {
-    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace), None)
+    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace))
   }
 
 }
@@ -504,9 +503,8 @@ case class WorkspaceDetails(namespace: String,
                             isLocked: Boolean = false,
                             authorizationDomain: Option[Set[ManagedGroupRef]],
                             workspaceVersion: WorkspaceVersion,
-                            googleProject: GoogleProjectId,
-                            googleProjectNumber: Option[GoogleProjectNumber]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber)
+                            googleProject: GoogleProjectId) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject)
 }
 
 
@@ -576,8 +574,7 @@ object WorkspaceDetails {
       workspace.isLocked,
       optAuthorizationDomain,
       workspace.workspaceVersion,
-      workspace.googleProject,
-      workspace.googleProjectNumber
+      workspace.googleProject
     )
   }
 }
@@ -780,8 +777,6 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val GoogleProjectIdFormat = ValueObjectFormat(GoogleProjectId)
 
-  implicit val GoogleProjectNumberFormat = ValueObjectFormat(GoogleProjectNumber)
-
   implicit val MethodConfigurationFormat = jsonFormat11(MethodConfiguration)
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
@@ -796,7 +791,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat14(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat13(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

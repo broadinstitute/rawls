@@ -30,8 +30,7 @@ case class WorkspaceRecord(
   isLocked: Boolean,
   recordVersion: Long,
   workspaceVersion: String,
-  googleProject: String,
-  googleProjectNumber: Option[String]) {
+  googleProject: String) {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
 }
 
@@ -58,11 +57,10 @@ trait WorkspaceComponent {
     def recordVersion = column[Long]("record_version")
     def workspaceVersion = column[String]("workspace_version")
     def googleProject = column[String]("google_project")
-    def googleProjectNumber = column[Option[String]]("google_project_number")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProject, googleProjectNumber) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProject) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   /** raw/optimized SQL queries for working with workspace attributes
@@ -392,11 +390,11 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProject.value, workspace.googleProjectNumber.map(_.value))
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProject.value)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProject), workspaceRec.googleProjectNumber.map(GoogleProjectNumber))
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProject))
     }
   }
 

@@ -27,12 +27,5 @@
     <changeSet logicalFilePath="dummy" author="dvoet" id="drop_cromwell_backend">
         <dropColumn tableName="BILLING_PROJECT" columnName="CROMWELL_BACKEND"/>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="dvoet" id="workspace_google_proj_num">
-        <addColumn tableName="WORKSPACE">
-            <column name="GOOGLE_PROJECT_NUMBER" type="VARCHAR(255)">
-                <constraints nullable="true"/>
-            </column>
-        </addColumn>
-    </changeSet>
 
 </databaseChangeLog>

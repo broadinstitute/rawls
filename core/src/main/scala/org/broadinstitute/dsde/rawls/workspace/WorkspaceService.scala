@@ -1781,7 +1781,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def disableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     // note that this does not throw an error if the workspace does not exist
     // the user may no longer have access to the workspace so we can't confirm it exists
-    // but the user does have the right
+    // but the user does have the right to remove their linked SAs
     for {
       maybeWorkspace <- dataSource.inTransaction { dataaccess =>
         dataaccess.workspaceQuery.findByName(workspaceName)
