@@ -111,7 +111,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       services.gpsDAO,
       services.gpsDAO,
       mockImportServiceDAO,
-      config
+      config,
+      slickDataSource
     ))
 
     mockImportServiceDAO

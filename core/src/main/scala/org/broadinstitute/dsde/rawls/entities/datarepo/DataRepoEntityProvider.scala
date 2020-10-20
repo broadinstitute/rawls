@@ -37,8 +37,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   private lazy val googleProject = {
     // determine project to be billed for the BQ job TODO: need business logic from PO!
     requestArguments.billingProject match {
-      case Some(billing) => billing.projectName.value
-      case None => requestArguments.workspace.namespace
+      case Some(billing) => billing.googleProjectId
+      case None => requestArguments.workspace.googleProject
     }
   }
 

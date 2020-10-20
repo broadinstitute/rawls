@@ -161,18 +161,18 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
       when(mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(userIdInfo)))
-      when(mockSamDAO.getPetServiceAccountKeyForUser(project.projectName.value, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+      when(mockSamDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(userInfo))
       when(mockGcsDAO.deleteProject(project.googleProjectId)).thenReturn(Future.successful())
-      when(mockSamDAO.deleteUserPetServiceAccount(project.projectName.value, userInfo)).thenReturn(Future.successful())
+      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, userInfo)).thenReturn(Future.successful())
       when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful())
 
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual = userService.DeleteBillingProject(defaultBillingProjectName).futureValue
 
-      verify(mockSamDAO).deleteUserPetServiceAccount(project.projectName.value, userInfo)
+      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, userInfo)
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
       verify(mockGcsDAO).deleteProject(project.googleProjectId)
 

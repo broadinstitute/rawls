@@ -305,7 +305,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       //yank things from the db. note this future has already started running and we're just waiting on it here
       (wfRecs, workflowBatch, methodConfig) <- dbThingsFuture
 
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceRec.googleProject, RawlsUserEmail(submissionRec.submitterEmail))
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(GoogleProjectId(workspaceRec.googleProject), RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
 
       wdl <- getWdl(methodConfig, petUserInfo)

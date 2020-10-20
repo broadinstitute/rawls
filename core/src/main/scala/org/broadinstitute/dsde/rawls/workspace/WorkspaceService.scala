@@ -1646,7 +1646,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
 
       petKey <- if (maxAccessLevel >= WorkspaceAccessLevels.Write)
-        samDAO.getPetServiceAccountKeyForUser(workspace.namespace, userInfo.userEmail)
+        samDAO.getPetServiceAccountKeyForUser(workspace.googleProject, userInfo.userEmail)
       else
         samDAO.getDefaultPetServiceAccountKeyForUser(userInfo)
 

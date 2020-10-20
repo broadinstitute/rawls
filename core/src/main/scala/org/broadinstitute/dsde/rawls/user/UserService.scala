@@ -230,18 +230,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def deletePetsInProject(projectName: RawlsBillingProjectName, userInfo: UserInfo): Future[Unit] = {
+  private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] = {
     for {
       projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, userInfo)
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
     } yield ()
   }
 
-  private def destroyPet(userIdInfo: UserIdInfo, projectName: RawlsBillingProjectName): Future[Unit] = {
+  private def destroyPet(userIdInfo: UserIdInfo, projectName: GoogleProjectId): Future[Unit] = {
     for {
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName.value, RawlsUserEmail(userIdInfo.userEmail))
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
       petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName.value, petUserInfo)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName, petUserInfo)
     } yield ()
   }
 
@@ -249,7 +249,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     // unregister then delete actual project in google
     val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
     for {
-      _ <- deletePetsInProject(projectName, ownerUserInfo)
+      _ <- deletePetsInProject(GoogleProjectId(projectName.value), ownerUserInfo) // TODO remove for project per workspace
       _ <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
       _ <- gcsDAO.deleteProject(GoogleProjectId(projectName.value)) // TODO remove for project per workspace
     } yield RequestComplete(StatusCodes.NoContent)
@@ -268,7 +268,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       Future.successful(())
      }
       // unregister then delete actual project in google
-      _ <- deletePetsInProject(projectName, userInfo)
+      _ <- deletePetsInProject(GoogleProjectId(projectName.value), userInfo) // TODO remove for project per workspace
       _ <- unregisterBillingProjectWithUserInfo(projectName, userInfo)
       _ <- gcsDAO.deleteProject(GoogleProjectId(projectName.value)) // TODO remove for project per workspace
     } yield RequestComplete(StatusCodes.NoContent)
