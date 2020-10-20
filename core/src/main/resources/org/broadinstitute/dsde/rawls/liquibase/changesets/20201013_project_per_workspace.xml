@@ -24,8 +24,5 @@
         </sql>
         <addNotNullConstraint tableName="WORKSPACE" columnName="GOOGLE_PROJECT" columnDataType="VARCHAR(254)"/>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="dvoet" id="drop_cromwell_backend">
-        <dropColumn tableName="BILLING_PROJECT" columnName="CROMWELL_BACKEND"/>
-    </changeSet>
 
 </databaseChangeLog>
