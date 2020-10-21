@@ -5312,6 +5312,8 @@ components:
         - name
         - namespace
         - workspaceId
+        - googleProject
+        - workspaceVersion
       type: object
       properties:
         attributes:
@@ -5355,6 +5357,12 @@ components:
         workspaceId:
           type: string
           description: A UUID associated with the workspace
+        googleProject:
+          type: string
+          description: the google project used by the workspace for compute and storage
+        workspaceVersion:
+          type: string
+          description: internal use
       description: ""
     WorkspaceSubmissionStats:
       required:
