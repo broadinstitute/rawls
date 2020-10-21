@@ -238,8 +238,8 @@ class AvroUpsertMonitorActor(
     val attributes = parseMessage(message)
 
     val importFuture = for {
-      workspace <- dataSource.inTransaction { dataaccess =>
-        dataaccess.workspaceQuery.findByName(attributes.workspace).map {
+      workspace <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.findByName(attributes.workspace).map {
           case Some(workspace) => workspace
           case None =>
             publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(s"Workspace ${attributes.workspace} not found"))
