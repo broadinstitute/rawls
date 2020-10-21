@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.server
+import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import akka.http.scaladsl.server
-import akka.http.scaladsl.server.Directives._
 
 import scala.concurrent.ExecutionContext
 
@@ -16,9 +15,9 @@ import scala.concurrent.ExecutionContext
 trait BillingApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
-  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-  import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import PerRequest.requestCompleteMarshaller
+  import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   val userServiceConstructor: UserInfo => UserService
 
@@ -29,15 +28,6 @@ trait BillingApiService extends UserInfoDirectives {
           complete { userServiceConstructor(userInfo).GetBillingProjectMembers(RawlsBillingProjectName(projectId)) }
         }
       } ~
-        // these routes are for setting/unsetting Google cloud roles
-        path("googleRole" / Segment / Segment) { (googleRole, userEmail) =>
-          put {
-            complete { userServiceConstructor(userInfo).GrantGoogleRoleToUser(RawlsBillingProjectName(projectId), WorkbenchEmail(userEmail), googleRole) }
-          } ~
-            delete {
-              complete { userServiceConstructor(userInfo).RemoveGoogleRoleFromUser(RawlsBillingProjectName(projectId), WorkbenchEmail(userEmail), googleRole) }
-            }
-        } ~
         // these routes are for adding/removing users from projects
         path(Segment / Segment) { (workbenchRole, userEmail) =>
           put {

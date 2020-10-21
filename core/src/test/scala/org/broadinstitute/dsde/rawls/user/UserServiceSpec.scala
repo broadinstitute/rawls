@@ -25,9 +25,8 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
   val defaultServicePerimeterName: ServicePerimeterName = ServicePerimeterName("accessPolicies/policyName/servicePerimeters/servicePerimeterName")
   val urlEncodedDefaultServicePerimeterName: String = URLEncoder.encode(defaultServicePerimeterName.value, UTF_8.name)
   val defaultGoogleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("42")
-  val defaultCromwellBucketUrl: String = "bucket-url"
   val defaultBillingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("test-bp")
-  val defaultBillingProject: RawlsBillingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.Ready, None, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
+  val defaultBillingProject: RawlsBillingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, None, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
   val defaultMockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val testConf: Config = ConfigFactory.load()
@@ -46,7 +45,6 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       gcsDAO,
       null,
       samDAO,
-      Seq.empty,
       "",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       null
@@ -75,10 +73,10 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       runAndWait(rawlsBillingProjectQuery.create(project))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.getGoogleProject(project.projectName)).thenReturn(Future.successful(new Project().setProjectNumber(42L)))
+      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.successful(new Project().setProjectNumber(42L)))
       val folderId = "folders/1234567"
       when(mockGcsDAO.getFolderId(defaultServicePerimeterName.value.split("/").last)).thenReturn(Future.successful(Option(folderId)))
-      when(mockGcsDAO.addProjectToFolder(project.projectName, folderId)).thenReturn(Future.successful(()))
+      when(mockGcsDAO.addProjectToFolder(project.googleProjectId, folderId)).thenReturn(Future.successful(()))
 
       val userService = getUserService(dataSource, gcsDAO = mockGcsDAO)
 
@@ -163,20 +161,20 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
       when(mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(userIdInfo)))
-      when(mockSamDAO.getPetServiceAccountKeyForUser(project.projectName.value, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+      when(mockSamDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(userInfo))
-      when(mockGcsDAO.deleteProject(project.projectName)).thenReturn(Future.successful())
-      when(mockSamDAO.deleteUserPetServiceAccount(project.projectName.value, userInfo)).thenReturn(Future.successful())
+      when(mockGcsDAO.deleteProject(project.googleProjectId)).thenReturn(Future.successful())
+      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, userInfo)).thenReturn(Future.successful())
       when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful())
 
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual = userService.DeleteBillingProject(defaultBillingProjectName).futureValue
 
-      verify(mockSamDAO).deleteUserPetServiceAccount(project.projectName.value, userInfo)
+      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, userInfo)
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
-      verify(mockGcsDAO).deleteProject(project.projectName)
+      verify(mockGcsDAO).deleteProject(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
       actual shouldEqual RequestComplete(StatusCodes.NoContent)

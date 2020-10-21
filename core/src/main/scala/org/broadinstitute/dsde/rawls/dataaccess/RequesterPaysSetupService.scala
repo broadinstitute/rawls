@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsUserEmail, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -19,29 +19,29 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
     }
   }
 
-  def grantRequesterPaysToLinkedSAs(userInfo: UserInfo, workspaceName: WorkspaceName): Future[List[BondServiceAccountEmail]] = {
+  def grantRequesterPaysToLinkedSAs(userInfo: UserInfo, workspace: Workspace): Future[List[BondServiceAccountEmail]] = {
     for {
       emails <- getBondProviderServiceAccountEmails(userInfo)
-      _ <- googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(workspaceName.namespace), Map(requesterPaysRole -> emails.toSet.map{mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
-      _ <- dataSource.inTransaction { dataAccess => dataAccess.workspaceRequesterPaysQuery.insertAllForUser(workspaceName, userInfo.userEmail, emails.toSet) }
+      _ <- googleServicesDAO.addPolicyBindings(workspace.googleProject, Map(requesterPaysRole -> emails.toSet.map{mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
+      _ <- dataSource.inTransaction { dataAccess => dataAccess.workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName, userInfo.userEmail, emails.toSet) }
     } yield {
       emails
     }
   }
 
-  def revokeUserFromWorkspace(userEmail: RawlsUserEmail, workspaceName: WorkspaceName): Future[Seq[BondServiceAccountEmail]] = {
+  def revokeUserFromWorkspace(userEmail: RawlsUserEmail, workspace: Workspace): Future[Seq[BondServiceAccountEmail]] = {
     for {
-      emails <- dataSource.inTransaction { dataAccess => dataAccess.workspaceRequesterPaysQuery.listAllForUser(workspaceName, userEmail) }
-      _ <- revokeEmails(emails.toSet, userEmail, workspaceName)
+      emails <- dataSource.inTransaction { dataAccess => dataAccess.workspaceRequesterPaysQuery.listAllForUser(workspace.toWorkspaceName, userEmail) }
+      _ <- revokeEmails(emails.toSet, userEmail, workspace)
     } yield emails.map(BondServiceAccountEmail)
   }
 
-  private def revokeEmails(emails: Set[String], userEmail: RawlsUserEmail, workspaceName: WorkspaceName): Future[Unit] = {
+  private def revokeEmails(emails: Set[String], userEmail: RawlsUserEmail, workspace: Workspace): Future[Unit] = {
     for {
       keepBindings <- dataSource.inTransaction { dataAccess =>
         for {
-          _ <- dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspaceName, userEmail)
-          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(workspaceName.namespace, userEmail)
+          _ <- dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
+          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(workspace.namespace, userEmail)
         } yield keepBindings
       }
 
@@ -49,7 +49,7 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
       _ <- if (keepBindings) {
         Future.successful(())
       } else {
-        googleServicesDAO.removePolicyBindings(RawlsBillingProjectName(workspaceName.namespace), Map(requesterPaysRole -> emails.map("serviceAccount:" + _)))
+        googleServicesDAO.removePolicyBindings(workspace.googleProject, Map(requesterPaysRole -> emails.map("serviceAccount:" + _)))
       }
     } yield ()
   }

@@ -11,13 +11,13 @@ import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
 import fs2.concurrent.SignallingRef
 import io.circe.fs2._
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName, ErrorReport => RawlsErrorReport}
+import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, Workspace, WorkspaceName, ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, KeepAlive, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
@@ -58,7 +58,8 @@ object AvroUpsertMonitorSupervisor {
             pubSubDAO: GooglePubSubDAO,
             importServicePubSubDAO: GooglePubSubDAO,
             importServiceDAO: ImportServiceDAO,
-            avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
+            avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
+            dataSource: SlickDataSource)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
     Props(
       new AvroUpsertMonitorSupervisor(
         entityService,
@@ -68,7 +69,8 @@ object AvroUpsertMonitorSupervisor {
         pubSubDAO,
         importServicePubSubDAO,
         importServiceDAO,
-        avroUpsertMonitorConfig))
+        avroUpsertMonitorConfig,
+        dataSource))
 
 
   import spray.json.DefaultJsonProtocol._
@@ -91,7 +93,8 @@ class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
                                   pubSubDAO: GooglePubSubDAO,
                                   importServicePubSubDAO: GooglePubSubDAO,
                                   importServiceDAO: ImportServiceDAO,
-                                  avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO])
+                                  avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
+                                  dataSource: SlickDataSource)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging {
   import AvroUpsertMonitorSupervisor._
@@ -113,7 +116,7 @@ class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
+    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize, dataSource))
   }
 
   override val supervisorStrategy =
@@ -145,9 +148,10 @@ object AvroUpsertMonitor {
              pubSubSubscriptionName: String,
              importStatusPubSubTopic: String,
              importServiceDAO: ImportServiceDAO,
-             batchSize: Int)(implicit cs: ContextShift[IO]): Props =
+             batchSize: Int,
+             dataSource: SlickDataSource)(implicit cs: ContextShift[IO]): Props =
     Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO,
-      pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize))
+      pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize, dataSource))
 }
 
 class AvroUpsertMonitorActor(
@@ -162,7 +166,8 @@ class AvroUpsertMonitorActor(
                               pubSubSubscriptionName: String,
                               importStatusPubSubTopic: String,
                               importServiceDAO: ImportServiceDAO,
-                              batchSize: Int)(implicit cs: ContextShift[IO])
+                              batchSize: Int,
+                              dataSource: SlickDataSource)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging
     with FutureSupport
@@ -233,7 +238,15 @@ class AvroUpsertMonitorActor(
     val attributes = parseMessage(message)
 
     val importFuture = for {
-      petUserInfo <- getPetServiceAccountUserInfo(attributes.workspace.namespace, attributes.userEmail)
+      workspace <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.findByName(attributes.workspace).map {
+          case Some(workspace) => workspace
+          case None =>
+            publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(s"Workspace ${attributes.workspace} not found"))
+            throw new RawlsException(s"Workspace ${attributes.workspace} not found while importing entities")
+        }
+      }
+      petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProject, attributes.userEmail)
       importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
       _ <- importStatus match {
         // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
@@ -241,7 +254,7 @@ class AvroUpsertMonitorActor(
         // of the same import.
         case Some(status) if status == ImportStatuses.ReadyForUpsert => {
           publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
-          toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, attributes.workspace, attributes.userEmail)) map {
+          toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, workspace, attributes.userEmail)) map {
             case Success(importUpsertResults) =>
               val msg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
               publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, Option(msg))
@@ -272,7 +285,7 @@ class AvroUpsertMonitorActor(
   }
 
 
-  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userEmail: RawlsUserEmail): Future[ImportUpsertResults] = {
+  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspace: Workspace, userEmail: RawlsUserEmail): Future[ImportUpsertResults] = {
     val startTime = System.currentTimeMillis()
     logger.info(s"beginning upsert process for $jobId ...")
 
@@ -314,8 +327,8 @@ class AvroUpsertMonitorActor(
       def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         for {
-          petUserInfo <- getPetServiceAccountUserInfo(workspaceName.namespace, userEmail)
-          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspaceName, upsertBatch, upsert = true)
+          petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProject, userEmail)
+          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = true)
         } yield {
           upsertResults
         }

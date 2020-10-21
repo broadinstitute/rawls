@@ -30,8 +30,8 @@ import scala.util.{Failure, Success}
 object UserService {
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, projectOwnerGrantableRoles, requesterPaysRole, dmConfig, projectTemplate)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, requesterPaysRole, dmConfig, projectTemplate)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -57,7 +57,7 @@ object UserService {
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
 
@@ -73,8 +73,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) }
   def RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) }
-  def GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamBillingProjectActions.alterGoogleRole) { grantGoogleRoleToUser(projectName, targetUserEmail, role) }
-  def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamBillingProjectActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
   def CreateBillingProjectFull(createProjectRequest: CreateRawlsBillingProjectFullRequest) = startBillingProjectCreation(createProjectRequest)
@@ -232,18 +230,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def deletePetsInProject(projectName: RawlsBillingProjectName, userInfo: UserInfo): Future[Unit] = {
+  private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] = {
     for {
       projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, userInfo)
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
     } yield ()
   }
 
-  private def destroyPet(userIdInfo: UserIdInfo, projectName: RawlsBillingProjectName): Future[Unit] = {
+  private def destroyPet(userIdInfo: UserIdInfo, projectName: GoogleProjectId): Future[Unit] = {
     for {
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName.value, RawlsUserEmail(userIdInfo.userEmail))
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
       petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName.value, petUserInfo)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName, petUserInfo)
     } yield ()
   }
 
@@ -251,9 +249,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     // unregister then delete actual project in google
     val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
     for {
-      _ <- deletePetsInProject(projectName, ownerUserInfo)
+      _ <- deletePetsInProject(GoogleProjectId(projectName.value), ownerUserInfo) // TODO remove for project per workspace
       _ <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
-      _ <- gcsDAO.deleteProject(projectName)
+      _ <- gcsDAO.deleteProject(GoogleProjectId(projectName.value)) // TODO remove for project per workspace
     } yield RequestComplete(StatusCodes.NoContent)
   }
 
@@ -270,9 +268,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       Future.successful(())
      }
       // unregister then delete actual project in google
-      _ <- deletePetsInProject(projectName, userInfo)
+      _ <- deletePetsInProject(GoogleProjectId(projectName.value), userInfo) // TODO remove for project per workspace
       _ <- unregisterBillingProjectWithUserInfo(projectName, userInfo)
-      _ <- gcsDAO.deleteProject(projectName)
+      _ <- gcsDAO.deleteProject(GoogleProjectId(projectName.value)) // TODO remove for project per workspace
     } yield RequestComplete(StatusCodes.NoContent)
   }
 
@@ -281,7 +279,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   //but that seems extremely shady
   def registerBillingProject(xfer: RawlsBillingProjectTransfer): Future[PerRequestMessage] = {
     val billingProjectName = RawlsBillingProjectName(xfer.project)
-    val project = RawlsBillingProject(billingProjectName, s"gs://${xfer.bucket}", CreationStatuses.Ready, None, None)
+    val project = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None)
     val ownerUserInfo = UserInfo(RawlsUserEmail(xfer.newOwnerEmail), OAuth2BearerToken(xfer.newOwnerToken), 3600, RawlsUserSubjectId("0"))
 
 
@@ -296,8 +294,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole)
 
-      _ <- gcsDAO.addPolicyBindings(billingProjectName, policiesToAdd)
-      _ <- gcsDAO.grantReadAccess(billingProjectName, xfer.bucket, Set(ownerGroupEmail, computeUserGroupEmail))
+      _ <- gcsDAO.addPolicyBindings(project.googleProjectId, policiesToAdd)
+      _ <- gcsDAO.grantReadAccess(xfer.bucket, Set(ownerGroupEmail, computeUserGroupEmail))
     } yield {
       RequestComplete(StatusCodes.Created)
     }).recoverWith {
@@ -337,33 +335,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     for {
       _ <- samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo).recover {
         case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) => throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))}
-    } yield {
-      RequestComplete(StatusCodes.OK)
-    }
-  }
-
-  private def googleRoleWhitelistCheck(role: String): Future[Unit] = {
-    if (projectOwnerGrantableRoles.contains(role))
-      Future.successful(())
-    else
-      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"Cannot alter Google role $role: not in list [${projectOwnerGrantableRoles mkString ", "}]")))
-  }
-
-  def grantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String): Future[PerRequestMessage] = {
-    for {
-      _ <- googleRoleWhitelistCheck(role)
-      proxyGroupEmail <- samDAO.getProxyGroup(userInfo, targetUserEmail)
-      _ <- gcsDAO.addRoleToGroup(projectName, proxyGroupEmail, role)
-    } yield {
-      RequestComplete(StatusCodes.OK)
-    }
-  }
-
-  def removeGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String): Future[PerRequestMessage] = {
-    for {
-      _ <- googleRoleWhitelistCheck(role)
-      proxyGroupEmail <- samDAO.getProxyGroup(userInfo, targetUserEmail)
-      _ <- gcsDAO.removeRoleFromGroup(projectName, proxyGroupEmail, role)
     } yield {
       RequestComplete(StatusCodes.OK)
     }
@@ -417,14 +388,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def internalStartBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest, billingAccount: RawlsBillingAccount): Future[PerRequestMessage] = {
     for {
-      _ <- dataSource.inTransaction { dataAccess =>
+      project <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(createProjectRequest.projectName) flatMap {
           case None =>
             for {
               _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, userInfo))
               _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
               _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
-              project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(createProjectRequest.projectName), CreationStatuses.Creating, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
+              project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, CreationStatuses.Creating, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
             } yield project
 
           case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
@@ -438,7 +409,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
       parentFolderId <- createProjectRequest.servicePerimeter.traverse(lookupFolderIdFromServicePerimeterName)
 
-      createProjectOperation <- gcsDAO.createProject(createProjectRequest.projectName, billingAccount, dmConfig.templatePath, createProjectRequest.highSecurityNetwork.getOrElse(false), createProjectRequest.enableFlowLogs.getOrElse(false), createProjectRequest.privateIpGoogleAccess.getOrElse(false), requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate, parentFolderId).recoverWith {
+      createProjectOperation <- gcsDAO.createProject(project.googleProjectId, billingAccount, dmConfig.templatePath, createProjectRequest.highSecurityNetwork.getOrElse(false), createProjectRequest.enableFlowLogs.getOrElse(false), createProjectRequest.privateIpGoogleAccess.getOrElse(false), requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate, parentFolderId).recoverWith {
         case t: Throwable =>
           // failed to create project in google land, rollback inserts above
           dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(createProjectRequest.projectName) } map(_ => throw t)
@@ -498,11 +469,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
       folderId <- lookupFolderIdFromServicePerimeterName(servicePerimeterName)
-      _ <- gcsDAO.addProjectToFolder(projectName, folderId)
+      _ <- gcsDAO.addProjectToFolder(billingProject.googleProjectId, folderId)
 
       googleProjectNumber <- billingProject.googleProjectNumber match {
         case Some(existingGoogleProjectNumber) => Future.successful(existingGoogleProjectNumber)
-        case None => gcsDAO.getGoogleProject(billingProject.projectName).map(googleProject => GoogleProjectNumber(googleProject.getProjectNumber.toString))
+        case None => gcsDAO.getGoogleProject(billingProject.googleProjectId).map(googleProject => GoogleProjectNumber(googleProject.getProjectNumber.toString))
       }
 
       _ <- dataSource.inTransaction { dataAccess =>

@@ -313,8 +313,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
 
   private def onSuccessfulProjectCreate(project: RawlsBillingProject): Future[RawlsBillingProject] = {
     for {
-      _ <- gcsDAO.cleanupDMProject(project.projectName)
-      googleProject <- gcsDAO.getGoogleProject(project.projectName)
+      _ <- gcsDAO.cleanupDMProject(project.googleProjectId)
+      googleProject <- gcsDAO.getGoogleProject(project.googleProjectId)
     } yield {
       val status = project.servicePerimeter match {
         case Some(_) => CreationStatuses.AddingToPerimeter
@@ -326,7 +326,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
 
   private def onFailedProjectCreate(project: RawlsBillingProject, error: String): Future[RawlsBillingProject] = {
     logger.debug(s"project ${project.projectName.value} creation finished with errors: $error")
-    gcsDAO.cleanupDMProject(project.projectName) map { _ =>
+    gcsDAO.cleanupDMProject(project.googleProjectId) map { _ =>
       project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error"))
     }
   }

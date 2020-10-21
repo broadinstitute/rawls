@@ -228,13 +228,13 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or500) { () => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply RequestBuilding.Get(url) }
   }
 
-  override def getPetServiceAccountKeyForUser(googleProject: String, userEmail: RawlsUserEmail): Future[String] = {
-    val url = samServiceURL + s"/api/google/v1/petServiceAccount/$googleProject/${URLEncoder.encode(userEmail.value, UTF_8.name)}"
+  override def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId, userEmail: RawlsUserEmail): Future[String] = {
+    val url = samServiceURL + s"/api/google/v1/petServiceAccount/${googleProject.value}/${URLEncoder.encode(userEmail.value, UTF_8.name)}"
     retry(when401or500) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
   }
 
-  override def deleteUserPetServiceAccount(googleProject: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/google/v1/user/petServiceAccount/$googleProject"
+  override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, userInfo: UserInfo): Future[Unit] = {
+    val url = samServiceURL + s"/api/google/v1/user/petServiceAccount/${googleProject.value}"
     doSuccessOrFailureRequest(RequestBuilding.Delete(url), userInfo)
   }
 

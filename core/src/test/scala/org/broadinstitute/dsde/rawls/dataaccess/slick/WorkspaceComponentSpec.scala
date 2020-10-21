@@ -30,7 +30,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
         AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
       false,
       WorkspaceVersions.V2,
-      "test_google_project"
+      GoogleProjectId("test_google_project")
     )
 
     assertResult(None) {

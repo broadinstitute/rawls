@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefF
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.workbench.model.ValueObject
+import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
 import org.joda.time.DateTime
 import spray.json._
 
@@ -101,6 +101,10 @@ object WorkspaceVersions {
       case _ => None
     }
   }
+
+  def fromStringThrows(versionString: String): WorkspaceVersion = {
+    fromString(versionString).getOrElse(throw new RawlsException(s"unexpected version string ${versionString}, acceptable values are ${V1.value} or ${V2.value}"))
+  }
 }
 
 case class WorkspaceRequest (
@@ -116,6 +120,8 @@ case class WorkspaceRequest (
   def path: String = toWorkspaceName.path
 }
 
+case class GoogleProjectId(value: String) extends ValueObject
+
 case class Workspace(
                       namespace: String,
                       name: String,
@@ -128,7 +134,7 @@ case class Workspace(
                       attributes: AttributeMap,
                       isLocked: Boolean,
                       workspaceVersion: WorkspaceVersion,
-                      googleProject: String
+                      googleProject: GoogleProjectId
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -148,7 +154,7 @@ object Workspace {
            createdBy: String,
            attributes: AttributeMap,
            isLocked: Boolean = false): Workspace = {
-    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, namespace)
+    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace))
   }
 
 }
@@ -497,7 +503,7 @@ case class WorkspaceDetails(namespace: String,
                             isLocked: Boolean = false,
                             authorizationDomain: Option[Set[ManagedGroupRef]],
                             workspaceVersion: WorkspaceVersion,
-                            googleProject: String) {
+                            googleProject: GoogleProjectId) {
   def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject)
 }
 
@@ -768,6 +774,8 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
 
   }
+
+  implicit val GoogleProjectIdFormat = ValueObjectFormat(GoogleProjectId)
 
   implicit val MethodConfigurationFormat = jsonFormat11(MethodConfiguration)
 

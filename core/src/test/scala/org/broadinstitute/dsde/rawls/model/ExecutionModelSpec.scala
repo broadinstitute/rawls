@@ -137,7 +137,6 @@ class ExecutionModelSpec extends FlatSpec with Matchers {
           |  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
           |  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com"
           |}""".stripMargin,
-      auth_bucket = "auth_bucket",
       final_workflow_log_dir = "final_workflow_log_dir",
       default_runtime_attributes = None,
       read_from_cache = true,
@@ -155,7 +154,6 @@ class ExecutionModelSpec extends FlatSpec with Matchers {
         |  "google_compute_service_account": "account@foo.com",
         |  "google_labels": {},
         |  "user_service_account_json": "{\n  \"type\": \"service_account\",\n  \"project_id\": \"broad-dsde-dev\",\n  \"proovate_key_id\": \"120924d141277cef7a976320d3dc3e4e298ac447\",\n  \"proovate_key\": \"-----BEGIN proovate KEY-----\\naloha\\n-----END proovate KEY-----\\n\",\n  \"client_email\": \"pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com\",\n  \"client_id\": \"110086970853956779852\",\n  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n  \"token_uri\": \"https://accounts.google.com/o/oauth2/token\",\n  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com\"\n}",
-        |  "auth_bucket": "auth_bucket",
         |  "final_workflow_log_dir": "final_workflow_log_dir",
         |  "read_from_cache": true,
         |  "delete_intermediate_output_files": true,
@@ -180,7 +178,6 @@ class ExecutionModelSpec extends FlatSpec with Matchers {
         |  "google_compute_service_account": "account@foo.com",
         |  "google_labels": {},
         |  "user_service_account_json": "{\n  \"type\": \"service_account\",\n  \"project_id\": \"broad-dsde-dev\",\n  \"proovate_key_id\": \"120924d141277cef7a976320d3dc3e4e298ac447\",\n  \"proovate_key\": \"-----BEGIN proovate KEY-----\\naloha\\n-----END proovate KEY-----\\n\",\n  \"client_email\": \"pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com\",\n  \"client_id\": \"110086970853956779852\",\n  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n  \"token_uri\": \"https://accounts.google.com/o/oauth2/token\",\n  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com\"\n}",
-        |  "auth_bucket": "auth_bucket",
         |  "final_workflow_log_dir": "final_workflow_log_dir",
         |  "read_from_cache": true,
         |  "delete_intermediate_output_files": true,

@@ -78,11 +78,11 @@ trait WorkspaceSupport {
       response <- userHasAction match {
         case true =>
           traceDBIOWithParent("loadBillingProject", parentSpan)( _ => dataAccess.rawlsBillingProjectQuery.load(projectName)).flatMap {
-            case Some(RawlsBillingProject(_, _, CreationStatuses.Ready, _, _, _, _, _, _)) => op //Sam will check to make sure the Auth Domain selection is valid
-            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Creating, _, _, _, _, _, _)) =>
+            case Some(RawlsBillingProject(_, CreationStatuses.Ready, _, _, _, _, _, _)) => op //Sam will check to make sure the Auth Domain selection is valid
+            case Some(RawlsBillingProject(RawlsBillingProjectName(name), CreationStatuses.Creating, _, _, _, _, _, _)) =>
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${name} is still being created")))
 
-            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Error, _, messageOp, _, _, _, _)) =>
+            case Some(RawlsBillingProject(RawlsBillingProjectName(name), CreationStatuses.Error, _, messageOp, _, _, _, _)) =>
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Error creating ${name}: ${messageOp.getOrElse("no message")}")))
             case Some(_) | None =>
               // this can't happen with the current code but a 404 would be the correct response
