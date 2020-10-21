@@ -8,14 +8,16 @@ import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchGroupName
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.BeforeAndAfterAll
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
-  with FlatSpecLike with Matchers with BeforeAndAfterAll {
+  with AnyFlatSpecLike with Matchers with BeforeAndAfterAll {
 
   implicit val materializer = ActorMaterializer()
   val mockServer = RemoteServicesMockServer()

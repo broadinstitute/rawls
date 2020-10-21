@@ -2,11 +2,12 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString}
-import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.{Failure, Success}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class OutputExpressionSpec extends FlatSpec with Matchers {
+class OutputExpressionSpec extends AnyFlatSpec with Matchers {
   private val testAttr = AttributeString("this is a test")
   private val testEntityType = Option("wombat")
 

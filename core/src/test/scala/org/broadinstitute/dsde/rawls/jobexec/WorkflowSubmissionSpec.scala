@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -30,12 +30,14 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 /**
  * Created by dvoet on 5/17/16.
  */
 //noinspection TypeAnnotation,NameBooleanParameters,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
-class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with BeforeAndAfterEach with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
+class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with BeforeAndAfterEach with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
   import driver.api._
   implicit val materializer = ActorMaterializer()
 

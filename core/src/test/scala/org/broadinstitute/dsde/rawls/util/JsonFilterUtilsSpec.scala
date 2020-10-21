@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.util
 
-import org.scalatest.FreeSpec
 import spray.json._
+import org.scalatest.freespec.AnyFreeSpec
 
-class JsonFilterUtilsSpec extends FreeSpec with JsonFilterUtils {
+class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
 
   // these fixtures are used in multiple tests below
   val thirdLevel = JsObject(

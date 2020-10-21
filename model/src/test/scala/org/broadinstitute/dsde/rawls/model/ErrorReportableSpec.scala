@@ -1,11 +1,12 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.scalatest.{Matchers, FlatSpec}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 /**
  * Created by dvoet on 2/24/17.
  */
-class ErrorReportableSpec extends FlatSpec with Matchers {
+class ErrorReportableSpec extends AnyFlatSpec with Matchers {
 
   "ErrorReportable" should "have the right source for causes" in {
     implicit val outerErrorReportSource = ErrorReportSource("foo")

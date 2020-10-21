@@ -4,14 +4,14 @@ import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNull, AttributeNumber, AttributeString, Entity, EntityQuery, EntityQueryResultMetadata, SortDirections}
-import org.scalatest.FreeSpec
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.createKeyList
 
 import scala.collection.JavaConverters._
+import org.scalatest.freespec.AnyFreeSpec
 
 /* see also the unit tests in DataRepoEntityProviderSpec
  */
-class DataRepoBigQuerySupportSpec extends FreeSpec with DataRepoBigQuerySupport {
+class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySupport {
 
   "DataRepoBigQuerySupport, when translating BQ results to Terra entities, should" - {
 

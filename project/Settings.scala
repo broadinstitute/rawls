@@ -33,8 +33,8 @@ object Settings {
     "-encoding", "utf8",
     "-Xmax-classfile-name", "100",
     "-Ywarn-unused-import",
-    "-deprecation:false", // This is tricky to enable as of 03/2020 [AEN]
-    "-Xfatal-warnings"
+    "-deprecation:false"//, // This is tricky to enable as of 03/2020 [AEN]
+//    "-Xfatal-warnings"
   )
 
   //sbt assembly settings common to rawlsCore and rawlsModel

@@ -1,12 +1,13 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.scalatest.{Matchers, FlatSpec}
 import spray.json.JsString
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 /**
  * Created by dvoet on 3/28/17.
  */
-class NotificationsSpec extends FlatSpec with Matchers {
+class NotificationsSpec extends AnyFlatSpec with Matchers {
   "Notifications" should "have types" in {
     assert(!Notifications.allNotificationTypes.isEmpty)
   }

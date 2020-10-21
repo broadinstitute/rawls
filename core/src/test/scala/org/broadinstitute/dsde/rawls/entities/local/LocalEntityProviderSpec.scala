@@ -5,12 +5,13 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, MethodConfiguration, Workspace, SubmissionValidationValue, WDL}
-import org.scalatest.{Matchers, WordSpecLike}
 
 import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
-class LocalEntityProviderSpec extends WordSpecLike with Matchers with TestDriverComponent with MethodConfigTestSupport {
+class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDriverComponent with MethodConfigTestSupport {
   import driver.api._
 
   //Test harness to call resolveInputsForEntities without having to go via the WorkspaceService

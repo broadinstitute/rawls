@@ -16,12 +16,14 @@ import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, HttpGooglePubSubDA
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.{MockitoTestUtils, Retry}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfterAll
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils {
+class HttpGooglePubSubDAOSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils {
   implicit val system = ActorSystem("HttpGooglePubSubDAOSpec")
 
   val etcConf = ConfigFactory.load()

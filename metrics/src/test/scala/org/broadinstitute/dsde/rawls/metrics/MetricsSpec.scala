@@ -10,20 +10,22 @@ import org.mockito.ArgumentMatchers.{eq => argEq, _}
 import org.mockito.Mockito.{inOrder => mockitoInOrder, _}
 import org.mockito.{ArgumentMatcher, InOrder}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.time.{Seconds, Span}
-import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfter
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Try
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 /**
   * Created by rtitle on 5/31/17.
   */
-class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventually with MockitoSugar {
+class MetricsSpec extends AnyFlatSpec with Matchers with BeforeAndAfter with Eventually with MockitoSugar {
   var statsD: StatsD = _
   var reporter: StatsDReporter = _
   var test: TestInstrumented = _

@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
-import org.scalatest.{FlatSpec, Matchers, Suite}
+import org.scalatest.Suite
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
@@ -28,6 +28,8 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.{implicitConversions, postfixOps}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 // initialize database tables and connection pool only once
 object DbResource {
@@ -1381,4 +1383,4 @@ trait TestData {
   def save(): ReadWriteAction[Unit]
 }
 
-trait TestDriverComponentWithFlatSpecAndMatchers extends FlatSpec with TestDriverComponent with Matchers
+trait TestDriverComponentWithFlatSpecAndMatchers extends AnyFlatSpec with TestDriverComponent with Matchers

@@ -11,15 +11,17 @@ import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterEach, FlatSpecLike, Matchers}
+import org.scalatest.BeforeAndAfterEach
 import org.mockito.{ArgumentMatcher, ArgumentMatchers}
 import org.mockito.Mockito._
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
-class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterEach with Eventually {
+class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterEach with Eventually {
   val defaultExecutionContext: ExecutionContext = executionContext
 
   val defaultServicePerimeterName: ServicePerimeterName = ServicePerimeterName("accessPolicies/policyName/servicePerimeters/servicePerimeterName")

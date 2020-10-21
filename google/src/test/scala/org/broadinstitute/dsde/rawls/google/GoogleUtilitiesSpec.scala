@@ -9,7 +9,7 @@ import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonRespons
 import com.google.api.client.http._
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Millis, Span}
 import spray.json._
@@ -18,8 +18,10 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
-class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtilities with FlatSpecLike with BeforeAndAfterAll with Matchers with ScalaFutures with Eventually with MockitoTestUtils with StatsDTestUtils {
+class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtilities with AnyFlatSpecLike with BeforeAndAfterAll with Matchers with ScalaFutures with Eventually with MockitoTestUtils with StatsDTestUtils {
   implicit val executionContext = ExecutionContext.global
   implicit def histo = ExpandedMetricBuilder.empty.asHistogram("histo")
   override implicit val patienceConfig = PatienceConfig(scaled(Span(1000, Millis)), scaled(Span(15, Millis)))
@@ -149,7 +151,7 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
   }
 }
 
-class GoogleJsonSpec extends FlatSpecLike with Matchers {
+class GoogleJsonSpec extends AnyFlatSpecLike with Matchers {
   "GoogleRequest" should "roundtrip json" in {
     import GoogleRequestJsonSupport._
     val gooRq = GoogleRequest("GET", "www.thegoogle.hooray", Some(JsString("you did a search")), 400, Some(200), None)

@@ -5,12 +5,13 @@ import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.WDLParser
 import org.broadinstitute.dsde.rawls.model._
-import org.scalatest.{Matchers, WordSpecLike}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
-class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDriverComponent with MethodConfigTestSupport {
+class MethodConfigResolverSpec extends AnyWordSpecLike with Matchers with TestDriverComponent with MethodConfigTestSupport {
   "MethodConfigResolver" should {
     "remove missing inputs from processable inputs in GatherInputsResult" in withConfigData {
       val gatheredInputs = methodConfigResolver.gatherInputs(userInfo, configMissingExpr, littleWdl)
