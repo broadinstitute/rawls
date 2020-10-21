@@ -28,9 +28,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingGroupEmail: String
 
   // returns bucket and group information
-  def setupWorkspace(userInfo: UserInfo, projectName: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo]
+  def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo]
 
-  def getGoogleProject(projectName: GoogleProjectId): Future[Project]
+  def getGoogleProject(googleProject: GoogleProjectId): Future[Project]
 
   /** Mark all objects in the bucket for deletion, then attempts to delete the bucket from Google Cloud Storage.
     *
@@ -46,7 +46,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def deleteBucket(bucketName: String): Future[Boolean]
 
-  def getStorageLogsBucketName(billingProject: GoogleProjectId) = s"storage-logs-${billingProject.value}"
+  def getStorageLogsBucketName(googleProject: GoogleProjectId) = s"storage-logs-${googleProject.value}"
 
   def isAdmin(userEmail: String): Future[Boolean]
 
@@ -70,12 +70,12 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * with. For that reason, the maxResults parameter should be removed in favor of extracting the creation of Storage
     * objects from the service implementation to enable test doubles to be injected.
     *
-    * @param projectName  the name of the project that owns the bucket
+    * @param googleProject  the name of the project that owns the bucket
     * @param bucketName the name of the bucket to query
     * @param maxResults (optional) the page size to use when fetching objects
     * @return the size in bytes of the data stored in the bucket
     */
-  def getBucketUsage(projectName: GoogleProjectId, bucketName: String, maxResults: Option[Long] = None): Future[BigInt]
+  def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long] = None): Future[BigInt]
 
   /**
     * Gets a Google bucket.
@@ -153,18 +153,18 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    * - Polling is handled by CreatingBillingProjectMonitor. Once the deployment is completed, CBPM deletes the deployment, as
    * there is a per-project limit on number of deployments, and then marks the project as fully created.
    */
-  def createProject(projectName: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord]
+  def createProject(googleProject: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord]
 
   /**
     *
     */
-  def cleanupDMProject(projectName: GoogleProjectId): Future[Unit]
+  def cleanupDMProject(googleProject: GoogleProjectId): Future[Unit]
 
   /**
     * Removes the IAM policies from the project's existing policies
     * @return true if the policy was actually changed
     */
-  def removePolicyBindings(projectName: GoogleProjectId, policiesToRemove: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(projectName) { existingPolicies =>
+  def removePolicyBindings(googleProject: GoogleProjectId, policiesToRemove: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(googleProject) { existingPolicies =>
     val updatedKeysWithRemovedPolicies: Map[String, Set[String]] = policiesToRemove.keys.map { k =>
       val existingForKey = existingPolicies.get(k).getOrElse(Set.empty)
       val updatedForKey = existingForKey diff policiesToRemove(k)
@@ -179,7 +179,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * Adds the IAM policies to the project's existing policies
     * @return true if the policy was actually changed
     */
-  def addPolicyBindings(projectName: GoogleProjectId, policiesToAdd: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(projectName) { existingPolicies =>
+  def addPolicyBindings(googleProject: GoogleProjectId, policiesToAdd: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(googleProject) { existingPolicies =>
     // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
     import cats.implicits._
     existingPolicies |+| policiesToAdd
@@ -187,26 +187,23 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   /**
     * Internal function to update project IAM bindings.
-    * @param projectName google project name
+    * @param googleProject google project name
     * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
     *                       which will be handled appropriately when sent to google.
     * @return true if google was called to update policies, false otherwise
     */
-  protected def updatePolicyBindings(projectName: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean]
+  protected def updatePolicyBindings(googleProject: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean]
 
   /**
     *
-    * @param billingProject
     * @param bucketName
     * @param readers emails of users to be granted read access
     * @return bucket name
     */
-  def grantReadAccess(billingProject: GoogleProjectId,
-                      bucketName: String,
-                      readers: Set[WorkbenchEmail]): Future[String]
+  def grantReadAccess(bucketName: String, readers: Set[WorkbenchEmail]): Future[String]
 
   def pollOperation(operationId: OperationId): Future[OperationStatus]
-  def deleteProject(projectName: GoogleProjectId): Future[Unit]
+  def deleteProject(googleProject: GoogleProjectId): Future[Unit]
 
   def getAccessTokenUsingJson(saKey: String) : Future[String]
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]
@@ -216,7 +213,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
   }
 
-  def addProjectToFolder(projectName: GoogleProjectId, folderId: String): Future[Unit]
+  def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit]
   def getFolderId(folderName: String): Future[Option[String]]
 }
 

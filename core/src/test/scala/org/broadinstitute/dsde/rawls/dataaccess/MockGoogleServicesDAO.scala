@@ -98,7 +98,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
-  override def setupWorkspace(userInfo: UserInfo, projectName: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span =  null
+  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span =  null
                              ): Future[GoogleWorkspaceInfo] = {
 
     val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
@@ -161,7 +161,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] = Future.successful(Some(new Group))
 
-  def getBucketUsage(projectName: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BigInt] = Future.successful(42)
+  def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BigInt] = Future.successful(42)
 
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     googleGroups(groupEmail) += emailToAdd
@@ -193,37 +193,35 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(true)
   }
 
-  override def createProject(projectName: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] =
-    Future.successful(RawlsBillingProjectOperationRecord(projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", false, None, GoogleApiTypes.DeploymentManagerApi))
+  override def createProject(googleProject: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] =
+    Future.successful(RawlsBillingProjectOperationRecord(googleProject.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", false, None, GoogleApiTypes.DeploymentManagerApi))
 
-  override def cleanupDMProject(projectName: GoogleProjectId): Future[Unit] = Future.successful(())
+  override def cleanupDMProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
 
   override def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions] = {
     Future.successful(WorkspaceBucketOptions(false))
   }
 
-  protected def updatePolicyBindings(projectName: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = Future.successful {
-    val existingPolicies = policies.getOrElse(projectName, Map.empty)
+  protected def updatePolicyBindings(googleProject: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = Future.successful {
+    val existingPolicies = policies.getOrElse(googleProject, Map.empty)
     val updatedPolicies = updatePolicies(existingPolicies)
     if (updatedPolicies.equals(existingPolicies)) {
       false
     } else {
-      policies.put(projectName, updatedPolicies)
+      policies.put(googleProject, updatedPolicies)
       true
     }
   }
 
-  override def grantReadAccess(billingProject: GoogleProjectId,
-                               bucketName: String,
-                               readers: Set[WorkbenchEmail]): Future[String] = Future(bucketName)
+  override def grantReadAccess(bucketName: String, readers: Set[WorkbenchEmail]): Future[String] = Future(bucketName)
 
   override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
     Future.successful(OperationStatus(true, None))
   }
 
-  override def deleteProject(projectName: GoogleProjectId): Future[Unit] = Future.successful(())
+  override def deleteProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
 
-  override def addProjectToFolder(projectName: GoogleProjectId, folderName: String): Future[Unit] = Future.successful(())
+  override def addProjectToFolder(googleProject: GoogleProjectId, folderName: String): Future[Unit] = Future.successful(())
 
   override def getFolderId(folderName: String): Future[Option[String]] = Future.successful(Option("folders/1234567"))
 }

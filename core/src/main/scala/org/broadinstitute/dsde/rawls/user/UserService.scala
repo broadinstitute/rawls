@@ -295,7 +295,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole)
 
       _ <- gcsDAO.addPolicyBindings(project.googleProjectId, policiesToAdd)
-      _ <- gcsDAO.grantReadAccess(project.googleProjectId, xfer.bucket, Set(ownerGroupEmail, computeUserGroupEmail))
+      _ <- gcsDAO.grantReadAccess(xfer.bucket, Set(ownerGroupEmail, computeUserGroupEmail))
     } yield {
       RequestComplete(StatusCodes.Created)
     }).recoverWith {

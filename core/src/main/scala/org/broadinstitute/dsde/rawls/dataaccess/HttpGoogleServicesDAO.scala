@@ -186,7 +186,7 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  override def setupWorkspace(userInfo: UserInfo, projectName: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
     def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
@@ -226,7 +226,7 @@ class HttpGoogleServicesDAO(
                |""".stripMargin.getBytes))
           // use an object name that will always be superseded by a real storage log
           val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
-          val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(projectName), storageObject, stream)
+          val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(googleProject), storageObject, stream)
           executeGoogleRequest(objectInserter)
         }
       }
@@ -236,7 +236,7 @@ class HttpGoogleServicesDAO(
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(projectName.value), GcsBucketName(bucketName), None, labels, Option(traceId), true, Option(GcsBucketName(getStorageLogsBucketName(projectName)))).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(googleProject.value), GcsBucketName(bucketName), None, labels, Option(traceId), true, Option(GcsBucketName(getStorageLogsBucketName(googleProject)))).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
       updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
       insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
       _ <- updateBucketIamFuture
@@ -244,9 +244,7 @@ class HttpGoogleServicesDAO(
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
   }
 
-  def grantReadAccess(billingProject: GoogleProjectId,
-                      bucketName: String,
-                      authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
+  def grantReadAccess(bucketName: String, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
 
     def insertNewAcls() = for {
@@ -265,27 +263,6 @@ class HttpGoogleServicesDAO(
     retryWithRecoverWhen500orGoogleError(
       () => { insertNewAcls(); bucketName }
     ) {
-      case t: HttpResponseException if t.getStatusCode == 409 => bucketName
-    }
-  }
-
-  def createStorageLogsBucket(billingProject: GoogleProjectId): Future[String] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    val bucketName = getStorageLogsBucketName(billingProject)
-    logger debug s"storage log bucket: $bucketName"
-
-    retryWithRecoverWhen500orGoogleError(() => {
-      val bucket = new Bucket().setName(bucketName)
-      val storageLogExpiration = new Lifecycle.Rule()
-        .setAction(new Action().setType("Delete"))
-        .setCondition(new Condition().setAge(bucketLogsMaxAge))
-      bucket.setLifecycle(new Lifecycle().setRule(List(storageLogExpiration).asJava))
-      val inserter = getStorage(getBucketServiceAccountCredential).buckets().insert(billingProject.value, bucket)
-      executeGoogleRequest(inserter)
-
-      bucketName
-    }) {
-      // bucket already exists
       case t: HttpResponseException if t.getStatusCode == 409 => bucketName
     }
   }
@@ -364,7 +341,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getBucketUsage(projectName: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BigInt] = {
+  override def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BigInt] = {
     implicit val service = GoogleInstrumentedService.Storage
 
     def usageFromLogObject(o: StorageObject): Future[BigInt] = {
@@ -380,7 +357,7 @@ class HttpGoogleServicesDAO(
       // Fetch objects with a prefix of "${bucketName}_storage_", (ignoring "_usage_" logs)
       val fetcher = getStorage(getBucketServiceAccountCredential).
         objects().
-        list(getStorageLogsBucketName(projectName)).
+        list(getStorageLogsBucketName(googleProject)).
         setPrefix(s"${bucketName}_storage_")
       maxResults.foreach(fetcher.setMaxResults(_))
       pageToken.foreach(fetcher.setPageToken)
@@ -727,23 +704,23 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  override def getGoogleProject(projectName: GoogleProjectId): Future[Project] = {
+  override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
     val credential = getDeploymentManagerAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
 
     retryWhen500orGoogleError(() => {
-      executeGoogleRequest(cloudResManager.projects().get(projectName.value))
+      executeGoogleRequest(cloudResManager.projects().get(googleProject.value))
     })
   }
 
-  def getDMConfigYamlString(projectName: GoogleProjectId, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
+  def getDMConfigYamlString(googleProject: GoogleProjectId, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
     import DeploymentManagerJsonSupport._
     import cats.syntax.either._
     import io.circe.yaml.syntax._
 
-    val configContents = ConfigContents(Seq(Resources(projectName.value, dmTemplatePath, properties)))
+    val configContents = ConfigContents(Seq(Resources(googleProject.value, dmTemplatePath, properties)))
     val jsonVersion = io.circe.jawn.parse(configContents.toJson.toString).valueOr(throw _)
     jsonVersion.asYaml.spaces2
   }
@@ -752,20 +729,20 @@ class HttpGoogleServicesDAO(
    * Set the deployment policy to "abandon" -- i.e. allows the created project to persist even if the deployment is deleted --
    * and then delete the deployment. There's a limit of 1000 deployments so this is important to do.
    */
-  override def cleanupDMProject(projectName: GoogleProjectId): Future[Unit] = {
+  override def cleanupDMProject(googleProject: GoogleProjectId): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
 
     if( cleanupDeploymentAfterCreating ) {
       executeGoogleRequestWithRetry(
-        deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(projectName)).setDeletePolicy("ABANDON")).void
+        deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(googleProject)).setDeletePolicy("ABANDON")).void
     } else {
       Future.successful(())
     }
   }
 
-  def projectToDM(projectName: GoogleProjectId) = s"dm-${projectName.value}"
+  def projectToDM(googleProject: GoogleProjectId) = s"dm-${googleProject.value}"
 
 
   def parseTemplateLocation(path: String): Option[TemplateLocation] = {
@@ -779,7 +756,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
+  override def createProject(googleProject: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -793,7 +770,7 @@ class HttpGoogleServicesDAO(
     val properties = Map (
       "billingAccountId" -> billingAccount.accountName.value.toJson,
       "billingAccountFriendlyName" -> billingAccount.displayName.toJson,
-      "projectId" -> projectName.value.toJson,
+      "projectId" -> googleProject.value.toJson,
       "parentOrganization" -> orgID.toJson,
       "fcBillingGroup" -> billingGroupEmail.toJson,
       "projectOwnersGroup" -> ownerGroupEmail.value.toJson,
@@ -808,16 +785,16 @@ class HttpGoogleServicesDAO(
     ) ++ parentFolderId.map("parentFolder" -> folderNumberOnly(_).toJson).toMap
 
     //a list of one resource: type=composite-type, name=whocares, properties=pokein
-    val yamlConfig = new ConfigFile().setContent(getDMConfigYamlString(projectName, dmTemplatePath, properties))
+    val yamlConfig = new ConfigFile().setContent(getDMConfigYamlString(googleProject, dmTemplatePath, properties))
     val deploymentConfig = new TargetConfiguration().setConfig(yamlConfig)
 
     retryWhen500orGoogleError(() => {
       executeGoogleRequest {
-        deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(projectToDM(projectName)).setTarget(deploymentConfig))
+        deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(projectToDM(googleProject)).setTarget(deploymentConfig))
       }
     }) map { googleOperation =>
       val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
-      RawlsBillingProjectOperationRecord(projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, googleOperation.getName, false, errorStr, GoogleApiTypes.DeploymentManagerApi)
+      RawlsBillingProjectOperationRecord(googleProject.value, GoogleOperationNames.DeploymentManagerCreateProject, googleOperation.getName, false, errorStr, GoogleApiTypes.DeploymentManagerApi)
     }
   }
 
@@ -875,12 +852,12 @@ class HttpGoogleServicesDAO(
     * 3) if updated policies are the same as existing policies return false, don't call google
     * 4) if updated policies are different than existing policies update google and return true
     *
-    * @param projectName google project name
+    * @param googleProject google project name
     * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
     *                       which will be handled appropriately when sent to google.
     * @return true if google was called to update policies, false otherwise
     */
-  override protected def updatePolicyBindings(projectName: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
+  override protected def updatePolicyBindings(googleProject: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
     val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
@@ -889,7 +866,7 @@ class HttpGoogleServicesDAO(
         // it is important that we call getIamPolicy within the same retry block as we call setIamPolicy
         // getIamPolicy gets the etag that is used in setIamPolicy, the etag is used to detect concurrent
         // modifications and if that happens we need to be sure to get a new etag before retrying setIamPolicy
-        val existingPolicy = executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
+        val existingPolicy = executeGoogleRequest(cloudResManager.projects().getIamPolicy(googleProject.value, null))
         val existingPolicies: Map[String, Set[String]] = existingPolicy.getBindings.asScala.map { policy => policy.getRole -> policy.getMembers.asScala.toSet }.toMap
 
         val updatedPolicies = updatePolicies(existingPolicies)
@@ -903,7 +880,7 @@ class HttpGoogleServicesDAO(
 
           // when setting IAM policies, always reuse the existing policy so the etag is preserved.
           val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings.asJava))
-          executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
+          executeGoogleRequest(cloudResManager.projects().setIamPolicy(googleProject.value, policyRequest))
           true
         }
       })
@@ -911,18 +888,17 @@ class HttpGoogleServicesDAO(
     } yield updated
   }
 
-  override def deleteProject(projectName: GoogleProjectId): Future[Unit]= {
+  override def deleteProject(googleProject: GoogleProjectId): Future[Unit]= {
     implicit val service = GoogleInstrumentedService.Billing
     val billingServiceAccountCredential = getBillingServiceAccountCredential
     val resMgr = getCloudResourceManager(billingServiceAccountCredential)
     val billingManager = getCloudBillingManager(billingServiceAccountCredential)
-    val projectNameString = projectName.value
     for {
       _ <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
+        executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProject.value}", new ProjectBillingInfo().setBillingEnabled(false)))
       })
       _ <- retryWithRecoverWhen500orGoogleError(() => {
-        executeGoogleRequest(resMgr.projects().delete(projectNameString))
+        executeGoogleRequest(resMgr.projects().delete(googleProject.value))
       }) {
         case e: GoogleJsonResponseException if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) => new Empty()
           // stop trying to delete an already deleted project
@@ -932,7 +908,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def projectUsageExportBucketName(projectName: GoogleProjectId) = s"${projectName.value}-usage-export"
+  def projectUsageExportBucketName(googleProject: GoogleProjectId) = s"${googleProject.value}-usage-export"
 
   override def getBucketDetails(bucketName: String, project: GoogleProjectId): Future[WorkspaceBucketOptions] = {
     implicit val service = GoogleInstrumentedService.Storage
@@ -1118,15 +1094,15 @@ class HttpGoogleServicesDAO(
     retryWhen500orGoogleError(() => { executeGoogleFetch(getter) { is => f(is) } })
   }
 
-  override def addProjectToFolder(projectName: GoogleProjectId, folderId: String): Future[Unit] = {
+  override def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
     val cloudResourceManager = getCloudResourceManager(getBillingServiceAccountCredential)
 
     retryWhen500orGoogleError( () => {
-      val existingProject = executeGoogleRequest(cloudResourceManager.projects().get(projectName.value))
+      val existingProject = executeGoogleRequest(cloudResourceManager.projects().get(googleProject.value))
 
       val folderResourceId = new ResourceId().setType(GoogleResourceTypes.Folder.value).setId(folderNumberOnly(folderId))
-      executeGoogleRequest(cloudResourceManager.projects().update(projectName.value, existingProject.setParent(folderResourceId)))
+      executeGoogleRequest(cloudResourceManager.projects().update(googleProject.value, existingProject.setParent(folderResourceId)))
     })
   }
 
