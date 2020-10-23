@@ -1,3 +1,9 @@
 package org.broadinstitute.dsde.rawls.entities.exceptions
 
-class EntityTypeNotFoundException(val requestedType: String) extends DataEntityException
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+
+class EntityTypeNotFoundException(message: String = "Entity type not found",
+                                  cause: Throwable = null,
+                                  code: StatusCode = StatusCodes.BadRequest,
+                                  val requestedType: String)
+  extends DataEntityException(message, cause, code)
