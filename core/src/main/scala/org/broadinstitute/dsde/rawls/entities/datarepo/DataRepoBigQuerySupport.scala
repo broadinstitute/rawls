@@ -64,7 +64,7 @@ object DataRepoBigQuerySupport {
   def getTableModel(snapshotModel: SnapshotModel, entityType: String): TableModel = {
     snapshotModel.getTables.asScala.find(_.getName == entityType) match {
       case Some(table) => table
-      case None => throw new EntityTypeNotFoundException(entityType)
+      case None => throw new EntityTypeNotFoundException(requestedType = entityType)
     }
   }
 
