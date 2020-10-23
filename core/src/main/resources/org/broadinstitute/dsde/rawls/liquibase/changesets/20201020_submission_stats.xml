@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="ansingh" id="sub-stats-100">
+        <createTable tableName="WORKSPACE_SUBMISSION_STATS">
+            <column name="workspace_id" type="BIGINT">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="last_succeeded_date" type="TIMESTAMP(6)"/>
+            <column name="last_failed_date" type="TIMESTAMP(6)"/>
+            <column name="running_count" type="INT"/>
+        </createTable>
+    </changeSet>
+
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="status_change_log_triggers">
+        <sql>
+            DROP TRIGGER IF EXISTS after_submission_insert;
+            DROP TRIGGER IF EXISTS after_submission_update;
+
+            CREATE TRIGGER after_submission_insert AFTER INSERT ON SUBMISSION
+            FOR EACH ROW
+            BEGIN
+                INSERT INTO AUDIT_SUBMISSION_STATUS (submission_id, status, timestamp)
+                    VALUES (NEW.ID, NEW.STATUS, CURRENT_TIMESTAMP);
+                INSERT INTO WORKSPACE_SUBMISSION_STATS (workspace_id, last_succeeded_date, last_failed_date, running_count)
+                    VALUES (NEW.workspace_id, null, null, 1)
+                    ON DUPLICATE KEY UPDATE
+                        running_count = running_count + 1;
+            END;
+
+
+            CREATE TRIGGER after_submission_update AFTER UPDATE ON SUBMISSION
+            FOR EACH ROW
+            BEGIN
+                INSERT INTO AUDIT_SUBMISSION_STATUS (submission_id, status, timestamp)
+                    VALUES (NEW.ID, NEW.STATUS, CURRENT_TIMESTAMP);
+                INSERT INTO WORKSPACE_SUBMISSION_STATS (workspace_id, last_succeeded_date, last_failed_date, running_count)
+                    SELECT sub.workspace_id, sub.last_succeeded, sub.last_failed, sub.count
+                    FROM (SElECT workspace_id,
+                                '' AS last_succeeded,
+                                '' AS last_failed,
+                                0 AS count
+                        FROM SUBMISSION s
+                        LEFT OUTER JOIN WORKFLOW wf on s.ID = wf.SUBMISSION_ID
+                        WHERE s.id = OLD.ID) AS sub
+                    ON DUPLICATE KEY UPDATE
+                        last_succeeded_date = CASE WHEN sub.last_succeeded is not null THEN sub.last_succeeded else last_succeeded_date END,
+                        last_failed_date = CASE WHEN sub.last_failed is not null then sub.last_failed else last_failed_date END,
+                        running_count = running_count - 1;
+            END;
+
+        </sql>
+        <rollback>
+            DROP TRIGGER IF EXISTS after_submission_insert;
+            DROP TRIGGER IF EXISTS after_submission_update;
+        </rollback>
+    </changeSet>
+
+
+</databaseChangeLog>
