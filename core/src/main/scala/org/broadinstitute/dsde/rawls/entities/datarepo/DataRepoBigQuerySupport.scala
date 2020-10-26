@@ -219,7 +219,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
       val schemaFields = queryResults.getSchema.getFields
 
       // check results for data we don't handle well. For now this is just RECORD types.
-      if (schemaFields.asScala.exists(_.getType == LegacySQLTypeName.STRING)) {
+      if (schemaFields.asScala.exists(_.getType == LegacySQLTypeName.RECORD)) {
         logger.warn(s"query results for entity type $entityType contains one or more fields " +
           s"with ${LegacySQLTypeName.RECORD.toString} datatypes; these " +
           s"are unsupported and will be serialized to a string value.")
