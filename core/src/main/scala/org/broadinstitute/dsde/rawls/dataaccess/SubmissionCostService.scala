@@ -71,7 +71,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
       .plusDays(1)
       .toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
     
-    s"""AND _PARTITIONDATE BETWEEN "$windowStartDate" AND "$windowEndDate""""
+    s"""AND billing_date BETWEEN "$windowStartDate" AND "$windowEndDate""""
   }
 
   private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String,
@@ -80,14 +80,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
     val querySql: String =
       generateSubmissionCostsQuery(submissionId, submissionDate, terminalStatusDate)
 
-    val namespaceParam =
-      new QueryParameter()
-        .setParameterType(stringParamType)
-        .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
-
-    val queryParameters: List[QueryParameter] = List(namespaceParam)
-
-    executeBigQuery(querySql, queryParameters) map { result =>
+    executeBigQuery(querySql, List.empty) map { result =>
       val rowsReturned =  Option(result.getTotalRows).getOrElse(0)
       val bytesProcessed = Option(result.getTotalBytesProcessed).getOrElse(0)
       logger.debug(s"Queried for costs of submission $submissionId: $rowsReturned Rows Returned and $bytesProcessed Bytes Processed.")
@@ -105,20 +98,14 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
     workflowIds match {
       case Seq() => Future.successful(Seq.empty.asJava)
       case ids =>
-        val subquery = ids.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
         val querySql: String =
-          generateWorkflowCostsQuery(submissionDate, terminalStatusDate, subquery)
+          generateWorkflowCostsQuery(submissionDate, terminalStatusDate, ids.length)
 
-        val namespaceParam =
-          new QueryParameter()
-            .setParameterType(stringParamType)
-            .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
-        val subqueryParams = workflowIds.toList map { workflowId =>
+        val queryParameters = workflowIds.toList map { workflowId =>
           new QueryParameter()
             .setParameterType(stringParamType)
             .setParameterValue(new QueryParameterValue().setValue(s"%$workflowId%"))
         }
-        val queryParameters: List[QueryParameter] = namespaceParam :: subqueryParams
 
         executeBigQuery(querySql, queryParameters) map { result =>
           val idCount = ids.length
@@ -130,25 +117,23 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
     }
   }
 
+
   def generateSubmissionCostsQuery(submissionId: String, submissionDate: DateTime, terminalStatusDate: Option[DateTime]): String = {
-    s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
-       |FROM `$tableName` as billing, UNNEST(labels) as wflabels
-       |CROSS JOIN UNNEST(billing.labels) as blabels
-       |WHERE blabels.value = "terra-$submissionId"
-       |AND wflabels.key = "cromwell-workflow-id"
-       |AND project.id = ?
+    s"""SELECT 'cromwell-workflow-id', workflow_id, SUM(cost)
+       |FROM `$tableName`
+       |WHERE submission_id = '$submissionId'
        |${partitionDateClause(submissionDate, terminalStatusDate)}
-       |GROUP BY wflabels.key, workflowId""".stripMargin
+       |GROUP BY 1,2""".stripMargin
   }
 
-  def generateWorkflowCostsQuery(submissionDate: DateTime, terminalStatusDate: Option[DateTime], subquery: String): String = {
-    s"""|SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
-        |FROM `$tableName`, UNNEST(labels) as labels
-        |WHERE project.id = ?
-        |AND labels.key LIKE "cromwell-workflow-id"
-        |${partitionDateClause(submissionDate, terminalStatusDate)}
-        |GROUP BY labels.key, workflowId
-        |HAVING $subquery""".stripMargin
+  def generateWorkflowCostsQuery(submissionDate: DateTime, terminalStatusDate: Option[DateTime], idsToBind: Int): String = {
+    val inClause = Seq.fill(idsToBind)("?").mkString(", ")
+
+    s"""SELECT 'cromwell-workflow-id', workflow_id, SUM(cost)
+       |FROM `$tableName`
+       |WHERE workflow_id IN ($inClause)
+       |${partitionDateClause(submissionDate, terminalStatusDate)}
+       |GROUP BY 1,2""".stripMargin
   }
 
   private def executeBigQuery(querySql: String, queryParams: List[QueryParameter]): Future[GetQueryResultsResponse] = {

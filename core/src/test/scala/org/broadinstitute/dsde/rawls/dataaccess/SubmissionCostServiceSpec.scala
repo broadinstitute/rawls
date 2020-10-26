@@ -36,16 +36,13 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     val expectedStartDateString = "1969-12-31"  // submissionDate - 1 day
     val expectedEndDateString = "2020-10-10"  // terminalStatusDate + 1 day
     val expected =
-      s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
-        |FROM `test` as billing, UNNEST(labels) as wflabels
-        |CROSS JOIN UNNEST(billing.labels) as blabels
-        |WHERE blabels.value = "terra-submission-id"
-        |AND wflabels.key = "cromwell-workflow-id"
-        |AND project.id = ?
-        |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
-        |GROUP BY wflabels.key, workflowId""".stripMargin
+      s"""SELECT 'cromwell-workflow-id', workflow_id, SUM(cost)
+         |FROM `test`
+         |WHERE submission_id = 'test-submission-id'
+         |AND billing_date BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
+         |GROUP BY 1,2""".stripMargin    
     assertResult(expected) {
-      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
+      submissionCostService.generateSubmissionCostsQuery("test-submission-id", submissionDate, terminalStatusDate)
     }
   }
 
@@ -55,16 +52,13 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     val expectedStartDateString = "1969-12-31"  // submissionDate - 1 day
     val expectedEndDateString = "1970-02-02"  // submissionDate + 31 day + 1 day
     val expected =
-      s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
-        |FROM `test` as billing, UNNEST(labels) as wflabels
-        |CROSS JOIN UNNEST(billing.labels) as blabels
-        |WHERE blabels.value = "terra-submission-id"
-        |AND wflabels.key = "cromwell-workflow-id"
-        |AND project.id = ?
-        |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
-        |GROUP BY wflabels.key, workflowId""".stripMargin
+      s"""SELECT 'cromwell-workflow-id', workflow_id, SUM(cost)
+         |FROM `test`
+         |WHERE submission_id = 'test-submission-id'
+         |AND billing_date BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
+         |GROUP BY 1,2""".stripMargin    
     assertResult(expected) {
-      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
+      submissionCostService.generateSubmissionCostsQuery("test-submission-id", submissionDate, terminalStatusDate)
     }
   }
 
@@ -74,15 +68,13 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     val expectedStartDateString = "1969-12-31"  // submissionDate - 1 day
     val expectedEndDateString = "2020-10-10"  // terminalStatusDate + 1 day
     val expected =
-      s"""SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
-        |FROM `test`, UNNEST(labels) as labels
-        |WHERE project.id = ?
-        |AND labels.key LIKE "cromwell-workflow-id"
-        |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
-        |GROUP BY labels.key, workflowId
-        |HAVING some having clause""".stripMargin
+      s"""SELECT 'cromwell-workflow-id', workflow_id, SUM(cost)
+         |FROM `test`
+         |WHERE workflow_id IN (?, ?, ?)
+         |AND billing_date BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
+         |GROUP BY 1,2""".stripMargin    
     assertResult(expected) {
-      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause")
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, 3)
     }
   }
 
@@ -92,15 +84,13 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     val expectedStartDateString = "1969-12-31"  // submissionDate - 1 day
     val expectedEndDateString = "1970-02-02"  // submissionDate + 31 day + 1 day
     val expected =
-      s"""SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
-        |FROM `test`, UNNEST(labels) as labels
-        |WHERE project.id = ?
-        |AND labels.key LIKE "cromwell-workflow-id"
-        |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
-        |GROUP BY labels.key, workflowId
-        |HAVING some having clause""".stripMargin
+      s"""SELECT 'cromwell-workflow-id', workflow_id, SUM(cost)
+         |FROM `test`
+         |WHERE workflow_id IN (?, ?, ?)
+         |AND billing_date BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
+         |GROUP BY 1,2""".stripMargin    
     assertResult(expected) {
-      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause")
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, 3)
     }
   }
 
