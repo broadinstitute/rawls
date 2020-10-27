@@ -45,6 +45,9 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 ```
 
 ## Build Rawls docker image
+
+Note: this may use more than 4.5 GB of Docker memory. If your Docker is not configured with enough memory (Docker for Mac defaults to 2GB), you may see a cryptic error messages saying `Killed`.
+ 
 Build Rawls jar
 ```
 ./docker/build.sh jar
@@ -54,3 +57,16 @@ Build Rawls jar and docker image
 ```
 ./docker/build.sh jar -d build
 ```
+
+## Publish rawls-model
+
+Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory. You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
+- [Jenkins runs `publishSnapshot.sh` on every dev build](https://fc-jenkins.dsp-techops.broadinstitute.org/job/rawls-build/), but that makes "unofficial" `-SNAP` versions.
+- Note that you need `ARTIFACTORY_USERNAME` and `ARTIFACTORY_PASSWORD` in your env for either of these to work.
+
+To publish an official release, you can run the following command:
+```
+VAULT_TOKEN=$(cat ~/.vault-token) ARTIFACTORY_USERNAME=dsdejenkins ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins) core/src/bin/publishRelease.sh
+```
+
+You can view what is in the artifactory here: https://broadinstitute.jfrog.io/broadinstitute/webapp/#/home
