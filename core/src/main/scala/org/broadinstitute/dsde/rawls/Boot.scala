@@ -392,7 +392,6 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         samDAO,
         workspaceManagerDAO,
-        gcsDAO.getBucketServiceAccountCredential,
         conf.getString("dataRepo.terraInstanceName")
       )
 
