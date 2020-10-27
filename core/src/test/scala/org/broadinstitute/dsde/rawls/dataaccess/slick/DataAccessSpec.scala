@@ -4,7 +4,6 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.scalatest.concurrent.PatienceConfiguration.Interval
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Seconds, Span}
 import slick.basic.DatabaseConfig
@@ -67,7 +66,7 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
         // can't use runAndWait here because we need to use our altDataSource
 
         val roundtripCheckFutures = roundtripCheckActions map { a => altDataSource.inTransaction { _ => a } }
-        Future.sequence(roundtripCheckFutures).futureValue(Interval(Span(10, Seconds)))
+        Future.sequence(roundtripCheckFutures).futureValue(timeout(Span(10, Seconds)))
       }
     }
   }
