@@ -542,7 +542,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //delete the workspace
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
 
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken], any[OAuth2BearerToken])
+    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
 
     //check that the workspace has been deleted
     assertResult(None) {

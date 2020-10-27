@@ -161,7 +161,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       slickDataSource,
       samDAO,
       workspaceManagerDAO,
-      gcsDAO.getBucketServiceAccountCredential,
       mockServer.mockServerBaseUrl
     )
 
