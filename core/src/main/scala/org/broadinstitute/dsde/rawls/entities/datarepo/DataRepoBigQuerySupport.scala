@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{RelationshipModel, SnapshotModel, TableModel}
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery._
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException, IllegalIdentifierException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
@@ -125,7 +126,7 @@ object DataRepoBigQuerySupport {
 /**
  * contains helper methods for working with BigQuery from an EntityProvider.
  */
-trait DataRepoBigQuerySupport {
+trait DataRepoBigQuerySupport extends LazyLogging {
 
   /**
    * translate a single BigQuery FieldValue (i.e. not a repeated/array type) to a single Rawls AttributeValue
@@ -145,7 +146,8 @@ trait DataRepoBigQuerySupport {
       case LegacySQLTypeName.STRING =>
         AttributeString(fv.getStringValue)
       case LegacySQLTypeName.RECORD =>
-        // TODO: unclear what to do with RECORD types; they don't translate cleanly to the entity model
+        // Data Repo does not support RECORD types, but we'll include a primitive case for them here
+        // by simply toString-ing them
         AttributeString(fv.getValue.toString)
       case _ =>
         // "else" case that covers LegacySQLTypeNames of:
@@ -215,6 +217,13 @@ trait DataRepoBigQuerySupport {
     } else {
 
       val schemaFields = queryResults.getSchema.getFields
+
+      // check results for data we don't handle well. For now this is just RECORD types.
+      if (schemaFields.asScala.exists(_.getType == LegacySQLTypeName.RECORD)) {
+        logger.warn(s"query results for entity type $entityType contains one or more fields " +
+          s"with ${LegacySQLTypeName.RECORD.toString} datatypes; these " +
+          s"are unsupported and will be serialized to a string value.")
+      }
 
       // does primary key exist in the results?
       if (Try(schemaFields.getIndex(primaryKey)).isFailure) {
