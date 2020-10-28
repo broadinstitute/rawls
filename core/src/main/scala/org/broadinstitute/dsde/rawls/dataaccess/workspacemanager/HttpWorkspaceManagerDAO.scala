@@ -31,11 +31,11 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
   }
 
   override def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace = {
-    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).authToken(accessToken.token))
+    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
   }
 
   override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = {
-    getWorkspaceApi(accessToken).deleteWorkspace(new DeleteWorkspaceRequestBody().authToken(accessToken.token), workspaceId)
+    getWorkspaceApi(accessToken).deleteWorkspace(workspaceId)
   }
 
   override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
