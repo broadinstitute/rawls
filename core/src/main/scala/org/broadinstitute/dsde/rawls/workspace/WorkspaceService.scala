@@ -1817,6 +1817,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  // TODO: https://broadworkbench.atlassian.net/browse/CA-946
+  // This method should talk to the Resource Buffering Service, get a Google Project, and then set the appropriate
+  // Billing Account on the project and any other things we need to set on the Project.
+  def claimGoogleProject(namespace: String): GoogleProjectId = {
+    GoogleProjectId(UUID.randomUUID.toString.substring(0, 8) + "_fake_proj_name")
+  }
+
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.
   private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)
                                      (op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
@@ -1830,6 +1837,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, bucketName: String, projectOwnerPolicyEmail: WorkbenchEmail, dataAccess: DataAccess, parentSpan: Span = null): ReadWriteAction[(Workspace, Map[SamResourcePolicyName, WorkbenchEmail])] = {
       val currentDate = DateTime.now
 
+      val googleProjectId = claimGoogleProject(workspaceRequest.namespace)
+
       val workspace = Workspace(
         namespace = workspaceRequest.namespace,
         name = workspaceRequest.name,
@@ -1839,7 +1848,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         createdDate = currentDate,
         lastModified = currentDate,
         createdBy = userInfo.userEmail.value,
-        attributes = workspaceRequest.attributes
+        attributes = workspaceRequest.attributes,
+        isLocked = false,
+        workspaceVersion = WorkspaceVersions.V2,
+        googleProject = googleProjectId
       )
 
       traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.save(workspace)).flatMap { _ =>
