@@ -1,12 +1,13 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.scalatest.{FreeSpec, Matchers}
 
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class WorkspaceModelSpec extends FreeSpec with Matchers {
+class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
   val trickyBit        = "/+:?&~!@#$^*()[]{}∞€\\"
   val trickyBitEncoded = java.net.URLEncoder.encode(trickyBit, java.nio.charset.StandardCharsets.UTF_8.name)

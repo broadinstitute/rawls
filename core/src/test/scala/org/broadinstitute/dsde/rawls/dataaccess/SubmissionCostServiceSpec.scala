@@ -5,14 +5,14 @@ import com.google.api.services.bigquery.model.{TableCell, TableRow}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.joda.time.{DateTime, DateTimeZone}
-import org.scalatest.FlatSpec
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.Await
 import scala.language.postfixOps
+import org.scalatest.flatspec.AnyFlatSpec
 
-class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
+class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
   implicit val actorSystem = ActorSystem("SubmissionCostServiceSpec")
   val mockBigQueryDAO = new MockGoogleBigQueryDAO
   val submissionCostService = SubmissionCostService.constructor("test", "test", 31, mockBigQueryDAO)

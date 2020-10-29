@@ -5,18 +5,21 @@ import akka.testkit.TestKit
 import cats.effect.IO
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{PendingBucketDeletionRecord, TestDriverComponent}
+import org.scalatest.time.{Seconds, Span}
 import org.mockito.Mockito
 import org.mockito.Mockito._
-import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatestplus.mockito.MockitoSugar
+import org.scalatest.BeforeAndAfterAll
 
 import scala.concurrent.ExecutionContext.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
-class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually {
+class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with ScalaFutures {
   implicit val cs = IO.contextShift(global)
   def this() = this(ActorSystem("BucketDeletionMonitorSpec"))
 
@@ -46,12 +49,14 @@ class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) w
 
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, mockGoogleServicesDAO, 0 seconds, 100 milliseconds))
 
-    implicit val patienceConfig = PatienceConfig(timeout = 1 second)
-
-    eventually {
+    // `eventually` now requires an implicit `Retrying` instance. When the statement inside returns future, it'll
+    // try to use `Retrying[Future[T]]`, which gets weird when we're using mockito together with it.
+    // Hence adding ascribing [Unit] explicitly here so that `eventually` will use `Retrying[Unit]`
+    eventually[Unit](timeout = timeout(Span(1, Seconds))) {
       verify(mockGoogleServicesDAO, times(1)).deleteBucket(emptyBucketName)
       verify(mockGoogleServicesDAO, Mockito.atLeast(5)).deleteBucket(nonEmptyBucketName)
       verify(mockGoogleServicesDAO, Mockito.atLeast(5)).deleteBucket(errorBucketName)
+      ()
     }
 
     val pendingDeletes = runAndWait(pendingBucketDeletionQuery.list())

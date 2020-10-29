@@ -4,10 +4,11 @@ import java.nio.charset.Charset
 
 import com.google.common.io.Resources
 import org.broadinstitute.dsde.rawls.entities.exceptions.IllegalIdentifierException
-import org.scalatest.{BeforeAndAfterAll, FreeSpec}
+import org.scalatest.BeforeAndAfterAll
 import spray.json._
+import org.scalatest.freespec.AnyFreeSpec
 
-class DataRepoBigQuerySanitizationSpec extends FreeSpec with DataRepoBigQuerySupport with BeforeAndAfterAll {
+class DataRepoBigQuerySanitizationSpec extends AnyFreeSpec with DataRepoBigQuerySupport with BeforeAndAfterAll {
 
   // read the list of naughty strings from https://github.com/minimaxir/big-list-of-naughty-strings.
   // We expect a json array, containing base64-encoded strings.

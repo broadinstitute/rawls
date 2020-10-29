@@ -4,15 +4,17 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props, SupervisorStrategy}
 import akka.actor.SupervisorStrategy.{Directive, Restart}
 import akka.testkit.TestKit
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.mockito.MockitoSugar
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatestplus.mockito.MockitoSugar
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.time.{Seconds, Span}
 import akka.pattern.ask
 import akka.util.Timeout
 
 import scala.concurrent.duration._
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
-class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneForOneStrategySpec")) with ScalaFutures with Eventually with FlatSpecLike with MockitoSugar with Matchers with BeforeAndAfterAll {
+class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneForOneStrategySpec")) with ScalaFutures with Eventually with AnyFlatSpecLike with MockitoSugar with Matchers with BeforeAndAfterAll {
 
   // This configures how long the calls to `whenReady(Future)` and `eventually` will wait
   // before giving up and failing the test.

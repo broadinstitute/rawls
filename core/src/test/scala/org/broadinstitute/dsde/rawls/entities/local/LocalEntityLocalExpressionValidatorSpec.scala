@@ -8,11 +8,11 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
 import org.broadinstitute.dsde.rawls.expressions.LocalExpressionFixture
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{AgoraMethod, Attributable, AttributeString, MethodConfiguration}
-import org.scalatest.FlatSpec
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Seconds, Span}
+import org.scalatest.flatspec.AnyFlatSpec
 
-class LocalEntityLocalExpressionValidatorSpec extends FlatSpec with TestDriverComponent with LocalExpressionFixture with RawlsTestUtils with ScalaFutures  {
+class LocalEntityLocalExpressionValidatorSpec extends AnyFlatSpec with TestDriverComponent with LocalExpressionFixture with RawlsTestUtils with ScalaFutures  {
 
   def toExpressionMap(expressions: Seq[String]): Map[String, AttributeString] =
     expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap

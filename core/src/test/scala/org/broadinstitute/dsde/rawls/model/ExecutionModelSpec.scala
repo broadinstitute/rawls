@@ -1,13 +1,14 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.scalatest.{FlatSpec, Matchers}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import spray.json._
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 /**
   * Created by rtitle on 5/7/17.
   */
-class ExecutionModelSpec extends FlatSpec with Matchers {
+class ExecutionModelSpec extends AnyFlatSpec with Matchers {
 
   "SubmissionRequest deserialization" should "translate null to None" in {
     import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat

@@ -9,15 +9,16 @@ import com.google.api.client.testing.http.{HttpTesting, MockHttpTransport}
 import com.google.api.services.storage.Storage
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{FlatSpecLike, Matchers}
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 /**
   * Created by rtitle on 8/14/17.
   */
-class GoogleInstrumentedSpec extends GoogleInstrumented with FlatSpecLike with Matchers with Eventually with MockitoTestUtils with StatsDTestUtils {
+class GoogleInstrumentedSpec extends GoogleInstrumented with AnyFlatSpecLike with Matchers with Eventually with MockitoTestUtils with StatsDTestUtils {
   override val workbenchMetricBaseName = "test"
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
