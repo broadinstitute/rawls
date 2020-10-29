@@ -86,7 +86,7 @@ object Dependencies {
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "0.5.3"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
-  val mockito: ModuleID =         "org.scalatestplus" %% "mockito-3-4" % "3.2.2.0" % Test
+  val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-3-4"          % "3.2.2.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
   val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
