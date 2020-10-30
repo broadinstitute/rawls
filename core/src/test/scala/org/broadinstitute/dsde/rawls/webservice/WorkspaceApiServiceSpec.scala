@@ -224,9 +224,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             entityQuery.save(ctx, sample5),
             entityQuery.save(ctx, sample6),
             entityQuery.save(ctx, sampleSet),
-    
+
             methodConfigurationQuery.create(ctx, methodConfig),
-    
+
             submissionQuery.create(ctx, submissionSuccess),
             submissionQuery.create(ctx, submissionFail),
             submissionQuery.create(ctx, submissionRunning1),
@@ -1550,8 +1550,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     testCreateSubmission(dataSource, testData.userWriter.userEmail, StatusCodes.Created)
   }
 
-  it should "403 creating submission without billing project compute permission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    testCreateSubmission(dataSource, userWriterNoComputeOnProject, StatusCodes.Forbidden)
+  it should "allow user to create submission with workspace compute permission and no billing project compute permission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    testCreateSubmission(dataSource, userWriterNoComputeOnProject, StatusCodes.Created)
   }
 
   private def testCreateSubmission(dataSource: SlickDataSource, userEmail: RawlsUserEmail, exectedStatus: StatusCode) = {
