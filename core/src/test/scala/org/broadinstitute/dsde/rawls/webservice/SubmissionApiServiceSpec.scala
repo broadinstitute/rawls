@@ -761,7 +761,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   }
 
   it should "return 404 when reading a Google Genomics operation for a non-existent workflow" in withEmptyTestDataApiServices { services =>
-    Get(s"/workflows/bogus/genomics/projects/dummy-project/operations/dummy-job-id") ~> services.submissionRoutes ~>
+    Get(s"/workflows/bogus/genomics/projects/dummy-project/operations/dummy-job-id") ~> services.route ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -770,7 +770,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   }
 
   it should "return 404 when reading a Google Genomics operation for a non-existent job" in withEmptyTestDataApiServices { services =>
-    Get(s"/workflows/workflow_with_job_ids/genomics/projects/dummy-project/operations/bogus") ~> services.submissionRoutes ~>
+    Get(s"/workflows/workflow_with_job_ids/genomics/projects/dummy-project/operations/bogus") ~> services.route ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
