@@ -50,7 +50,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
 
     assertWorkspaceResult(Seq(workspace)) {
-      runAndWait(workspaceQuery.listByIds(Seq(workspaceId)))
+      runAndWait(workspaceQuery.listWorkspaces(Seq(workspaceId), WorkspaceQuery()))._3
     }
 
     assertWorkspaceResult(Option(workspace)) {

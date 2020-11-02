@@ -6,14 +6,19 @@ import java.util.{Date, UUID}
 import cats.instances.int._
 import cats.instances.option._
 import cats.{Monoid, MonoidK}
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceSubmissionStats
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcProfile}
 
 import scala.language.postfixOps
+
+import com.google.common.base.CaseFormat
+
 
 /**
  * Created by dvoet on 2/4/16.
@@ -134,8 +139,10 @@ trait WorkspaceComponent {
 
   }
 
-  object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
+  object workspaceQuery extends TableQuery(new WorkspaceTable(_)) with RawSqlQuery with LazyLogging  {
     private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
+    val driver: JdbcProfile = WorkspaceComponent.this.driver
+
 
     def listAll(): ReadAction[Seq[Workspace]] = {
       loadWorkspaces(workspaceQuery)
@@ -202,10 +209,6 @@ trait WorkspaceComponent {
 
     def findById(workspaceId: String): ReadAction[Option[Workspace]] = {
       loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
-    }
-
-    def listByIds(workspaceIds: Seq[UUID], attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Seq[Workspace]] = {
-      loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
     }
 
     def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] = {
@@ -386,6 +389,204 @@ trait WorkspaceComponent {
         workspaceRecs.map { workspaceRec =>
           unmarshalWorkspace(workspaceRec, attributesByWsId.getOrElse(workspaceRec.id, Map.empty))
         }
+      }
+    }
+
+
+    // result structure from workspace and attribute list raw sql
+    case class WorkspaceAndAttributesRecord(workspaceRecord: WorkspaceRecord,
+                                            attributeRecord: Option[WorkspaceAttributeRecord],
+                                            entityRef: Option[EntityRecord],
+                                            submissionStats: WorkspaceSubmissionStats)
+
+    //implicit val getWorkspaceSubmissionStatsResult = GetResult { r => WorkspaceSubmissionStats(r.<<, r.<<, r.<<) }
+    // tells slick how to convert a result row from a raw sql query to an instance of WorkspaceAndAttributesResult
+    implicit val getWorkspaceAndAttributesResult = GetResult { r =>
+      val workspaceRecordResult = WorkspaceRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+
+      val attributeIdOption: Option[Long] = r.<<
+      val attributeRecOption = attributeIdOption.map(id => WorkspaceAttributeRecord(id, workspaceRecordResult.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+      val entityIdOption: Option[Long] = r.<<
+      val entityRecOption = entityIdOption.map(id => EntityRecord(id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+      val submissionStats = WorkspaceSubmissionStats(r.<<, r.<<, r.<<)
+
+      WorkspaceAndAttributesRecord(workspaceRecordResult, attributeRecOption, entityRecOption, submissionStats)
+    }
+
+    def listWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[(Int, Int, Seq[(Workspace, WorkspaceSubmissionStats)])] = {
+      val lw = loadWorkspaces(workspaceIds, workspaceQuery)
+      lw.map { case (unfilteredCount, filteredCount, workspaceAndAttributesRecords) =>
+        val wsAttRec = workspaceAndAttributesRecords
+        val allWorkspaceAndSubmissionStatsRecords = workspaceAndAttributesRecords.map(rec => (rec.workspaceRecord, rec.submissionStats)).distinct
+
+        val workspacesWithAttributes = workspaceAndAttributesRecords.collect {
+          case WorkspaceAndAttributesRecord(workspaceRecord, Some(attributeRecord), entityRefOption, submissionStats) => (((workspaceRecord.id, attributeRecord), entityRefOption), submissionStats)
+        }
+
+        val attributesByWorkspaceId = workspaceAttributeQuery.unmarshalAttributes(workspacesWithAttributes.map(_._1))
+
+        val workspacesAndSubmissionStats = allWorkspaceAndSubmissionStatsRecords.map { case (workspaceRec, submissionStats) =>
+          (unmarshalWorkspace(workspaceRec, attributesByWorkspaceId.getOrElse(workspaceRec.id, Map.empty)), submissionStats)
+        }
+        println("STUFF " + unfilteredCount + filteredCount + workspacesAndSubmissionStats)
+        (unfilteredCount, filteredCount, workspacesAndSubmissionStats)
+
+      }
+    }
+
+
+    def loadWorkspaces(workspaceIds: Seq[UUID], workspaceQuery: WorkspaceQuery): ReadAction[(Int, Int, Seq[WorkspaceAndAttributesRecord])] = {
+      def workspaceUUIDList = {
+        val sqlWhere = sql" WHERE "
+        val sqlWhereClause = if (workspaceIds.isEmpty) sql" FALSE "
+        else {
+          concatSqlActions( sql" w.id in ", sql"(", reduceSqlActionsWithDelim( workspaceIds.map { id => sql" UNHEX(REPLACE(${id.toString}, '-','')) "} ), sql")")
+        }
+        concatSqlActions(sqlWhere, sqlWhereClause)
+      }
+
+      def lastSubmissionStatusFilter = workspaceQuery.lastSubmissionStatuses.map { statuses =>
+        val statusSql = reduceSqlActionsWithDelim( statuses.map { status => sql"${status.toString}"} )
+        concatSqlActions(sql" AND last_submission_status in (", statusSql, sql")")
+      }.getOrElse(sql" ")
+
+      def workspaceNamespaceFilter = workspaceQuery.billingProject.map { namespace =>
+        sql" AND w.namespace = ${ namespace } " }.getOrElse(sql" ")
+
+      def workspaceNameFilter = workspaceQuery.workspaceName.map { workspaceName =>
+        sql" AND w.name = ${ workspaceName } " }.getOrElse(sql" ")
+
+      def tagFilter = workspaceQuery.tags.map { tags =>
+        val tagSql = reduceSqlActionsWithDelim( tags.map { tag => sql"${tag}"})
+        concatSqlActions(sql"AND wa.value_string in (", tagSql, sql") ")
+      }.getOrElse(sql" ")
+
+      // This is different from namespace and workspace name, which do an exact match
+      def searchNamespaceAndNameFilter = {
+        workspaceQuery.searchTerm.map { searchTerm =>
+          val sqlSearchTerm = '%' + searchTerm + '%'
+          sql" AND (w.namespace LIKE '#${sqlSearchTerm}' OR w.name LIKE '#${sqlSearchTerm}' ) "
+        }.getOrElse(sql" ")
+      }
+
+
+      def ordering(prefix: String) = {
+        // ToDo: Check that sortField is defined sortDirection is defaulted to ascending
+        def addPrefix(str: String) = prefix + "." + str
+        val sortField = addPrefix(CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, workspaceQuery.sortField))
+        val sortDirection = SortDirections.toSql(workspaceQuery.sortDirection)
+        val defaultSortOrdering = Seq("name", "last_modified", "created_by").map(prefix + "." + _)
+        if (defaultSortOrdering.contains(sortField)) {
+          val sortOrdering = defaultSortOrdering.filterNot( _ == sortField)
+          val sqlOrdering = reduceSqlActionsWithDelim( sortOrdering.map { field => sql" ${field} "})
+          concatSqlActions(sql" ORDER BY #${sortField} #${sortDirection}, ", sqlOrdering)
+        } else {
+          val sqlOrdering = reduceSqlActionsWithDelim(defaultSortOrdering.map { field => sql" ${field} "})
+          concatSqlActions(sql" ORDER BY ", sqlOrdering)
+        }
+      }
+
+      def limitOffset = {
+        val offset = (workspaceQuery.page - 1) * workspaceQuery.pageSize
+        sql" limit ${workspaceQuery.pageSize} offset ${offset}"
+      }
+
+      val sqlSelect =
+        sql"""
+              SELECT ws.namespace,
+                     ws.name,
+                     ws.id,
+                     ws.bucket_name,
+                     ws.workflow_collection,
+                     ws.created_date,
+                     ws.last_modified,
+                     ws.created_by,
+                     ws.is_locked,
+                     ws.record_version,
+                     wa.id,
+                     wa.namespace,
+                     wa.name,
+                     wa.value_string,
+                     wa.value_number,
+                     wa.value_boolean,
+                     wa.VALUE_JSON,
+                     wa.value_entity_ref,
+                     wa.list_index,
+                     wa.list_length,
+                     wa.deleted,
+                     wa.deleted_date,
+                     e_ref.id,
+                     e_ref.name,
+                     e_ref.entity_type,
+                     e_ref.workspace_id,
+                     e_ref.record_version,
+                     e_ref.deleted,
+                     e_ref.deleted_date,
+                     last_succeeded,
+                     last_failed,
+                     running_submission_count
+              FROM
+           """
+
+      val sqlInnerSelect =
+        sql"""
+          SELECT w.namespace,
+                 w.name,
+                 w.id,
+                 w.bucket_name,
+                 w.workflow_collection,
+                 w.created_date,
+                 w.last_modified,
+                 w.created_by,
+                 w.is_locked,
+                 w.record_version,
+                 sub_stats.last_succeeded,
+                 sub_stats.last_failed,
+                 sub_stats.running_submission_count,
+                 last_submission_status
+          FROM WORKSPACE w
+           """
+
+      val wsAttSubmissionJoins = sql""" LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on w.id = wa.owner_id """
+
+      val substatssql = sql""" LEFT OUTER JOIN (SELECT workspace_id,
+                                                       submission_id,
+                                                       workspace_name,
+                                                       submission_status,
+                                                       workflow_status,
+                                                       MAX(if (workflow_status = '#${WorkflowStatuses.Succeeded.toString}', max_date, null)) AS last_succeeded,
+                                                       MAX(if (workflow_status = '#${WorkflowStatuses.Failed.toString}', max_date, null)) AS last_failed,
+                                                       MAX(submission_active_count) AS running_submission_count,
+                                                       (CASE
+                                                         when MAX(submission_active_count) > 0 then '#{LastSubmissionStatusRequest.Running.toString}'
+                                                         when MAX(if (workflow_status = '#{LastSubmissionStatusRequest.Succeeded.toString}', max_date, 0)) > MAX(if (workflow_status = '#{LastSubmissionStatusRequest.Failed.toString}', max_date, 0)) then 'Succeeded'
+                                                         when MAX(if (workflow_status = '#{LastSubmissionStatusRequest.Succeeded.toString}', max_date, 0)) < MAX(if (workflow_status = '#{LastSubmissionStatusRequest.Failed.toString}', max_date, 0)) then 'Failed'
+                                                         else null END) AS last_submission_status
+                                                FROM
+                                                    (SELECT w.id AS workspace_id,
+                                                            s.id AS submission_id,
+                                                            w.name AS workspace_name,
+                                                            s.STATUS AS submission_status,
+                                                            wf.STATUS AS workflow_status,
+                                                            MAX(wf.STATUS_LAST_CHANGED) as max_date,
+                                                            SUM(s.STATUS in ('Accepted', 'Evaluating', 'Submitting', 'Submitted', 'Aborting')) AS submission_active_count
+                                                     FROM WORKSPACE w
+                                                              LEFT OUTER JOIN SUBMISSION s on w.id = s.WORKSPACE_ID
+                                                              LEFT OUTER JOIN WORKFLOW wf on s.ID = wf.SUBMISSION_ID
+                                                     GROUP BY s.id, w.id, wf.status) innerS
+                                                GROUP BY workspace_id
+                                                ORDER BY workspace_name) sub_stats ON sub_stats.workspace_id = w.id """
+
+      val fromAndJoins = sql"""
+                         LEFT OUTER JOIN WORKSPACE_ATTRIBUTE wa on ws.id = wa.owner_id
+                         LEFT OUTER JOIN ENTITY e_ref on wa.value_entity_ref = e_ref.id """
+      for {
+        filteredCount <- concatSqlActions(sql"SELECT count(1) FROM (SELECT w.id FROM WORKSPACE w ", wsAttSubmissionJoins, substatssql, workspaceUUIDList, lastSubmissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql" GROUP BY w.id ", sql") ws").as[Int]
+        page <- concatSqlActions(sqlSelect, sql" (", sqlInnerSelect, wsAttSubmissionJoins, substatssql, workspaceUUIDList, lastSubmissionStatusFilter, workspaceNamespaceFilter, workspaceNameFilter, tagFilter, searchNamespaceAndNameFilter, sql" GROUP BY w.id", ordering("w"),  limitOffset, sql")  ws ", fromAndJoins, ordering("ws")).as[WorkspaceAndAttributesRecord]
+      } yield {
+        (workspaceIds.length, filteredCount.head, page)
       }
     }
 

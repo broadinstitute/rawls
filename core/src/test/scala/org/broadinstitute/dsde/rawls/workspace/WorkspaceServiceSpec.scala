@@ -787,8 +787,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // searching for with no query should return all tags
     val res6 = Await.result(services.workspaceService.getTags(None), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("buffalo", 1), WorkspaceTag("cancer", 1))) {
-      res6.response._2
+    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("buffalo", 1), WorkspaceTag("cancer", 1))) {      res6.response._2
     }
 
     // remove tags

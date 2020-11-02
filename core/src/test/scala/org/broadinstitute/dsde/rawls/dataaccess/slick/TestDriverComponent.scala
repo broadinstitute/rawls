@@ -295,6 +295,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     // Test copying configs between workspaces
     val (workspaceConfigCopyDestination) = makeWorkspaceWithUsers(billingProject, wsNameConfigCopyDestination.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
 
+
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
 

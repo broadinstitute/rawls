@@ -16,6 +16,8 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
 import org.joda.time.DateTime
 import spray.json._
+import UserModelJsonSupport.ManagedGroupRefFormat
+import org.broadinstitute.dsde.rawls.model.LastSubmissionStatusRequests.LastSubmissionStatusRequest
 
 import scala.util.Try
 
@@ -212,10 +214,53 @@ object SortDirections {
 
   def toSql(direction: SortDirection) = toString(direction)
 }
+
+
+object LastSubmissionStatusRequests {
+  sealed trait LastSubmissionStatusRequest extends RawlsEnumeration[LastSubmissionStatusRequest] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): LastSubmissionStatusRequest = LastSubmissionStatusRequests.withName(name)
+  }
+
+  def withName(name: String): LastSubmissionStatusRequest = {
+    name match {
+      case "Succeeded" => Succeeded
+      case "Running" => Running
+      case "Failed" => Failed
+      case _ => throw new RawlsException(s"invalid last submission status [${name}]")
+    }
+  }
+
+  case object Succeeded extends LastSubmissionStatusRequest
+  case object Running extends LastSubmissionStatusRequest
+  case object Failed extends LastSubmissionStatusRequest
+
+}
+
 case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
+case class WorkspaceQuery(page: Int = 1,
+                          pageSize: Int = 10,
+                          sortField: String = "name",
+                          sortDirection: SortDirections.SortDirection = SortDirections.Ascending,
+                          searchTerm: Option[String] = None,
+                          lastSubmissionStatuses: Option[Seq[LastSubmissionStatusRequest]] = None,
+                          accessLevel: Option[WorkspaceAccessLevel] = None,
+                          billingProject: Option[String] = None,
+                          workspaceName: Option[String] = None,
+                          tags: Option[Seq[String]] = None,
+                          fields: WorkspaceFieldSpecs
+                         )
+
+case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
+                                 workspace: WorkspaceDetails,
+                                 workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
+                                 public: Boolean)
+
+case class WorkspaceQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 
+case class WorkspaceQueryResponse(parameters: WorkspaceQuery, resultMetadata: WorkspaceQueryResultMetadata, results: Seq[WorkspaceListResponse])
 case class EntityQueryResponse(parameters: EntityQuery, resultMetadata: EntityQueryResultMetadata, results: Seq[Entity])
 
 case class EntityCopyResponse(entitiesCopied: Seq[AttributeEntityReference], hardConflicts: Seq[EntityHardConflict], softConflicts: Seq[EntitySoftConflict])
@@ -477,10 +522,10 @@ case class MethodRepoConfigurationExport(
                                          source: MethodConfigurationName
                                          )
 
-case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
-                                 workspace: WorkspaceDetails,
-                                 workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
-                                 public: Boolean)
+//case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
+//                                 workspace: WorkspaceDetails,
+//                                 workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
+//                                 public: Boolean)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
@@ -685,6 +730,16 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
+
+  implicit object LastSubmissionRequestFormat extends JsonFormat[LastSubmissionStatusRequest] {
+    override def write(sub: LastSubmissionStatusRequest): JsValue = JsString(sub.toString)
+
+    override def read(json: JsValue): LastSubmissionStatusRequest = json match {
+      case JsString(sub) => LastSubmissionStatusRequests.withName(sub)
+      case _ => throw DeserializationException("unexpected json type")
+    }
+  }
+
   implicit object AttributeNameFormat extends JsonFormat[AttributeName] {
     override def write(an: AttributeName): JsValue = JsString(AttributeName.toDelimitedName(an))
 
@@ -810,6 +865,14 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodInputsOutputsFormat = jsonFormat2(MethodInputsOutputs)
 
   implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
+
+
+  implicit val WorkspaceQueryFormat = jsonFormat10(WorkspaceQuery)
+
+  implicit val WorkspaceQueryResultMetadataFormat = jsonFormat3(WorkspaceQueryResultMetadata)
+
+  implicit val WorkspaceQueryResponseFormat = jsonFormat3(WorkspaceQueryResponse)
+
 
   implicit object StatusCodeFormat extends JsonFormat[StatusCode] {
     override def write(code: StatusCode): JsValue = JsNumber(code.intValue)

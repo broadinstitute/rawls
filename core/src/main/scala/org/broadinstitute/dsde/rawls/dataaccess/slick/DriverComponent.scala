@@ -124,6 +124,7 @@ trait RawSqlQuery {
   implicit val getSingleStatisticResult = GetResult { r => SingleStatistic(r.<<) }
   implicit val getNamedStatisticResult = GetResult { r => NamedStatistic(r.<<, r.<<) }
 
+
   def concatSqlActions(builders: SQLActionBuilder*): SQLActionBuilder = {
     SQLActionBuilder(builders.flatMap(_.queryParts), new SetParameter[Unit] {
       def apply(p: Unit, pp: PositionedParameters): Unit = {
