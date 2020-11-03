@@ -31,7 +31,7 @@ object Settings {
     "-unchecked",
     "-feature",
     "-encoding", "utf8",
-    "-Ywarn-unused-import",
+//    "-Ywarn-unused-import", bad option for 2.13
     "-deprecation:false", // This is tricky to enable as of 03/2020 [AEN]
     "-Xfatal-warnings"
   )
