@@ -82,7 +82,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
     }
   }
 
-  override def publishMessages(topicName: String, messages: Seq[MessageRequest]) = {
+  override def publishMessages(topicName: String, messages: scala.collection.immutable.Seq[MessageRequest]) = {
     logger.debug(s"publishing to google pubsub topic $topicName, messages [${messages.mkString(", ")}]")
     Future.traverse(messages.grouped(1000)) { messageBatch =>
       retryWhen500orGoogleError(() => {
@@ -93,24 +93,24 @@ class HttpGooglePubSubDAO(clientEmail: String,
     }.map(_ => ())
   }
 
-  override def acknowledgeMessages(subscriptionName: String, messages: Seq[PubSubMessage]) = {
+  override def acknowledgeMessages(subscriptionName: String, messages: scala.collection.immutable.Seq[PubSubMessage]) = {
     acknowledgeMessagesById(subscriptionName, messages.map(_.ackId))
   }
 
-  override def acknowledgeMessagesById(subscriptionName: String, ackIds: Seq[String]) = {
+  override def acknowledgeMessagesById(subscriptionName: String, ackIds: scala.collection.immutable.Seq[String]) = {
     retryWhen500orGoogleError(() => {
       val ackRequest = new AcknowledgeRequest().setAckIds(ackIds.asJava)
       executeGoogleRequest(getPubSubDirectory.projects().subscriptions().acknowledge(subscriptionToFullPath(subscriptionName), ackRequest))
     })
   }
 
-  override def pullMessages(subscriptionName: String, maxMessages: Int): Future[Seq[PubSubMessage]] = {
+  override def pullMessages(subscriptionName: String, maxMessages: Int): Future[scala.collection.immutable.Seq[PubSubMessage]] = {
     retryWhen500orGoogleError(() => {
       val pullRequest = new PullRequest().setReturnImmediately(true).setMaxMessages(maxMessages) //won't keep the connection open if there's no msgs available
       val messages = executeGoogleRequest(getPubSubDirectory.projects().subscriptions().pull(subscriptionToFullPath(subscriptionName), pullRequest)).getReceivedMessages
       if(messages == null)
-        Seq.empty
-      else messages.asScala.toSeq.map { message =>
+        scala.collection.immutable.Seq.empty
+      else messages.asScala.toList.map { message =>
         val messageBody =  Option(message.getMessage.decodeData()).map(new String(_, characterEncoding)).getOrElse("")
         PubSubMessage(message.getAckId,
           messageBody,

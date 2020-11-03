@@ -27,6 +27,6 @@ class PubSubNotificationDAO(googlePubSubDAO: GooglePubSubDAO, topicName: String)
   googlePubSubDAO.createTopic(topicName)
 
   protected def sendNotifications(notification: Traversable[String]): Future[Unit] = {
-    googlePubSubDAO.publishMessages(topicName, notification.toSeq.map(MessageRequest(_)))
+    googlePubSubDAO.publishMessages(topicName, notification.toList.map(MessageRequest(_)))
   }
 }
