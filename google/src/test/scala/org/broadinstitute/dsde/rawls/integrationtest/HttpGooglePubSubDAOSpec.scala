@@ -62,7 +62,7 @@ class HttpGooglePubSubDAOSpec extends AnyFlatSpec with Matchers with BeforeAndAf
 
   "HttpGooglePubSubDAOSpec" should "do all of the things" in {
     //publish a few messages to the topic
-    val messages = Seq(MessageRequest("test-1"))
+    val messages = List(MessageRequest("test-1"))
     Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
 
     Await.result(gpsDAO.withMessage(defaultSubscriptionName) { msg =>
@@ -76,7 +76,7 @@ class HttpGooglePubSubDAOSpec extends AnyFlatSpec with Matchers with BeforeAndAf
   it should "submit more than 1000 messages" in {
     //publish a lot of messages to the topic
     val numMessages = 2877
-    val messages = Seq.fill(numMessages)(MessageRequest("foo"))
+    val messages = List.fill(numMessages)(MessageRequest("foo"))
     Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
 
     while (Await.result(gpsDAO.withMessages(defaultSubscriptionName, numMessages) { msgs =>
@@ -95,7 +95,7 @@ class HttpGooglePubSubDAOSpec extends AnyFlatSpec with Matchers with BeforeAndAf
 
   it should "do all of the things with multiple messages" in {
     //publish a few messages to the topic
-    val messages = Seq("test-1", "test-2", "test-3", "test-4", "test-5").map(MessageRequest(_))
+    val messages = List("test-1", "test-2", "test-3", "test-4", "test-5").map(MessageRequest(_))
     Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
 
     Await.result(gpsDAO.withMessages(defaultSubscriptionName, 5) { msg =>

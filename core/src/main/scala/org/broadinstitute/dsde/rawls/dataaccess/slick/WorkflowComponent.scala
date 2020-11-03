@@ -7,7 +7,7 @@ import cats.instances.int._
 import cats.instances.list._
 import cats.instances.map._
 import cats.syntax.foldable._
-import nl.grons.metrics.scala.Counter
+import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.ExecutionServiceId
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus

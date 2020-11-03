@@ -49,7 +49,7 @@ object RawlsApiService {
     import DefaultJsonProtocol._
     RejectionHandler.default.mapRejectionResponse {
       case res @ HttpResponse(status, _, ent: HttpEntity.Strict, _) =>
-        res.copy(entity = HttpEntity(ContentTypes.`application/json`, Map(status.toString -> ent.data.utf8String).toJson.toString))
+        res.withEntity(entity = HttpEntity(ContentTypes.`application/json`, Map(status.toString -> ent.data.utf8String).toJson.toString))
     }
   }
 }
@@ -88,7 +88,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   }
 
   def apiRoutes =
-    options { complete(OK) } ~
+    options(complete(OK)) ~
     withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
       concatenatedRoutes
     }
@@ -97,7 +97,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
     swaggerRoutes ~
     versionRoutes ~
     statusRoute ~
-    pathPrefix("api") { apiRoutes }
+    pathPrefix("api")(apiRoutes)
   }
 
   // basis for logRequestResult lifted from http://stackoverflow.com/questions/32475471/how-does-one-log-akka-http-client-requests

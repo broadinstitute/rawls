@@ -4,7 +4,7 @@ import java.util.UUID
 
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
-import nl.grons.metrics.scala.{Counter, DefaultInstrumented, MetricName}
+import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import slick.basic.DatabaseConfig
 import slick.jdbc.MySQLProfile.api._

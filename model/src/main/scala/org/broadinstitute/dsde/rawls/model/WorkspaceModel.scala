@@ -3,10 +3,10 @@ package org.broadinstitute.dsde.rawls.model
 import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
-
+import cats.implicits._
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-import com.netaporter.uri.Uri.parse
+import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
@@ -48,8 +48,6 @@ case class WorkspaceName(
 case class AttributeName(
                           namespace: String,
                           name: String) extends Ordered[AttributeName] {
-  // enable implicit ordering for sorting
-  import scala.math.Ordered.orderingToOrdered
   def compare(that: AttributeName): Int = (this.namespace, this.name) compare (that.namespace, that.name)
   def equalsIgnoreCase(that: AttributeName): Boolean = (this.namespace.equalsIgnoreCase(that.namespace) && this.name.equalsIgnoreCase(that.name))
 }
@@ -280,8 +278,8 @@ object MethodRepoMethod {
 
   def fromUri(uri: String): MethodRepoMethod = {
     (for {
-      parsedUri <- Try(parse(uri)).toOption
-      repoName  <- parsedUri.scheme
+      parsedUri <- Uri.parseOption(uri)
+      repoName  <- parsedUri.schemeOption
       repo      <- MethodRepository.withName(repoName)
     } yield {
       repo
@@ -324,12 +322,12 @@ object AgoraMethod {
   def apply(uri: String): AgoraMethod = {
 
     (for {
-      parsedUri <- Try(parse(uri)).toOption
-      namespace <- parsedUri.host // parser does not URL-decode host
-      parts     <- Option(parsedUri.pathParts)
-      name      <- Option(parts.head.part) // parser does URL-decode path parts
-      version   <- Try(parts(1).part.toInt).toOption // encoding does not apply to ints
-      result    <- if (parts.size == 2) AgoraMethod(URLDecoder.decode(namespace, UTF_8.name), name, version).validate else None
+      parsedUri <- Url.parseOption(uri)
+      namespace <- parsedUri.hostOption // parser does not URL-decode host
+      parts     <- parsedUri.path.toAbsolute.parts.toNev
+      name      <- Option(parts.head) // parser does URL-decode path parts
+      version   <- Try(parts.toVector(1).toInt).toOption // encoding does not apply to ints
+      result    <- if (parts.size == 2) AgoraMethod(URLDecoder.decode(namespace.value, UTF_8.name), name, version).validate else None
     } yield {
       result
     }).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$uri\'"))
@@ -372,11 +370,10 @@ object DockstoreMethod {
   def apply(uri: String): DockstoreMethod = {
 
     (for {
-      parsedUri <- Try(parse(uri)).toOption
-      path      <- parsedUri.host // parser does not URL-decode host
-      parts     <- Option(parsedUri.pathParts)
-      version   <- Try(parts.head.part).toOption // parser does URL-decode path parts
-      result    <- if (parts.size == 1) DockstoreMethod(URLDecoder.decode(path, UTF_8.name), version).validate else None
+      parsedUri <- Url.parseOption(uri)
+      host      <- parsedUri.hostOption // parser does not URL-decode host
+      parts     <- parsedUri.path.toAbsolute.parts.toNev
+      result    <- if (parts.size == 1) DockstoreMethod(URLDecoder.decode(host.value, UTF_8.name), parts.head).validate else None
     } yield {
       result
     }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))

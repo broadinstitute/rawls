@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import java.util.UUID
 
-import nl.grons.metrics.scala.Counter
+import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus

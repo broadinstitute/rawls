@@ -41,13 +41,13 @@ trait GooglePubSubDAO {
 
   def deleteSubscription(subscriptionName: String): Future[Boolean]
 
-  def publishMessages(topicName: String, messages: Seq[MessageRequest]): Future[Unit]
+  def publishMessages(topicName: String, messages: scala.collection.immutable.Seq[MessageRequest]): Future[Unit]
 
-  def acknowledgeMessages(subscriptionName: String, messages: Seq[PubSubMessage]): Future[Unit]
+  def acknowledgeMessages(subscriptionName: String, messages: scala.collection.immutable.Seq[PubSubMessage]): Future[Unit]
 
-  def acknowledgeMessagesById(subscriptionName: String, ackIds: Seq[String]): Future[Unit]
+  def acknowledgeMessagesById(subscriptionName: String, ackIds: scala.collection.immutable.Seq[String]): Future[Unit]
 
-  def pullMessages(subscriptionName: String, maxMessages: Int): Future[Seq[PubSubMessage]]
+  def pullMessages(subscriptionName: String, maxMessages: Int): Future[scala.collection.immutable.Seq[PubSubMessage]]
 
   def withMessage(subscriptionName: String)(op: (String) => Future[AckStatus]): Future[HandledStatus] = {
     withMessages(subscriptionName, 1) {
@@ -56,7 +56,7 @@ trait GooglePubSubDAO {
     }
   }
 
-  def withMessages(subscriptionName: String, maxMessages: Int)(op: (Seq[String]) => Future[AckStatus]): Future[HandledStatus] = {
+  def withMessages(subscriptionName: String, maxMessages: Int)(op: (scala.collection.immutable.Seq[String]) => Future[AckStatus]): Future[HandledStatus] = {
     pullMessages(subscriptionName, maxMessages) flatMap {
       case Seq() => Future.successful(NoMessage)
       case messages => op(messages.map(msg => msg.contents)) flatMap {

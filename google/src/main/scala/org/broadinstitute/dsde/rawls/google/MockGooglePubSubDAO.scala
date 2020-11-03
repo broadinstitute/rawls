@@ -36,18 +36,18 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
     Future.successful(topics.size != initialCount)
   }
 
-  override def pullMessages(subscriptionName: String, maxMessages: Int): Future[Seq[PubSubMessage]] = Future {
+  override def pullMessages(subscriptionName: String, maxMessages: Int): Future[scala.collection.immutable.Seq[PubSubMessage]] = Future {
     val subscription = subscriptionsByName.getOrElse(subscriptionName, throw new RawlsException(s"no subscription named $subscriptionName"))
     (0 until maxMessages).map(_ => Option(subscription.queue.poll())).collect {
       case Some(message) => PubSubMessage(UUID.randomUUID().toString, message.text, message.attributes)
     }
   }
 
-  override def acknowledgeMessages(subscriptionName: String, messages: Seq[PubSubMessage]): Future[Unit] = Future.successful(messages.foreach(m => acks.add(m.ackId)))
+  override def acknowledgeMessages(subscriptionName: String, messages: scala.collection.immutable.Seq[PubSubMessage]): Future[Unit] = Future.successful(messages.foreach(m => acks.add(m.ackId)))
 
-  override def acknowledgeMessagesById(subscriptionName: String, ackIds: Seq[String]): Future[Unit] = Future.successful(ackIds.foreach(acks.add))
+  override def acknowledgeMessagesById(subscriptionName: String, ackIds: scala.collection.immutable.Seq[String]): Future[Unit] = Future.successful(ackIds.foreach(acks.add))
 
-  override def publishMessages(topicName: String, messages: Seq[MessageRequest]): Future[Unit] = Future {
+  override def publishMessages(topicName: String, messages: scala.collection.immutable.Seq[MessageRequest]): Future[Unit] = Future {
     val subscriptions = topics.getOrElse(topicName, throw new RawlsException(s"no topic named $topicName"))
     messages.foreach(message => logMessage(topicName, message.text))
     for {

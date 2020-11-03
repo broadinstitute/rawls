@@ -13,14 +13,16 @@ import scala.concurrent.duration._
 import akka.http.scaladsl.testkit.RouteTestTimeout
 import akka.http.scaladsl.model.headers.Location
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import akka.http.scaladsl.unmarshalling.Unmarshal
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.makeBadWorkflowDescription
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.scalatest.concurrent.ScalaFutures
 
 
 /**
  * Created by dvoet on 4/24/15.
  */
-class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent {
+class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent with ScalaFutures {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   override implicit val routeTestTimeout = RouteTestTimeout(500.seconds)
@@ -35,7 +37,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   mockCromwellSwaggerClient.workflowDescriptions += (badWdlFromMockServer -> badWdlFromMockServerDescription)
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+    val apiService = TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {
@@ -829,13 +831,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   }
 
   it should "return 400 on copy Dockstore method configuration to Agora" in withTestDataApiServices { services =>
-    Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.dockstoreMethodConfigName))) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+    Post(s"/api${copyToMethodRepo}", httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.dockstoreMethodConfigName))) ~>
+      services.route ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
         }
-        assert(response.entity.toString.contains("Action not supported for method repo"))
+        val responseString = Unmarshal(response.entity).to[String].futureValue
+        assert(responseString.contains("Action not supported for method repo"))
       }
   }
 
@@ -1014,28 +1017,30 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
   }
 
   it should "return 400 when generating a method config template from an invalid method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/template", httpJson(AgoraMethod("dsde","bad_wdl",1))) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+    Post("/api/methodconfigs/template", httpJson(AgoraMethod("dsde","bad_wdl",1))) ~>
+      sealRoute(services.route) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
-        assert(response.entity.toString.contains(
+        val responseString = Unmarshal(response.entity).to[String].futureValue
+        assert(responseString.contains(
           "ERROR: Finished parsing without consuming all tokens."
         ))
-        assert(response.entity.toString.contains(
+        assert(responseString.contains(
           "Bad syntax workflow returned from Agora mock server"
         ))
       }
   }
 
   it should "return 400 getting method inputs and outputs from an invalid method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/inputsOutputs", httpJson(AgoraMethod("dsde","bad_wdl",1))) ~>
-      sealRoute(services.methodConfigRoutes) ~>
+    Post("/api/methodconfigs/inputsOutputs", httpJson(AgoraMethod("dsde","bad_wdl",1))) ~>
+      sealRoute(services.route) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
-        assert(response.entity.toString.contains(
+        val responseString = Unmarshal(response.entity).to[String].futureValue
+        assert(responseString.contains(
           "ERROR: Finished parsing without consuming all tokens."
         ))
-        assert(response.entity.toString.contains(
+        assert(responseString.contains(
           "Bad syntax workflow returned from Agora mock server"
         ))
       }
