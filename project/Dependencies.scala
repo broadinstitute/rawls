@@ -7,7 +7,7 @@ object Dependencies {
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
-  val workbenchGoogle2V = "0.11-8d09185"
+  val workbenchGoogle2V = "0.14-aa84412"
 
   val cromwellVersion = "40-2754783"
 
@@ -66,7 +66,7 @@ object Dependencies {
   val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
-  val metricsScala: ModuleID =       "nl.grons"              %% "metrics-scala"    % "3.5.6"
+  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.9"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.2"
@@ -95,7 +95,7 @@ object Dependencies {
 
   val workbenchModelV  = "0.14-65bba14"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
-  val workbenchGoogleV = "0.21-890a74f"
+  val workbenchGoogleV = "0.21-64a7b29"
   val workbenchGoogle: ModuleID =       workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV)
   val workbenchGoogleMocks: ModuleID =  workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests")
   val workbenchGoogle2: ModuleID =      workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V)

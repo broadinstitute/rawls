@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.metrics
 
 import com.codahale.metrics.{Gauge => DropwizardGauge}
-import nl.grons.metrics.scala._
+import nl.grons.metrics4.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
 
 import scala.collection.JavaConverters._
