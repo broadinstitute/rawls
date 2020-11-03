@@ -16,6 +16,7 @@ object SamResourceTypeNames {
   val workspace = SamResourceTypeName("workspace")
   val workflowCollection = SamResourceTypeName("workflow-collection")
   val servicePerimeter = SamResourceTypeName("service-perimeter")
+  val googleProject = SamResourceTypeName("google-project")
 }
 
 /*
@@ -117,8 +118,8 @@ case class SamPolicySyncStatus(lastSyncDate: String, email: WorkbenchEmail)
 
 case class SamCreateResourceResponse(resourceTypeName: String, resourceId: String, authDomain: Set[String], accessPolicies: Set[SamCreateResourcePolicyResponse])
 case class SamCreateResourcePolicyResponse(id: SamCreateResourceAccessPolicyIdResponse, email: String)
-case class SamCreateResourceAccessPolicyIdResponse(accessPolicyName: String, resource: SamCreateResourceAccessPolicyIdResourceIdResponse)
-case class SamCreateResourceAccessPolicyIdResourceIdResponse(resourceId: String, resourceTypeName: String)
+case class SamCreateResourceAccessPolicyIdResponse(accessPolicyName: String, resource: SamFullyQualifiesResourceId)
+case class SamFullyQualifiesResourceId(resourceId: String, resourceTypeName: String)
 
 
 object SamModelJsonSupport extends JsonSupport {
@@ -132,7 +133,7 @@ object SamModelJsonSupport extends JsonSupport {
   implicit val SamResourceIdWithPolicyNameFormat = jsonFormat5(SamResourceIdWithPolicyName)
   implicit val SamPolicySyncStatusFormat = jsonFormat2(SamPolicySyncStatus)
 
-  implicit val SamCreateResourceAccessPolicyIdResourceIdResponseFormat = jsonFormat2(SamCreateResourceAccessPolicyIdResourceIdResponse)
+  implicit val SamFullyQualifiesResourceIdFormat = jsonFormat2(SamFullyQualifiesResourceId)
   implicit val SamCreateResourceAccessPolicyIdResponseFormat = jsonFormat2(SamCreateResourceAccessPolicyIdResponse)
   implicit val samCreateResourcePolicyResponseFormat = jsonFormat2(SamCreateResourcePolicyResponse)
   implicit val SamCreateResourceResponseFormat = jsonFormat4(SamCreateResourceResponse)

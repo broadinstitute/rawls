@@ -70,9 +70,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * with. For that reason, the maxResults parameter should be removed in favor of extracting the creation of Storage
     * objects from the service implementation to enable test doubles to be injected.
     *
-    * @param googleProject  the name of the project that owns the bucket
-    * @param bucketName the name of the bucket to query
-    * @param maxResults (optional) the page size to use when fetching objects
+    * @param googleProject the name of the project that owns the bucket
+    * @param bucketName    the name of the bucket to query
+    * @param maxResults    (optional) the page size to use when fetching objects
     * @return the size in bytes of the data stored in the bucket
     */
   def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long] = None): Future[BigInt]
@@ -84,7 +84,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * is because this method is used for health monitoring, and we want health checks to use a
     * different execution context (thread pool) than user-facing operations.
     *
-    * @param bucketName the bucket name
+    * @param bucketName       the bucket name
     * @param executionContext the execution context to use for aysnc operations
     * @return optional Google bucket
     */
@@ -115,10 +115,15 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return sequence of RawlsBillingAccounts
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
+
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
+
   def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
+
   def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]]
+
   def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit]
+
   def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
 
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
@@ -138,21 +143,24 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def toGoogleGroupName(groupName: RawlsGroupName): String
 
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
+
   def getBucketServiceAccountCredential: Credential
+
   def getServiceAccountRawlsUser(): Future[RawlsUser]
+
   def getServiceAccountUserInfo(): Future[UserInfo]
 
   def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions]
 
   /**
-   * The project creation process is now mostly handled by Deployment Manager.
-   *
-   * - First, we call Deployment Manager, telling it to kick off its template and create the new project. This gives us back
-   * an operation that needs to be polled.
-   *
-   * - Polling is handled by CreatingBillingProjectMonitor. Once the deployment is completed, CBPM deletes the deployment, as
-   * there is a per-project limit on number of deployments, and then marks the project as fully created.
-   */
+    * The project creation process is now mostly handled by Deployment Manager.
+    *
+    * - First, we call Deployment Manager, telling it to kick off its template and create the new project. This gives us back
+    * an operation that needs to be polled.
+    *
+    * - Polling is handled by CreatingBillingProjectMonitor. Once the deployment is completed, CBPM deletes the deployment, as
+    * there is a per-project limit on number of deployments, and then marks the project as fully created.
+    */
   def createProject(googleProject: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord]
 
   /**
@@ -162,6 +170,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   /**
     * Removes the IAM policies from the project's existing policies
+    *
     * @return true if the policy was actually changed
     */
   def removePolicyBindings(googleProject: GoogleProjectId, policiesToRemove: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(googleProject) { existingPolicies =>
@@ -177,6 +186,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   /**
     * Adds the IAM policies to the project's existing policies
+    *
     * @return true if the policy was actually changed
     */
   def addPolicyBindings(googleProject: GoogleProjectId, policiesToAdd: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(googleProject) { existingPolicies =>
@@ -187,7 +197,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   /**
     * Internal function to update project IAM bindings.
-    * @param googleProject google project name
+    *
+    * @param googleProject  google project name
     * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
     *                       which will be handled appropriately when sent to google.
     * @return true if google was called to update policies, false otherwise
@@ -203,9 +214,11 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def grantReadAccess(bucketName: String, readers: Set[WorkbenchEmail]): Future[String]
 
   def pollOperation(operationId: OperationId): Future[OperationStatus]
+
   def deleteProject(googleProject: GoogleProjectId): Future[Unit]
 
-  def getAccessTokenUsingJson(saKey: String) : Future[String]
+  def getAccessTokenUsingJson(saKey: String): Future[String]
+
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]
 
   def labelSafeString(s: String, prefix: String = "fc-"): String = {
@@ -214,7 +227,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   }
 
   def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit]
+
   def getFolderId(folderName: String): Future[Option[String]]
+
+  def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean]
 }
 
 object GoogleApiTypes {

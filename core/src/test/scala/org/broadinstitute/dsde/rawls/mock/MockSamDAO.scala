@@ -26,7 +26,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
         SamCreateResourcePolicyResponse(
           SamCreateResourceAccessPolicyIdResponse(
             policyName.value,
-            SamCreateResourceAccessPolicyIdResourceIdResponse(resourceId, resourceTypeName.value)
+            SamFullyQualifiesResourceId(resourceId, resourceTypeName.value)
           ),
           "fake-email@testing.org"
         )

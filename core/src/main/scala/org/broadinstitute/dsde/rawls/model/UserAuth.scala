@@ -48,6 +48,7 @@ case class RawlsBillingProject(projectName: RawlsBillingProjectName, status: Cre
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
 }
+case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName], servicePerimeter: Option[ServicePerimeterName], invalidBillingAccount: Boolean, role: ProjectRoles.ProjectRole)
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
@@ -171,6 +172,8 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
 
   implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
+
+  implicit val RawlsBillingProjectResponseFormat = jsonFormat5(RawlsBillingProjectResponse)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
