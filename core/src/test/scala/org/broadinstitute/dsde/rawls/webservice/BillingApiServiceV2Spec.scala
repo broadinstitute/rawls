@@ -1,26 +1,23 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
-
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, RawlsBillingProjectRecord, ReadAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import akka.http.scaladsl.model.StatusCodes
-import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
+import org.scalatest.mockito.MockitoSugar
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.{ExecutionContext, Future}
-import org.mockito.Mockito._
-import org.mockito.ArgumentMatchers._
-import org.scalatestplus.mockito.MockitoSugar
 
-class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
+class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
@@ -51,19 +48,19 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     runAndWait(rawlsBillingProjectQuery.create(projectWithOwner))
   }
 
-  "BillingApiService" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
+  "BillingApiServiceV2" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
-    Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
+    Put(s"/billing/v2/${project.projectName.value}/members/user/${testData.userWriter.userEmail.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
       }
 
-    Put(s"/billing/${project.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
+    Put(s"/billing/v2/${project.projectName.value}/members/owner/${testData.userWriter.userEmail.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -76,24 +73,19 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
 
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
-    withStatsD {
-      Put(s"/billing/${project.projectName.value}/user/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.Forbidden) {
-            status
-          }
+    Put(s"/billing/v2/${project.projectName.value}/members/user/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
         }
+      }
 
-      Put(s"/billing/${project.projectName.value}/owner/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.Forbidden) {
-            status
-          }
+    Put(s"/billing/v2/${project.projectName.value}/members/owner/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
         }
-    } { capturedMetrics =>
-      val expected = expectedHttpRequestMetrics("put", s"billing.redacted.redacted.redacted", StatusCodes.Forbidden.intValue, 2)
-      assertSubsetOf(expected, capturedMetrics)
-    }
+      }
   }
 
   it should "return 400 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
@@ -102,8 +94,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     when(services.samDAO.addUserToPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourcePolicyName], ArgumentMatchers.eq("nobody"), any[UserInfo])).thenReturn(
       Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "user not found"))))
 
-    Put(s"/billing/${project.projectName.value}/user/nobody") ~>
-      sealRoute(services.billingRoutes) ~>
+    Put(s"/billing/v2/${project.projectName.value}/members/user/nobody") ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -114,8 +106,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   it should "return 403 when adding a user to a nonexistent project" in withTestDataApiServices { services =>
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq("missing_project"), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
-    Put(s"/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
+    Put(s"/billing/v2/missing_project/members/user/${testData.userOwner.userEmail.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -126,25 +118,20 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
-    withStatsD {
-      Delete(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
+    Delete(s"/billing/v2/${project.projectName.value}/members/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
         }
-    } { capturedMetrics =>
-      val expected = expectedHttpRequestMetrics("delete", s"billing.redacted.redacted.redacted", StatusCodes.OK.intValue, 1)
-      assertSubsetOf(expected, capturedMetrics)
-    }
+      }
   }
 
   it should "return 403 when removing a user from a non-owned billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("no_access")
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
-    Delete(s"/billing/${project.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
+    Delete(s"/billing/v2/${project.projectName.value}/members/owner/${testData.userWriter.userEmail.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -156,8 +143,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     val project = billingProjectFromName("test_good")
     when(services.samDAO.removeUserFromPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourcePolicyName], ArgumentMatchers.eq("nobody"), any[UserInfo])).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ""))))
 
-    Delete(s"/billing/${project.projectName.value}/user/nobody") ~>
-      sealRoute(services.billingRoutes) ~>
+    Delete(s"/billing/v2/${project.projectName.value}/members/user/nobody") ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -167,8 +154,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
 
   it should "return 403 when removing a user from a nonexistent billing project" in withTestDataApiServices { services =>
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq("missing_project"), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
-    Delete(s"/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
+    Delete(s"/billing/v2/missing_project/members/user/${testData.userOwner.userEmail.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -181,8 +168,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
 
     mockPositiveBillingProjectCreation(services, projectName)
 
-    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -199,48 +186,19 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "rollback billing project inserts when there is a google error" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    withApiServices(dataSource, new MockGoogleServicesDAO("test") {
-      override def createProject(projectName: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
-        Future.failed(new Exception("test exception"))
-      }
-    }) { services =>
-      val projectName = RawlsBillingProjectName("test_good2")
-
-      Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
-        sealRoute(services.billingRoutes) ~>
-        check {
-          assertResult(StatusCodes.InternalServerError) {
-            status
-          }
-          runAndWait(rawlsBillingProjectQuery.load(projectName)) map { p => fail("did not rollback project inserts: " + p) }
-        }
-    }
-  }
-
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withTestDataApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None, None, None, None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None, None, None, None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
-        assertResult(StatusCodes.BadRequest) {
-          status
-        }
-      }
-  }
-
-  it should "return 403 when creating a project with inaccessible to user billing account" in withTestDataApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), RawlsBillingAccountName("this does not exist"), None, None, None, None)) ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.BadRequest, responseAs[String]) {
           status
         }
       }
   }
 
   it should "return 400 when creating a project with enableFlowLogs but not highSecurityNetwork" in withTestDataApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), enableFlowLogs = Some(true), None, None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), enableFlowLogs = Some(true), None, None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -249,8 +207,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with privateIpGoogleAccess but not highSecurityNetwork" in withTestDataApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), None, privateIpGoogleAccess = Some(true), None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), None, privateIpGoogleAccess = Some(true), None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -259,19 +217,26 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   }
 
   private def mockPositiveBillingProjectCreation(services: TestApiService, projectName: RawlsBillingProjectName): Unit = {
-    when(services.samDAO.createResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), any[UserInfo])).thenReturn(Future.successful(()))
-    when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.workspaceCreator), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator))), any[UserInfo])).thenReturn(Future.successful(()))
-    when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser))), any[UserInfo])).thenReturn(Future.successful(()))
-    when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
-    when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser))).thenReturn(Future.successful(Map(WorkbenchEmail("can-compute-policy@google.group") -> Seq())))
+    val policies = services.userServiceConstructor(userInfo).defaultBillingProjectPolicies
+    when(services.samDAO.createResourceFull(
+      ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+      ArgumentMatchers.eq(projectName.value),
+      ArgumentMatchers.eq(policies),
+      ArgumentMatchers.eq(Set.empty),
+      any[UserInfo])).
+      thenReturn(Future.successful(SamCreateResourceResponse(
+        SamResourceTypeNames.billingProject.value,
+        projectName.value,
+        Set.empty,
+        policies.keySet.map(p => SamCreateResourcePolicyResponse(SamCreateResourceAccessPolicyIdResponse(p.value, SamFullyQualifiesResourceId(projectName.value, SamResourceTypeNames.billingProject.value)), s"${p.value}@foo.com")))))
   }
 
   it should "return 201 when creating a project with a highSecurityNetwork" in withTestDataApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
     mockPositiveBillingProjectCreation(services, projectName)
 
-    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), None, None, None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), None, None, None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -283,8 +248,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     val projectName = RawlsBillingProjectName("test_good")
     mockPositiveBillingProjectCreation(services, projectName)
 
-    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), enableFlowLogs = Some(true), None, None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), enableFlowLogs = Some(true), None, None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -296,8 +261,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     val projectName = RawlsBillingProjectName("test_good")
     mockPositiveBillingProjectCreation(services, projectName)
 
-    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), None, privateIpGoogleAccess = Some(true), None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), None, privateIpGoogleAccess = Some(true), None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -309,8 +274,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     val projectName = RawlsBillingProjectName("test_good")
     mockPositiveBillingProjectCreation(services, projectName)
 
-    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), enableFlowLogs = Some(true), privateIpGoogleAccess = Some(true), None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), enableFlowLogs = Some(true), privateIpGoogleAccess = Some(true), None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -327,8 +292,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
         model.SamPolicyWithNameAndEmail(SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set.empty), WorkbenchEmail(""))
       )))
 
-    Get(s"/billing/${project.projectName.value}/members") ~>
-      sealRoute(services.billingRoutes) ~>
+    Get(s"/billing/v2/${project.projectName.value}/members") ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -344,29 +309,12 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
 
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
-    Get(s"/billing/${project.projectName.value}/members") ~>
-      sealRoute(services.billingRoutes) ~>
+    Get(s"/billing/v2/${project.projectName.value}/members") ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
         }
       }
   }
-
-  it should "return 202 when adding a billing project to a service perimeter with all the right permissions" in withTestDataApiServices { services =>
-    val projectName = testData.billingProject.projectName
-    val servicePerimeterName = ServicePerimeterName("accessPolicies/123/servicePerimeters/service_perimeter")
-    val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
-
-    when(services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, encodedServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
-
-    Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
-      sealRoute(services.servicePerimeterRoutes) ~>
-      check {
-        assertResult(StatusCodes.Accepted) {
-          status
-        }
-      }
-  }
-
 }

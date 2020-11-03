@@ -36,10 +36,12 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
               }
             }
         } ~
-          path("members") {
-            get {
-              complete {
-                userServiceConstructor(userInfo).GetBillingProjectMembers(RawlsBillingProjectName(projectId))
+          pathPrefix("members") {
+            pathEnd {
+              get {
+                complete {
+                  userServiceConstructor(userInfo).GetBillingProjectMembers(RawlsBillingProjectName(projectId))
+                }
               }
             } ~
               // these routes are for adding/removing users from projects

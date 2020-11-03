@@ -103,7 +103,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
   }
 
   //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  trait ApiServices extends AdminApiService with BillingApiService with EntityApiService
+  trait ApiServices extends AdminApiService with BillingApiService with BillingApiServiceV2 with EntityApiService
     with NotificationsApiService with RawlsApiService with SnapshotApiService with StatusApiService with UserApiService with WorkspaceApiService {
 
     val dataSource: SlickDataSource
@@ -237,7 +237,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     // for metrics testing
     val sealedInstrumentedRoutes: Route = instrumentRequest {
-      sealRoute(adminRoutes ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
+      sealRoute(adminRoutes ~ billingRoutes ~ billingRoutesV2 ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
         submissionRoutes ~ userRoutes ~ workspaceRoutes)
     }
   }

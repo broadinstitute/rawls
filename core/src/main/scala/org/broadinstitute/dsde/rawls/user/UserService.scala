@@ -490,14 +490,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def createBillingProjectInternal(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
-    def defaultBillingProjectPolicies = {
-      Map(
-        SamBillingProjectPolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamProjectRoles.owner)),
-        SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator))
-      )
-    }
+  def defaultBillingProjectPolicies = {
+    Map(
+      SamBillingProjectPolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamProjectRoles.owner)),
+      SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator))
+    )
+  }
 
+  private def createBillingProjectInternal(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
       maybeProject <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(createProjectRequest.projectName)
