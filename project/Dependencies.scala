@@ -79,12 +79,12 @@ object Dependencies {
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
-  val cats: ModuleID =            "org.typelevel"                 %% "cats"                 % "0.9.0"
+  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.2.0"
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
-  val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "0.5.3"
+  val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-3-4"          % "3.2.2.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
@@ -103,10 +103,8 @@ object Dependencies {
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.111.0-alpha" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
-  val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
-  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.9.0"
-  val circeFS2: ModuleID = "io.circe" %% "circe-fs2" % "0.13.0"
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.13.1"
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
@@ -210,7 +208,6 @@ object Dependencies {
     swaggerUI,
     webjarsLocator,
     circeYAML,
-    circeFS2,
     commonsJEXL,
     cromwellClient,
     cats,
@@ -221,7 +218,6 @@ object Dependencies {
     akkaHttpTestKit,
     mockserverNetty,
     mockito,
-    log4cats,
     workbenchModel,
     workbenchGoogle,
     googleStorageLocal,

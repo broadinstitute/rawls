@@ -6,7 +6,7 @@ import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-import com.netaporter.uri.Uri.parse
+import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
@@ -280,8 +280,8 @@ object MethodRepoMethod {
 
   def fromUri(uri: String): MethodRepoMethod = {
     (for {
-      parsedUri <- Try(parse(uri)).toOption
-      repoName  <- parsedUri.scheme
+      parsedUri <- Uri.parseOption(uri)
+      repoName  <- parsedUri.schemeOption
       repo      <- MethodRepository.withName(repoName)
     } yield {
       repo
@@ -324,10 +324,10 @@ object AgoraMethod {
   def apply(uri: String): AgoraMethod = {
 
     (for {
-      parsedUri <- Try(parse(uri)).toOption
-      namespace <- parsedUri.host // parser does not URL-decode host
-      parts     <- Option(parsedUri.pathParts)
-      name      <- Option(parts.head.part) // parser does URL-decode path parts
+      parsedUri <- Url.parseOption(uri)
+      namespace <- parsedUri.hostOption // parser does not URL-decode host
+      parts     <- Option(parsedUri.path.toAbsolute.parts)
+      name      <- Option(parts.toAbsolute.parts.head.part) // parser does URL-decode path parts
       version   <- Try(parts(1).part.toInt).toOption // encoding does not apply to ints
       result    <- if (parts.size == 2) AgoraMethod(URLDecoder.decode(namespace, UTF_8.name), name, version).validate else None
     } yield {
