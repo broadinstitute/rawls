@@ -90,12 +90,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     "no-access" -> WorkspaceAccessLevels.NoAccess
   )
 
-  private def getAccessLevelOrDieTrying(userId: String) = {
-    mockPermissions get userId getOrElse {
-      throw new RuntimeException(s"Need to add ${userId} to MockGoogleServicesDAO.mockPermissions map")
-    }
-  }
-
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
   override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span =  null
@@ -224,4 +218,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def addProjectToFolder(googleProject: GoogleProjectId, folderName: String): Future[Unit] = Future.successful(())
 
   override def getFolderId(folderName: String): Future[Option[String]] = Future.successful(Option("folders/1234567"))
+
+  override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] = Future.successful(true)
+
 }

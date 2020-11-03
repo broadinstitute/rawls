@@ -105,6 +105,8 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]] = Future.successful(Set.empty)
 
   override def getAccessInstructions(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Option[String]] = ???
+
+  override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[SamFullyQualifiesResourceId]] = Future.successful(Seq.empty)
 }
 
 class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext) extends MockSamDAO(dataSource) {

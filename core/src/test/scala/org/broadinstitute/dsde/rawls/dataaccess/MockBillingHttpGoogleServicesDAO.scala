@@ -7,6 +7,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.cloudbilling.model.BillingAccount
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -100,10 +101,11 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
-  protected override def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
+  protected override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
     billingAccountId match {
-      case "billingAccounts/firecloudHasThisOne" => Future.successful(true)
-      case "billingAccounts/firecloudDoesntHaveThisOne" => Future.successful(false)
+      case RawlsBillingAccountName("billingAccounts/firecloudHasThisOne") => Future.successful(true)
+      case RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne") => Future.successful(false)
+      case _ => throw new RawlsException(s"unexpected billingAccountId $billingAccountId")
     }
   }
 }
