@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -9,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -16,6 +19,7 @@ import org.scalatest.mockito.MockitoSugar
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Random
 
 class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
@@ -36,20 +40,18 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     }
   }
 
-  def withTestDataApiServices[T](testCode: TestApiService =>  T): T = {
-    withDefaultTestDatabase { dataSource: SlickDataSource =>
+  def withEmptyDatabaseAndApiServices[T](testCode: TestApiService =>  T): T = {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
 
-  def createProject(project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
-    val projectWithOwner = project.copy()
-
-    runAndWait(rawlsBillingProjectQuery.create(projectWithOwner))
+  def createProject(projectName: String): RawlsBillingProject = {
+    runAndWait(rawlsBillingProjectQuery.create(billingProjectFromName(projectName)))
   }
 
-  "BillingApiServiceV2" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
+  "PUT /billing/v2/{projectName}/members/user/{email}" should "return 200 when adding a user to a billing project" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("new_project")
 
     Put(s"/billing/v2/${project.projectName.value}/members/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutesV2) ~>
@@ -68,8 +70,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 403 when adding a user to a non-owned billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("no_access")
+  it should "return 403 when adding a user to a non-owned billing project" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("no_access")
 
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
@@ -88,8 +90,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 400 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("no_access")
+  it should "return 400 when adding a nonexistent user to a billing project" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("no_access")
 
     when(services.samDAO.addUserToPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourcePolicyName], ArgumentMatchers.eq("nobody"), any[UserInfo])).thenReturn(
       Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "user not found"))))
@@ -103,7 +105,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 403 when adding a user to a nonexistent project" in withTestDataApiServices { services =>
+  it should "return 403 when adding a user to a nonexistent project" in withEmptyDatabaseAndApiServices { services =>
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq("missing_project"), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
     Put(s"/billing/v2/missing_project/members/user/${testData.userOwner.userEmail.value}") ~>
@@ -115,8 +117,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
+  "DELETE /billing/v2/{projectName}/members/user/{email}" should "return 200 when removing a user from a billing project" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("new_project")
 
     Delete(s"/billing/v2/${project.projectName.value}/members/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
       check {
@@ -126,8 +128,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 403 when removing a user from a non-owned billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("no_access")
+  it should "return 403 when removing a user from a non-owned billing project" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("no_access")
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
     Delete(s"/billing/v2/${project.projectName.value}/members/owner/${testData.userWriter.userEmail.value}") ~>
@@ -139,8 +141,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 400 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("test_good")
+  it should "return 400 when removing a nonexistent user from a billing project" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("test_good")
     when(services.samDAO.removeUserFromPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourcePolicyName], ArgumentMatchers.eq("nobody"), any[UserInfo])).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ""))))
 
     Delete(s"/billing/v2/${project.projectName.value}/members/user/nobody") ~>
@@ -152,7 +154,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 403 when removing a user from a nonexistent billing project" in withTestDataApiServices { services =>
+  it should "return 403 when removing a user from a nonexistent billing project" in withEmptyDatabaseAndApiServices { services =>
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq("missing_project"), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
     Delete(s"/billing/v2/missing_project/members/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.billingRoutesV2) ~>
@@ -163,7 +165,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 204 when creating a project with accessible billing account" in withTestDataApiServices { services =>
+  "POST /billing/v2" should "return 204 when creating a project with accessible billing account" in withEmptyDatabaseAndApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
 
     mockPositiveBillingProjectCreation(services, projectName)
@@ -186,7 +188,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 400 when creating a project with inaccessible to firecloud billing account" in withTestDataApiServices { services =>
+  it should "return 400 when creating a project with inaccessible to firecloud billing account" in withEmptyDatabaseAndApiServices { services =>
     Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None, None, None, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
@@ -196,7 +198,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 400 when creating a project with enableFlowLogs but not highSecurityNetwork" in withTestDataApiServices { services =>
+  it should "return 400 when creating a project with enableFlowLogs but not highSecurityNetwork" in withEmptyDatabaseAndApiServices { services =>
     Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), enableFlowLogs = Some(true), None, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
@@ -206,7 +208,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 400 when creating a project with privateIpGoogleAccess but not highSecurityNetwork" in withTestDataApiServices { services =>
+  it should "return 400 when creating a project with privateIpGoogleAccess but not highSecurityNetwork" in withEmptyDatabaseAndApiServices { services =>
     Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), None, privateIpGoogleAccess = Some(true), None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
@@ -231,7 +233,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         policies.keySet.map(p => SamCreateResourcePolicyResponse(SamCreateResourceAccessPolicyIdResponse(p.value, SamFullyQualifiesResourceId(projectName.value, SamResourceTypeNames.billingProject.value)), s"${p.value}@foo.com")))))
   }
 
-  it should "return 201 when creating a project with a highSecurityNetwork" in withTestDataApiServices { services =>
+  it should "return 201 when creating a project with a highSecurityNetwork" in withEmptyDatabaseAndApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
     mockPositiveBillingProjectCreation(services, projectName)
 
@@ -244,7 +246,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 201 when creating a project with a highSecurityNetwork and enableFlowLogs turned on" in withTestDataApiServices { services =>
+  it should "return 201 when creating a project with a highSecurityNetwork and enableFlowLogs turned on" in withEmptyDatabaseAndApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
     mockPositiveBillingProjectCreation(services, projectName)
 
@@ -257,7 +259,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 201 when creating a project with a highSecurityNetwork with privateIpGoogleAccess turned on" in withTestDataApiServices { services =>
+  it should "return 201 when creating a project with a highSecurityNetwork with privateIpGoogleAccess turned on" in withEmptyDatabaseAndApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
     mockPositiveBillingProjectCreation(services, projectName)
 
@@ -270,7 +272,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 201 when creating a project with a highSecurityNetwork with enableFlowLogs and privateIpGoogleAccess turned on" in withTestDataApiServices { services =>
+  it should "return 201 when creating a project with a highSecurityNetwork with enableFlowLogs and privateIpGoogleAccess turned on" in withEmptyDatabaseAndApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
     mockPositiveBillingProjectCreation(services, projectName)
 
@@ -283,8 +285,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 200 when listing billing project members as owner" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("test_good")
+  "GET /billing/v2/{projectName}/members" should "return 200 when listing billing project members as owner" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("test_good")
 
     when(services.samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[UserInfo])).thenReturn(Future.successful(
       Set(
@@ -304,8 +306,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 403 when listing billing project members as non-owner" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("no_access")
+  it should "return 403 when listing billing project members as non-owner" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("no_access")
 
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
@@ -315,6 +317,177 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.Forbidden) {
           status
         }
+      }
+  }
+
+  "GET /billing/v2/{projectName}" should "return 200 with owner role" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(Set(
+      SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.owner, Set.empty, Set.empty, false),
+      SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, Set.empty, Set.empty, false)
+    )))
+
+    Get(s"/billing/v2/${project.projectName.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, ProjectRoles.Owner)
+      }
+  }
+
+  it should "return 200 with user role" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(Set(
+      SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, Set.empty, Set.empty, false)
+    )))
+
+    Get(s"/billing/v2/${project.projectName.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, ProjectRoles.User)
+      }
+  }
+
+  it should "return 404 if project does not exist" in withEmptyDatabaseAndApiServices { services =>
+    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(Set.empty[SamResourceIdWithPolicyName]))
+
+    Get(s"/billing/v2/does_not_exist") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.NotFound, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 if user has no access" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(Set.empty[SamResourceIdWithPolicyName]))
+
+    Get(s"/billing/v2/${project.projectName.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.NotFound, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  "DELETE /billing/v2/{projectName}" should "return 204 - deleting google project" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    // wow there are a lot of sam calls in delete billing project
+    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, None))))
+    when(services.samDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail)).thenReturn(Future.successful("petSAJson"))
+    when(services.samDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiesResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))))
+    when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId), any[UserInfo])).thenReturn(Future.successful())
+    when(services.samDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful())
+    when(services.samDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)).thenReturn(Future.successful())
+
+    Delete(s"/billing/v2/${project.projectName.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.NoContent, responseAs[String]) {
+          status
+        }
+      }
+
+    verify(services.samDAO).deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId), any[UserInfo])
+    verify(services.samDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
+    verify(services.samDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)
+  }
+  it should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
+    when(services.samDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Seq.empty[SamFullyQualifiesResourceId]))
+    when(services.samDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful())
+
+    Delete(s"/billing/v2/${project.projectName.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.NoContent, responseAs[String]) {
+          status
+        }
+      }
+
+    verify(services.samDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
+  }
+
+  it should "return 400 if workspaces exist" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    runAndWait(workspaceQuery.save(Workspace(project.projectName.value, "workspace", UUID.randomUUID().toString, "", None, new DateTime(), new DateTime(), "", Map.empty)))
+
+    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
+    when(services.samDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Seq.empty[SamFullyQualifiesResourceId]))
+    when(services.samDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful())
+
+    Delete(s"/billing/v2/${project.projectName.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  it should "return 403 if user does not have access" in withEmptyDatabaseAndApiServices { services =>
+    val project = billingProjectFromName("no_access")
+    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(false))
+
+    Delete(s"/billing/v2/${project.projectName.value}") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  "GET /billing/v2" should "list all my projects" in withEmptyDatabaseAndApiServices { services =>
+    val projects = List.fill(10) { createProject(UUID.randomUUID().toString) }
+    val policies = projects.flatMap { p =>
+      // randomly select a policy name or none to test role mapping and no access
+      val maybeRole = Random.shuffle(List(Option(SamBillingProjectPolicyNames.workspaceCreator), Option(SamBillingProjectPolicyNames.owner), None)).head
+      maybeRole.map { role =>
+        SamResourceIdWithPolicyName(
+          p.projectName.value,
+          role,
+          Set.empty,
+          Set.empty,
+          false)
+      }
+    }.toSet
+
+    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(policies))
+
+    val expected = projects.flatMap { p =>
+      policies.find(_.resourceId == p.projectName.value).map { policy =>
+        RawlsBillingProjectResponse(
+          p.projectName,
+          p.billingAccount,
+          p.servicePerimeter,
+          p.invalidBillingAccount,
+          policy.accessPolicyName match {
+            case SamBillingProjectPolicyNames.owner => ProjectRoles.Owner
+            case SamBillingProjectPolicyNames.workspaceCreator => ProjectRoles.User
+            case _ => throw new Exception("this should not happen")
+          }
+        )
+      }
+    }
+    Get(s"/billing/v2") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+
+        responseAs[Seq[RawlsBillingProjectResponse]] should contain theSameElementsAs(expected)
       }
   }
 }

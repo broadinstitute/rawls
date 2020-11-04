@@ -507,9 +507,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case None => Future.successful(())
       }
 
-      _ <- {
-        samDAO.createResourceFull(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, defaultBillingProjectPolicies, Set.empty, userInfo)
-      }
+      _ <- samDAO.createResourceFull(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, defaultBillingProjectPolicies, Set.empty, userInfo)
 
       _ <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, CreationStatuses.Ready, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
