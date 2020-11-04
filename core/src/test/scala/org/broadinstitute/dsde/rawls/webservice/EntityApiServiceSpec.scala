@@ -36,9 +36,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   class MockSamDAOForAuthDomains(slickDataSource: SlickDataSource) extends MockSamDAO(slickDataSource) {
     val authDomains = new TrieMap[(SamResourceTypeName, String), Set[String]]()
 
-    override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[SamCreateResourceResponse] = {
+    override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiesResourceId]): Future[SamCreateResourceResponse] = {
       authDomains.put((resourceTypeName, resourceId), authDomain)
-      super.createResourceFull(resourceTypeName, resourceId, policies, authDomain, userInfo)
+      super.createResourceFull(resourceTypeName, resourceId, policies, authDomain, userInfo, parent)
     }
 
     override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[String]] = {

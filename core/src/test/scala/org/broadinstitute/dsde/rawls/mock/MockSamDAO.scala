@@ -20,7 +20,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[SamCreateResourceResponse] =
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiesResourceId]): Future[SamCreateResourceResponse] =
     Future.successful(SamCreateResourceResponse(resourceTypeName.value, resourceId, authDomain,
       policies.keys.map ( policyName =>
         SamCreateResourcePolicyResponse(
@@ -142,13 +142,13 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     }
   }
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, resourcePolicies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[SamCreateResourceResponse] = {
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, resourcePolicies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiesResourceId]): Future[SamCreateResourceResponse] = {
     // save each policy
     resourcePolicies.map { case(samResourcePolicyName, samPolicy) =>
       overwritePolicy(resourceTypeName, resourceId, samResourcePolicyName, samPolicy, userInfo)
     }
 
-    super.createResourceFull(resourceTypeName, resourceId, resourcePolicies, authDomain, userInfo)
+    super.createResourceFull(resourceTypeName, resourceId, resourcePolicies, authDomain, userInfo, parent)
   }
 
 

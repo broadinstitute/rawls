@@ -173,7 +173,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
         }
 
@@ -225,7 +225,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       ArgumentMatchers.eq(projectName.value),
       ArgumentMatchers.eq(policies),
       ArgumentMatchers.eq(Set.empty),
-      any[UserInfo])).
+      any[UserInfo],
+      ArgumentMatchers.eq(None)
+    )).
       thenReturn(Future.successful(SamCreateResourceResponse(
         SamResourceTypeNames.billingProject.value,
         projectName.value,
