@@ -1830,11 +1830,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   /**
     * takes a RawlsBillingProject and checks that Rawls has the appropriate permissions on the underlying Billing
-    * Account on Google.  Does NOT check if User has necessary permissions on the Billing Account.  Updates
-    * BillingProject to persist latest 'invalidBillingAccount' info.  Throws an exception if Rawls does not have
-    * permissions it needs.
+    * Account on Google.  Does NOT check if Terra _User_ has necessary permissions on the Billing Account.  Updates
+    * BillingProject to persist latest 'invalidBillingAccount' info.  Returns TRUE if user has right IAM access, else
+    * FALSE
     */
-  def verifyBillingAccountAccess(billingProject: RawlsBillingProject, parentSpan: Span = null): Future[Unit] = {
+  def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject, parentSpan: Span = null): Future[Boolean] = {
     val billingAccountName: RawlsBillingAccountName = billingProject.billingAccount.getOrElse(throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Billing Project ${billingProject.projectName.value} has no Billing Account associated with it")))
     for {
       hasAccess <- traceWithParent("checkBillingAccountIAM", parentSpan)(_ => gcsDAO.testDMBillingAccountAccess(billingAccountName.value))
@@ -1842,11 +1842,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("updateInvalidBillingAccountField", parentSpan)(_ => dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(updatedBillingProject)))
       }
-    } yield {
-      if (!hasAccess) {
-        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"))
-      }
-    }
+    } yield hasAccess
   }
 
   private def requireBillingAccountAccess[T](billingProjectName: String, parentSpan: Span = null)(op: => Future[T]): Future[T] = {
@@ -1855,7 +1851,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         traceDBIOWithParent("loadBillingProject", parentSpan)(_ => dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(billingProjectName)))
       }
       billingProject = maybeBillingProject.getOrElse(throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProjectName} does not exist")))
-      _ <- verifyBillingAccountAccess(billingProject, parentSpan)
+      _ <- updateAndGetBillingAccountAccess(billingProject, parentSpan).map { hasAccess =>
+        if (!hasAccess) {
+          throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"))
+        }
+      }
       result <- op
     } yield result
   }
