@@ -44,7 +44,10 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   }
 
   override def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
-    Future.successful(true)
+    if (billingAccountId == inaccessibleBillingAccountName.value)
+      Future.successful(false)
+    else
+      Future.successful(true)
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {

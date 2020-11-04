@@ -1226,5 +1226,17 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
   }
 
+  it should "fail with 403 if Rawls does not have the required IAM permissions on the Google Billing Account and set the invalidBillingAcct field" in withTestDataServices { services =>
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(services.gcsDAO.inaccessibleBillingAccountName)))))
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+    error.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+
+    val persistedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    persistedBillingProject.value.invalidBillingAccount shouldBe true
+  }
 
 }
