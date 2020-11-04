@@ -104,6 +104,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]]
 
+  def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean]
+
   /**
     * Lists Google billing accounts using the billing service account.
     *

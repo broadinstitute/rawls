@@ -43,6 +43,10 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
+  override def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
+    Future.successful(true)
+  }
+
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
     val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true, "testBillingAccount")
     Future.successful(Seq(firecloudHasThisOne))

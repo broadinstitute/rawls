@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers, OptionValues}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
@@ -43,7 +43,7 @@ import scala.util.Try
 
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
-class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll with TableDrivenPropertyChecks {
+class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll with TableDrivenPropertyChecks with OptionValues {
   import driver.api._
 
   val workspace = Workspace(
@@ -1165,4 +1165,66 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
     workspace.googleProject.value should not be empty
   }
+
+  it should "update the InvalidBillingAccount field on the associated Billing Project" in withTestDataServices { services =>
+    val originalInvalidBillingAccountValue = true
+    val billingProjectName = RawlsBillingProjectName("witty_project_name")
+    val originalBillingProject = testData.testProject1.copy(projectName = billingProjectName, billingAccount = Some(RawlsBillingAccountName("money_vault")), invalidBillingAccount = originalInvalidBillingAccountValue)
+
+    // Persist BillingProject and make sure base case has correct value(s)
+    val result = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.create(originalBillingProject))
+    val persistedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(billingProjectName))
+    persistedBillingProject.value.invalidBillingAccount shouldBe true
+
+    // Create the Workspace
+    val workspaceRequest = WorkspaceRequest(billingProjectName.value, "space_for_workin", Map.empty)
+    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    // Reload BillingProject to make sure it was modified during createWorkspace()
+    // MockGoogleServicesDAO.testDMBillingAccountAccess should always return TRUE (meaning Billing Access IS valid)
+    val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(billingProjectName))
+    updatedBillingProject.value.invalidBillingAccount shouldBe false
+  }
+
+  // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
+  it should "succeed regardless of the BillingProject.status" in withTestDataServices { services =>
+     CreationStatuses.all.foreach { projectStatus =>
+      // Update the BillingProject with the CreationStatus under test
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(status = projectStatus))))
+
+      // Create a Workspace in the BillingProject
+      val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_${projectStatus}")
+      val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+      // Load the newly created Workspace for assertions
+      val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+      maybeWorkspace.value.name shouldBe workspaceName.name
+    }
+  }
+
+  it should "fail with 400 if specified Namespace/Billing Project does not exist" in withTestDataServices { services =>
+    val workspaceRequest = WorkspaceRequest("nonexistent_namespace", "kermits_pond", Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+  it should "fail with 500 if Billing Project is does not have a Billing Account specified" in withTestDataServices { services =>
+    // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = None))))
+    val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    updatedBillingProject.value.billingAccount shouldBe empty
+
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+    error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+  }
+
+
 }

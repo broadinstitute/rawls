@@ -174,11 +174,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
-      traceWithParent("withNewWorkspaceContext", s1)( s2 => dataSource.inTransaction({ dataAccess =>
-        withNewWorkspaceContext(workspaceRequest, dataAccess, s2) { workspaceContext =>
-          DBIO.successful(workspaceContext)
-        }
-      }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
+      traceWithParent("requireBillingAccountAccess", s1)(s2 => requireBillingAccountAccess(workspaceRequest.namespace, s2) {
+        traceWithParent("withNewWorkspaceContext", s2)(s3 => dataSource.inTransaction({ dataAccess =>
+          withNewWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
+            DBIO.successful(workspaceContext)
+          }
+        }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
+      })
     })
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
@@ -1820,8 +1822,42 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // TODO: https://broadworkbench.atlassian.net/browse/CA-946
   // This method should talk to the Resource Buffering Service, get a Google Project, and then set the appropriate
   // Billing Account on the project and any other things we need to set on the Project.
-  def claimGoogleProject(namespace: String): GoogleProjectId = {
+  private def claimGoogleProject(namespace: String): GoogleProjectId = {
+    // 1. Claim Project from RBS
+    // 2. Update Billing Account information on Google Project
     GoogleProjectId(UUID.randomUUID.toString.substring(0, 8) + "_fake_proj_name")
+  }
+
+  /**
+    * takes a RawlsBillingProject and checks that Rawls has the appropriate permissions on the underlying Billing
+    * Account on Google.  Does NOT check if User has necessary permissions on the Billing Account.  Updates
+    * BillingProject to persist latest 'invalidBillingAccount' info.  Throws an exception if Rawls does not have
+    * permissions it needs.
+    */
+  def verifyBillingAccountAccess(billingProject: RawlsBillingProject, parentSpan: Span = null): Future[Unit] = {
+    val billingAccountName: RawlsBillingAccountName = billingProject.billingAccount.getOrElse(throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Billing Project ${billingProject.projectName.value} has no Billing Account associated with it")))
+    for {
+      hasAccess <- traceWithParent("checkBillingAccountIAM", parentSpan)(_ => gcsDAO.testDMBillingAccountAccess(billingAccountName.value))
+      updatedBillingProject = billingProject.copy(invalidBillingAccount = !hasAccess)
+      _ <- dataSource.inTransaction { dataAccess =>
+        traceDBIOWithParent("updateInvalidBillingAccountField", parentSpan)(_ => dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(updatedBillingProject)))
+      }
+    } yield {
+      if (!hasAccess) {
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"))
+      }
+    }
+  }
+
+  private def requireBillingAccountAccess[T](billingProjectName: String, parentSpan: Span = null)(op: => Future[T]): Future[T] = {
+    for {
+      maybeBillingProject <- dataSource.inTransaction { dataAccess =>
+        traceDBIOWithParent("loadBillingProject", parentSpan)(_ => dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(billingProjectName)))
+      }
+      billingProject = maybeBillingProject.getOrElse(throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProjectName} does not exist")))
+      _ <- verifyBillingAccountAccess(billingProject, parentSpan)
+      result <- op
+    } yield result
   }
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.

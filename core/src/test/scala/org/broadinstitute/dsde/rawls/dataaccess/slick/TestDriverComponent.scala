@@ -223,16 +223,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
     val dbGapAuthorizedUsersGroup = ManagedGroupRef(RawlsGroupName("dbGapAuthorizedUsers"))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), CreationStatuses.Ready, None, None)
+    val billingAccountName = RawlsBillingAccountName("fakeBillingAcct")
+
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1 = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, None, None)
+    val testProject1 = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject2Name = RawlsBillingProjectName("project2")
-    val testProject2 = RawlsBillingProject(testProject2Name, CreationStatuses.Ready, None, None)
+    val testProject2 = RawlsBillingProject(testProject2Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject3Name = RawlsBillingProjectName("project3")
-    val testProject3 = RawlsBillingProject(testProject3Name, CreationStatuses.Ready, None, None)
+    val testProject3 = RawlsBillingProject(testProject3Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
