@@ -90,7 +90,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiesResourceId]): Future[SamCreateResourceResponse] = {
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiedResourceId]): Future[SamCreateResourceResponse] = {
     val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}"
 
     val httpRequest = RequestBuilding.Post(url, SamResourceWithPolicies(resourceId, policies.map(x => x._1 -> x._2), authDomain, returnResource = true, parent = parent))
@@ -179,11 +179,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or500) { () => pipeline[SamPolicy](userInfo) apply httpRequest }
   }
 
-  override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[SamFullyQualifiesResourceId]] = {
+  override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[SamFullyQualifiedResourceId]] = {
     val url = samServiceURL + s"/api/resources/v2/${resourceTypeName.value}/$resourceId/children"
     val httpRequest = RequestBuilding.Get(url)
 
-    retry(when401or500) { () => pipeline[Seq[SamFullyQualifiesResourceId]](userInfo) apply httpRequest }
+    retry(when401or500) { () => pipeline[Seq[SamFullyQualifiedResourceId]](userInfo) apply httpRequest }
   }
 
   override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {

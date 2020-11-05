@@ -317,7 +317,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName, userInfoForSam: UserInfo) = {
     samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, userInfo).flatMap { projectChildren =>
-      if (projectChildren.contains(SamFullyQualifiesResourceId(projectName.value, SamResourceTypeNames.googleProject.value))) {
+      if (projectChildren.contains(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))) {
         for {
           _ <- deletePetsInProject(GoogleProjectId(projectName.value), userInfoForSam)
           _ <- gcsDAO.deleteProject(GoogleProjectId(projectName.value))
@@ -460,7 +460,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           case None =>
             for {
               _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, userInfo))
-              _ <- DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.googleProject, createProjectRequest.projectName.value, Map.empty, Set.empty, userInfo, Option(SamFullyQualifiesResourceId(createProjectRequest.projectName.value, SamResourceTypeNames.googleProject.value))))
+              _ <- DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.googleProject, createProjectRequest.projectName.value, Map.empty, Set.empty, userInfo, Option(SamFullyQualifiedResourceId(createProjectRequest.projectName.value, SamResourceTypeNames.billingProject.value))))
               _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
               _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
               project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, CreationStatuses.Creating, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))

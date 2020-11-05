@@ -266,7 +266,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       ArgumentMatchers.eq(Map.empty),
       ArgumentMatchers.eq(Set.empty),
       any[UserInfo],
-      ArgumentMatchers.eq(Option(SamFullyQualifiesResourceId(projectName.value, SamResourceTypeNames.googleProject.value))))).
+      ArgumentMatchers.eq(Option(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))))).
       thenReturn(Future.successful(SamCreateResourceResponse(SamResourceTypeNames.billingProject.value, projectName.value, Set.empty, Set.empty)))
 
     when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.workspaceCreator), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator))), any[UserInfo])).thenReturn(Future.successful(()))

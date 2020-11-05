@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUser, RawlsUserEmail, SamCreateResourceResponse, SamFullyQualifiesResourceId, SamPolicy, SamPolicySyncStatus, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceRole, SamResourceTypeName, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUser, RawlsUserEmail, SamCreateResourceResponse, SamFullyQualifiedResourceId, SamPolicy, SamPolicySyncStatus, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceRole, SamResourceTypeName, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo}
 import org.broadinstitute.dsde.workbench.model._
 
 import scala.concurrent.Future
@@ -21,7 +21,7 @@ trait SamDAO {
 
   def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
 
-  def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiesResourceId]): Future[SamCreateResourceResponse]
+  def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiedResourceId]): Future[SamCreateResourceResponse]
 
   def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
 
@@ -66,7 +66,7 @@ trait SamDAO {
 
   def getStatus(): Future[SubsystemStatus]
 
-  def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[SamFullyQualifiesResourceId]]
+  def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[SamFullyQualifiedResourceId]]
 }
 
 object SamDAO {
