@@ -174,9 +174,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
-      traceWithParent("requireBillingAccountAccess", s1)(s2 => requireBillingAccountAccess(workspaceRequest.namespace, s2) {
+      traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
         traceWithParent("withNewWorkspaceContext", s2)(s3 => dataSource.inTransaction({ dataAccess =>
-          withNewWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
+          withNewWorkspaceContext(workspaceRequest, billingProject, dataAccess, s3) { workspaceContext =>
             DBIO.successful(workspaceContext)
           }
         }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
@@ -589,43 +589,45 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
     withAttributeNamespaceCheck(workspaceAttributeNames) {
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
-        getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
-          dataSource.inTransaction({ dataAccess =>
-            // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
-            withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
-              DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
-                withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
+        withBillingProjectContext(destWorkspaceRequest.namespace) { destBillingProject =>
+          getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
+            dataSource.inTransaction({ dataAccess =>
+              // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
+              withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
+                DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
+                  withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
 
-                  // add to or replace current attributes, on an individual basis
-                  val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
+                    // add to or replace current attributes, on an individual basis
+                    val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
 
-                  withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), dataAccess) { destWorkspaceContext =>
-                    dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                      dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-                        val inserts = methodConfigShorts.map { methodConfigShort =>
-                          dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-                            dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                    withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, dataAccess) { destWorkspaceContext =>
+                      dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                        dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                          val inserts = methodConfigShorts.map { methodConfigShort =>
+                            dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                              dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                            }
                           }
-                        }
-                        DBIO.seq(inserts: _*)
-                      } andThen {
-                      DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                          DBIO.seq(inserts: _*)
+                        } andThen {
+                        DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                      }
                     }
                   }
                 }
               }
+            }, TransactionIsolation.ReadCommitted)
+            // read committed to avoid deadlocks on workspace attr scratch table
+          }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
+            //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
+            //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
+            //we also don't want to block returning a response on this call because it's already a slow endpoint
+            destWorkspaceRequest.copyFilesWithPrefix.foreach { prefix =>
+              copyBucketFiles(sourceWorkspaceContext, destWorkspaceContext, prefix)
             }
-          }, TransactionIsolation.ReadCommitted)
-          // read committed to avoid deadlocks on workspace attr scratch table
-        }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
-          //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
-          //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
-          //we also don't want to block returning a response on this call because it's already a slow endpoint
-          destWorkspaceRequest.copyFilesWithPrefix.foreach { prefix =>
-            copyBucketFiles(sourceWorkspaceContext, destWorkspaceContext, prefix)
-          }
 
-          destWorkspaceContext
+            destWorkspaceContext
+          }
         }
       }
     }
@@ -1822,10 +1824,54 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // TODO: https://broadworkbench.atlassian.net/browse/CA-946
   // This method should talk to the Resource Buffering Service, get a Google Project, and then set the appropriate
   // Billing Account on the project and any other things we need to set on the Project.
-  private def claimGoogleProject(namespace: String): GoogleProjectId = {
-    // 1. Claim Project from RBS
-    // 2. Update Billing Account information on Google Project
-    GoogleProjectId(UUID.randomUUID.toString.substring(0, 8) + "_fake_proj_name")
+  private def getGoogleProjectFromRBS: Future[GoogleProjectId] = {
+    // TODO: Implement for real
+    Future.successful(GoogleProjectId(UUID.randomUUID.toString.substring(0, 8) + "_fake_proj_name"))
+  }
+
+  // Gets a Google Project from the Resource Buffering Service (RBS) and sets it up to be usable by Rawls as the backing
+  // Google Project for a Workspace.  The specific entities in the Google Project (like Buckets or compute nodes or
+  // whatever) that are used by the Workspace will all get set up later after the Workspace is created in Rawls.
+  // 1. Claim Project from RBS
+  // 2. Add Google Project to Service Perimeter if one is specified on the Billing Project
+  // 3. Update Billing Account information on Google Project
+  // Returns a Future[GoogleProjectId] of the project that we claimed from RBS
+  private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null): Future[GoogleProjectId] = {
+    // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
+    // Option, so we are being thorough
+    val billingAccount = billingProject.billingAccount match {
+      case Some(ba) if !billingProject.invalidBillingAccount => ba
+      case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing or invalid for Billing Project: ${billingProject}"))
+    }
+
+    // TODO: Wire up the Spans for tracing
+    for {
+      googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => getGoogleProjectFromRBS)
+      _ <- maybeAddGoogleProjectToPerimeter(billingProject, googleProjectId)
+      _ <- updateBillingAccountOnGoogleProject(googleProjectId, billingAccount)
+    } yield googleProjectId
+  }
+
+  // If a ServicePerimeter is specified on the BillingProject, then we will need to ensure that the provided Google
+  // Project is added to that Service Perimeter.  If no ServicePerimeter is specified on the Billing Project, do nothing
+  private def maybeAddGoogleProjectToPerimeter(billingProject: RawlsBillingProject, googleProjectId: GoogleProjectId, span: Span = null): Future[Unit] = {
+    billingProject.servicePerimeter match {
+      case Some(servicePerimeterName) => addGoogleProjectToPerimeter(googleProjectId, servicePerimeterName)
+      case None => Future.successful()
+    }
+  }
+
+  // Method will need to get the latest list of Projects in the Perimeter and OVERWRITE the existing list of projects
+  // in the perimeter, this is just the way Google manages the list of projects in a perimeter.  This method will poll
+  // the Google Operation until it is finished.  Throw an exception on any errors.
+  private def addGoogleProjectToPerimeter(googleProjectId: GoogleProjectId, servicePerimeterName: ServicePerimeterName): Future[Unit] = {
+    // TODO: Implement for real
+    Future.successful()
+  }
+
+  private def updateBillingAccountOnGoogleProject(googleProjectId: GoogleProjectId, billingAccount: RawlsBillingAccountName): Future[Unit] = {
+    // TODO: Implement for real
+    Future.successful()
   }
 
   /**
@@ -1845,7 +1891,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield hasAccess
   }
 
-  private def requireBillingAccountAccess[T](billingProjectName: String, parentSpan: Span = null)(op: => Future[T]): Future[T] = {
+  // Checks that Rawls has the right permissions on the BillingProject's Billing Account, and then passes along the
+  // BillingProject to op to be used by code in this context
+  private def withBillingProjectContext[T](billingProjectName: String, parentSpan: Span = null)(op: (RawlsBillingProject) => Future[T]): Future[T] = {
     for {
       maybeBillingProject <- dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("loadBillingProject", parentSpan)(_ => dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(billingProjectName)))
@@ -1856,12 +1904,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"))
         }
       }
-      result <- op
+      result <- op(billingProject)
     } yield result
   }
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.
-  private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)
+  private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, billingProject: RawlsBillingProject, dataAccess: DataAccess, parentSpan: Span = null)
                                      (op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
     def getBucketName(workspaceId: String, secure: Boolean) = s"${config.workspaceBucketNamePrefix}-${if(secure) "secure-" else ""}${workspaceId}"
@@ -1870,10 +1918,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case ads => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.HIGH_SECURITY_LABEL) ++ ads.map(ad => gcsDAO.labelSafeString(ad.membersGroupName.value, "ad-") -> "")
     }
 
-    def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, bucketName: String, projectOwnerPolicyEmail: WorkbenchEmail, dataAccess: DataAccess, parentSpan: Span = null): ReadWriteAction[(Workspace, Map[SamResourcePolicyName, WorkbenchEmail])] = {
+    def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, bucketName: String, projectOwnerPolicyEmail: WorkbenchEmail, googleProjectId: GoogleProjectId, dataAccess: DataAccess, parentSpan: Span = null): ReadWriteAction[(Workspace, Map[SamResourcePolicyName, WorkbenchEmail])] = {
       val currentDate = DateTime.now
-
-      val googleProjectId = claimGoogleProject(workspaceRequest.namespace)
 
       val workspace = Workspace(
         namespace = workspaceRequest.namespace,
@@ -1956,26 +2002,28 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
 
             traceDBIOWithParent("getPolicySyncStatus", s1)(_ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { projectOwnerPolicyEmail =>
-              traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
-                for {
-                  //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
-                  //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
-                  //will never change, which would eliminate the call to sam entirely
-                  policyEmails <- DBIO.successful(policyMap.map { case (policyName, policyEmail) =>
-                    if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
-                      // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-                      // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-                      // the limit of 2000
-                      Option(WorkspaceAccessLevels.ProjectOwner -> projectOwnerPolicyEmail)
-                    } else {
-                      WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
-                    }
-                  }.flatten.toMap)
+              traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, s1))).flatMap { googleProjectId =>
+                traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, googleProjectId, dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
+                  for {
+                    //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
+                    //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
+                    //will never change, which would eliminate the call to sam entirely
+                    policyEmails <- DBIO.successful(policyMap.map { case (policyName, policyEmail) =>
+                      if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
+                        // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+                        // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+                        // the limit of 2000
+                        Option(WorkspaceAccessLevels.ProjectOwner -> projectOwnerPolicyEmail)
+                      } else {
+                        WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
+                      }
+                    }.flatten.toMap)
 
-                  _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProject, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3)))
-                  response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
-                } yield response
-              })
+                    _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProject, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3)))
+                    response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
+                  } yield response
+                })
+              }
             }
         }
       })

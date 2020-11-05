@@ -1166,26 +1166,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     workspace.googleProject.value should not be empty
   }
 
-  it should "update the InvalidBillingAccount field on the associated Billing Project" in withTestDataServices { services =>
-    val originalInvalidBillingAccountValue = true
-    val billingProjectName = RawlsBillingProjectName("witty_project_name")
-    val originalBillingProject = testData.testProject1.copy(projectName = billingProjectName, billingAccount = Some(RawlsBillingAccountName("money_vault")), invalidBillingAccount = originalInvalidBillingAccountValue)
-
-    // Persist BillingProject and make sure base case has correct value(s)
-    val result = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.create(originalBillingProject))
-    val persistedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(billingProjectName))
-    persistedBillingProject.value.invalidBillingAccount shouldBe true
-
-    // Create the Workspace
-    val workspaceRequest = WorkspaceRequest(billingProjectName.value, "space_for_workin", Map.empty)
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
-    // Reload BillingProject to make sure it was modified during createWorkspace()
-    // MockGoogleServicesDAO.testDMBillingAccountAccess should always return TRUE (meaning Billing Access IS valid)
-    val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(billingProjectName))
-    updatedBillingProject.value.invalidBillingAccount shouldBe false
-  }
-
   // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
   it should "succeed regardless of the BillingProject.status" in withTestDataServices { services =>
      CreationStatuses.all.foreach { projectStatus =>
@@ -1227,14 +1207,21 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "fail with 403 if Rawls does not have the required IAM permissions on the Google Billing Account and set the invalidBillingAcct field" in withTestDataServices { services =>
+    // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
+    // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
     runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(services.gcsDAO.inaccessibleBillingAccountName)))))
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
+    val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    originalBillingProject.value.invalidBillingAccount shouldBe false
 
+    // Make the call to createWorkspace and make sure it throws an exception with the correct StatusCode
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
     }
     error.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
 
+    // Make sure that the BillingProject.invalidBillingAccount field was properly updated while attempting to create the
+    // Workspace
     val persistedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
     persistedBillingProject.value.invalidBillingAccount shouldBe true
   }
