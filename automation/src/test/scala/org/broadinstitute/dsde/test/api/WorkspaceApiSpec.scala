@@ -72,7 +72,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             eventually {
               val studentAWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               studentAWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Read)
-              studentAWorkspaceDetails.canShare should be(true)
+              studentAWorkspaceDetails.canShare should equal(true)
             }
 
             // check that student A can share the workspace with student B
@@ -97,7 +97,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             eventually {
               val studentAWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               studentAWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Read)
-              studentAWorkspaceDetails.canShare should be(false)
+              studentAWorkspaceDetails.canShare should equal(false)
             }
 
             // check that student A cannot share the workspace with student B
@@ -117,7 +117,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             eventually {
               val canComputeWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               canComputeWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Write)
-              canComputeWorkspaceDetails.canCompute should be(true)
+              canComputeWorkspaceDetails.canCompute should equal(true)
             }
 
             val revokeCanCompute: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, Some(false), Some(false)))
@@ -126,7 +126,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             eventually {
               val noComputeWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               noComputeWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Write)
-              noComputeWorkspaceDetails.canCompute should be(false)
+              noComputeWorkspaceDetails.canCompute should equal(false)
             }
           }(ownerAuthToken)
         }
@@ -141,7 +141,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             eventually {
               val writerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               writerWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Write)
-              writerWorkspaceDetails.canCompute should be(true)
+              writerWorkspaceDetails.canCompute should equal(true)
             }
 
             val readerAccess: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))
@@ -150,7 +150,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             eventually {
               val readerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               readerWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Read)
-              readerWorkspaceDetails.canCompute should be(false)
+              readerWorkspaceDetails.canCompute should equal(false)
             }
           }(ownerAuthToken)
         }
@@ -184,8 +184,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             eventually {
               val secondOwnerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               secondOwnerWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Owner)
-              secondOwnerWorkspaceDetails.canCompute should be(true)
-              secondOwnerWorkspaceDetails.canShare should be(true)
+              secondOwnerWorkspaceDetails.canCompute should equal(true)
+              secondOwnerWorkspaceDetails.canShare should equal(true)
             }
 
             // try removing new owner's sharing and compute abilities, it should not work
@@ -195,8 +195,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             eventually {
               val newOwnerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               newOwnerWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Owner)
-              newOwnerWorkspaceDetails.canCompute should be(true)
-              newOwnerWorkspaceDetails.canShare should be(true)
+              newOwnerWorkspaceDetails.canCompute should equal(true)
+              newOwnerWorkspaceDetails.canShare should equal(true)
             }
           }(ownerAuthToken)
         }

@@ -499,7 +499,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def defaultBillingProjectPolicies = {
+  def defaultBillingProjectPolicies: Map[SamResourcePolicyName, SamPolicy] = {
     Map(
       SamBillingProjectPolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamProjectRoles.owner)),
       SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator))
