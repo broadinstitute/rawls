@@ -122,6 +122,9 @@ case class WorkspaceRequest (
 
 case class GoogleProjectId(value: String) extends ValueObject
 
+// All Workspaces are backed by a Google Project identified by googleProjectId.  The googleProjectNumber is a different
+// identifier that we only really need when adding the Workspace to a Service Perimeter.  For efficiency, we added the
+// GoogleProjectNumber field here.
 case class Workspace(
                       namespace: String,
                       name: String,
@@ -134,7 +137,8 @@ case class Workspace(
                       attributes: AttributeMap,
                       isLocked: Boolean,
                       workspaceVersion: WorkspaceVersion,
-                      googleProject: GoogleProjectId
+                      googleProjectId: GoogleProjectId,
+                      googleProjectNumber: Option[GoogleProjectNumber]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -145,18 +149,20 @@ case class Workspace(
 object Workspace {
   /** convenience constructor that defaults workspace version to v1 and google project to namespace */
   def apply(namespace: String,
-           name: String,
-           workspaceId: String,
-           bucketName: String,
-           workflowCollectionName: Option[String],
-           createdDate: DateTime,
-           lastModified: DateTime,
-           createdBy: String,
-           attributes: AttributeMap,
-           isLocked: Boolean = false): Workspace = {
-    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace))
+    name: String,
+    workspaceId: String,
+    bucketName: String,
+    workflowCollectionName: Option[String],
+    createdDate: DateTime,
+    lastModified: DateTime,
+    createdBy: String,
+    attributes: AttributeMap,
+    isLocked: Boolean = false,
+    workspaceVersion: WorkspaceVersion = WorkspaceVersions.V1,
+    googleProjectId: GoogleProjectId = null,
+    googleProjectNumber: Option[GoogleProjectNumber] = None): Workspace = {
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, workspaceVersion, if (googleProjectId == null) GoogleProjectId(namespace) else googleProjectId, googleProjectNumber)
   }
-
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -503,8 +509,8 @@ case class WorkspaceDetails(namespace: String,
                             isLocked: Boolean = false,
                             authorizationDomain: Option[Set[ManagedGroupRef]],
                             workspaceVersion: WorkspaceVersion,
-                            googleProject: GoogleProjectId) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject)
+                            googleProjectId: GoogleProjectId) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProjectId, None)
 }
 
 
@@ -574,7 +580,7 @@ object WorkspaceDetails {
       workspace.isLocked,
       optAuthorizationDomain,
       workspace.workspaceVersion,
-      workspace.googleProject
+      workspace.googleProjectId
     )
   }
 }

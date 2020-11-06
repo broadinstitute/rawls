@@ -4,34 +4,39 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model._
+import org.scalatest.OptionValues
 
 import scala.language.implicitConversions
 
 /**
  * Created by dvoet on 2/8/16.
  */
-class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils {
+class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils with OptionValues {
+  val workspaceId: UUID = UUID.randomUUID()
+  val googleProjectId: GoogleProjectId = GoogleProjectId("test_google_project")
+  val googleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("123456789")
+  val workspaceVersion: WorkspaceVersions.V2.type = WorkspaceVersions.V2
+
+  val workspace: Workspace = Workspace(
+    "test_namespace",
+    "test_name",
+    workspaceId.toString,
+    "bucketname",
+    Some("workflow-collection"),
+    currentTime(),
+    currentTime(),
+    "me",
+    Map(
+      AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
+      AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
+      AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
+    false,
+    workspaceVersion,
+    googleProjectId,
+    Option(googleProjectNumber)
+  )
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {
-    val workspaceId: UUID = UUID.randomUUID()
-
-    val workspace: Workspace = Workspace(
-      "test_namespace",
-      "test_name",
-      workspaceId.toString,
-      "bucketname",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "me",
-      Map(
-        AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
-        AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
-      false,
-      WorkspaceVersions.V2,
-      GoogleProjectId("test_google_project")
-    )
 
     assertResult(None) {
       runAndWait(workspaceQuery.findById(workspaceId.toString))
@@ -94,6 +99,21 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertResult(false) {
       runAndWait(workspaceQuery.delete(workspace.toWorkspaceName))
     }
+  }
+
+  it should "save workspaceVersion" in withEmptyTestDatabase {
+    val savedWorkspace = runAndWait(workspaceQuery.save(workspace))
+    savedWorkspace.workspaceVersion shouldBe workspaceVersion
+  }
+
+  it should "save googleProjectId" in withEmptyTestDatabase {
+    val savedWorkspace = runAndWait(workspaceQuery.save(workspace))
+    savedWorkspace.googleProjectId shouldBe googleProjectId
+  }
+
+  it should "save googleProjectNumber" in withEmptyTestDatabase {
+    val savedWorkspace = runAndWait(workspaceQuery.save(workspace))
+    savedWorkspace.googleProjectNumber.value shouldBe googleProjectNumber
   }
 
   it should "list submission summary stats" in withDefaultTestDatabase {

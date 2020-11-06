@@ -237,7 +237,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
-      val petJson = Await.result(workflowSubmission.samDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProject, testData.userOwner.userEmail), Duration.Inf)
+      val petJson = Await.result(workflowSubmission.samDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId, testData.userOwner.userEmail), Duration.Inf)
       assertResult(
         Some(
           ExecutionServiceWorkflowOptions(
@@ -330,7 +330,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(ctx.googleProject)(requesterPaysRole) should contain theSameElementsAs
+      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
         List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
     }
   }
@@ -363,7 +363,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(ctx.googleProject)(requesterPaysRole) should contain theSameElementsAs
+      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
         List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
     }
   }
@@ -405,7 +405,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       // Verify
       val expectedClientEmail = List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
-      mockGoogleServicesDAO.policies(ctx.googleProject)(requesterPaysRole) should contain theSameElementsAs expectedClientEmail
+      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs expectedClientEmail
     }
   }
 

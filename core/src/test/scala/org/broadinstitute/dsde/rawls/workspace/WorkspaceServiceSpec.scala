@@ -1163,7 +1163,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.googleProject.value should not be empty
+    workspace.googleProjectId.value should not be empty
   }
 
   // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947

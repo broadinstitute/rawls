@@ -188,7 +188,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           // to wait until the Workspace is persisted before adding to the Service Perimeter because the database IS the
           // source of record for which Google Projects need to be in the Service Perimeter because the method to add
           // projects to the Service Perimeter overwrites the entirely list
-          _ <- maybeAddGoogleProjectToPerimeter(billingProject, workspace.googleProject)
+          _ <- maybeAddGoogleProjectToPerimeter(billingProject, workspace.googleProjectId)
         } yield workspace
       })
     })
@@ -257,7 +257,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
           // determine which functions to use for the various part of the response
           def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
-            traceWithParent("getBucketDetails",s1)(_ =>  gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProject).map(Option(_)))
+            traceWithParent("getBucketDetails",s1)(_ =>  gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId).map(Option(_)))
           } else {
             noFuture
           }
@@ -323,7 +323,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        DBIO.from(gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProject)) map { details =>
+        DBIO.from(gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)) map { details =>
           RequestComplete(StatusCodes.OK, details)
         }
       }
@@ -1661,7 +1661,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
 
       petKey <- if (maxAccessLevel >= WorkspaceAccessLevels.Write)
-        samDAO.getPetServiceAccountKeyForUser(workspace.googleProject, userInfo.userEmail)
+        samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, userInfo.userEmail)
       else
         samDAO.getDefaultPetServiceAccountKeyForUser(userInfo)
 
@@ -1744,7 +1744,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.write) {
         //if we get here, we passed all the hoops, otherwise an exception would have been thrown
 
-        gcsDAO.getBucketUsage(workspaceContext.googleProject, workspaceContext.bucketName).map { usage =>
+        gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName).map { usage =>
           RequestComplete(BucketUsageResponse(usage))
         }
       }
@@ -1895,7 +1895,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // Throw exceptions if any of this goes awry
   private def addGoogleProjectToPerimeter(googleProjectId: GoogleProjectId, servicePerimeterName: ServicePerimeterName): Future[Unit] = {
     collectWorkspacesInPerimeter(servicePerimeterName).map { workspacesInPerimeter =>
-      val googleProjectIds = workspacesInPerimeter.map(_.googleProject) ++ Seq(googleProjectId)
+      val googleProjectIds = workspacesInPerimeter.map(_.googleProjectId) ++ Seq(googleProjectId)
       val googleProjectNumbers = convertToGoogleProjectNumbers(googleProjectIds)
       val projectNumberStrings = googleProjectNumbers.map(_.toString())
 
@@ -1969,7 +1969,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case ads => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.HIGH_SECURITY_LABEL) ++ ads.map(ad => gcsDAO.labelSafeString(ad.membersGroupName.value, "ad-") -> "")
     }
 
-    def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, bucketName: String, projectOwnerPolicyEmail: WorkbenchEmail, googleProjectId: GoogleProjectId, dataAccess: DataAccess, parentSpan: Span = null): ReadWriteAction[(Workspace, Map[SamResourcePolicyName, WorkbenchEmail])] = {
+    def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, bucketName: String, projectOwnerPolicyEmail: WorkbenchEmail, googleProjectId: GoogleProjectId, googleProjectNumber: Option[GoogleProjectNumber], dataAccess: DataAccess, parentSpan: Span = null): ReadWriteAction[(Workspace, Map[SamResourcePolicyName, WorkbenchEmail])] = {
       val currentDate = DateTime.now
 
       val workspace = Workspace(
@@ -1984,7 +1984,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         attributes = workspaceRequest.attributes,
         isLocked = false,
         workspaceVersion = WorkspaceVersions.V2,
-        googleProject = googleProjectId
+        googleProjectId = googleProjectId,
+        googleProjectNumber = googleProjectNumber
       )
 
       traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.save(workspace)).flatMap { _ =>
@@ -2054,7 +2055,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             traceDBIOWithParent("getPolicySyncStatus", s1)(_ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { projectOwnerPolicyEmail =>
               traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, s1))).flatMap { googleProjectId =>
-                traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, googleProjectId, dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
+                val googleProjectNumber: Option[GoogleProjectNumber] = Option(GoogleProjectNumber("IMPLEMENT ME"))
+                traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, googleProjectId, googleProjectNumber, dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
                   for {
                     //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
                     //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
@@ -2070,7 +2072,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       }
                     }.flatten.toMap)
 
-                    _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProject, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3)))
+                    _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3)))
                     response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
                   } yield response
                 })

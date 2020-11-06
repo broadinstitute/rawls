@@ -203,7 +203,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
-      workspace.googleProject,
+      workspace.googleProjectId,
       userEmail.value,
       petSAEmail,
       petSAJson,
@@ -313,7 +313,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       //yank things from the db. note this future has already started running and we're just waiting on it here
       (wfRecs, workflowBatch, billingProject, methodConfig) <- dbThingsFuture
 
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(GoogleProjectId(workspaceRec.googleProject), RawlsUserEmail(submissionRec.submitterEmail))
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(GoogleProjectId(workspaceRec.googleProjectId), RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
 
       wdl <- getWdl(methodConfig, petUserInfo)

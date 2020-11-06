@@ -19,18 +19,19 @@ import scala.language.postfixOps
  * Created by dvoet on 2/4/16.
  */
 case class WorkspaceRecord(
-  namespace: String,
-  name: String,
-  id: UUID,
-  bucketName: String,
-  workflowCollection: Option[String],
-  createdDate: Timestamp,
-  lastModified: Timestamp,
-  createdBy: String,
-  isLocked: Boolean,
-  recordVersion: Long,
-  workspaceVersion: String,
-  googleProject: String) {
+                            namespace: String,
+                            name: String,
+                            id: UUID,
+                            bucketName: String,
+                            workflowCollection: Option[String],
+                            createdDate: Timestamp,
+                            lastModified: Timestamp,
+                            createdBy: String,
+                            isLocked: Boolean,
+                            recordVersion: Long,
+                            workspaceVersion: String,
+                            googleProjectId: String,
+                            googleProjectNumber: Option[String] = None) {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
 }
 
@@ -56,11 +57,12 @@ trait WorkspaceComponent {
     def isLocked = column[Boolean]("is_locked")
     def recordVersion = column[Long]("record_version")
     def workspaceVersion = column[String]("workspace_version")
-    def googleProject = column[String]("google_project")
+    def googleProjectId = column[String]("google_project_id")
+    def googleProjectNumber = column[Option[String]]("google_project_number")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProject) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   /** raw/optimized SQL queries for working with workspace attributes
@@ -397,12 +399,12 @@ trait WorkspaceComponent {
       }
     }
 
-    private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProject.value)
+    private def marshalNewWorkspace(workspace: Workspace): WorkspaceRecord = {
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value))
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProject))
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProjectId), workspaceRec.googleProjectNumber.map(GoogleProjectNumber))
     }
   }
 
