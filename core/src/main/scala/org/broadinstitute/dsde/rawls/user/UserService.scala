@@ -12,6 +12,7 @@ import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -177,13 +178,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def getBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     for {
-      resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
+      resourceRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
       maybeBillingProject <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }
     } yield {
-      val bestRole = projectPoliciesToRoles(resourceIdsWithPolicyNames).foldLeft(Option.empty[ProjectRoles.ProjectRole]) {
+      val bestRole = samRolesToProjectRoles(resourceRoles).foldLeft(Option.empty[ProjectRoles.ProjectRole]) {
         // there are only 2 roles, if owner already found, keep it, otherwise use current role in the fold
         case (Some(ProjectRoles.Owner), _) => Option(ProjectRoles.Owner)
-        case (_, (_, projectRole)) => Option(projectRole)
+        case (_, projectRole) => Option(projectRole)
       }
       (bestRole, maybeBillingProject) match {
         case (Some(role), Some(project)) =>
@@ -222,6 +223,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
     membershipsFuture.map(RequestComplete(_))
+  }
+
+  private def samRolesToProjectRoles(samRoles: Set[SamResourceRole]): Set[ProjectRole] = {
+    samRoles.collect {
+      case SamResourceRole(SamProjectRoles.owner.value) => ProjectRoles.Owner
+      case SamResourceRole(SamProjectRoles.workspaceCreator.value) => ProjectRoles.User
+    }
   }
 
   private def projectPoliciesToRoles(resourceIdsWithPolicyNames: Set[SamResourceIdWithPolicyName]) = {

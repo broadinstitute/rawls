@@ -324,9 +324,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   "GET /billing/v2/{projectName}" should "return 200 with owner role" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
-    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(Set(
-      SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.owner, Set.empty, Set.empty, false),
-      SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, Set.empty, Set.empty, false)
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
     )))
 
     Get(s"/billing/v2/${project.projectName.value}") ~>
@@ -341,8 +340,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   it should "return 200 with user role" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
-    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(Set(
-      SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, Set.empty, Set.empty, false)
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
+      SamProjectRoles.workspaceCreator
     )))
 
     Get(s"/billing/v2/${project.projectName.value}") ~>
@@ -356,9 +355,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 404 if project does not exist" in withEmptyDatabaseAndApiServices { services =>
-    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(Set.empty[SamResourceIdWithPolicyName]))
+    val projectName = "does_not_exist"
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName, userInfo)).thenReturn(Future.successful(Set.empty[SamResourceRole]))
 
-    Get(s"/billing/v2/does_not_exist") ~>
+    Get(s"/billing/v2/$projectName") ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.NotFound, responseAs[String]) {
@@ -369,7 +369,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   it should "return 404 if user has no access" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
-    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(Set.empty[SamResourceIdWithPolicyName]))
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set.empty[SamResourceRole]))
 
     Get(s"/billing/v2/${project.projectName.value}") ~>
       sealRoute(services.billingRoutesV2) ~>
