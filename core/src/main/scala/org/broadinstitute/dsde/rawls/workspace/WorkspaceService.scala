@@ -8,6 +8,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import com.google.api.services.storage.model.StorageObject
+import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
@@ -26,7 +27,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -44,6 +45,7 @@ import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
@@ -175,11 +177,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
-        traceWithParent("withNewWorkspaceContext", s2)(s3 => dataSource.inTransaction({ dataAccess =>
-          withNewWorkspaceContext(workspaceRequest, billingProject, dataAccess, s3) { workspaceContext =>
-            DBIO.successful(workspaceContext)
-          }
-        }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
+        for {
+          workspace <- traceWithParent("withNewWorkspaceContext", s2) (s3 => dataSource.inTransaction({ dataAccess =>
+            withNewWorkspaceContext(workspaceRequest, billingProject, dataAccess, s3) { workspaceContext =>
+              DBIO.successful(workspaceContext)
+            }
+          }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
+          //////////////
+          // After creating the Workspace, THIS is where we want to add the project to the Service Perimeter.  We need
+          // to wait until the Workspace is persisted before adding to the Service Perimeter because the database IS the
+          // source of record for which Google Projects need to be in the Service Perimeter because the method to add
+          // projects to the Service Perimeter overwrites the entirely list
+          _ <- maybeAddGoogleProjectToPerimeter(billingProject, workspace.googleProject)
+        } yield workspace
       })
     })
 
@@ -1833,8 +1843,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // Google Project for a Workspace.  The specific entities in the Google Project (like Buckets or compute nodes or
   // whatever) that are used by the Workspace will all get set up later after the Workspace is created in Rawls.
   // 1. Claim Project from RBS
-  // 2. Add Google Project to Service Perimeter if one is specified on the Billing Project
-  // 3. Update Billing Account information on Google Project
+  // 2. Update Billing Account information on Google Project
   // Returns a Future[GoogleProjectId] of the project that we claimed from RBS
   private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null): Future[GoogleProjectId] = {
     // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
@@ -1847,7 +1856,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // TODO: Wire up the Spans for tracing
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => getGoogleProjectFromRBS)
-      _ <- maybeAddGoogleProjectToPerimeter(billingProject, googleProjectId)
+//      _ <- maybeAddGoogleProjectToPerimeter(billingProject, googleProjectId) // Don't add the project to the Perimeter yet, do that AFTER the Workspace is persisted
       _ <- updateBillingAccountOnGoogleProject(googleProjectId, billingAccount)
     } yield googleProjectId
   }
@@ -1861,12 +1870,54 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // Method will need to get the latest list of Projects in the Perimeter and OVERWRITE the existing list of projects
-  // in the perimeter, this is just the way Google manages the list of projects in a perimeter.  This method will poll
-  // the Google Operation until it is finished.  Throw an exception on any errors.
+  // Some Service Perimeters may required that they have some additional non-Terra Google Projects that need to be in
+  // the perimeter for some other reason.  They provide those to us and we add them to the Rawls Config so that
+  // whenever we update the list of projects for a perimeter, these projects are always included
+  private def loadStaticProjectsForPerimeter(servicePerimeterName: ServicePerimeterName): Seq[String] = {
+    val staticProjectsConfig = ConfigFactory.load().getConfig("gcs.servicePerimeters.staticProjects")
+    if (staticProjectsConfig.hasPath(servicePerimeterName.value)) {
+      staticProjectsConfig.getStringList(servicePerimeterName.value).asScala
+    } else {
+      List.empty
+    }
+  }
+
+  private def convertToGoogleProjectNumbers(googleProjectIds: Seq[GoogleProjectId]) = {
+    Seq[GoogleProjectNumber]()
+  }
+
+  // Since multiple Billing Projects can specify the same Service Perimeter, we need to:
+  // 1. Load all the Billing Projects that specify this servicePerimeterName
+  // 2. Load all the Workspaces in all of those Billing Projects
+  // 3. Collect all of the GoogleProjectNumbers from those Workspaces
+  // 4. Post that list to Google to overwrite the Service Perimeter's list of included Google Projects
+  // 5. Poll until ^ Google Operation is complete
+  // Throw exceptions if any of this goes awry
   private def addGoogleProjectToPerimeter(googleProjectId: GoogleProjectId, servicePerimeterName: ServicePerimeterName): Future[Unit] = {
-    // TODO: Implement for real
+    collectWorkspacesInPerimeter(servicePerimeterName).map { workspacesInPerimeter =>
+      val googleProjectIds = workspacesInPerimeter.map(_.googleProject) ++ Seq(googleProjectId)
+      val googleProjectNumbers = convertToGoogleProjectNumbers(googleProjectIds)
+      val projectNumberStrings = googleProjectNumbers.map(_.toString())
+
+      // Make the call to Google to overwrite the project.  Poll and wait for the Google Operation to complete
+      gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, projectNumberStrings).map { operation =>
+        // This pollOperation is what we need to retry until the OperationStatus that gets returned is some terminal
+        // status
+        gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operation.getName))
+      }
+    }
     Future.successful()
+  }
+
+  // In its own transaction, look up all of the Workspaces contained in Billing Projects that use the specified
+  // ServicePerimeterName
+  private def collectWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Seq[Workspace]] = {
+    dataSource.inTransaction { dataAccess =>
+      for {
+        allProjectsWithPerimeter <- dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeterAndStatus(servicePerimeterName, CreationStatuses.all.toSeq: _*)
+        allWorkspacesInBillingProject <- dataAccess.workspaceQuery.listByNamespaces(allProjectsWithPerimeter.map(_.projectName))
+      } yield allWorkspacesInBillingProject
+    }
   }
 
   private def updateBillingAccountOnGoogleProject(googleProjectId: GoogleProjectId, billingAccount: RawlsBillingAccountName): Future[Unit] = {

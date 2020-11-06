@@ -208,6 +208,10 @@ trait WorkspaceComponent {
       loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
     }
 
+    def listByNamespaces(namespaceNames: Seq[RawlsBillingProjectName]): ReadAction[Seq[Workspace]] = {
+      loadWorkspaces(findByNamespacesQuery(namespaceNames))
+    }
+
     def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] = {
       findByNamespaceQuery(namespaceName).size.result
     }
@@ -368,6 +372,10 @@ trait WorkspaceComponent {
 
     private def findByNamespaceQuery(namespaceName: RawlsBillingProjectName): WorkspaceQueryType = {
       filter(rec => (rec.namespace === namespaceName.value))
+    }
+
+    private def findByNamespacesQuery(namespaceNames: Seq[RawlsBillingProjectName]): WorkspaceQueryType = {
+      filter(_.namespace.inSetBind(namespaceNames.map(_.value)))
     }
 
     private def loadWorkspace(lookup: WorkspaceQueryType, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Option[Workspace]] = {
