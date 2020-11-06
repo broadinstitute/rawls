@@ -71,8 +71,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val studentAWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
-              studentAWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Read)
-              studentAWorkspaceDetails.canShare should equal(true)
+              studentAWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Read))
+              studentAWorkspaceDetails.canShare should equal(Option(true))
             }
 
             // check that student A can share the workspace with student B
@@ -81,7 +81,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val studentBWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentBToken))
-              studentBWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Read)
+              studentBWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Read))
             }
           }(ownerAuthToken)
         }
@@ -96,8 +96,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val studentAWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
-              studentAWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Read)
-              studentAWorkspaceDetails.canShare should equal(false)
+              studentAWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Read))
+              studentAWorkspaceDetails.canShare should equal(Option(false))
             }
 
             // check that student A cannot share the workspace with student B
@@ -116,8 +116,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val canComputeWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
-              canComputeWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Write)
-              canComputeWorkspaceDetails.canCompute should equal(true)
+              canComputeWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Write))
+              canComputeWorkspaceDetails.canCompute should equal(Option(true))
             }
 
             val revokeCanCompute: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, Some(false), Some(false)))
@@ -125,8 +125,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val noComputeWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
-              noComputeWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Write)
-              noComputeWorkspaceDetails.canCompute should equal(false)
+              noComputeWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Write))
+              noComputeWorkspaceDetails.canCompute should equal(Option(false))
             }
           }(ownerAuthToken)
         }
@@ -140,8 +140,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val writerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
-              writerWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Write)
-              writerWorkspaceDetails.canCompute should equal(true)
+              writerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Write))
+              writerWorkspaceDetails.canCompute should equal(Option(true))
             }
 
             val readerAccess: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))
@@ -149,8 +149,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val readerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
-              readerWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Read)
-              readerWorkspaceDetails.canCompute should equal(false)
+              readerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Read))
+              readerWorkspaceDetails.canCompute should equal(Option(false))
             }
           }(ownerAuthToken)
         }
@@ -164,7 +164,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val writerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
-              writerWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Write)
+              writerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Write))
             }
 
             val noAccess: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.NoAccess))
@@ -183,9 +183,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val secondOwnerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
-              secondOwnerWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Owner)
-              secondOwnerWorkspaceDetails.canCompute should equal(true)
-              secondOwnerWorkspaceDetails.canShare should equal(true)
+              secondOwnerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Owner))
+              secondOwnerWorkspaceDetails.canCompute should equal(Option(true))
+              secondOwnerWorkspaceDetails.canShare should equal(Option(true))
             }
 
             // try removing new owner's sharing and compute abilities, it should not work
@@ -194,9 +194,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             eventually {
               val newOwnerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
-              newOwnerWorkspaceDetails.accessLevel should equal(WorkspaceAccessLevels.Owner)
-              newOwnerWorkspaceDetails.canCompute should equal(true)
-              newOwnerWorkspaceDetails.canShare should equal(true)
+              newOwnerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Owner))
+              newOwnerWorkspaceDetails.canCompute should equal(Option(true))
+              newOwnerWorkspaceDetails.canShare should equal(Option(true))
             }
           }(ownerAuthToken)
         }
@@ -214,7 +214,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
             eventually {
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (Option(attributeMap))
             }
           }
         }
@@ -229,7 +229,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
             eventually {
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != attributeNameToRemove))
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (Option(attributeMap.filter(attribute => attribute._1.name != attributeNameToRemove)))
             }
           }
         }

@@ -49,7 +49,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.0"   % "test",
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % "test",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-0d02c8ce-SNAP"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-18b1c01e0"
       exclude("com.typesafe.scala-logging", "scala-logging_2.11") exclude("com.typesafe.akka", "akka-stream_2.11"),
 
     workbenchModel,

@@ -153,7 +153,7 @@ class BillingApiSpec extends AnyFreeSpec with BillingFixtures with MethodFixture
         "projectName" -> billingProjectName,
         "billingAccount" -> ServiceTestConfig.Projects.billingAccountId,
         "invalidBillingAccount" -> false,
-        "role" -> "Owner"
+        "roles" -> List("Owner")
       )
       result should contain allElementsOf expected
       Rawls.billingV2.deleteBillingProject(billingProjectName)
