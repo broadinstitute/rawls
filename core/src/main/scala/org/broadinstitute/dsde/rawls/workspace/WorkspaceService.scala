@@ -188,7 +188,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           // to wait until the Workspace is persisted before adding to the Service Perimeter because the database IS the
           // source of record for which Google Projects need to be in the Service Perimeter because the method to add
           // projects to the Service Perimeter overwrites the entirely list
-          _ <- maybeAddGoogleProjectToPerimeter(billingProject, workspace.googleProjectId)
+          _ <- maybeAddGoogleProjectToPerimeter(billingProject, workspace.googleProjectNumber)
         } yield workspace
       })
     })
@@ -1863,9 +1863,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   // If a ServicePerimeter is specified on the BillingProject, then we will need to ensure that the provided Google
   // Project is added to that Service Perimeter.  If no ServicePerimeter is specified on the Billing Project, do nothing
-  private def maybeAddGoogleProjectToPerimeter(billingProject: RawlsBillingProject, googleProjectId: GoogleProjectId, span: Span = null): Future[Unit] = {
+  private def maybeAddGoogleProjectToPerimeter(billingProject: RawlsBillingProject, googleProjectNumber: GoogleProjectNumber, span: Span = null): Future[Unit] = {
     billingProject.servicePerimeter match {
-      case Some(servicePerimeterName) => addGoogleProjectToPerimeter(googleProjectId, servicePerimeterName)
+      case Some(servicePerimeterName) => addGoogleProjectToPerimeter(googleProjectNumber, servicePerimeterName)
       case None => Future.successful()
     }
   }
@@ -1882,10 +1882,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def convertToGoogleProjectNumbers(googleProjectIds: Seq[GoogleProjectId]) = {
-    Seq[GoogleProjectNumber]()
-  }
-
   // Since multiple Billing Projects can specify the same Service Perimeter, we need to:
   // 1. Load all the Billing Projects that specify this servicePerimeterName
   // 2. Load all the Workspaces in all of those Billing Projects
@@ -1893,10 +1889,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // 4. Post that list to Google to overwrite the Service Perimeter's list of included Google Projects
   // 5. Poll until ^ Google Operation is complete
   // Throw exceptions if any of this goes awry
-  private def addGoogleProjectToPerimeter(googleProjectId: GoogleProjectId, servicePerimeterName: ServicePerimeterName): Future[Unit] = {
+  private def addGoogleProjectToPerimeter(googleProjectNumber: GoogleProjectNumber, servicePerimeterName: ServicePerimeterName): Future[Unit] = {
     collectWorkspacesInPerimeter(servicePerimeterName).map { workspacesInPerimeter =>
-      val googleProjectIds = workspacesInPerimeter.map(_.googleProjectId) ++ Seq(googleProjectId)
-      val googleProjectNumbers = convertToGoogleProjectNumbers(googleProjectIds)
+      val googleProjectNumbers: Seq[GoogleProjectNumber] = workspacesInPerimeter.map(_.googleProjectNumber) :+ googleProjectNumber
       val projectNumberStrings = googleProjectNumbers.map(_.toString())
 
       // Make the call to Google to overwrite the project.  Poll and wait for the Google Operation to complete
@@ -1969,7 +1964,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case ads => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.HIGH_SECURITY_LABEL) ++ ads.map(ad => gcsDAO.labelSafeString(ad.membersGroupName.value, "ad-") -> "")
     }
 
-    def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, bucketName: String, projectOwnerPolicyEmail: WorkbenchEmail, googleProjectId: GoogleProjectId, googleProjectNumber: Option[GoogleProjectNumber], dataAccess: DataAccess, parentSpan: Span = null): ReadWriteAction[(Workspace, Map[SamResourcePolicyName, WorkbenchEmail])] = {
+    def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, bucketName: String, projectOwnerPolicyEmail: WorkbenchEmail, googleProjectId: GoogleProjectId, googleProjectNumber: GoogleProjectNumber, dataAccess: DataAccess, parentSpan: Span = null): ReadWriteAction[(Workspace, Map[SamResourcePolicyName, WorkbenchEmail])] = {
       val currentDate = DateTime.now
 
       val workspace = Workspace(
@@ -2055,7 +2050,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             traceDBIOWithParent("getPolicySyncStatus", s1)(_ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { projectOwnerPolicyEmail =>
               traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, s1))).flatMap { googleProjectId =>
-                val googleProjectNumber: Option[GoogleProjectNumber] = Option(GoogleProjectNumber("IMPLEMENT ME"))
+                val googleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("NEED TO GET THIS BACK FROM setupGoogleProject ALONG WITH googleProjectId")
                 traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, googleProjectId, googleProjectNumber, dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
                   for {
                     //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have

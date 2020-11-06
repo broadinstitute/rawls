@@ -4,14 +4,13 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model._
-import org.scalatest.OptionValues
 
 import scala.language.implicitConversions
 
 /**
  * Created by dvoet on 2/8/16.
  */
-class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils with OptionValues {
+class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils {
   val workspaceId: UUID = UUID.randomUUID()
   val googleProjectId: GoogleProjectId = GoogleProjectId("test_google_project")
   val googleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("123456789")
@@ -33,7 +32,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     false,
     workspaceVersion,
     googleProjectId,
-    Option(googleProjectNumber)
+    googleProjectNumber
   )
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {
@@ -113,7 +112,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "save googleProjectNumber" in withEmptyTestDatabase {
     val savedWorkspace = runAndWait(workspaceQuery.save(workspace))
-    savedWorkspace.googleProjectNumber.value shouldBe googleProjectNumber
+    savedWorkspace.googleProjectNumber shouldBe googleProjectNumber
   }
 
   it should "list submission summary stats" in withDefaultTestDatabase {
