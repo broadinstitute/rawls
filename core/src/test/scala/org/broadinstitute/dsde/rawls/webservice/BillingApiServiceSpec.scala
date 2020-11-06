@@ -96,13 +96,16 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     }
   }
 
-  it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
+  it should "return 400 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("no_access")
 
-    Put(s"/billing/${project.projectName.value}/nobody") ~>
+    when(services.samDAO.addUserToPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourcePolicyName], ArgumentMatchers.eq("nobody"), any[UserInfo])).thenReturn(
+      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "user not found"))))
+
+    Put(s"/billing/${project.projectName.value}/user/nobody") ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound) {
+        assertResult(StatusCodes.BadRequest) {
           status
         }
       }
@@ -257,6 +260,15 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
 
   private def mockPositiveBillingProjectCreation(services: TestApiService, projectName: RawlsBillingProjectName): Unit = {
     when(services.samDAO.createResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), any[UserInfo])).thenReturn(Future.successful(()))
+    when(services.samDAO.createResourceFull(
+      ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+      ArgumentMatchers.eq(projectName.value),
+      ArgumentMatchers.eq(Map.empty),
+      ArgumentMatchers.eq(Set.empty),
+      any[UserInfo],
+      ArgumentMatchers.eq(Option(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.billingProject.value))))).
+      thenReturn(Future.successful(SamCreateResourceResponse(SamResourceTypeNames.billingProject.value, projectName.value, Set.empty, Set.empty)))
+
     when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.workspaceCreator), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator))), any[UserInfo])).thenReturn(Future.successful(()))
     when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser))), any[UserInfo])).thenReturn(Future.successful(()))
     when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))

@@ -142,6 +142,22 @@ class BillingApiSpec extends AnyFreeSpec with BillingFixtures with MethodFixture
       // try to create a project with a perimeter. retry up to 3 times for project to reach 'Ready' status
       val billingProjectName = createNewBillingProject(owner, servicePerimeterOpt = Option(fullyQualifiedServicePerimeterId))
     }
+
+    "can create a new billing project with v2 api" in {
+      val owner: Credentials = UserPool.chooseProjectOwner
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
+      val billingProjectName = "rawls-billingapispecV2-" + makeRandomId()
+      Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
+      val result = Rawls.billingV2.getBillingProject(billingProjectName).toList
+      val expected = List(
+        "projectName" -> billingProjectName,
+        "billingAccount" -> ServiceTestConfig.Projects.billingAccountId,
+        "invalidBillingAccount" -> false,
+        "roles" -> List("Owner")
+      )
+      result should contain allElementsOf expected
+      Rawls.billingV2.deleteBillingProject(billingProjectName)
+    }
   }
 
 
