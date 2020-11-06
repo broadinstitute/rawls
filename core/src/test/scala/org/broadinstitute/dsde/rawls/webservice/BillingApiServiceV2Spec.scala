@@ -334,7 +334,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, ProjectRoles.Owner)
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User))
       }
   }
 
@@ -350,7 +350,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, ProjectRoles.User)
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.User))
       }
   }
 
@@ -451,33 +451,36 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   "GET /billing/v2" should "list all my projects" in withEmptyDatabaseAndApiServices { services =>
-    val projects = List.fill(10) { createProject(UUID.randomUUID().toString) }
-    val policies = projects.flatMap { p =>
-      // randomly select a policy name or none to test role mapping and no access
-      val maybeRole = Random.shuffle(List(Option(SamBillingProjectPolicyNames.workspaceCreator), Option(SamBillingProjectPolicyNames.owner), None)).head
-      maybeRole.map { role =>
-        SamResourceIdWithPolicyName(
+    val projects = List.fill(20) { createProject(UUID.randomUUID().toString) }
+    val possibleRoles = List(Option(SamProjectRoles.workspaceCreator), Option(SamProjectRoles.owner), None)
+    val samUserResources = projects.flatMap { p =>
+      // randomly select a subset of possible roles
+      val roles = Random.shuffle(possibleRoles).take(Random.nextInt(possibleRoles.size)).flatten.toSet
+      if (roles.isEmpty) {
+        None
+      } else {
+        Option(SamUserResource(
           p.projectName.value,
-          role,
+          SamRolesAndActions(roles, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
           Set.empty,
-          Set.empty,
-          false)
+          Set.empty))
       }
-    }.toSet
+    }
 
-    when(services.samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(policies))
+    when(services.samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(samUserResources))
 
     val expected = projects.flatMap { p =>
-      policies.find(_.resourceId == p.projectName.value).map { policy =>
+      samUserResources.find(_.resourceId == p.projectName.value).map { samResource =>
         RawlsBillingProjectResponse(
           p.projectName,
           p.billingAccount,
           p.servicePerimeter,
           p.invalidBillingAccount,
-          policy.accessPolicyName match {
-            case SamBillingProjectPolicyNames.owner => ProjectRoles.Owner
-            case SamBillingProjectPolicyNames.workspaceCreator => ProjectRoles.User
-            case _ => throw new Exception("this should not happen")
+          samResource.direct.roles.collect {
+            case SamProjectRoles.owner => ProjectRoles.Owner
+            case SamProjectRoles.workspaceCreator => ProjectRoles.User
           }
         )
       }

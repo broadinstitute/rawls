@@ -121,6 +121,8 @@ case class SamCreateResourcePolicyResponse(id: SamCreateResourceAccessPolicyIdRe
 case class SamCreateResourceAccessPolicyIdResponse(accessPolicyName: String, resource: SamFullyQualifiedResourceId)
 case class SamFullyQualifiedResourceId(resourceId: String, resourceTypeName: String)
 
+case class SamRolesAndActions(roles: Set[SamResourceRole], actions: Set[SamResourceAction])
+case class SamUserResource(resourceId: String, direct: SamRolesAndActions, inherited: SamRolesAndActions, public: SamRolesAndActions, authDomainGroups: Set[WorkbenchGroupName], missingAuthDomainGroups: Set[WorkbenchGroupName])
 
 object SamModelJsonSupport extends JsonSupport {
   implicit val SamFullyQualifiesResourceIdFormat = jsonFormat2(SamFullyQualifiedResourceId)
@@ -137,4 +139,7 @@ object SamModelJsonSupport extends JsonSupport {
   implicit val SamCreateResourceAccessPolicyIdResponseFormat = jsonFormat2(SamCreateResourceAccessPolicyIdResponse)
   implicit val samCreateResourcePolicyResponseFormat = jsonFormat2(SamCreateResourcePolicyResponse)
   implicit val SamCreateResourceResponseFormat = jsonFormat4(SamCreateResourceResponse)
+
+  implicit val SamRolesAndActionsFormat = jsonFormat2(SamRolesAndActions)
+  implicit val SamUserResourceFormat = jsonFormat6(SamUserResource)
 }

@@ -181,32 +181,37 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       resourceRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
       maybeBillingProject <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }
     } yield {
-      val bestRole = samRolesToProjectRoles(resourceRoles).foldLeft(Option.empty[ProjectRoles.ProjectRole]) {
-        // there are only 2 roles, if owner already found, keep it, otherwise use current role in the fold
-        case (Some(ProjectRoles.Owner), _) => Option(ProjectRoles.Owner)
-        case (_, projectRole) => Option(projectRole)
-      }
-      (bestRole, maybeBillingProject) match {
-        case (Some(role), Some(project)) =>
-          val projectResponse = RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, role)
-          RequestComplete(StatusCodes.OK, projectResponse)
-        case _ => RequestComplete(StatusCodes.NotFound)
+      maybeProjectResponse(resourceRoles, maybeBillingProject) match {
+        case Some(projectResponse) => RequestComplete(StatusCodes.OK, projectResponse)
+        case None => RequestComplete(StatusCodes.NotFound)
       }
     }
   }
 
   def listBillingProjectsV2(): Future[PerRequestMessage] = {
     for {
-      resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
-      projectsInDB <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjects(resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))) }
+      samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)
+      projectsInDB <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjects(samUserResources.map(resource => RawlsBillingProjectName(resource.resourceId)).toSet) }
     } yield {
       val projectsByName = projectsInDB.map(p => p.projectName -> p).toMap
-      val projectResponses = projectPoliciesToRoles(resourceIdsWithPolicyNames).flatMap { case (resourceId, role) =>
-        projectsByName.get(RawlsBillingProjectName(resourceId)).map { project =>
-          RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, role)
-        }
+      val projectResponses = samUserResources.flatMap { samUserResource =>
+        val allSamRoles = samUserResource.direct.roles ++ samUserResource.inherited.roles
+        val maybeBillingProject = projectsByName.get(RawlsBillingProjectName(samUserResource.resourceId))
+        maybeProjectResponse(allSamRoles, maybeBillingProject)
       }.toList.sortBy(_.projectName.value)
       RequestComplete(projectResponses)
+    }
+  }
+
+  private def maybeProjectResponse(samRoles: Set[SamResourceRole], maybeBillingProject: Option[RawlsBillingProject]): Option[RawlsBillingProjectResponse] = {
+    val projectRoles = samRolesToProjectRoles(samRoles)
+    maybeBillingProject match {
+      case Some(project) if projectRoles.nonEmpty =>
+        Option(RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, projectRoles))
+      case _ =>
+        // either the project is not in the db or the user does not have a sam role that maps to a ProjectRole
+        // in either case the project is excluded
+        None
     }
   }
 

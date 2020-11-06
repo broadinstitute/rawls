@@ -235,6 +235,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or500) { () => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply RequestBuilding.Get(url) }
   }
 
+  override def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]] = {
+    val url = samServiceURL + s"/api/resources/v2/${resourceTypeName.value}"
+    retry(when401or500) { () => pipeline[Seq[SamUserResource]](userInfo) apply RequestBuilding.Get(url) }
+  }
+
   override def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId, userEmail: RawlsUserEmail): Future[String] = {
     val url = samServiceURL + s"/api/google/v1/petServiceAccount/${googleProject.value}/${URLEncoder.encode(userEmail.value, UTF_8.name)}"
     retry(when401or500) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
