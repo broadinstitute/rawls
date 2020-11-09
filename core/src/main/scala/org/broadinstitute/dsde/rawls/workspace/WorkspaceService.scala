@@ -2,9 +2,11 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import com.google.api.services.storage.model.StorageObject
@@ -45,6 +47,8 @@ import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
@@ -64,7 +68,7 @@ object WorkspaceService {
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
                   entityManager: EntityManager)
                  (userInfo: UserInfo)
-                 (implicit executionContext: ExecutionContext): WorkspaceService = {
+                 (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
     new WorkspaceService(userInfo, dataSource, entityManager, methodRepoDAO, cromiamDAO,
       executionServiceCluster, execServiceBatchSize, workspaceManagerDAO,
@@ -112,8 +116,8 @@ object WorkspaceService {
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)(implicit protected val executionContext: ExecutionContext)
-  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
+  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport with Retry {
 
   import dataSource.dataAccess.driver.api._
 
@@ -1841,11 +1845,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   // Gets a Google Project from the Resource Buffering Service (RBS) and sets it up to be usable by Rawls as the backing
   // Google Project for a Workspace.  The specific entities in the Google Project (like Buckets or compute nodes or
-  // whatever) that are used by the Workspace will all get set up later after the Workspace is created in Rawls.
+  // whatever) that are used by the Workspace will all get set up later after the Workspace is created in Rawls.  The
+  // project should NOT be added to any Service Perimeters yet, that needs to happen AFTER we persist the Workspace
+  // record.
   // 1. Claim Project from RBS
   // 2. Update Billing Account information on Google Project
-  // Returns a Future[GoogleProjectId] of the project that we claimed from RBS
-  private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null): Future[GoogleProjectId] = {
+  // Returns a Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
+  private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null): Future[(GoogleProjectId, GoogleProjectNumber)] = {
     // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
     // Option, so we are being thorough
     val billingAccount = billingProject.billingAccount match {
@@ -1856,9 +1862,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // TODO: Wire up the Spans for tracing
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => getGoogleProjectFromRBS)
-//      _ <- maybeAddGoogleProjectToPerimeter(billingProject, googleProjectId) // Don't add the project to the Perimeter yet, do that AFTER the Workspace is persisted
       _ <- updateBillingAccountOnGoogleProject(googleProjectId, billingAccount)
-    } yield googleProjectId
+      googleProjectNumber <- getGoogleProjectNumber(googleProjectId)
+    } yield (googleProjectId, googleProjectNumber)
+  }
+
+  private def getGoogleProjectNumber(googleProjectId: GoogleProjectId): Future[GoogleProjectNumber] = {
+    gcsDAO.getGoogleProject(googleProjectId).map { p => Option(p.getProjectNumber) match {
+        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
+        case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
+      }
+    }
   }
 
   // If a ServicePerimeter is specified on the BillingProject, then we will need to ensure that the provided Google
@@ -1898,10 +1912,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, projectNumberStrings).map { operation =>
         // This pollOperation is what we need to retry until the OperationStatus that gets returned is some terminal
         // status
-        gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operation.getName))
+        retryUntilSuccessOrTimeout(failureLogMessage = s"Google Operation to update Service Perimeter: ${servicePerimeterName} was not successful")(5 seconds, 50 seconds) { () =>
+          gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operation.getName)).map {
+            case OperationStatus(false, _) => Future.failed(new RawlsException(s"Google Operation to update Service Perimeter ${servicePerimeterName} is still in progress..."))
+            case OperationStatus(true, errorMessage) if !errorMessage.isEmpty => Future.successful(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Google Operation to update Service Perimeter ${servicePerimeterName} failed with message: ${errorMessage}")))
+            case _ => Future.successful()
+          }
+        }
       }
     }
-    Future.successful()
   }
 
   // In its own transaction, look up all of the Workspaces contained in Billing Projects that use the specified
@@ -2049,8 +2068,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
 
             traceDBIOWithParent("getPolicySyncStatus", s1)(_ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { projectOwnerPolicyEmail =>
-              traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, s1))).flatMap { googleProjectId =>
-                val googleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("NEED TO GET THIS BACK FROM setupGoogleProject ALONG WITH googleProjectId")
+              traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, s1))).flatMap { case (googleProjectId, googleProjectNumber) =>
                 traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, googleProjectId, googleProjectNumber, dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
                   for {
                     //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
