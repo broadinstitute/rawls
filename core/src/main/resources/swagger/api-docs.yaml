@@ -276,6 +276,89 @@ paths:
             - openid
             - email
             - profile
+  /api/billing/v2:
+    post:
+      tags:
+        - billing
+      summary: create billing project in rawls
+      description: create new billing project in rawls
+      operationId: createBillingProjectFullV2
+      requestBody:
+        description: create project request
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/CreateRawlsBillingProjectFullRequest'
+        required: true
+      responses:
+        204:
+          description: Successfully Created Billing Project in Rawls and Google
+          content: {}
+        400:
+          description: both you and firecloud billing user must be a user of the billing account
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: project already exists in rawls
+          content: {}
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+            - https://www.googleapis.com/auth/cloud-billing
+      x-codegen-request-body-name: createProjectRequest
+  /api/billing/v2/{projectId}:
+    get:
+      tags:
+        - billing
+      summary: get billing project
+      description: get billing project
+      operationId: getBillingProject
+      parameters:
+        - name: projectId
+          in: path
+          description: Id of the billing project
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RawlsBillingProjectResponse'
+        404:
+          description: Project Not Found
+          content: {}
+        500:
+          description: Internal Server Error
+          content: {}
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    delete:
+
+
+  /api/billing/v2/{projectId}/members:
+    get:
+
+  /api/billing/v2/{projectId}/members/{role}/{email}:
+    put:
+
+    delete:
+
   /api/admin/project/registration:
     post:
       tags:
