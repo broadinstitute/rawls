@@ -329,7 +329,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   private def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName, userInfoForSam: UserInfo) = {
-    samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, userInfo).flatMap { projectChildren =>
+    samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, userInfoForSam).flatMap { projectChildren =>
       if (projectChildren.contains(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))) {
         for {
           _ <- deletePetsInProject(GoogleProjectId(projectName.value), userInfoForSam)
