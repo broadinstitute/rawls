@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
 
 import scala.collection.JavaConverters._
@@ -85,7 +86,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       // get pet service account key for this user
       petKey <- getPetSAKey
       // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey)
+      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(dataProject))
     } yield {
       // translate the BQ results into a single Rawls Entity
       queryResultsToEntity(queryResults, entityType, pk)
@@ -119,7 +120,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       // get pet service account key for this user
       petKey <- getPetSAKey
       // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey)
+      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(dataProject))
     } yield {
       // translate the BQ results into a Rawls query result
       val page = queryResultsToEntities(queryResults, entityType, pk)
@@ -206,7 +207,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
           (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel, parsedExpressions, tableModel, entityNameColumn)
           _ = logger.debug(s"expressions [${parsedExpressions.map(_.expression).mkString(", ")}] for snapshot id [${snapshotModel.getId} produced sql query ${bqQueryJobConfig.build().getQuery}")
           petKey <- getPetSAKey
-          queryResults <- runBigQuery(bqQueryJobConfig, petKey)
+          queryResults <- runBigQuery(bqQueryJobConfig, petKey, GoogleProject(snapshotModel.getDataProject))
         } yield {
           val expressionResultsStream = transformQueryResultToExpressionAndResult(entityNameColumn, parsedExpressions, selectAndFroms, queryResults)
           val expressionResults = convertToListAndCheckSize(expressionResultsStream, tableModel.getRowCount)
@@ -274,8 +275,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
   }
 
-  private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String): IO[TableResult] = {
-    bqServiceFactory.getServiceForPet(petKey).use(_.query(
+  private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String, projectToBill: GoogleProject): IO[TableResult] = {
+    bqServiceFactory.getServiceForPet(petKey, projectToBill).use(_.query(
       bqQueryJobConfigBuilder
         .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
         .build()))
