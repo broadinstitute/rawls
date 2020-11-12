@@ -74,4 +74,5 @@
     <include file="changesets/20200629_method_config_data_ref_name.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20200718_external_workflow_entities.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20201013_project_per_workspace.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20201105_add_use_reference_disks.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
