@@ -725,6 +725,15 @@ class HttpGoogleServicesDAO(
     jsonVersion.asYaml.spaces2
   }
 
+  override def setBillingAccountForProject(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, billingEnabled: Boolean = true): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Billing
+    val billingServiceAccountCredential = getBillingServiceAccountCredential
+    val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+    retryWhen500orGoogleError(() => {
+      executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProjectId.value}", new ProjectBillingInfo().setBillingEnabled(billingEnabled)))
+    })
+  }
+
   /*
    * Set the deployment policy to "abandon" -- i.e. allows the created project to persist even if the deployment is deleted --
    * and then delete the deployment. There's a limit of 1000 deployments so this is important to do.
