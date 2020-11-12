@@ -4546,6 +4546,9 @@ components:
         useCallCache:
           type: boolean
           description: Whether or not to read from cache for this submission
+        useReferenceDisks:
+          type: boolean
+          description: Whether or not to use pre-built disks for common genome references
         deleteIntermediateOutputFiles:
           type: boolean
           description: Whether or not to delete intermediate output files when the
