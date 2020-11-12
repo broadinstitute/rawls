@@ -187,12 +187,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               DBIO.successful(workspaceContext)
             }
           }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
-          //////////////
           // After creating the Workspace, THIS is where we want to add the project to the Service Perimeter.  We need
           // to wait until the Workspace is persisted before adding to the Service Perimeter because the database IS the
           // source of record for which Google Projects need to be in the Service Perimeter because the method to add
-          // projects to the Service Perimeter overwrites the entirely list
-          _ <- maybeAddGoogleProjectToPerimeter(billingProject, workspace.googleProjectNumber)
+          // projects to the Service Perimeter overwrites the entire list projects in the Perimeter
+          _ <- maybeUpdateGoogleProjectsInPerimeter(billingProject)
         } yield workspace
       })
     })
@@ -1843,14 +1842,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     Future.successful(GoogleProjectId(UUID.randomUUID.toString.substring(0, 8) + "_fake_proj_name"))
   }
 
-  // Gets a Google Project from the Resource Buffering Service (RBS) and sets it up to be usable by Rawls as the backing
-  // Google Project for a Workspace.  The specific entities in the Google Project (like Buckets or compute nodes or
-  // whatever) that are used by the Workspace will all get set up later after the Workspace is created in Rawls.  The
-  // project should NOT be added to any Service Perimeters yet, that needs to happen AFTER we persist the Workspace
-  // record.
-  // 1. Claim Project from RBS
-  // 2. Update Billing Account information on Google Project
-  // Returns a Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
+  /**
+    * Gets a Google Project from the Resource Buffering Service (RBS) and sets it up to be usable by Rawls as the backing
+    * Google Project for a Workspace.  The specific entities in the Google Project (like Buckets or compute nodes or
+    * whatever) that are used by the Workspace will all get set up later after the Workspace is created in Rawls.  The
+    * project should NOT be added to any Service Perimeters yet, that needs to happen AFTER we persist the Workspace
+    * record.
+    * 1. Claim Project from RBS
+    * 2. Update Billing Account information on Google Project
+    *
+    * @param billingProject
+    * @param span
+    * @return Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
+    */
   private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null): Future[(GoogleProjectId, GoogleProjectNumber)] = {
     // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
     // Option, so we are being thorough
@@ -1859,11 +1863,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing or invalid for Billing Project: ${billingProject}"))
     }
 
-    // TODO: Wire up the Spans for tracing
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => getGoogleProjectFromRBS)
-      _ <- updateBillingAccountOnGoogleProject(googleProjectId, billingAccount)
-      googleProjectNumber <- getGoogleProjectNumber(googleProjectId)
+      _ <- traceWithParent("updateBillingAccountForProject", span)(_ => gcsDAO.setBillingAccountForProject(googleProjectId, billingAccountName))
+      googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
     } yield (googleProjectId, googleProjectNumber)
   }
 
@@ -1875,11 +1878,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // If a ServicePerimeter is specified on the BillingProject, then we will need to ensure that the provided Google
-  // Project is added to that Service Perimeter.  If no ServicePerimeter is specified on the Billing Project, do nothing
-  private def maybeAddGoogleProjectToPerimeter(billingProject: RawlsBillingProject, googleProjectNumber: GoogleProjectNumber, span: Span = null): Future[Unit] = {
+  /**
+    * If a ServicePerimeter is specified on the BillingProject, then we should update the list of Google Projects in the
+    * Service Perimeter.  All newly created Workspaces (and their newly claimed Google Projects) should already be
+    * persisted in the Rawls database prior to calling this method.  If no ServicePerimeter is specified on the Billing
+    * Project, do nothing
+    *
+    * @param billingProject
+    * @param span
+    * @return Future[Unit]
+    */
+  private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject, span: Span = null): Future[Unit] = {
     billingProject.servicePerimeter match {
-      case Some(servicePerimeterName) => addGoogleProjectToPerimeter(googleProjectNumber, servicePerimeterName)
+      case Some(servicePerimeterName) => overwriteGoogleProjectsInPerimeter(servicePerimeterName)
       case None => Future.successful()
     }
   }
@@ -1903,18 +1914,33 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // 4. Post that list to Google to overwrite the Service Perimeter's list of included Google Projects
   // 5. Poll until ^ Google Operation is complete
   // Throw exceptions if any of this goes awry
-  private def addGoogleProjectToPerimeter(googleProjectNumber: GoogleProjectNumber, servicePerimeterName: ServicePerimeterName): Future[Unit] = {
+  /**
+    * Takes the the name of a Service Perimeter as the only parameter.  Since multiple Billing Projects can specify the
+    * same Service Perimeter, we will:
+    * 1. Load all the Billing Projects that also use this servicePerimeterName
+    * 2. Load all the Workspaces in all of those Billing Projects
+    * 3. Collect all of the GoogleProjectNumbers from those Workspaces
+    * 4. Post that list to Google to overwrite the Service Perimeter's list of included Google Projects
+    * 5. Poll until Google Operation to update the Service Perimeter gets to some terminal state
+    * Throw exceptions if any of this goes awry
+    *
+    * @param servicePerimeterName
+    * @return Future[Unit] indicating whether we succeeded to update the Service Perimeter
+    */
+  private def overwriteGoogleProjectsInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Unit] = {
     collectWorkspacesInPerimeter(servicePerimeterName).map { workspacesInPerimeter =>
-      val googleProjectNumbers: Seq[GoogleProjectNumber] = workspacesInPerimeter.map(_.googleProjectNumber) :+ googleProjectNumber
-      val projectNumberStrings = googleProjectNumbers.map(_.toString())
+      val projectNumberStrings = workspacesInPerimeter.map(_.googleProjectNumber.toString())
 
       // Make the call to Google to overwrite the project.  Poll and wait for the Google Operation to complete
       gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, projectNumberStrings).map { operation =>
-        // This pollOperation is what we need to retry until the OperationStatus that gets returned is some terminal
-        // status
+        // Keep retrying the pollOperation until the OperationStatus that gets returned is some terminal status
         retryUntilSuccessOrTimeout(failureLogMessage = s"Google Operation to update Service Perimeter: ${servicePerimeterName} was not successful")(5 seconds, 50 seconds) { () =>
           gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operation.getName)).map {
             case OperationStatus(false, _) => Future.failed(new RawlsException(s"Google Operation to update Service Perimeter ${servicePerimeterName} is still in progress..."))
+            // TODO: If the operation to update the Service Perimeter failed, we need to consider the possibility that
+            // the list of Projects in the Perimeter may have been wiped or somehow modified in an undesirable way.  If
+            // this happened, it would be possible for Projects intended to be in the Perimeter are NOT in that
+            // Perimeter anymore, which is a problem.
             case OperationStatus(true, errorMessage) if !errorMessage.isEmpty => Future.successful(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Google Operation to update Service Perimeter ${servicePerimeterName} failed with message: ${errorMessage}")))
             case _ => Future.successful()
           }
@@ -1932,11 +1958,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         allWorkspacesInBillingProject <- dataAccess.workspaceQuery.listByNamespaces(allProjectsWithPerimeter.map(_.projectName))
       } yield allWorkspacesInBillingProject
     }
-  }
-
-  private def updateBillingAccountOnGoogleProject(googleProjectId: GoogleProjectId, billingAccount: RawlsBillingAccountName): Future[Unit] = {
-    // TODO: Implement for real
-    Future.successful()
   }
 
   /**
