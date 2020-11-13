@@ -84,7 +84,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sample1),

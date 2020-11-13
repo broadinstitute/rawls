@@ -21,7 +21,7 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       Map.empty,
       false)
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
 
     val userEmail = RawlsUserEmail("foo@bar.com")
     val saEmail1 = BondServiceAccountEmail("sa1@bar.com")

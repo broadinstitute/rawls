@@ -198,7 +198,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       )
 
       runAndWait(rawlsBillingProjectQuery.create(project))
-      runAndWait(workspaceQuery.save(workspace))
+      runAndWait(workspaceQuery.createOrUpdate(workspace))
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))

@@ -2092,7 +2092,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       import driver.api._
 
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         entityQuery.save(workspace, entities)
       )
     }

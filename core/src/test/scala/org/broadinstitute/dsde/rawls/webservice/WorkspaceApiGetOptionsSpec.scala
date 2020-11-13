@@ -115,8 +115,8 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
 
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspace2),
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(workspace2),
 
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(

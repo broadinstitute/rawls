@@ -28,7 +28,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   "EntityComponent" should "crud entities" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     val workspaceContext = workspace
 
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
@@ -332,7 +332,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "list all entity types with their namespaced attribute names" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     val workspaceContext = workspace
 
     // this entity also tests that namespaced and default attributes of the same name are tracked separately
@@ -457,7 +457,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     override def save() = {
       DBIOAction.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         entityQuery.save(workspace, aliquot1),
         entityQuery.save(workspace, sample1))
     }
@@ -575,8 +575,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val c2 = Entity("c2", "samples", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("cycle2") -> AttributeEntityReference("samples", "c3")))
       val c3 = Entity("c3", "samples", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3)))
 
-      runAndWait(workspaceQuery.save(workspaceOriginal))
-      runAndWait(workspaceQuery.save(workspaceClone))
+      runAndWait(workspaceQuery.createOrUpdate(workspaceOriginal))
+      runAndWait(workspaceQuery.createOrUpdate(workspaceClone))
 
       withWorkspaceContext(workspaceOriginal) { originalContext =>
         withWorkspaceContext(workspaceClone) { cloneContext =>
@@ -757,7 +757,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   )
 
   it should "copy entities without a conflict" in withDefaultTestDatabase {
-    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
     withWorkspaceContext(testData.workspace) { context1 =>
       withWorkspaceContext(workspace2) { context2 =>
         runAndWait(entityQuery.save(context2, x2))
@@ -784,7 +784,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "copy entities without a conflict with a cycle" in withDefaultTestDatabase {
 
-    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
     withWorkspaceContext(testData.workspace) { context1 =>
       withWorkspaceContext(workspace2) { context2 =>
         val a = Entity("a", "test", Map.empty)
@@ -841,8 +841,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "copy entities with a conflict in the entity subtrees and properly link already existing entities" in withDefaultTestDatabase {
 
-    runAndWait(workspaceQuery.save(workspace2))
-    runAndWait(workspaceQuery.save(workspace3))
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
+    runAndWait(workspaceQuery.createOrUpdate(workspace3))
     withWorkspaceContext(workspace2) { context2 =>
       withWorkspaceContext(workspace3) { context3 =>
         val participant1 = Entity("participant1", "participant", Map.empty)
@@ -915,7 +915,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "save a new entity with the same name as a deleted entity" in withDefaultTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     val workspaceContext = workspace
 
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
@@ -1093,7 +1093,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     val entityStats1 = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(Some(testData.billingProject.projectName.value), None))
     assertResult(expected)(entityStats1.toSet)
     // add two sample sets to a different namespace
-    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
     withWorkspaceContext(workspace2) { wsctx =>
       runAndWait(entityQuery.save(wsctx, x2))
       runAndWait(entityQuery.save(wsctx, x1))
@@ -1119,7 +1119,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(expected1)(entityStats1.toSet)
     // add two sample sets in a different namespace
     val wsOtherNamespace = testData.workspace.copy(namespace="somethingelse", workspaceId = UUID.randomUUID.toString)
-    runAndWait(workspaceQuery.save(wsOtherNamespace))
+    runAndWait(workspaceQuery.createOrUpdate(wsOtherNamespace))
     withWorkspaceContext(wsOtherNamespace) { wsctx =>
       runAndWait(entityQuery.save(wsctx, x2))
       runAndWait(entityQuery.save(wsctx, x1))
@@ -1138,7 +1138,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "gather entity statistics for the entire corpus, across all namespace/names" in withDefaultTestDatabase {
     // add two sample sets in a different namespace
-    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
     withWorkspaceContext(workspace2) { wsctx =>
       runAndWait(entityQuery.save(wsctx, x2))
       runAndWait(entityQuery.save(wsctx, x1))

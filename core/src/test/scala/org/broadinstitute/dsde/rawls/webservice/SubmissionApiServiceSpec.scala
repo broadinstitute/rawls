@@ -716,7 +716,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       import driver.api._
 
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         entityQuery.save(workspace, lotsOfSamples :+ sampleSet)
       )
     }

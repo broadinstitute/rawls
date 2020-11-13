@@ -299,7 +299,7 @@ trait MethodConfigTestSupport {
   class ConfigData extends TestData {
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sampleGood),

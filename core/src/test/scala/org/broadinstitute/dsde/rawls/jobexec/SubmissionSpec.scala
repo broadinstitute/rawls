@@ -256,7 +256,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sample1),
@@ -885,7 +885,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val workspaceAttrValue = "foobar"
       val inputsWithWorkspaceExpression = methodConfig.inputs.map { case (name, expr) => name -> AttributeString(s"""{"entity": ${expr.value}, "workspace": workspace.$workspaceAttrName}""")}
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(inputs =  inputsWithWorkspaceExpression)))
-      runAndWait(workspaceQuery.save(minimalTestData.workspace.copy(attributes = Map(AttributeName.withDefaultNS(workspaceAttrName) -> AttributeString(workspaceAttrValue)))))
+      runAndWait(workspaceQuery.createOrUpdate(minimalTestData.workspace.copy(attributes = Map(AttributeName.withDefaultNS(workspaceAttrName) -> AttributeString(workspaceAttrValue)))))
 
       val vComplete = Await.result(workspaceService.createSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
       val (vStatus, resultSubmission) = vComplete.response

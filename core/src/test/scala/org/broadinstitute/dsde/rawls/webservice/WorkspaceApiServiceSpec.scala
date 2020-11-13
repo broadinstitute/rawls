@@ -212,8 +212,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
 
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspace2),
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(workspace2),
 
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
@@ -912,7 +912,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "return 201 on clone workspace with existing library-namespace attributes" in withTestDataApiServices { services =>
 
     val updatedWorkspace = testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo")))
-    runAndWait(workspaceQuery.save(updatedWorkspace))
+    runAndWait(workspaceQuery.createOrUpdate(updatedWorkspace))
 
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
