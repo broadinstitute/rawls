@@ -36,6 +36,7 @@ import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, Deplo
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
+import org.broadinstitute.dsde.rawls.dataaccess.rbs.{HttpRbsDAO, RbsDAO}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
@@ -199,6 +200,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0))
 
+    val rbsDAO: RbsDAO = new HttpRbsDAO() // todo: mock this
+
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
@@ -219,7 +222,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager
+      entityManager,
+      rbsDAO
     )_
 
     override val entityServiceConstructor = EntityService.constructor(

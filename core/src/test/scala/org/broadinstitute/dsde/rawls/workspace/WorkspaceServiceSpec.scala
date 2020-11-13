@@ -30,6 +30,7 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.rbs.{HttpRbsDAO, RbsDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
@@ -139,6 +140,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
     val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0))
 
+    val rbsDAO: RbsDAO = new HttpRbsDAO() // todo: mock this
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -162,7 +165,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager
+      entityManager,
+      rbsDAO
     )_
 
     def cleanupSupervisor = {

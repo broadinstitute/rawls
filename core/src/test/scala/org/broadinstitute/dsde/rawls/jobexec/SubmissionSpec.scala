@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, Deplo
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.rbs.{HttpRbsDAO, RbsDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
@@ -336,6 +337,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
       val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0))
 
+      val rbsDAO: RbsDAO = new HttpRbsDAO() // todo: mock this
+
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
         new HttpMethodRepoDAO(
@@ -359,7 +362,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         mockSubmissionCostService,
         workspaceServiceConfig,
         requesterPaysSetupService,
-        entityManager
+        entityManager,
+        rbsDAO
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
