@@ -174,7 +174,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace)
+        workspaceQuery.createOrUpdate(workspace)
       )
     }
   }
@@ -192,7 +192,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq (
-        workspaceQuery.save(workspace)
+        workspaceQuery.createOrUpdate(workspace)
       )
     }
   }
@@ -819,7 +819,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceWorkflowFailureMode,
       workspaceToTestGrant,
       workspaceConfigCopyDestination)
-    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
+    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
 
     override def save() = {
       DBIO.seq(
@@ -976,8 +976,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspace2)
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(workspace2)
       )
     }
   }
@@ -1112,7 +1112,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
             entityQuery.save(context, allEntities),

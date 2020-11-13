@@ -424,7 +424,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     //note there is only 1 workspace (may be None if it is not updated) even though it may be updated multiple times so reduce it into 1 update
     val workspaces = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
     if (workspaces.isEmpty) DBIO.successful(0)
-    else dataAccess.workspaceQuery.save(workspaces.reduce((a, b) => a.copy(attributes = a.attributes ++ b.attributes)))
+    else dataAccess.workspaceQuery.createOrUpdate(workspaces.reduce((a, b) => a.copy(attributes = a.attributes ++ b.attributes)))
   }
 
   def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]])(implicit executionContext: ExecutionContext) = {

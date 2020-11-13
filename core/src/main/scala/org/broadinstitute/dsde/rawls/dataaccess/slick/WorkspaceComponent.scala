@@ -41,7 +41,8 @@ trait WorkspaceComponent {
     with EntityComponent
     with SubmissionComponent
     with WorkflowComponent
-    with MethodConfigurationComponent =>
+    with MethodConfigurationComponent
+    with RawlsBillingProjectComponent =>
 
   import driver.api._
 
@@ -154,7 +155,14 @@ trait WorkspaceComponent {
       loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
     }
 
-    def save(workspace: Workspace): ReadWriteAction[Workspace] = {
+    /**
+      * Creates or updates the provided Workspace.  First queries the database to see if a Workspace record already
+      * exists with the same workspaceId.  If yes, then the existing Workspace record will be updated, otherwise a new
+      * Workspace record will be created.
+      * @param workspace
+      * @return The updated or created Workspace
+      */
+    def createOrUpdate(workspace: Workspace): ReadWriteAction[Workspace] = {
       validateUserDefinedString(workspace.namespace)
       validateWorkspaceName(workspace.name)
       workspace.attributes.keys.foreach { attrName =>
@@ -268,6 +276,15 @@ trait WorkspaceComponent {
         attribute <- workspaceAttributeQuery.queryByAttribute(attrName, attrValue)
         workspace <- workspaceQuery if workspace.id === attribute.ownerId
       } yield workspace
+    }
+
+    def getWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): ReadAction[Seq[Workspace]] = {
+      val workspaces = for {
+        billingProject <- rawlsBillingProjectQuery.getProjectsWithPerimeterAndStatusQuery(servicePerimeterName, CreationStatuses.all.toSeq)
+        workspace <- workspaceQuery if workspace.namespace === billingProject.projectName
+      } yield workspace
+
+      loadWorkspaces(workspaces)
     }
 
     /**

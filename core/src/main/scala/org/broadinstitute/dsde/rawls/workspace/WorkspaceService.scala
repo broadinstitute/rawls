@@ -477,7 +477,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val workspace = workspaceContext
       Try {
         val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
-        dataAccess.workspaceQuery.save(updatedWorkspace)
+        dataAccess.workspaceQuery.createOrUpdate(updatedWorkspace)
       } match {
         case Success(result) => result
         case Failure(e: AttributeUpdateOperationException) =>
@@ -1865,7 +1865,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => getGoogleProjectFromRBS)
-      _ <- traceWithParent("updateBillingAccountForProject", span)(_ => gcsDAO.setBillingAccountForProject(googleProjectId, billingAccountName))
+      _ <- traceWithParent("updateBillingAccountForProject", span)(_ => gcsDAO.setBillingAccountForProject(googleProjectId, billingAccount))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
     } yield (googleProjectId, googleProjectNumber)
   }
@@ -1953,10 +1953,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // ServicePerimeterName
   private def collectWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Seq[Workspace]] = {
     dataSource.inTransaction { dataAccess =>
-      for {
-        allProjectsWithPerimeter <- dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeterAndStatus(servicePerimeterName, CreationStatuses.all.toSeq: _*)
-        allWorkspacesInBillingProject <- dataAccess.workspaceQuery.listByNamespaces(allProjectsWithPerimeter.map(_.projectName))
-      } yield allWorkspacesInBillingProject
+      dataAccess.workspaceQuery.getWorkspacesInPerimeter(servicePerimeterName)
     }
   }
 
@@ -2023,7 +2020,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         googleProjectNumber = googleProjectNumber
       )
 
-      traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.save(workspace)).flatMap { _ =>
+      traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace)).flatMap { _ =>
         DBIO.from(for {
           resource <- {
             val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerPolicyEmail), Set.empty, Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner))
