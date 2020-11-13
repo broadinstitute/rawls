@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.rbs.RbsDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
@@ -65,7 +66,7 @@ object WorkspaceService {
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
-                  entityManager: EntityManager)
+                  entityManager: EntityManager, rbsDAO: RbsDAO)
                  (userInfo: UserInfo)
                  (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
@@ -75,7 +76,7 @@ object WorkspaceService {
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
-      config, requesterPaysSetupService)
+      config, requesterPaysSetupService, rbsDAO)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -113,7 +114,7 @@ object WorkspaceService {
 }
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, rbsDAO: RbsDAO)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport with Retry {
 
   import dataSource.dataAccess.driver.api._
@@ -1831,12 +1832,47 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // TODO: https://broadworkbench.atlassian.net/browse/CA-946
-  // This method should talk to the Resource Buffering Service, get a Google Project, and then set the appropriate
-  // Billing Account on the project and any other things we need to set on the Project.
-  private def getGoogleProjectFromRBS: Future[GoogleProjectId] = {
-    // TODO: Implement for real
-    Future.successful(GoogleProjectId(UUID.randomUUID.toString.substring(0, 8) + "_fake_proj_name"))
+  // todo: find this a home
+  case class ProjectPoolId(value: String)
+
+  // "enum" for pools
+  // start here:
+  object ProjectPoolType extends Enumeration {
+    type ProjectPoolType = Value
+    val Regular, ServicePerimeter = Value
+  }
+
+  import ProjectPoolType._
+
+  // This method talks to the Resource Buffering Service and gets a Google Project based on the project pool type
+  private def getGoogleProjectFromRBS(projectPoolType: ProjectPoolType = ProjectPoolType.Regular): Future[GoogleProjectId] = {
+
+    val projectPoolId: ProjectPoolId = getProjectPoolId(projectPoolType)
+
+    // todo: doesn't seem like this is too important to save since it's only for getting back the same info we already got. verify this?
+    val handoutRequestId = generateHandoutRequestId(userInfo, projectPoolId)
+
+    val projectFromRbs = rbsDAO.handoutGoogleProject(projectPoolId.value, handoutRequestId, userInfo.accessToken)
+    Future.successful(projectFromRbs)
+  }
+
+
+  // get the corresponding projectPoolId from the config, based on the projectPoolType
+  private def getProjectPoolId(projectPoolType: ProjectPoolType.ProjectPoolType) = {
+    val projectPoolId: ProjectPoolId = projectPoolType match {
+      case ProjectPoolType.Regular => ProjectPoolId("todo") // todo: grab from config
+      case ProjectPoolType.ServicePerimeter => ProjectPoolId("todo")
+    }
+    projectPoolId
+  }
+
+  //  handoutRequestId:
+  //        The unique identifier presented by the client for a resource request.
+  //        Using the same handoutRequestId in the same pool would ge the same resource back.
+  // prefix with user and pooltype
+  private def generateHandoutRequestId(userInfo: UserInfo, projectPoolId: ProjectPoolId): String = {
+    val prefix: String = userInfo.userSubjectId + projectPoolId.value
+    prefix + UUID.randomUUID().toString
   }
 
   /**
@@ -1861,7 +1897,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     for {
-      googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => getGoogleProjectFromRBS)
+      googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => getGoogleProjectFromRBS())
       _ <- traceWithParent("updateBillingAccountForProject", span)(_ => gcsDAO.setBillingAccountForProject(googleProjectId, billingAccount))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
     } yield (googleProjectId, googleProjectNumber)
