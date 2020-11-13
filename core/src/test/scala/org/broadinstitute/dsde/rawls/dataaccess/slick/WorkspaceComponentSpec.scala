@@ -16,6 +16,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   val googleProjectId: GoogleProjectId = GoogleProjectId("test_google_project")
   val googleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("123456789")
   val workspaceVersion: WorkspaceVersions.V2.type = WorkspaceVersions.V2
+  val workspaceBillingAccount: RawlsBillingAccountName = RawlsBillingAccountName("billing_account_name")
 
   val workspace: Workspace = Workspace(
     "test_namespace",
@@ -33,7 +34,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     false,
     workspaceVersion,
     googleProjectId,
-    Option(googleProjectNumber)
+    Option(googleProjectNumber),
+    Option(workspaceBillingAccount)
   )
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {
