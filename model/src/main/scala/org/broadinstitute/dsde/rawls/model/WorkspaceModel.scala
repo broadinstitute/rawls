@@ -138,7 +138,7 @@ case class Workspace(
                       isLocked: Boolean,
                       workspaceVersion: WorkspaceVersion,
                       googleProjectId: GoogleProjectId,
-                      googleProjectNumber: GoogleProjectNumber
+                      googleProjectNumber: Option[GoogleProjectNumber]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -158,7 +158,7 @@ object Workspace {
     createdBy: String,
     attributes: AttributeMap,
     isLocked: Boolean = false): Workspace = {
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace), GoogleProjectNumber("UNKNOWN"))
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace), None)
   }
 }
 
@@ -507,7 +507,7 @@ case class WorkspaceDetails(namespace: String,
                             authorizationDomain: Option[Set[ManagedGroupRef]],
                             workspaceVersion: WorkspaceVersion,
                             googleProjectId: GoogleProjectId,
-                            googleProjectNumber: GoogleProjectNumber) {
+                            googleProjectNumber: Option[GoogleProjectNumber]) {
   def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProjectId, googleProjectNumber)
 }
 
