@@ -1895,9 +1895,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // Some Service Perimeters may required that they have some additional non-Terra Google Projects that need to be in
-  // the perimeter for some other reason.  They provide those to us and we add them to the Rawls Config so that
-  // whenever we update the list of projects for a perimeter, these projects are always included
+  /**
+    * Some Service Perimeters may required that they have some additional non-Terra Google Projects that need to be in
+    * the perimeter for some other reason.  These are provided to us by the Service Perimeter stakeholders and we add
+    * them to the Rawls Config so that whenever we update the list of projects for a perimeter, these projects are
+    * always included.
+    *
+    * @param servicePerimeterName
+    * @return
+    */
   private def loadStaticProjectsForPerimeter(servicePerimeterName: ServicePerimeterName): Seq[String] = {
     val staticProjectsConfig = ConfigFactory.load().getConfig("gcs.servicePerimeters.staticProjects")
     if (staticProjectsConfig.hasPath(servicePerimeterName.value)) {
@@ -1907,13 +1913,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // Since multiple Billing Projects can specify the same Service Perimeter, we need to:
-  // 1. Load all the Billing Projects that specify this servicePerimeterName
-  // 2. Load all the Workspaces in all of those Billing Projects
-  // 3. Collect all of the GoogleProjectNumbers from those Workspaces
-  // 4. Post that list to Google to overwrite the Service Perimeter's list of included Google Projects
-  // 5. Poll until ^ Google Operation is complete
-  // Throw exceptions if any of this goes awry
   /**
     * Takes the the name of a Service Perimeter as the only parameter.  Since multiple Billing Projects can specify the
     * same Service Perimeter, we will:
@@ -1949,8 +1948,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // In its own transaction, look up all of the Workspaces contained in Billing Projects that use the specified
-  // ServicePerimeterName
+  /**
+    * In its own transaction, look up all of the Workspaces contained in Billing Projects that use the specified
+    * ServicePerimeterName
+    *
+    * @param servicePerimeterName
+    * @return
+    */
   private def collectWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Seq[Workspace]] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.getWorkspacesInPerimeter(servicePerimeterName)
@@ -1974,8 +1978,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield hasAccess
   }
 
-  // Checks that Rawls has the right permissions on the BillingProject's Billing Account, and then passes along the
-  // BillingProject to op to be used by code in this context
+  /**
+    * Checks that Rawls has the right permissions on the BillingProject's Billing Account, and then passes along the
+    * BillingProject to op to be used by code in this context
+    *
+    * @param billingProjectName
+    * @param parentSpan
+    * @param op
+    * @tparam T
+    * @return
+    */
   private def withBillingProjectContext[T](billingProjectName: String, parentSpan: Span = null)(op: (RawlsBillingProject) => Future[T]): Future[T] = {
     for {
       maybeBillingProject <- dataSource.inTransaction { dataAccess =>
