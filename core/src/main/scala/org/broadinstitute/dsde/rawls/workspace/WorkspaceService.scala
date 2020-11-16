@@ -1872,7 +1872,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def getGoogleProjectNumber(googleProjectId: GoogleProjectId): Future[GoogleProjectNumber] = {
     gcsDAO.getGoogleProject(googleProjectId).map { p => Option(p.getProjectNumber) match {
-        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
+        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
         case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
       }
     }
@@ -1929,7 +1929,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def overwriteGoogleProjectsInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Unit] = {
     collectWorkspacesInPerimeter(servicePerimeterName).map { workspacesInPerimeter =>
       val projectNumbers = workspacesInPerimeter.flatMap(_.googleProjectNumber)
-      val projectNumberStrings = projectNumbers.map(_.value)
+      val projectNumberStrings = projectNumbers.map(_.value) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
 
       // Make the call to Google to overwrite the project.  Poll and wait for the Google Operation to complete
       gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, projectNumberStrings).map { operation =>

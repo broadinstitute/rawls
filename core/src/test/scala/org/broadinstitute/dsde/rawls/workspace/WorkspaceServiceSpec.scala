@@ -25,6 +25,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers, OptionValues}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -33,11 +34,11 @@ import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -80,7 +81,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+    val gcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
     val samDAO = new MockSamDAO(dataSource)
     val gpsDAO = new MockGooglePubSubDAO
     val workspaceManagerDAO = mock[MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
@@ -168,6 +169,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     override val samDAO: CustomizableMockSamDAO = new CustomizableMockSamDAO(dataSource)
   }
 
+  class TestApiServiceWithCustomGCSDao(dataSource: SlickDataSource, override val user: RawlsUser)(override implicit val executionContext: ExecutionContext) extends TestApiService(dataSource, user) {
+//    override val gcsDAO = mock[MockGoogleServicesDAO](RETURNS_SMART_NULLS)
+    override val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("whatever"))
+//    when(gcsDAO.getBucketServiceAccountCredential).thenCallRealMethod()
+  }
+
   def withTestDataServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner)(testCode)
@@ -184,6 +191,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     withTestDataServicesCustomSamAndUser(testData.userOwner)(testCode)
   }
 
+  def withTestDataServicesCustomGCSDao[T](testCode: TestApiServiceWithCustomGCSDao => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withServicesCustomGCSDao(dataSource, testData.userOwner)(testCode)
+    }
+  }
+
   private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
     val apiService = new TestApiService(dataSource, user)
     try {
@@ -195,6 +208,16 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   private def withServicesCustomSam[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiServiceWithCustomSamDAO) => T) = {
     val apiService = new TestApiServiceWithCustomSamDAO(dataSource, user)
+
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
+  private def withServicesCustomGCSDao[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiServiceWithCustomGCSDao) => T) = {
+    val apiService = new TestApiServiceWithCustomGCSDao(dataSource, user)
 
     try {
       testCode(apiService)
@@ -1164,6 +1187,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
     workspace.googleProjectId.value should not be empty
+    workspace.googleProjectNumber should not be empty
   }
 
   // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
@@ -1193,7 +1217,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
-  it should "fail with 500 if Billing Project is does not have a Billing Account specified" in withTestDataServices { services =>
+  it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices { services =>
     // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
     runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = None))))
     val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
@@ -1206,10 +1230,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
   }
 
-  it should "fail with 403 if Rawls does not have the required IAM permissions on the Google Billing Account and set the invalidBillingAcct field" in withTestDataServices { services =>
+  it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices { services =>
     // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
     // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
-    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(services.gcsDAO.inaccessibleBillingAccountName)))))
+
+    val billingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
     val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
     originalBillingProject.value.invalidBillingAccount shouldBe false
 
@@ -1225,5 +1251,40 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val persistedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
     persistedBillingProject.value.invalidBillingAccount shouldBe true
   }
+
+  it should "fail with 502 if Rawls is unable to retrieve the Google Project Number from Google for Workspace's Google Project" in withTestDataServicesCustomGCSDao { services =>
+    when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
+
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadGateway)
+  }
+
+//  it should "fail with 502 if Rawls is unable to retrieve the Google Project Number from Google for Workspace's Google Project" in withTestDataServices { services =>
+//    val spyGCSDao = Mockito.spy(services.gcsDAO)
+//    when(spyGCSDao.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
+////    Mockito.doReturn(Future.successful(new Project().setProjectNumber(null))).when(spyGCSDao).getGoogleProject(any[GoogleProjectId])
+//
+//    val newWorkspaceName = "space_for_workin"
+//    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+//
+//    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+//      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+//    }
+//
+//    error.errorReport.statusCode shouldBe Some(StatusCodes.BadGateway)
+//  }
+
+  it should "update the Billing Account on the Workspace's Google Project" in pending
+
+  it should "do all this stuff for clone workspace too" in pending
+
+
+  it should "do all the perimeter stuff - adding all projects and all static projects"
 
 }
