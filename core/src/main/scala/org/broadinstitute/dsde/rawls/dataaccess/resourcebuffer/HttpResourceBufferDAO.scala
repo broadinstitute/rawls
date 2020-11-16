@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess.rbs
+package org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.rbs.generated.model.{PoolInfo, ResourceInfo}
@@ -6,7 +6,7 @@ import bio.terra.rbs.generated.ApiClient
 import bio.terra.rbs.generated.controller.RbsApi
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 
-class HttpRbsDAO() extends RbsDAO {
+class HttpResourceBufferDAO() extends ResourceBufferDAO {
 
   private def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()
@@ -16,7 +16,7 @@ class HttpRbsDAO() extends RbsDAO {
   }
 
   // todo: does this need the auth token?
-  private def getRbsApi(accessToken: OAuth2BearerToken) = {
+  private def getResourceBufferApi(accessToken: OAuth2BearerToken) = {
     new RbsApi(getApiClient(accessToken.token))
   }
 
@@ -31,10 +31,10 @@ class HttpRbsDAO() extends RbsDAO {
   //  }
 
   private def handoutResourceGeneric(poolId: String, handoutRequestId: String, accessToken: OAuth2BearerToken): ResourceInfo =
-    getRbsApi(accessToken).handoutResource(poolId, handoutRequestId)
+    getResourceBufferApi(accessToken).handoutResource(poolId, handoutRequestId)
 
   override def getPoolInfo(poolId: String, accessToken: OAuth2BearerToken): PoolInfo = {
-    getRbsApi(accessToken).getPoolInfo(poolId)
+    getResourceBufferApi(accessToken).getPoolInfo(poolId)
   }
 
   // todo: make a PoolId type?
@@ -42,6 +42,8 @@ class HttpRbsDAO() extends RbsDAO {
     val resource = handoutResourceGeneric(poolId, handoutRequestId, accessToken)
     GoogleProjectId(resource.getCloudResourceUid.getGoogleProjectUid.getProjectId)
   }
+
+  //todo: unit tests
 
 }
 

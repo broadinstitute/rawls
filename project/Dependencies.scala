@@ -112,7 +112,7 @@ object Dependencies {
 
   val workspaceManager = excludeGuavaJDK5("bio.terra" % "workspace-manager-client" % "0.2.0-SNAPSHOT")
   val dataRepo = excludeGuavaJDK5("bio.terra" % "datarepo-client" % "1.0.44-SNAPSHOT")
-  val resourceBufferingService = excludeGuavaJDK5("bio.terra" % "terra-rbs-client" % "0.0.3-SNAPSHOT")
+  val resourceBufferService = excludeGuavaJDK5("bio.terra" % "terra-rbs-client" % "0.0.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.0-M2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.0-M2"
@@ -234,6 +234,6 @@ object Dependencies {
     workspaceManager,
     dataRepo,
     antlrParser,
-    resourceBufferingService
+    resourceBufferService
   )
 }

@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.rbs.RbsDAO
+import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
@@ -66,7 +66,7 @@ object WorkspaceService {
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
-                  entityManager: EntityManager, rbsDAO: RbsDAO)
+                  entityManager: EntityManager, resourceBufferDAO: ResourceBufferDAO)
                  (userInfo: UserInfo)
                  (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
@@ -76,7 +76,7 @@ object WorkspaceService {
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
-      config, requesterPaysSetupService, rbsDAO)
+      config, requesterPaysSetupService, resourceBufferDAO)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -114,7 +114,7 @@ object WorkspaceService {
 }
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, rbsDAO: RbsDAO)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, resourceBufferDAO: ResourceBufferDAO)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport with Retry {
 
   import dataSource.dataAccess.driver.api._
@@ -1852,7 +1852,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // todo: doesn't seem like this is too important to save since it's only for getting back the same info we already got. verify this?
     val handoutRequestId = generateHandoutRequestId(userInfo, projectPoolId)
 
-    val projectFromRbs = rbsDAO.handoutGoogleProject(projectPoolId.value, handoutRequestId, userInfo.accessToken)
+    val projectFromRbs = resourceBufferDAO.handoutGoogleProject(projectPoolId.value, handoutRequestId, userInfo.accessToken)
     Future.successful(projectFromRbs)
   }
 
