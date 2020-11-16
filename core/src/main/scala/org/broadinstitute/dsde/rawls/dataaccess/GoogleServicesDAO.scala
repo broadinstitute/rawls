@@ -143,6 +143,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
   def getBucketServiceAccountCredential: Credential
+  def getResourceBufferServiceAccountCredential: Credential
   def getServiceAccountRawlsUser(): Future[RawlsUser]
   def getServiceAccountUserInfo(): Future[UserInfo]
 

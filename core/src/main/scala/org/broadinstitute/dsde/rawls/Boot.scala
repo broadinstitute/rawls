@@ -165,7 +165,8 @@ object Boot extends IOApp with LazyLogging {
         cleanupDeploymentAfterCreating = dmConfig.cleanupDeploymentAfterCreating,
         terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
         terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
-        accessContextManagerDAO = accessContextManagerDAO
+        accessContextManagerDAO = accessContextManagerDAO,
+        resourceBufferPemFile = gcsConfig.getString("pathToResourceBufferPem")
       )
 
 
@@ -356,7 +357,8 @@ object Boot extends IOApp with LazyLogging {
       // create the entity manager.
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO, appDependencies.bigQueryServiceFactory, DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")))
 
-      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO()
+      val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
+      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential) // todo: will this fail if the config doesn't exist?
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,

@@ -38,6 +38,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACL
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 import org.broadinstitute.dsde.rawls.util._
@@ -1832,48 +1833,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // todo: find this a home
-  case class ProjectPoolId(value: String)
 
-  // "enum" for pools
-  // start here:
-  object ProjectPoolType extends Enumeration {
-    type ProjectPoolType = Value
-    val Regular, ServicePerimeter = Value
-  }
-
-  import ProjectPoolType._
-
-  // This method talks to the Resource Buffering Service and gets a Google Project based on the project pool type
-  private def getGoogleProjectFromRBS(projectPoolType: ProjectPoolType = ProjectPoolType.Regular): Future[GoogleProjectId] = {
-
-    val projectPoolId: ProjectPoolId = getProjectPoolId(projectPoolType)
-
-    // todo: doesn't seem like this is too important to save since it's only for getting back the same info we already got. verify this?
-    val handoutRequestId = generateHandoutRequestId(userInfo, projectPoolId)
-
-    val projectFromRbs = resourceBufferDAO.handoutGoogleProject(projectPoolId.value, handoutRequestId, userInfo.accessToken)
-    Future.successful(projectFromRbs)
-  }
-
-
-  // get the corresponding projectPoolId from the config, based on the projectPoolType
-  private def getProjectPoolId(projectPoolType: ProjectPoolType.ProjectPoolType) = {
-    val projectPoolId: ProjectPoolId = projectPoolType match {
-      case ProjectPoolType.Regular => ProjectPoolId("todo") // todo: grab from config
-      case ProjectPoolType.ServicePerimeter => ProjectPoolId("todo")
-    }
-    projectPoolId
-  }
-
-  //  handoutRequestId:
-  //        The unique identifier presented by the client for a resource request.
-  //        Using the same handoutRequestId in the same pool would ge the same resource back.
-  // prefix with user and pooltype
-  private def generateHandoutRequestId(userInfo: UserInfo, projectPoolId: ProjectPoolId): String = {
-    val prefix: String = userInfo.userSubjectId + projectPoolId.value
-    prefix + UUID.randomUUID().toString
-  }
 
   /**
     * Gets a Google Project from the Resource Buffering Service (RBS) and sets it up to be usable by Rawls as the backing
@@ -1896,8 +1856,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing or invalid for Billing Project: ${billingProject}"))
     }
 
+    val resourceBufferService = new ResourceBufferService(resourceBufferDAO, userInfo)
+
     for {
-      googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => getGoogleProjectFromRBS())
+      googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => resourceBufferService.getGoogleProjectFromRBS())
       _ <- traceWithParent("updateBillingAccountForProject", span)(_ => gcsDAO.setBillingAccountForProject(googleProjectId, billingAccount))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
     } yield (googleProjectId, googleProjectNumber)

@@ -11,7 +11,7 @@ import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, Ref
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, WorkspaceServiceConfig, ResourceBufferConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -337,7 +337,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
       val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0))
 
-      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO() // todo: mock this
+      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(ResourceBufferConfig(testConf.getConfig("resourceBuffer")), gcsDAO.getResourceBufferServiceAccountCredential) // todo: mock this
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,

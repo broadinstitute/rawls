@@ -124,7 +124,8 @@ class HttpGoogleServicesDAO(
   cleanupDeploymentAfterCreating: Boolean,
   terraBucketReaderRole: String,
   terraBucketWriterRole: String,
-  override val accessContextManagerDAO: AccessContextManagerDAO)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  override val accessContextManagerDAO: AccessContextManagerDAO,
+  resourceBufferPemFile: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
@@ -1027,6 +1028,17 @@ class HttpGoogleServicesDAO(
       .setServiceAccountId(billingPemEmail)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(billingPemFile))
       .setServiceAccountUser(billingEmail)
+      .build()
+  }
+
+  def getResourceBufferServiceAccountCredential: Credential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      //      .setServiceAccountId(billingPemEmail) // todo: do we need these?
+      //      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJava) // any scopes needed?
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(resourceBufferPemFile))
+      //      .setServiceAccountUser(billingEmail)
       .build()
   }
 
