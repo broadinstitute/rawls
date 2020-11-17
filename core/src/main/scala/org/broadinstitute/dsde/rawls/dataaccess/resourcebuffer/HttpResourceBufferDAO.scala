@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.rbs.generated.ApiClient
 import bio.terra.rbs.generated.controller.RbsApi
-import bio.terra.rbs.generated.model.{PoolInfo, ResourceInfo}
+import bio.terra.rbs.generated.model.ResourceInfo
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -40,10 +40,6 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
 
   private def handoutResourceGeneric(poolId: PoolId, handoutRequestId: String, accessToken: OAuth2BearerToken): ResourceInfo =
     getResourceBufferApi(accessToken).handoutResource(poolId.value, handoutRequestId)
-
-  override def getPoolInfo(poolId: PoolId): PoolInfo = {
-    getResourceBufferApi(OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)).getPoolInfo(poolId.value)
-  }
 
   override def handoutGoogleProject(poolId: PoolId, handoutRequestId: String): Future[GoogleProjectId] = {
     retry(when500) { () =>

@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.resourcebuffer
 
 import java.util.UUID
 
-import bio.terra.rbs.generated.model.PoolInfo
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PoolId, ProjectPoolId, ProjectPoolType, UserInfo}
@@ -16,12 +15,7 @@ object ResourceBufferService {
 }
 class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, protected val userInfo: UserInfo) {
 
-  def GetPoolInfo(poolId: PoolId): PoolInfo = getPoolInfo(poolId)
   def GetGoogleProjectFromRBS(projectPoolType: ProjectPoolType): Future[GoogleProjectId] = getGoogleProjectFromRBS(projectPoolType)
-
-  def getPoolInfo(poolId: PoolId): PoolInfo = {
-    resourceBufferDAO.getPoolInfo(poolId)
-  }
 
   def getGoogleProjectFromRBS(projectPoolType: ProjectPoolType = ProjectPoolType.Regular): Future[GoogleProjectId] = {
 
