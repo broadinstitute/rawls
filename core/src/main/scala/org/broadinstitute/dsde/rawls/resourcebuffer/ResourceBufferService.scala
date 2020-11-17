@@ -17,14 +17,10 @@ object ResourceBufferService {
 class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, protected val userInfo: UserInfo) {
 
   def GetPoolInfo(poolId: String): PoolInfo = getPoolInfo(poolId)
-  def HandoutGoogleProject(poolId: String, handoutRequestId: String): GoogleProjectId = handoutGoogleProject(poolId, handoutRequestId)
+  def GetGoogleProjectFromRBS(projectPoolType: ProjectPoolType): Future[GoogleProjectId] = getGoogleProjectFromRBS(projectPoolType)
 
-  private def getPoolInfo(poolId: String): PoolInfo = {
+  def getPoolInfo(poolId: String): PoolInfo = {
     resourceBufferDAO.getPoolInfo(poolId)
-  }
-
-  private def handoutGoogleProject(poolId: String, handoutRequestId: String): GoogleProjectId = {
-    resourceBufferDAO.handoutGoogleProject(poolId, handoutRequestId)
   }
 
   def getGoogleProjectFromRBS(projectPoolType: ProjectPoolType = ProjectPoolType.Regular): Future[GoogleProjectId] = {
@@ -34,15 +30,13 @@ class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, protected val 
     // todo: doesn't seem like this is too important to save since it's only for getting back the same info we already got. verify this?
     val handoutRequestId = generateHandoutRequestId(userInfo, projectPoolId)
 
-    val projectFromRbs = resourceBufferDAO.handoutGoogleProject(projectPoolId.value, handoutRequestId)
-    Future.successful(projectFromRbs)
+    val project = resourceBufferDAO.handoutGoogleProject(projectPoolId.value, handoutRequestId)
+    Future.successful(project)
   }
-
 
   //  handoutRequestId:
   //        The unique identifier presented by the client for a resource request.
-  //        Using the same handoutRequestId in the same pool would ge the same resource back.
-  // prefix with user and pooltype
+  //        Using the same handoutRequestId in the same pool would get the same resource back.
   private def generateHandoutRequestId(userInfo: UserInfo, projectPoolId: ProjectPoolId): String = {
     val prefix: String = userInfo.userSubjectId + projectPoolId.value
     prefix + UUID.randomUUID().toString
