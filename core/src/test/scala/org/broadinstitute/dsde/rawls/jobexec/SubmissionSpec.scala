@@ -15,14 +15,14 @@ import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, Deplo
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -337,7 +337,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
       val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0))
 
-      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(ResourceBufferConfig(testConf.getConfig("resourceBuffer")), gcsDAO.getResourceBufferServiceAccountCredential) // todo: mock this
+      val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,

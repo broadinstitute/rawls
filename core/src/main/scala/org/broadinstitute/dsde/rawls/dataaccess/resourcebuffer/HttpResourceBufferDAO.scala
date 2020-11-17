@@ -15,31 +15,11 @@ import org.broadinstitute.dsde.rawls.util.Retry
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCreds: Credential)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends ResourceBufferDAO with Retry with LazyLogging {
+class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCreds: Credential)
+                           (implicit val system: ActorSystem, val materializer: Materializer,
+                            val executionContext: ExecutionContext) extends ResourceBufferDAO with Retry with LazyLogging {
 
   private val baseUrl = config.url
-
-  protected def when500(throwable: Throwable ): Boolean = {
-    throwable match {
-      case t: RawlsExceptionWithErrorReport => t.errorReport.statusCode.exists(_.intValue/100 == 5)
-      case _ => false
-    }
-  }
-
-  private def getApiClient(accessToken: String): ApiClient = {
-    val client: ApiClient = new ApiClient()
-    client.setBasePath(baseUrl)
-    client.setAccessToken(accessToken)
-
-    client
-  }
-
-  private def getResourceBufferApi(accessToken: OAuth2BearerToken) = {
-    new RbsApi(getApiClient(accessToken.token))
-  }
-
-  private def handoutResourceGeneric(poolId: PoolId, handoutRequestId: String, accessToken: OAuth2BearerToken): ResourceInfo =
-    getResourceBufferApi(accessToken).handoutResource(poolId.value, handoutRequestId)
 
   override def handoutGoogleProject(poolId: PoolId, handoutRequestId: String): Future[GoogleProjectId] = {
     retry(when500) { () =>
@@ -48,6 +28,28 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
         GoogleProjectId(resource.getCloudResourceUid.getGoogleProjectUid.getProjectId)
       }
     }
+  }
+
+  protected def when500(throwable: Throwable): Boolean = {
+    throwable match {
+      case t: RawlsExceptionWithErrorReport => t.errorReport.statusCode.exists(_.intValue / 100 == 5)
+      case _ => false
+    }
+  }
+
+  private def handoutResourceGeneric(poolId: PoolId, handoutRequestId: String, accessToken: OAuth2BearerToken): ResourceInfo =
+    getResourceBufferApi(accessToken).handoutResource(poolId.value, handoutRequestId)
+
+  private def getResourceBufferApi(accessToken: OAuth2BearerToken) = {
+    new RbsApi(getApiClient(accessToken.token))
+  }
+
+  private def getApiClient(accessToken: String): ApiClient = {
+    val client: ApiClient = new ApiClient()
+    client.setBasePath(baseUrl)
+    client.setAccessToken(accessToken)
+
+    client
   }
 
   override def getProjectPoolId(projectPoolType: ProjectPoolType.ProjectPoolType): ProjectPoolId = {
