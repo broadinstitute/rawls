@@ -30,8 +30,7 @@ class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, protected val 
     // todo: doesn't seem like this is too important to save since it's only for getting back the same info we already got. verify this?
     val handoutRequestId = generateHandoutRequestId(userInfo, projectPoolId)
 
-    val project = resourceBufferDAO.handoutGoogleProject(PoolId(projectPoolId.value), handoutRequestId)
-    Future.successful(project) // todo: future?
+    resourceBufferDAO.handoutGoogleProject(PoolId(projectPoolId.value), handoutRequestId)
   }
 
   //  handoutRequestId:

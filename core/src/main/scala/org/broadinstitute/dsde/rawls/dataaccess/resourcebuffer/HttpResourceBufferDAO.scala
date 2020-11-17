@@ -7,14 +7,24 @@ import bio.terra.rbs.generated.ApiClient
 import bio.terra.rbs.generated.controller.RbsApi
 import bio.terra.rbs.generated.model.{PoolInfo, ResourceInfo}
 import com.google.api.client.auth.oauth2.Credential
+import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PoolId, ProjectPoolId, ProjectPoolType}
+import org.broadinstitute.dsde.rawls.util.Retry
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
-class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCreds: Credential)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends ResourceBufferDAO {
+class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCreds: Credential)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends ResourceBufferDAO with Retry with LazyLogging {
 
   private val baseUrl = config.url
+
+  protected def when500(throwable: Throwable ): Boolean = {
+    throwable match {
+      case t: RawlsExceptionWithErrorReport => t.errorReport.statusCode.exists(_.intValue/100 == 5)
+      case _ => false
+    }
+  }
 
   private def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()
@@ -35,13 +45,16 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
     getResourceBufferApi(OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)).getPoolInfo(poolId.value)
   }
 
-  override def handoutGoogleProject(poolId: PoolId, handoutRequestId: String): GoogleProjectId = {
-    val resource = handoutResourceGeneric(poolId, handoutRequestId, OAuth2BearerToken(clientServiceAccountCreds.getAccessToken))
-    GoogleProjectId(resource.getCloudResourceUid.getGoogleProjectUid.getProjectId)
+  override def handoutGoogleProject(poolId: PoolId, handoutRequestId: String): Future[GoogleProjectId] = {
+    retry(when500) { () =>
+      Future {
+        val resource = handoutResourceGeneric(poolId, handoutRequestId, OAuth2BearerToken(clientServiceAccountCreds.getAccessToken))
+        GoogleProjectId(resource.getCloudResourceUid.getGoogleProjectUid.getProjectId)
+      }
+    }
   }
 
-  // get the corresponding projectPoolId from the config, based on the projectPoolType
-  override def getProjectPoolId(projectPoolType: ProjectPoolType.ProjectPoolType) = {
+  override def getProjectPoolId(projectPoolType: ProjectPoolType.ProjectPoolType): ProjectPoolId = {
     val projectPoolId: ProjectPoolId = projectPoolType match {
       case ProjectPoolType.Regular => config.regularProjectPoolId
       case ProjectPoolType.ServicePerimeter => config.servicePerimeterProjectPoolId
