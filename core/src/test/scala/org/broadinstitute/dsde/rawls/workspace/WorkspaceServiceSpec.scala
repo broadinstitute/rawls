@@ -25,7 +25,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers, OptionValues}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-//import com.google.api.services.cloudresourcemanager.model.Project
+import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -35,11 +35,11 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify}
-//import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 //import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.Try
@@ -83,7 +83,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val gcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
+    val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test"))
     val samDAO = new MockSamDAO(dataSource)
     val gpsDAO = new MockGooglePubSubDAO
     val workspaceManagerDAO = mock[MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
@@ -171,12 +171,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     override val samDAO: CustomizableMockSamDAO = new CustomizableMockSamDAO(dataSource)
   }
 
-  class TestApiServiceWithCustomGCSDao(dataSource: SlickDataSource, override val user: RawlsUser)(override implicit val executionContext: ExecutionContext) extends TestApiService(dataSource, user) {
-//    override val gcsDAO = mock[MockGoogleServicesDAO](RETURNS_SMART_NULLS)
-    override val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("whatever"))
-//    when(gcsDAO.getBucketServiceAccountCredential).thenCallRealMethod()
-  }
-
   def withTestDataServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner)(testCode)
@@ -193,12 +187,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     withTestDataServicesCustomSamAndUser(testData.userOwner)(testCode)
   }
 
-  def withTestDataServicesCustomGCSDao[T](testCode: TestApiServiceWithCustomGCSDao => T): T = {
-    withDefaultTestDatabase { dataSource: SlickDataSource =>
-      withServicesCustomGCSDao(dataSource, testData.userOwner)(testCode)
-    }
-  }
-
   private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
     val apiService = new TestApiService(dataSource, user)
     try {
@@ -210,16 +198,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   private def withServicesCustomSam[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiServiceWithCustomSamDAO) => T) = {
     val apiService = new TestApiServiceWithCustomSamDAO(dataSource, user)
-
-    try {
-      testCode(apiService)
-    } finally {
-      apiService.cleanupSupervisor
-    }
-  }
-
-  private def withServicesCustomGCSDao[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiServiceWithCustomGCSDao) => T) = {
-    val apiService = new TestApiServiceWithCustomGCSDao(dataSource, user)
 
     try {
       testCode(apiService)
@@ -1254,24 +1232,51 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     persistedBillingProject.value.invalidBillingAccount shouldBe true
   }
 
-//  it should "fail with 502 if Rawls is unable to retrieve the Google Project Number from Google for Workspace's Google Project" in withTestDataServicesCustomGCSDao { services =>
-//    when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
-//
-//    val newWorkspaceName = "space_for_workin"
-//    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-//
-//    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-//      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-//    }
-//
-//    error.errorReport.statusCode shouldBe Some(StatusCodes.BadGateway)
-//  }
+  it should "fail with 502 if Rawls is unable to retrieve the Google Project Number from Google for Workspace's Google Project" in withTestDataServices { services =>
+    when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
 
-  it should "update the Billing Account on the Workspace's Google Project" in pending
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "whatever")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadGateway)
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    maybeWorkspace shouldBe None
+  }
+
+  it should "call GoogleServicesDAO to update the Billing Account on the Workspace's Google Project" in withTestDataServices { services =>
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.gcsDAO).setBillingAccountForProject(any[GoogleProjectId], any[RawlsBillingAccountName], anyBoolean())
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    maybeWorkspace shouldBe defined
+  }
+
+  it should "throw an exception when calling GoogleServicesDAO to update the Billing Account on the Workspace's Google Project and the DAO call fails" in withTestDataServices { services =>
+    when(services.gcsDAO.setBillingAccountForProject(any[GoogleProjectId], any[RawlsBillingAccountName], anyBoolean()))
+      .thenReturn(Future.failed(new Exception("Fake error from Google")))
+
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    intercept[Exception] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    maybeWorkspace shouldBe None
+  }
 
   it should "do all this stuff for clone workspace too" in pending
 
-
-  it should "do all the perimeter stuff - adding all projects and all static projects"
+  it should "do all the perimeter stuff - adding all projects and all static projects" in pending
 
 }
