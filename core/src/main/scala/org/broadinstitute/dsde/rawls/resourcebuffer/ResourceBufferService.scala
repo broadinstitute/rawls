@@ -5,7 +5,7 @@ import java.util.UUID
 import bio.terra.rbs.generated.model.PoolInfo
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolId, ProjectPoolType, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PoolId, ProjectPoolId, ProjectPoolType, UserInfo}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -16,10 +16,10 @@ object ResourceBufferService {
 }
 class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, protected val userInfo: UserInfo) {
 
-  def GetPoolInfo(poolId: String): PoolInfo = getPoolInfo(poolId)
+  def GetPoolInfo(poolId: PoolId): PoolInfo = getPoolInfo(poolId)
   def GetGoogleProjectFromRBS(projectPoolType: ProjectPoolType): Future[GoogleProjectId] = getGoogleProjectFromRBS(projectPoolType)
 
-  def getPoolInfo(poolId: String): PoolInfo = {
+  def getPoolInfo(poolId: PoolId): PoolInfo = {
     resourceBufferDAO.getPoolInfo(poolId)
   }
 
@@ -30,8 +30,8 @@ class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, protected val 
     // todo: doesn't seem like this is too important to save since it's only for getting back the same info we already got. verify this?
     val handoutRequestId = generateHandoutRequestId(userInfo, projectPoolId)
 
-    val project = resourceBufferDAO.handoutGoogleProject(projectPoolId.value, handoutRequestId)
-    Future.successful(project)
+    val project = resourceBufferDAO.handoutGoogleProject(PoolId(projectPoolId.value), handoutRequestId)
+    Future.successful(project) // todo: future?
   }
 
   //  handoutRequestId:

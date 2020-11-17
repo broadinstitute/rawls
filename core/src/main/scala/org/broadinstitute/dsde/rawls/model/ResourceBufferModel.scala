@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
-case class ProjectPoolId(value: String) //todo: convert everything to ProjectPoolId and poolId
+case class ProjectPoolId(value: String)
 case class PoolId(value: String)
 
 // enum for project pools

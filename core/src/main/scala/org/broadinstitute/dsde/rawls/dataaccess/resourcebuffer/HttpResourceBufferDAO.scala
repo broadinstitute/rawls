@@ -8,7 +8,7 @@ import bio.terra.rbs.generated.controller.RbsApi
 import bio.terra.rbs.generated.model.{PoolInfo, ResourceInfo}
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolId, ProjectPoolType}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PoolId, ProjectPoolId, ProjectPoolType}
 
 import scala.concurrent.ExecutionContext
 
@@ -28,14 +28,14 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
     new RbsApi(getApiClient(accessToken.token))
   }
 
-  private def handoutResourceGeneric(poolId: String, handoutRequestId: String, accessToken: OAuth2BearerToken): ResourceInfo =
-    getResourceBufferApi(accessToken).handoutResource(poolId, handoutRequestId)
+  private def handoutResourceGeneric(poolId: PoolId, handoutRequestId: String, accessToken: OAuth2BearerToken): ResourceInfo =
+    getResourceBufferApi(accessToken).handoutResource(poolId.value, handoutRequestId)
 
-  override def getPoolInfo(poolId: String): PoolInfo = {
-    getResourceBufferApi(OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)).getPoolInfo(poolId)
+  override def getPoolInfo(poolId: PoolId): PoolInfo = {
+    getResourceBufferApi(OAuth2BearerToken(clientServiceAccountCreds.getAccessToken)).getPoolInfo(poolId.value)
   }
 
-  override def handoutGoogleProject(poolId: String, handoutRequestId: String): GoogleProjectId = {
+  override def handoutGoogleProject(poolId: PoolId, handoutRequestId: String): GoogleProjectId = {
     val resource = handoutResourceGeneric(poolId, handoutRequestId, OAuth2BearerToken(clientServiceAccountCreds.getAccessToken))
     GoogleProjectId(resource.getCloudResourceUid.getGoogleProjectUid.getProjectId)
   }
@@ -43,8 +43,8 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
   // get the corresponding projectPoolId from the config, based on the projectPoolType
   override def getProjectPoolId(projectPoolType: ProjectPoolType.ProjectPoolType) = {
     val projectPoolId: ProjectPoolId = projectPoolType match {
-      case ProjectPoolType.Regular => ProjectPoolId(config.regularProjectPoolId)
-      case ProjectPoolType.ServicePerimeter => ProjectPoolId(config.servicePerimeterProjectPoolId)
+      case ProjectPoolType.Regular => config.regularProjectPoolId
+      case ProjectPoolType.ServicePerimeter => config.servicePerimeterProjectPoolId
     }
     projectPoolId
   }

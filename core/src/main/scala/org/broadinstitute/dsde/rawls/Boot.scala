@@ -358,7 +358,7 @@ object Boot extends IOApp with LazyLogging {
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO, appDependencies.bigQueryServiceFactory, DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")))
 
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
-      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential) // todo: will this fail if the config doesn't exist?
+      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
