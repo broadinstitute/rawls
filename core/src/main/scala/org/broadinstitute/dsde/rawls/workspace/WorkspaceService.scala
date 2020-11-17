@@ -10,10 +10,10 @@ import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import com.google.api.services.storage.model.StorageObject
-import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -49,7 +49,6 @@ import spray.json._
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
@@ -112,8 +111,6 @@ object WorkspaceService {
     }
   }
 }
-
-final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
 class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
@@ -1904,13 +1901,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     * @param servicePerimeterName
     * @return
     */
-  private def loadStaticProjectsForPerimeter(servicePerimeterName: ServicePerimeterName): Seq[String] = {
-    val staticProjectsConfig = ConfigFactory.load().getConfig("gcs.servicePerimeters.staticProjects")
-    if (staticProjectsConfig.hasPath(servicePerimeterName.value)) {
-      staticProjectsConfig.getStringList(servicePerimeterName.value).asScala
-    } else {
-      List.empty
-    }
+  private def loadStaticProjectsForPerimeter(servicePerimeterName: ServicePerimeterName): Seq[GoogleProjectNumber] = {
+    config.staticProjectsInPerimeters.getOrElse(servicePerimeterName, Seq.empty)
   }
 
   /**
@@ -1928,8 +1920,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     */
   private def overwriteGoogleProjectsInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Unit] = {
     collectWorkspacesInPerimeter(servicePerimeterName).map { workspacesInPerimeter =>
-      val projectNumbers = workspacesInPerimeter.flatMap(_.googleProjectNumber)
-      val projectNumberStrings = projectNumbers.map(_.value) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
+      val projectNumbers = workspacesInPerimeter.flatMap(_.googleProjectNumber) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
+      val projectNumberStrings = projectNumbers.map(_.value)
 
       // Make the call to Google to overwrite the project.  Poll and wait for the Google Operation to complete
       gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, projectNumberStrings).map { operation =>

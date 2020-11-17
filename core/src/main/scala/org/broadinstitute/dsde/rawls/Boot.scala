@@ -18,7 +18,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.config.{WDLParserConfig, _}
+import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
@@ -39,7 +39,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService}
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.google2._
@@ -346,10 +346,7 @@ object Boot extends IOApp with LazyLogging {
       val statusServiceConstructor: () => StatusService = () =>
         StatusService.constructor(healthMonitor)
 
-      val workspaceServiceConfig = WorkspaceServiceConfig(
-        conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
-        gcsConfig.getString("groupsPrefix")
-      )
+      val workspaceServiceConfig = WorkspaceServiceConfig.apply(conf)
 
       val bondConfig = conf.getConfig("bond")
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
