@@ -66,13 +66,13 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
 
   gcs {
   ...
-  pathToResourceBufferPem =
+  pathToResourceBufferPem = /etc/rbs-account.pem
   }
 
   resourceBuffer {
     projectPool {
-      regular = "regularProjectPoolId-manualentry"
-      servicePerimeter = "servicePerimeterProjectPoolId-manualentry"
+      regularProjectPoolId = "regularProjectPoolId-manualentry"
+      servicePerimeterProjectPoolId = "servicePerimeterProjectPoolId-manualentry"
     }
     url =
   }

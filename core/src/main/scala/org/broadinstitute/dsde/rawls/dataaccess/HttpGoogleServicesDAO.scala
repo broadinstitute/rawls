@@ -1035,8 +1035,8 @@ class HttpGoogleServicesDAO(
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      //      .setServiceAccountId(billingPemEmail) // todo: do we need these?
-      //      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJava) // any scopes needed?
+      .setServiceAccountId(clientEmail) //todo: update this to RBS SA email
+      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJava) // any scopes needed?
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(resourceBufferPemFile))
       //      .setServiceAccountUser(billingEmail)
       .build()

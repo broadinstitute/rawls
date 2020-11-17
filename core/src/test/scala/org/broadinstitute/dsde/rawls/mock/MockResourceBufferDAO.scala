@@ -16,5 +16,4 @@ class MockResourceBufferDAO extends ResourceBufferDAO {
     ProjectPoolId("ProjectPoolId")
   }
 
-
 }
