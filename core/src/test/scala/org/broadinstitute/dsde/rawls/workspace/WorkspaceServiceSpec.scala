@@ -8,7 +8,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.google.{MockGoogleAccessContextManagerDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockBondApiDAO, MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
@@ -83,7 +83,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test"))
+    val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
+    val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val samDAO = new MockSamDAO(dataSource)
     val gpsDAO = new MockGooglePubSubDAO
     val workspaceManagerDAO = mock[MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
@@ -1279,4 +1280,48 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "do all the perimeter stuff - adding all projects and all static projects" in pending
 
+  // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
+  // that should be within a Service Perimeter
+  "creating a Workspace in a Service Perimeter" should "attempt to overwrite the Service Perimeter with the correct list of Google Project Numbers" in withTestDataServices { services =>
+    val servicePerimeterName = ServicePerimeterName("whatACoolPerimeter")
+    val billingProject1 = testData.testProject1
+    val billingProject2 = testData.testProject2
+    val billingProjects = Seq(billingProject1, billingProject2)
+    val workspacesPerProject = 2
+
+    // Setup BillingProjects by updating their Service Perimeter fields and verifying that they are set properly, then
+    // add a couple of Workspaces to each Billing Project
+    val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(bp.copy(servicePerimeter = Option(servicePerimeterName)))))
+      val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName))
+      updatedBillingProject.value.servicePerimeter.value shouldBe servicePerimeterName
+
+      (1 to workspacesPerProject).map { n =>
+        val workspace = testData.workspace.copy(
+          namespace = bp.projectName.value,
+          name = s"${bp.projectName.value}Workspace${n}",
+          workspaceId = UUID.randomUUID().toString,
+          googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+        runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(workspace))
+      }
+    }
+
+    // Make a call to Create a new Workspace in the same Billing Project
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    // Check that we made the call to overwrite the Perimeter exactly once (default) and that the correct perimeter
+    // name was specified with the correct list of projects
+    val expectedGoogleProjectNumbers: Seq[String] = workspacesInPerimeter.map(_.googleProjectNumber.get.value):+ workspace.googleProjectNumber.get.value
+    val projectNumbersCaptor = captor[Seq[String]]
+    val servicePerimeterNameCaptor = captor[ServicePerimeterName]
+    // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
+    // the arguments passed to it so that we can verify that they were correct
+    verify(services.googleAccessContextManagerDAO).overwriteProjectsInServicePerimeter(servicePerimeterNameCaptor.capture, projectNumbersCaptor.capture)
+    projectNumbersCaptor.getValue should contain theSameElementsAs expectedGoogleProjectNumbers
+    servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
+  }
+
+  it should "ensure that any static projects from config are also added to the Service Perimeter" in pending
 }
