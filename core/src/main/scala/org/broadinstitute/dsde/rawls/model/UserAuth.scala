@@ -105,6 +105,8 @@ case class CreateRawlsBillingProjectFullRequest(
   privateIpGoogleAccess: Option[Boolean],
   servicePerimeter: Option[ServicePerimeterName])
 
+case class UpdateRawlsBillingAccountRequest(billingAccount: RawlsBillingAccountName)
+
 case class SyncReportItem(operation: String, email: String, errorReport: Option[ErrorReport])
 case class SyncReport(groupEmail: RawlsGroupEmail, items: Seq[SyncReportItem])
 
@@ -162,6 +164,8 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val SyncReportFormat = jsonFormat2(SyncReport)
 
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat6(CreateRawlsBillingProjectFullRequest)
+
+  implicit val UpdateRawlsBillingAccountRequestFormat = jsonFormat1(UpdateRawlsBillingAccountRequest)
 
   implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
 

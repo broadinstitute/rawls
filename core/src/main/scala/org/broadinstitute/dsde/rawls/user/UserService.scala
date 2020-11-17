@@ -78,6 +78,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) }
   def ListBillingAccounts = listBillingAccounts()
 
+  def UpdateBillingAccount(projectName: RawlsBillingProjectName, updateProjectRequest: UpdateRawlsBillingAccountRequest) = requireProjectAction(projectName, SamBillingProjectActions.updateBillingAccount) { updateBillingAccount(projectName, updateProjectRequest) }
+  def DeleteBillingAccount(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamBillingProjectActions.updateBillingAccount) { deleteBillingAccount(projectName) }
+
   def CreateBillingProjectFull(createProjectRequest: CreateRawlsBillingProjectFullRequest) = startBillingProjectCreation(createProjectRequest)
   def CreateBillingProjectFullV2(createProjectRequest: CreateRawlsBillingProjectFullRequest) = createBillingProjectV2(createProjectRequest)
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamBillingProjectActions.readPolicies) { getBillingProjectMembers(projectName) }
@@ -422,6 +425,22 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield result
   }
 
+  def updateBillingAccount(projectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[PerRequestMessage] = {
+    for {
+      hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, userInfo)
+      _ = if (!hasAccess) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
+      }
+      result <- updateBillingAccountInternal(projectName, Option(updateAccountRequest.billingAccount))
+    } yield result
+  }
+
+  def deleteBillingAccount(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    for {
+      result <- updateBillingAccountInternal(projectName, None)
+    } yield result
+  }
+
   def createBillingProjectV2(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
       _ <- validateCreateProjectRequest(createProjectRequest)
@@ -529,6 +548,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield {
       RequestComplete(StatusCodes.Created)
     }
+  }
+
+  private def updateBillingAccountInternal(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): Future[PerRequestMessage] = {
+    for {
+      billingProject <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.updateBillingAccount(projectName, billingAccount)
+          .flatMap(_ => dataAccess.rawlsBillingProjectQuery.load(projectName))
+      }
+    } yield {
+      RequestComplete(StatusCodes.OK, billingProject)
+    }
+
   }
 
   private def lookupFolderIdFromServicePerimeterName(perimeterName: ServicePerimeterName): Future[String] = {

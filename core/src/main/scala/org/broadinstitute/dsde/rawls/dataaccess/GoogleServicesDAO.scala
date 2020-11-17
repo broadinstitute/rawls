@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.typesafe.config.Config
@@ -119,6 +120,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return sequence of RawlsBillingAccounts
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
+
+  def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, billingAccountName: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
 

@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import io.opencensus.trace.Span
@@ -232,6 +233,10 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] = {
     Future.successful(billingAccount == accessibleBillingAccountName)
+  }
+
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, billingAccountName: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+    Future.successful(new ProjectBillingInfo().setBillingAccountName(billingAccountName.map(_.value).getOrElse("")).setProjectId(googleProjectId.value))
   }
 
 }

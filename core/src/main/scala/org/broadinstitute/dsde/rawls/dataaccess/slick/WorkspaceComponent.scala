@@ -292,7 +292,7 @@ trait WorkspaceComponent {
     }
     def listWorkspaceGoogleProjectsWithIncorrectBillingAccounts(): ReadAction[Seq[(GoogleProjectId, Option[RawlsBillingAccountName])]] = {
       val query = for {
-        billingProject <- rawlsBillingProjectQuery
+        billingProject <- rawlsBillingProjectQuery if !billingProject.invalidBillingAccount
         workspace <- workspaceQuery if workspace.namespace === billingProject.projectName &&
           workspace.workspaceVersion === WorkspaceVersions.V2.value &&
           !(workspace.billingAccount === billingProject.billingAccount ||

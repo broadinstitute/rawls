@@ -621,6 +621,45 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, billingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+    val billingSvcCred = getBillingServiceAccountCredential
+    implicit val service = GoogleInstrumentedService.Billing
+    val googleProjectName = s"projects/${googleProjectId.value}"
+    val cloudBillingProjectsApi = getCloudBillingManager(billingSvcCred).projects()
+
+    val fetcher = cloudBillingProjectsApi.getBillingInfo(googleProjectName)
+
+    val updater = billingAccount match {
+      case Some(RawlsBillingAccountName(billingAccountName)) =>
+        cloudBillingProjectsApi.updateBillingInfo(googleProjectName,
+          new ProjectBillingInfo().setBillingAccountName(billingAccountName).setBillingEnabled(true))
+      case None =>
+        cloudBillingProjectsApi.updateBillingInfo(googleProjectName,
+          new ProjectBillingInfo().setBillingEnabled(false))
+    }
+    retryWithRecoverWhen500orGoogleError(() => {
+      blocking {
+        val projectBillingInfo = executeGoogleRequest(fetcher)
+        val shouldUpdate = billingAccount match {
+          case Some(RawlsBillingAccountName(billingAccountName)) =>
+            projectBillingInfo.getBillingAccountName == billingAccountName && projectBillingInfo.getBillingEnabled == true
+          case None =>
+            projectBillingInfo.getBillingEnabled == false
+        }
+        if (shouldUpdate) {
+          executeGoogleRequest(updater)
+        } else {
+          projectBillingInfo
+        }
+      }
+    }) {
+      case gjre: GoogleJsonResponseException
+        if gjre.getStatusCode == StatusCodes.Forbidden.intValue =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
+          s"Rawls service account does not have access to billing account [${billingAccount.map(_.value)}]", gjre))
+    }
+  }
+
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
