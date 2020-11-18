@@ -1251,16 +1251,19 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     maybeWorkspace shouldBe None
   }
 
-  it should "call GoogleServicesDAO to update the Billing Account on the Workspace's Google Project" in withTestDataServices { services =>
-    val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
+  it should "set the Billing Account on the Workspace's Google Project to match the Billing Project's Billing Account" in withTestDataServices { services =>
+    val billingProject = testData.testProject1
+    val workspaceName = WorkspaceName(billingProject.projectName.value, "cool_workspace")
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
 
     Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
-    verify(services.gcsDAO).setBillingAccountForProject(any[GoogleProjectId], any[RawlsBillingAccountName], anyBoolean())
-
-    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
-    maybeWorkspace shouldBe defined
+    // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
+    // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
+    // in the Billing Project
+    val billingAccountNameCaptor = captor[RawlsBillingAccountName]
+    verify(services.gcsDAO).setBillingAccountForProject(any[GoogleProjectId], billingAccountNameCaptor.capture, anyBoolean())
+    billingAccountNameCaptor.getValue shouldEqual billingProject.billingAccount.get
   }
 
   it should "throw an exception when calling GoogleServicesDAO to update the Billing Account on the Workspace's Google Project and the DAO call fails" in withTestDataServices { services =>
