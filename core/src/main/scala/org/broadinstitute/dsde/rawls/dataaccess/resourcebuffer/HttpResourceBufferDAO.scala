@@ -60,25 +60,5 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
     projectPoolId
   }
 
-
-  // todo: put in firecloud-develop rawls config
-  /*
-
-  gcs {
-  ...
-  pathToResourceBufferPem = /etc/rbs-account.pem
-  }
-
-  resourceBuffer {
-    projectPool {
-      regularProjectPoolId = "regularProjectPoolId-manualentry"
-      servicePerimeterProjectPoolId = "servicePerimeterProjectPoolId-manualentry"
-    }
-    url =
-  }
-   */
-
-  // todo: rebase
-
 }
 

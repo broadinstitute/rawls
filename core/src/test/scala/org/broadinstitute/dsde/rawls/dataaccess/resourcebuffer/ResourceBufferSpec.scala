@@ -14,7 +14,7 @@ class ResourceBufferSpec extends AsyncFlatSpec {
   val resourceBufferService = new ResourceBufferService(resourceBufferDAO, userInfo)
 
 
-  "ResourceBuffer" should "do the happy path" in {
+  "getGoogleProjectFromRBS" should "get a Google Project ID" in {
     val expected = GoogleProjectId("project-from-rbs")
 
     resourceBufferService.getGoogleProjectFromRBS() map {projectId =>
