@@ -128,7 +128,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConfig = WorkspaceServiceConfig(
       true,
-      "fc-"
+      "fc-",
+      Map(ServicePerimeterName("theGreatBarrier") -> Seq(GoogleProjectNumber("555555"), GoogleProjectNumber("121212")),
+          ServicePerimeterName("anotherGoodName") -> Seq(GoogleProjectNumber("777777"), GoogleProjectNumber("343434")))
     )
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
@@ -1278,19 +1280,20 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "do all this stuff for clone workspace too" in pending
 
-  it should "do all the perimeter stuff - adding all projects and all static projects" in pending
-
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "creating a Workspace in a Service Perimeter" should "attempt to overwrite the Service Perimeter with the correct list of Google Project Numbers" in withTestDataServices { services =>
-    val servicePerimeterName = ServicePerimeterName("whatACoolPerimeter")
+    // Use the WorkspaceServiceConfig to determine which static projects exist for which perimeter
+    val servicePerimeterName: ServicePerimeterName = services.workspaceServiceConfig.staticProjectsInPerimeters.keys.head
+    val staticProjectNumbersInPerimeter: Seq[String] = services.workspaceServiceConfig.staticProjectsInPerimeters(servicePerimeterName).map(_.value)
+
     val billingProject1 = testData.testProject1
     val billingProject2 = testData.testProject2
     val billingProjects = Seq(billingProject1, billingProject2)
     val workspacesPerProject = 2
 
-    // Setup BillingProjects by updating their Service Perimeter fields and verifying that they are set properly, then
-    // add a couple of Workspaces to each Billing Project
+    // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
+    // the Billing Projects and therefore in the Perimeter
     val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
       runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(bp.copy(servicePerimeter = Option(servicePerimeterName)))))
       val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName))
@@ -1306,14 +1309,18 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       }
     }
 
+    // Test setup is done, now we're getting to the test
     // Make a call to Create a new Workspace in the same Billing Project
     val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
     // Check that we made the call to overwrite the Perimeter exactly once (default) and that the correct perimeter
-    // name was specified with the correct list of projects
-    val expectedGoogleProjectNumbers: Seq[String] = workspacesInPerimeter.map(_.googleProjectNumber.get.value):+ workspace.googleProjectNumber.get.value
+    // name was specified with the correct list of projects which should include all pre-existing Workspaces within
+    // Billing Projects using the same Service Perimeter, all static Google Project Numbers specified by the Config, and
+    // the new Google Project Number that we just created
+    val existingProjectNumbersInPerimeter = workspacesInPerimeter.map(_.googleProjectNumber.get.value)
+    val expectedGoogleProjectNumbers: Seq[String] = (existingProjectNumbersInPerimeter ++ staticProjectNumbersInPerimeter) :+ workspace.googleProjectNumber.get.value
     val projectNumbersCaptor = captor[Seq[String]]
     val servicePerimeterNameCaptor = captor[ServicePerimeterName]
     // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
@@ -1322,6 +1329,4 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     projectNumbersCaptor.getValue should contain theSameElementsAs expectedGoogleProjectNumbers
     servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
   }
-
-  it should "ensure that any static projects from config are also added to the Service Perimeter" in pending
 }
