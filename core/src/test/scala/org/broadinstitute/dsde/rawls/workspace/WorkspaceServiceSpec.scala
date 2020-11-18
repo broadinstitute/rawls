@@ -1281,7 +1281,22 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     maybeWorkspace shouldBe None
   }
 
-  it should "do all this stuff for clone workspace too" in pending
+  it should "not try to modify the Service Perimeter if the Billing Project does not specify a Service Perimeter" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val billingProject = testData.testProject1
+
+    // Pre-condition: make sure that the Billing Project we're adding the Workspace to DOES NOT specify a Service
+    // Perimeter
+    billingProject.servicePerimeter shouldBe empty
+
+    val workspaceRequest = WorkspaceRequest(billingProject.projectName.value, newWorkspaceName, Map.empty)
+    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    // Verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was NOT called
+    verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Seq[String]])
+  }
+
+  it should "claim a Google Project from Resource Buffering Service" in pending
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
@@ -1332,4 +1347,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     projectNumbersCaptor.getValue should contain theSameElementsAs expectedGoogleProjectNumbers
     servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
   }
+
+  "cloneWorkspace" should "do all the same things as Create Workspace" in pending
 }
