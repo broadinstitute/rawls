@@ -12,9 +12,9 @@ case class ResourceBufferConfig(
 object ResourceBufferConfig{
   def apply(conf: Config): ResourceBufferConfig = {
     ResourceBufferConfig(
-      conf.getString("url"),  // todo: will startup fail if this config doesn't exist?
-      ProjectPoolId(conf.getString("projectPool.regularProjectPoolId")),
-      ProjectPoolId(conf.getString("projectPool.servicePerimeterProjectPoolId"))
+      conf.getString("url"),
+      ProjectPoolId(conf.getString("projectPool.regular")),
+      ProjectPoolId(conf.getString("projectPool.servicePerimeter"))
     )
   }
 }

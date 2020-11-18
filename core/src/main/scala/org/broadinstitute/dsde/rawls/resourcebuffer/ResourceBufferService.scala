@@ -21,7 +21,6 @@ class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, protected val 
 
     val projectPoolId: ProjectPoolId = resourceBufferDAO.getProjectPoolId(projectPoolType)
 
-    // todo: doesn't seem like this is too important to save since it's only for getting back the same info we already got. verify this?
     val handoutRequestId = generateHandoutRequestId(userInfo, projectPoolId)
 
     resourceBufferDAO.handoutGoogleProject(PoolId(projectPoolId.value), handoutRequestId)
