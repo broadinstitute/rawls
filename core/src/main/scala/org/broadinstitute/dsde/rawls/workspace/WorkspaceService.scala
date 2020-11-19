@@ -601,32 +601,35 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
         withBillingProjectContext(destWorkspaceRequest.namespace) { destBillingProject =>
           getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
-            dataSource.inTransaction({ dataAccess =>
-              // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
-              withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
-                DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
-                  withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
+            for {
+              workspaceTuple <- dataSource.inTransaction( { dataAccess =>
+                // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
+                withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
+                  DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
+                    withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
 
-                    // add to or replace current attributes, on an individual basis
-                    val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
+                      // add to or replace current attributes, on an individual basis
+                      val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
 
-                    withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, dataAccess) { destWorkspaceContext =>
-                      dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                        dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-                          val inserts = methodConfigShorts.map { methodConfigShort =>
-                            dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-                              dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                      withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, dataAccess) { destWorkspaceContext =>
+                        dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                          dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                            val inserts = methodConfigShorts.map { methodConfigShort =>
+                              dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                                dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                              }
                             }
-                          }
-                          DBIO.seq(inserts: _*)
-                        } andThen {
-                        DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                            DBIO.seq(inserts: _*)
+                          } andThen {
+                          DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                        }
                       }
                     }
                   }
                 }
-              }
-            }, TransactionIsolation.ReadCommitted)
+              }, TransactionIsolation.ReadCommitted)
+              _ <- maybeUpdateGoogleProjectsInPerimeter(destBillingProject)
+            } yield workspaceTuple
             // read committed to avoid deadlocks on workspace attr scratch table
           }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
             //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs

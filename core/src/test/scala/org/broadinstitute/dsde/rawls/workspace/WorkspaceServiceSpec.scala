@@ -1348,5 +1348,180 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
   }
 
-  "cloneWorkspace" should "do all the same things as Create Workspace" in pending
+  "cloneWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProjectId.value should not be empty
+    workspace.googleProjectNumber should not be empty
+  }
+
+  it should "fail with 400 if specified Namespace/Billing Project does not exist" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val workspaceRequest = WorkspaceRequest("nonexistent_namespace", "kermits_pond", Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+  it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices { services =>
+    // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = None))))
+    val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    updatedBillingProject.value.billingAccount shouldBe empty
+
+    val baseWorkspace = testData.workspace
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    }
+    error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+  }
+
+  it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices { services =>
+    // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
+    // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
+    val billingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
+    val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    originalBillingProject.value.invalidBillingAccount shouldBe false
+
+    // Make the call to createWorkspace and make sure it throws an exception with the correct StatusCode
+    val baseWorkspace = testData.workspace
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    }
+    error.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+
+    // Make sure that the BillingProject.invalidBillingAccount field was properly updated while attempting to create the
+    // Workspace
+    val persistedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    persistedBillingProject.value.invalidBillingAccount shouldBe true
+  }
+
+  it should "fail with 502 if Rawls is unable to retrieve the Google Project Number from Google for Workspace's Google Project" in withTestDataServices { services =>
+    when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
+
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "whatever")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadGateway)
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    maybeWorkspace shouldBe None
+  }
+
+  it should "set the Billing Account on the Workspace's Google Project to match the Billing Project's Billing Account" in withTestDataServices { services =>
+    val billingProject = testData.testProject1
+    val workspaceName = WorkspaceName(billingProject.projectName.value, "cool_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    val baseWorkspace = testData.workspace
+    Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
+    // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
+    // in the Billing Project
+    val billingAccountNameCaptor = captor[RawlsBillingAccountName]
+    verify(services.gcsDAO).setBillingAccountForProject(any[GoogleProjectId], billingAccountNameCaptor.capture, anyBoolean())
+    billingAccountNameCaptor.getValue shouldEqual billingProject.billingAccount.get
+  }
+
+  it should "throw an exception when calling GoogleServicesDAO to update the Billing Account on the Workspace's Google Project and the DAO call fails" in withTestDataServices { services =>
+    when(services.gcsDAO.setBillingAccountForProject(any[GoogleProjectId], any[RawlsBillingAccountName], anyBoolean()))
+      .thenReturn(Future.failed(new Exception("Fake error from Google")))
+
+    val baseWorkspace = testData.workspace
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    intercept[Exception] {
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    }
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    maybeWorkspace shouldBe None
+  }
+
+  it should "not try to modify the Service Perimeter if the Billing Project does not specify a Service Perimeter" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "space_for_workin"
+    val billingProject = testData.testProject1
+
+    // Pre-condition: make sure that the Billing Project we're adding the Workspace to DOES NOT specify a Service
+    // Perimeter
+    billingProject.servicePerimeter shouldBe empty
+
+    val workspaceRequest = WorkspaceRequest(billingProject.projectName.value, newWorkspaceName, Map.empty)
+    Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    // Verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was NOT called
+    verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Seq[String]])
+  }
+
+  it should "claim a Google Project from Resource Buffering Service" in pending
+
+  // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
+  // that should be within a Service Perimeter
+  "cloning a Workspace into a Service Perimeter" should "attempt to overwrite the Service Perimeter with the correct list of Google Project Numbers" in withTestDataServices { services =>
+    // Use the WorkspaceServiceConfig to determine which static projects exist for which perimeter
+    val servicePerimeterName: ServicePerimeterName = services.workspaceServiceConfig.staticProjectsInPerimeters.keys.head
+    val staticProjectNumbersInPerimeter: Seq[String] = services.workspaceServiceConfig.staticProjectsInPerimeters(servicePerimeterName).map(_.value)
+
+    val billingProject1 = testData.testProject1
+    val billingProject2 = testData.testProject2
+    val billingProjects = Seq(billingProject1, billingProject2)
+    val workspacesPerProject = 2
+
+    // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
+    // the Billing Projects and therefore in the Perimeter
+    val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(bp.copy(servicePerimeter = Option(servicePerimeterName)))))
+      val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName))
+      updatedBillingProject.value.servicePerimeter.value shouldBe servicePerimeterName
+
+      (1 to workspacesPerProject).map { n =>
+        val workspace = testData.workspace.copy(
+          namespace = bp.projectName.value,
+          name = s"${bp.projectName.value}Workspace${n}",
+          workspaceId = UUID.randomUUID().toString,
+          googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+        runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(workspace))
+      }
+    }
+
+    // Test setup is done, now we're getting to the test
+    // Make a call to Create a new Workspace in the same Billing Project
+    val baseWorkspace = testData.workspace
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    // Check that we made the call to overwrite the Perimeter exactly once (default) and that the correct perimeter
+    // name was specified with the correct list of projects which should include all pre-existing Workspaces within
+    // Billing Projects using the same Service Perimeter, all static Google Project Numbers specified by the Config, and
+    // the new Google Project Number that we just created
+    val existingProjectNumbersInPerimeter = workspacesInPerimeter.map(_.googleProjectNumber.get.value)
+    val expectedGoogleProjectNumbers: Seq[String] = (existingProjectNumbersInPerimeter ++ staticProjectNumbersInPerimeter) :+ workspace.googleProjectNumber.get.value
+    val projectNumbersCaptor = captor[Seq[String]]
+    val servicePerimeterNameCaptor = captor[ServicePerimeterName]
+    // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
+    // the arguments passed to it so that we can verify that they were correct
+    verify(services.googleAccessContextManagerDAO).overwriteProjectsInServicePerimeter(servicePerimeterNameCaptor.capture, projectNumbersCaptor.capture)
+    projectNumbersCaptor.getValue should contain theSameElementsAs expectedGoogleProjectNumbers
+    servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
+  }
 }
