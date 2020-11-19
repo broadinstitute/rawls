@@ -186,6 +186,30 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
+  def getRuntimeZoneAttrs(googleProjectId: String, bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[JsValue]] = {
+    googleServicesDAO.getBucket(bucketName) map {
+      case Some(bucket) =>
+        val sdf: Option[JsValue] = bucket.getLocationType match {
+          case "Region" =>
+            val region: String = bucket.getLocation
+            // get zones
+            // Should RawlsBillingProject be used or googleProjectId ??
+            val zonesFuture: Future[Option[List[String]]] = googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region)
+
+            // TODO: convert this List[String] to JsValue
+            // TODO: this will return Future[Future[_]], we need to wrap it in a single Future
+            val zonesAsJsValue: Future[Option[JsValue]] = zonesFuture.map { x =>
+              x.map { y =>
+                JsObject("zones" -> JsString(y.mkString(" ")))
+              }
+            }
+            zonesAsJsValue
+          case _ => runtimeOptions
+        }
+      case _ => Future.successful(None)
+    }
+  }
+
   def buildWorkflowOpts(workspace: WorkspaceRecord,
                         submissionId: UUID,
                         userEmail: RawlsUserEmail,
@@ -319,6 +343,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
 
       wdl <- getWdl(methodConfig, petUserInfo)
+      computeZones <- getRuntimeZoneAttrs(workspaceRec.bucketName)
     } yield {
 
       val wfOpts = buildWorkflowOpts(
