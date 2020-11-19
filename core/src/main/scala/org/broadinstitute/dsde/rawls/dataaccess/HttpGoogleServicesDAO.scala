@@ -507,7 +507,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
+  override def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.IamCredentials
 
     /* Because we can't assume the identity of the Google SA that actually does the work in DM (it's in their project and we can't access it),
