@@ -1037,7 +1037,7 @@ class HttpGoogleServicesDAO(
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(resourceBufferPemEmail)
-      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJava)
+      .setServiceAccountScopes(workbenchLoginScopes.asJava) // might be ok with null scopes but adding this here per recommendation
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(resourceBufferPemFile))
       .build()
   }
