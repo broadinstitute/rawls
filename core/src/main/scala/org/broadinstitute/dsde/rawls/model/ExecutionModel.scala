@@ -28,6 +28,7 @@ case class SubmissionRequest(
   expression: Option[String],
   useCallCache: Boolean,
   deleteIntermediateOutputFiles: Boolean,
+  useReferenceDisks: Boolean = false,
   workflowFailureMode: Option[String] = None
 )
 
@@ -76,6 +77,7 @@ case class ExecutionServiceWorkflowOptions(
   default_runtime_attributes: Option[JsValue],
   read_from_cache: Boolean,
   delete_intermediate_output_files: Boolean,
+  use_reference_disks: Boolean,
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
   google_labels: Map[String, String] = Map.empty
@@ -129,6 +131,7 @@ case class Submission(
   status: SubmissionStatus,
   useCallCache: Boolean,
   deleteIntermediateOutputFiles: Boolean,
+  useReferenceDisks: Boolean = false,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None
@@ -334,6 +337,7 @@ class ExecutionJsonSupport extends JsonSupport {
           obj.expression.map("expression" -> _.toJson),
           Option("useCallCache" -> obj.useCallCache.toJson),
           Option("deleteIntermediateOutputFiles" -> obj.deleteIntermediateOutputFiles.toJson),
+          Option("useReferenceDisks" -> obj.useReferenceDisks.toJson),
           obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson)
         ).flatten: _*
       )
@@ -355,6 +359,7 @@ class ExecutionJsonSupport extends JsonSupport {
         expression = fields.get("expression").flatMap(_.convertTo[Option[String]]),
         useCallCache = fields("useCallCache").convertTo[Boolean],
         deleteIntermediateOutputFiles = fields.get("deleteIntermediateOutputFiles").fold(false)(_.convertTo[Boolean]),
+        useReferenceDisks = fields.get("useReferenceDisks").fold(false)(_.convertTo[Boolean]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
@@ -378,7 +383,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat12(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat13(ExecutionServiceWorkflowOptions)
 
   implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 
@@ -402,7 +407,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat = jsonFormat13(Submission)
+  implicit val SubmissionFormat = jsonFormat14(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
