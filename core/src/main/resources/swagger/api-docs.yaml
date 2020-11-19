@@ -292,7 +292,7 @@ paths:
         required: true
       responses:
         201:
-          description: Successfully Created Billing Project in Rawls and Google
+          description: Successfully Created Billing Project in Rawls
         400:
           description: both you and firecloud billing user must be a user of the billing account
           content:
