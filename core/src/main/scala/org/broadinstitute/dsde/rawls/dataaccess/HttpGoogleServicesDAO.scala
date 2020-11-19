@@ -438,6 +438,14 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[Option[List[String]]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+    val getter = getComputeManager(getBucketServiceAccountCredential).regions().get(googleProject.value, region)
+    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter).getZones.asScala.toList) }) {
+      case e: HttpResponseException => None
+    }
+  }
+
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Groups
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
