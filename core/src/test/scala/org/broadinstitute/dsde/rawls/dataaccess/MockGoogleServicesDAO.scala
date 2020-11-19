@@ -20,6 +20,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Random
 
 class MockGoogleServicesDAO(groupsPrefix: String,
                             override val accessContextManagerDAO: AccessContextManagerDAO = new MockGoogleAccessContextManagerDAO) extends GoogleServicesDAO(groupsPrefix) {
@@ -115,7 +116,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def getAccessTokenUsingJson(saKey: String): Future[String] = Future.successful("token")
   override def getUserInfoUsingJson(saKey: String): Future[UserInfo] = Future.successful(UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000")))
 
-  override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] = Future.successful(new Project().setProjectNumber(42L))
+  override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] = Future.successful(new Project().setProjectNumber(Random.nextLong()))
 
   override def setBillingAccountForProject(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, billingEnabled: Boolean = true ): Future[Unit] = Future.successful()
 
