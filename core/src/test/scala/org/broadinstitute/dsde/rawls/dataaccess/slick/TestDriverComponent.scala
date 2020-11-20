@@ -160,7 +160,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                     attributes: AttributeMap,
                     isLocked: Boolean) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)))
   }
 
   class EmptyWorkspace() extends TestData {

@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.scalatest.concurrent.Eventually
-import org.scalatest.BeforeAndAfterEach
+import org.scalatest.{BeforeAndAfterEach, OptionValues}
 import org.mockito.{ArgumentMatcher, ArgumentMatchers}
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
@@ -21,7 +21,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
-class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterEach with Eventually {
+class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterEach with Eventually with OptionValues {
   val defaultExecutionContext: ExecutionContext = executionContext
 
   val defaultServicePerimeterName: ServicePerimeterName = ServicePerimeterName("accessPolicies/policyName/servicePerimeters/servicePerimeterName")
@@ -41,7 +41,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLik
 
   "CreatingBillingProjectMonitor" should "set project status to 'AddingToPerimeter' when it's been successfully created and it has a service perimeter" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Creating, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Creating, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = None)
       val creatingOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", true, None, GoogleApiTypes.DeploymentManagerApi)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -53,10 +53,11 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLik
         Await.result(creatingBillingProjectMonitor.checkCreatingProjects(), Duration.Inf)
       }
 
-      // the only thing that should change is the status
-      assertResult(Some(billingProject.copy(status = CreationStatuses.AddingToPerimeter))) {
-        runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
-      }
+      // If the project was successfully created, we should see that the Billing Project Status is set to
+      // AddingToPerimeter, and we should also see that the Google Project Number field is now populated
+      val billingProjectResult = runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
+      billingProjectResult.value.status shouldEqual CreationStatuses.AddingToPerimeter
+      billingProjectResult.value.googleProjectNumber shouldBe defined
     }
   }
 

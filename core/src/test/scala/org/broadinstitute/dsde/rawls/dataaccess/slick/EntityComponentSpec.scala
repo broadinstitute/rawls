@@ -1118,7 +1118,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     )
     assertResult(expected1)(entityStats1.toSet)
     // add two sample sets in a different namespace
-    val wsOtherNamespace = testData.workspace.copy(namespace="somethingelse", workspaceId = UUID.randomUUID.toString)
+    val wsOtherNamespace = testData.workspace.copy(namespace="somethingelse", workspaceId = UUID.randomUUID.toString, googleProjectNumber = None)
     runAndWait(workspaceQuery.createOrUpdate(wsOtherNamespace))
     withWorkspaceContext(wsOtherNamespace) { wsctx =>
       runAndWait(entityQuery.save(wsctx, x2))
