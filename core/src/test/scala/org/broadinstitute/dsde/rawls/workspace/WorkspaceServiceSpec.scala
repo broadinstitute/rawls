@@ -142,7 +142,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0))
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
-    val resourceBufferConfig = ResourceBufferConfig(testConf)
+    val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
     val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
 
     val workspaceServiceConstructor = WorkspaceService.constructor(

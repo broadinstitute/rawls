@@ -341,7 +341,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0))
 
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
-      val resourceBufferConfig = ResourceBufferConfig(testConf)
+      val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
 
       val workspaceServiceConstructor = WorkspaceService.constructor(

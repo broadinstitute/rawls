@@ -12,9 +12,9 @@ class ResourceBufferSpec extends AsyncFlatSpec {
 
 
   val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
-  val resourceBufferDAO = new MockResourceBufferDAO
+  val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
   val testConf = ConfigFactory.load()
-  val resourceBufferConfig = ResourceBufferConfig(testConf)
+  val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
   val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
 
 
