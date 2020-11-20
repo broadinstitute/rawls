@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
 import org.broadinstitute.dsde.rawls.mock.MockResourceBufferDAO
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolType, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
-import org.scalatest.AsyncFlatSpec
+import org.scalatest.flatspec.AsyncFlatSpec
 
 class ResourceBufferSpec extends AsyncFlatSpec {
 
