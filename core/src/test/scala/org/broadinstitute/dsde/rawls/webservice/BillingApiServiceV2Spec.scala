@@ -334,7 +334,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User))
+//        Add testing for workspaces here.
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
       }
   }
 
@@ -350,7 +351,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.User))
+//        Add testing for workspaces here
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.User), Set(), Set())
       }
   }
 
@@ -481,7 +483,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           samResource.direct.roles.collect {
             case SamProjectRoles.owner => ProjectRoles.Owner
             case SamProjectRoles.workspaceCreator => ProjectRoles.User
-          }
+          },
+          Set(),
+          Set()
         )
       }
     }

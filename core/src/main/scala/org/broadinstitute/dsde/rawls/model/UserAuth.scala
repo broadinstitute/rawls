@@ -48,7 +48,16 @@ case class RawlsBillingProject(projectName: RawlsBillingProjectName, status: Cre
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
 }
-case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName], servicePerimeter: Option[ServicePerimeterName], invalidBillingAccount: Boolean, roles: Set[ProjectRoles.ProjectRole])
+
+case class WorkspaceBillingAccount(workspaceName: WorkspaceName, maybeBillingAccountName: Option[RawlsBillingAccountName])
+
+case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName,
+                                       billingAccount: Option[RawlsBillingAccountName],
+                                       servicePerimeter: Option[ServicePerimeterName],
+                                       invalidBillingAccount: Boolean,
+                                       roles: Set[ProjectRoles.ProjectRole],
+                                       workspacesWithCorrectBillingAccount: Set[WorkspaceName],
+                                       workspacesWithIncorrectBillingAccount: Set[WorkspaceBillingAccount])
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
@@ -116,6 +125,8 @@ class UserAuthJsonSupport extends JsonSupport {
   import ExecutionJsonSupport._
   import UserModelJsonSupport._
   import spray.json.DefaultJsonProtocol._
+  import WorkspaceJsonSupport.WorkspaceNameFormat
+
 
   // need "apply" here so it doesn't choose the companion class
   implicit val RawlsUserFormat = jsonFormat2(RawlsUser.apply)
@@ -177,7 +188,9 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
 
-  implicit val RawlsBillingProjectResponseFormat = jsonFormat5(RawlsBillingProjectResponse)
+  implicit val WorkspaceBillingAccountFormat = jsonFormat2(WorkspaceBillingAccount)
+
+  implicit val RawlsBillingProjectResponseFormat = jsonFormat7(RawlsBillingProjectResponse)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

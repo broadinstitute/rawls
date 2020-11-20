@@ -179,15 +179,40 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def getBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+  def getBillingProject(billingProjectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    dataSource.inTransaction {
+      dataAccess => dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
+    }.map {
+      case Some(billingProject) => RequestComplete(StatusCodes.OK, constructBillingProjectResponse(billingProject))
+      case None => RequestComplete(StatusCodes.NotFound)
+    }
+  }
+
+  private def constructBillingProjectResponse(billingProject: RawlsBillingProject): Future[RawlsBillingProjectResponse] = {
     for {
-      resourceRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
-      maybeBillingProject <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }
-    } yield {
-      maybeProjectResponse(resourceRoles, maybeBillingProject) match {
-        case Some(projectResponse) => RequestComplete(StatusCodes.OK, projectResponse)
-        case None => RequestComplete(StatusCodes.NotFound)
-      }
+      resourceRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, billingProject.projectName.value, userInfo)
+      billingProjectResponse <- constructBillingProjectResponseWithUserRoles(resourceRoles, billingProject)
+    } yield billingProjectResponse
+  }
+
+  private def constructBillingProjectResponseWithUserRoles(resourceRoles: Set[SamResourceRole], billingProject: RawlsBillingProject): Future[RawlsBillingProjectResponse] = {
+    for {
+      (workspacesWithCorrectBillingAccount, workspacesWithIncorrectBillingAccount) <- loadAndPartitionWorkspacesByMatchingBillingProjectBillingAccount(billingProject)
+    } yield RawlsBillingProjectResponse(
+      billingProject.projectName,
+      billingProject.billingAccount,
+      billingProject.servicePerimeter,
+      billingProject.invalidBillingAccount,
+      samRolesToProjectRoles(resourceRoles),
+      workspacesWithCorrectBillingAccount.map(_.toWorkspaceName).toSet,
+      workspacesWithIncorrectBillingAccount.map(workspace => WorkspaceBillingAccount(workspace.toWorkspaceName, workspace.billingAccount)).toSet)
+  }
+
+  private def loadAndPartitionWorkspacesByMatchingBillingProjectBillingAccount(billingProject: RawlsBillingProject): Future[(Seq[Workspace], Seq[Workspace])] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.listWithBillingProject(billingProject.projectName).map(workspaces => {
+        workspaces.partition(workspace => workspace.billingAccount == billingProject.billingAccount)
+      })
     }
   }
 
@@ -196,25 +221,21 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)
       projectsInDB <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjects(samUserResources.map(resource => RawlsBillingProjectName(resource.resourceId)).toSet) }
     } yield {
-      val projectsByName = projectsInDB.map(p => p.projectName -> p).toMap
-      val projectResponses = samUserResources.flatMap { samUserResource =>
-        val allSamRoles = samUserResource.direct.roles ++ samUserResource.inherited.roles
-        val maybeBillingProject = projectsByName.get(RawlsBillingProjectName(samUserResource.resourceId))
-        maybeProjectResponse(allSamRoles, maybeBillingProject)
-      }.toList.sortBy(_.projectName.value)
+      val projectResponses = constructBillingProjectResponses(samUserResources, projectsInDB)
       RequestComplete(projectResponses)
     }
   }
 
-  private def maybeProjectResponse(samRoles: Set[SamResourceRole], maybeBillingProject: Option[RawlsBillingProject]): Option[RawlsBillingProjectResponse] = {
-    val projectRoles = samRolesToProjectRoles(samRoles)
-    maybeBillingProject match {
-      case Some(project) if projectRoles.nonEmpty =>
-        Option(RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, projectRoles))
-      case _ =>
-        // either the project is not in the db or the user does not have a sam role that maps to a ProjectRole
-        // in either case the project is excluded
-        None
+  private def constructBillingProjectResponses(samUserResources: Seq[SamUserResource], billingProjectsInRawlsDB: Seq[RawlsBillingProject]): Future[List[RawlsBillingProjectResponse]] = {
+    val projectsByName = billingProjectsInRawlsDB.map(p => p.projectName -> p).toMap
+    for {
+      foo <- samUserResources.toList.traverse { samUserResource =>
+        val allSamRoles = samUserResource.direct.roles ++ samUserResource.inherited.roles
+        projectsByName.get(RawlsBillingProjectName(samUserResource.resourceId))
+          .traverse(billingProject => constructBillingProjectResponseWithUserRoles(allSamRoles, billingProject))
+      }
+    } yield {
+      foo.flatten.sortBy(value => value.projectName.value)
     }
   }
 

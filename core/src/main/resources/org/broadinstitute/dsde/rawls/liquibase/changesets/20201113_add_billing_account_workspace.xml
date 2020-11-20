@@ -5,9 +5,4 @@
             <column name="BILLING_ACCOUNT" type="varchar(254)" />
         </addColumn>
     </changeSet>
-<!--    <changeSet id="BACKFILL_BILLING_ACCT" author="srubenst">-->
-<!--        <sql>-->
-<!--            update WORKSPACE workspace set billing_account = (SELECT billing_account FROM BILLING_PROJECT billing_project WHERE workspace.google_project = billing_project.name);-->
-<!--        </sql>-->
-<!--    </changeSet>-->
 </databaseChangeLog>

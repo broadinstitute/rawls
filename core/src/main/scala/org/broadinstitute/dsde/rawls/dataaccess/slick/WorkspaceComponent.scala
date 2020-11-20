@@ -148,6 +148,14 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaceQuery)
     }
 
+    def listWithBillingProject(billingProject: RawlsBillingProjectName): ReadAction[Seq[Workspace]] = {
+      for {
+        workspaceRecords <- filter(rec => rec.namespace === billingProject.value).result
+      } yield {
+        workspaceRecords.map(unmarshalWorkspace)
+      }
+    }
+
     def getTags(queryString: Option[String]): ReadAction[Seq[WorkspaceTag]] = {
       val tags = workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, queryString).result
       tags map(_.map { rec =>
@@ -443,6 +451,10 @@ trait WorkspaceComponent {
 
     private def marshalNewWorkspace(workspace: Workspace) = {
       WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.billingAccount.map(_.value))
+    }
+
+    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord): Workspace = {
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, Map.empty, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProject), workspaceRec.billingAccount.map(RawlsBillingAccountName))
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
