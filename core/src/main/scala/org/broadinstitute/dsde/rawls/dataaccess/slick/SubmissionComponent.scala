@@ -4,7 +4,7 @@ import java.sql.Timestamp
 import java.util.UUID
 
 import cats.implicits._
-import nl.grons.metrics.scala.Counter
+import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus

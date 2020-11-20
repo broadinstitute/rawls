@@ -34,7 +34,7 @@ import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import spray.json._
 
 import scala.collection.JavaConverters._
@@ -42,6 +42,8 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Try
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 /**
  * Created with IntelliJ IDEA.
@@ -51,7 +53,7 @@ import scala.util.Try
  */
 //noinspection TypeAnnotation,ScalaUnusedSymbol
 class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
-  with FlatSpecLike
+  with AnyFlatSpecLike
   with Matchers
   with TestDriverComponent
   with BeforeAndAfterAll

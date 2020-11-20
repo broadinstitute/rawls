@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class AttributeNamespaceSpec extends FlatSpec with Matchers {
+class AttributeNamespaceSpec extends AnyFlatSpec with Matchers {
   "AttributeNamespace" should "parse delimited names" in {
     val fromExpectations = Map(
       "simple"              -> AttributeName("default", "simple"),

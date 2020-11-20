@@ -6,11 +6,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.scalatest.{FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContext
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class EntitySupportSpec extends FlatSpec with Matchers with TestDriverComponent with RawlsTestUtils {
+class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverComponent with RawlsTestUtils {
   import driver.api._
 
   "withEntityRecsForExpressionEval" should "pull entity records for a single entity given no expression" in withDefaultTestDatabase {

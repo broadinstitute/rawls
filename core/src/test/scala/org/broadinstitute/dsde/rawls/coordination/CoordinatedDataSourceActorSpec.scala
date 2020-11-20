@@ -10,20 +10,22 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.prop.TableDrivenPropertyChecks
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import slick.jdbc.TransactionIsolation
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success}
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 class CoordinatedDataSourceActorSpec
   extends TestKit(ActorSystem("CoordinatedDataSourceActorSpec"))
     with ImplicitSender
-    with FlatSpecLike
+    with AnyFlatSpecLike
     with Matchers
     with BeforeAndAfterAll
     with ScalaFutures

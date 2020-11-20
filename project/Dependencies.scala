@@ -1,13 +1,13 @@
 import sbt._
 
 object Dependencies {
-  val akkaV = "2.5.19"
-  val akkaHttpV = "10.1.7"
+  val akkaV = "2.6.8"
+  val akkaHttpV = "10.2.0"
   val slickV = "3.3.2"
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
-  val workbenchGoogle2V = "0.11-8d09185"
+  val workbenchGoogle2V = "0.14-aa84412"
 
   val cromwellVersion = "40-2754783"
 
@@ -66,10 +66,10 @@ object Dependencies {
   val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
-  val metricsScala: ModuleID =       "nl.grons"              %% "metrics-scala"    % "3.5.6"
+  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.9"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
-  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.7.1"
+  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.2"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.10"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.4"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
@@ -79,23 +79,23 @@ object Dependencies {
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
-  val cats: ModuleID =            "org.typelevel"                 %% "cats"                 % "0.9.0"
+  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.2.0"
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
-  val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "0.5.3"
-  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.0.1" % "test"
-  val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
+  val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
+  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
+  val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-3-4"          % "3.2.2.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
   val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
-  val workbenchModelV  = "0.13-58c913d"
+  val workbenchModelV  = "0.14-65bba14"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
-  val workbenchGoogleV = "0.21-890a74f"
+  val workbenchGoogleV = "0.21-64a7b29"
   val workbenchGoogle: ModuleID =       workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV)
   val workbenchGoogleMocks: ModuleID =  workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests")
   val workbenchGoogle2: ModuleID =      workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V)
@@ -103,14 +103,12 @@ object Dependencies {
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.111.0-alpha" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
-  val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
-  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.9.0"
-  val circeFS2: ModuleID = "io.circe" %% "circe-fs2" % "0.13.0"
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.13.1"
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
-  val workspaceManager = excludeGuavaJDK5("bio.terra" % "workspace-manager-client" % "0.2.0-SNAPSHOT")
+  val workspaceManager = excludeGuavaJDK5("bio.terra" % "workspace-manager-client" % "0.5.0-SNAPSHOT")
   val dataRepo = excludeGuavaJDK5("bio.terra" % "datarepo-client" % "1.0.44-SNAPSHOT")
   val resourceBufferService = excludeGuavaJDK5("bio.terra" % "terra-rbs-client" % "0.0.3-SNAPSHOT")
 
@@ -211,7 +209,6 @@ object Dependencies {
     swaggerUI,
     webjarsLocator,
     circeYAML,
-    circeFS2,
     commonsJEXL,
     cromwellClient,
     cats,
@@ -222,7 +219,6 @@ object Dependencies {
     akkaHttpTestKit,
     mockserverNetty,
     mockito,
-    log4cats,
     workbenchModel,
     workbenchGoogle,
     googleStorageLocal,

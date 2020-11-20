@@ -13,18 +13,20 @@ import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.time.{Seconds, Span}
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.BeforeAndAfterAll
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 /**
   * Created by rtitle on 5/19/17.
   */
-class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures with Eventually with FlatSpecLike with MockitoSugar with Matchers with TestDriverComponent with BeforeAndAfterAll {
+class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures with Eventually with AnyFlatSpecLike with MockitoSugar with Matchers with TestDriverComponent with BeforeAndAfterAll {
 
   // actor ask timeout
   implicit val timeout = Timeout(5 seconds)

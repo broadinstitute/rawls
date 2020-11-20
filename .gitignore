@@ -19,6 +19,7 @@ rawlsdb/
 *.pid
 automation/src/test/resources/
 automation/.bsp/
+automation/test-reports/
 
 .bloop/
 .metals/

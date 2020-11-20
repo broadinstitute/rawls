@@ -419,7 +419,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo)
       // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
-      _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, OAuth2BearerToken(gcsDAO.getBucketServiceAccountCredential.getAccessToken), userInfo.accessToken)).recoverWith {
+      _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recoverWith {
         //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
         case e: ApiException => {
           if(e.getCode != StatusCodes.NotFound.intValue) {
@@ -602,32 +602,35 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
         withBillingProjectContext(destWorkspaceRequest.namespace) { destBillingProject =>
           getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
-            dataSource.inTransaction({ dataAccess =>
-              // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
-              withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
-                DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
-                  withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
+            for {
+              workspaceTuple <- dataSource.inTransaction( { dataAccess =>
+                // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
+                withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
+                  DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
+                    withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
 
-                    // add to or replace current attributes, on an individual basis
-                    val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
+                      // add to or replace current attributes, on an individual basis
+                      val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
 
-                    withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, dataAccess) { destWorkspaceContext =>
-                      dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                        dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-                          val inserts = methodConfigShorts.map { methodConfigShort =>
-                            dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-                              dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                      withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, dataAccess) { destWorkspaceContext =>
+                        dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                          dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                            val inserts = methodConfigShorts.map { methodConfigShort =>
+                              dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                                dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                              }
                             }
-                          }
-                          DBIO.seq(inserts: _*)
-                        } andThen {
-                        DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                            DBIO.seq(inserts: _*)
+                          } andThen {
+                          DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                        }
                       }
                     }
                   }
                 }
-              }
-            }, TransactionIsolation.ReadCommitted)
+              }, TransactionIsolation.ReadCommitted)
+              _ <- maybeUpdateGoogleProjectsInPerimeter(destBillingProject)
+            } yield workspaceTuple
             // read committed to avoid deadlocks on workspace attr scratch table
           }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
             //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
@@ -1826,7 +1829,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   SamPolicy(Set(policyMap(SamWorkspacePolicyNames.reader), policyMap(SamWorkspacePolicyNames.writer)), Set.empty, Set(SamWorkflowCollectionRoles.reader))
               ),
               Set.empty,
-              userInfo
+              userInfo,
+              None
             ))
     } yield {
     }
@@ -1963,12 +1967,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject, parentSpan: Span = null): Future[Boolean] = {
     val billingAccountName: RawlsBillingAccountName = billingProject.billingAccount.getOrElse(throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Billing Project ${billingProject.projectName.value} has no Billing Account associated with it")))
     for {
-      hasAccess <- traceWithParent("checkBillingAccountIAM", parentSpan)(_ => gcsDAO.testDMBillingAccountAccess(billingAccountName.value))
-      updatedBillingProject = billingProject.copy(invalidBillingAccount = !hasAccess)
-      _ <- dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("updateInvalidBillingAccountField", parentSpan)(_ => dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(updatedBillingProject)))
-      }
+      hasAccess <- traceWithParent("checkBillingAccountIAM", parentSpan)(_ => gcsDAO.testDMBillingAccountAccess(billingAccountName))
+      _ <- maybeUpdateInvalidBillingAccountField(billingProject, !hasAccess, parentSpan)
     } yield hasAccess
+  }
+
+  private def maybeUpdateInvalidBillingAccountField(billingProject: RawlsBillingProject, invalidBillingAccount: Boolean, span: Span = null): Future[Seq[Int]] = {
+    // Only update the Billing Project record if the invalidBillingAccount field has changed
+    if (billingProject.invalidBillingAccount != invalidBillingAccount) {
+      val updatedBillingProject = billingProject.copy(invalidBillingAccount = invalidBillingAccount)
+      dataSource.inTransaction { dataAccess =>
+        traceDBIOWithParent("updateInvalidBillingAccountField", span)(_ => dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(updatedBillingProject)))
+      }
+    } else {
+      Future.successful(Seq[Int]())
+    }
   }
 
   /**
@@ -2044,7 +2057,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             val defaultPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy, canCatalogPolicy)
 
-            traceWithParent("createResourceFull", parentSpan)(_ => samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo))
+            traceWithParent("createResourceFull", parentSpan)(_ => samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, None))
           }
 
           // policyMap has policyName -> policyEmail

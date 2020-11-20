@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.{HttpResponse, HttpResponseException}
-import nl.grons.metrics.scala.{Counter, Histogram, Timer}
+import nl.grons.metrics4.scala.{Counter, Histogram, Timer}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented._
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService._
 

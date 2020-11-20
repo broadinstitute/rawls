@@ -3,9 +3,7 @@ package org.broadinstitute.dsde.rawls.snapshot
 import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, ReferenceTypeEnum}
-import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
@@ -17,14 +15,14 @@ import scala.util.{Failure, Success, Try}
 
 object SnapshotService {
 
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, serviceAccountCreds: Credential, terraDataRepoUrl: String)(userInfo: UserInfo)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoUrl: String)(userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): SnapshotService = {
-    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, serviceAccountCreds, terraDataRepoUrl)
+    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, terraDataRepoUrl)
   }
 
 }
 
-class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, serviceAccountCreds: Credential, terraDataRepoInstanceName: String)(implicit protected val executionContext: ExecutionContext) extends FutureSupport with WorkspaceSupport {
+class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoInstanceName: String)(implicit protected val executionContext: ExecutionContext) extends FutureSupport with WorkspaceSupport {
 
   def CreateSnapshot(workspaceName: WorkspaceName, namedDataRepoSnapshot: NamedDataRepoSnapshot): Future[DataReferenceDescription] = createSnapshot(workspaceName, namedDataRepoSnapshot)
   def GetSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataReferenceDescription] = getSnapshot(workspaceName, snapshotId)
@@ -34,7 +32,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def createSnapshot(workspaceName: WorkspaceName, snapshot: NamedDataRepoSnapshot): Future[DataReferenceDescription] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
       if(!workspaceStubExists(workspaceContext.workspaceIdAsUUID, userInfo)) {
-        workspaceManagerDAO.createWorkspace(workspaceContext.workspaceIdAsUUID, getServiceAccountAccessToken, userInfo.accessToken)
+        workspaceManagerDAO.createWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)
       }
 
       val dataRepoReference = new DataRepoSnapshot().instanceName(terraDataRepoInstanceName).snapshot(snapshot.snapshotId)
@@ -67,14 +65,6 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
   private def workspaceStubExists(workspaceId: UUID, userInfo: UserInfo): Boolean = {
     Try(workspaceManagerDAO.getWorkspace(workspaceId, userInfo.accessToken)).isSuccess
-  }
-
-  private def getServiceAccountAccessToken: OAuth2BearerToken = {
-    val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
-    if (expiresInSeconds < 60*5) {
-      serviceAccountCreds.refreshToken()
-    }
-    OAuth2BearerToken(serviceAccountCreds.getAccessToken)
   }
 
   private def validateSnapshotId(snapshotId: String): UUID = {

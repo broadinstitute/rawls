@@ -11,18 +11,20 @@ import org.broadinstitute.dsde.rawls.model.{MetadataParams, RawlsUserEmail, Rawl
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Seconds, Span}
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import spray.json.JsObject
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 /**
   * Created by rtitle on 8/17/17.
   */
 class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServiceDAOSpec"))
-  with FlatSpecLike with Matchers with BeforeAndAfterAll with ScalaFutures with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
+  with AnyFlatSpecLike with Matchers with BeforeAndAfterAll with ScalaFutures with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
 
   implicit val materializer = ActorMaterializer()
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
