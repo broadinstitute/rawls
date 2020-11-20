@@ -13,8 +13,8 @@ case object WorkspaceServiceConfig {
     val staticProjectConfig = gcsConfig.getConfig("servicePerimeters.staticProjects")
 
     val mappings: Map[ServicePerimeterName, Seq[GoogleProjectNumber]] = staticProjectConfig.entrySet().asScala.map { entry =>
-      val key = ServicePerimeterName(entry.getKey.replace("\"", ""))
-      val value = staticProjectConfig.getStringList(entry.getKey).asScala.map(GoogleProjectNumber)
+      val key: ServicePerimeterName = ServicePerimeterName(entry.getKey.replace("\"", ""))
+      val value: Seq[GoogleProjectNumber] = staticProjectConfig.getStringList(entry.getKey).asScala.map(GoogleProjectNumber)
       key -> value
     }.toMap
 

@@ -4,13 +4,14 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model._
+import org.scalatest.OptionValues
 
 import scala.language.implicitConversions
 
 /**
  * Created by dvoet on 2/8/16.
  */
-class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils {
+class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils with OptionValues {
   val workspaceId: UUID = UUID.randomUUID()
   val googleProjectId: GoogleProjectId = GoogleProjectId("test_google_project")
   val googleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("123456789")
@@ -112,7 +113,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "save googleProjectNumber" in withEmptyTestDatabase {
     val savedWorkspace = runAndWait(workspaceQuery.createOrUpdate(workspace))
-    savedWorkspace.googleProjectNumber shouldBe googleProjectNumber
+    savedWorkspace.googleProjectNumber.value shouldBe googleProjectNumber
   }
 
   // 5 Billing Projects total
@@ -157,7 +158,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       workspace.copy(
         namespace = billingProject1Name.value,
         name = s"workspace${n}",
-        workspaceId = UUID.randomUUID().toString)
+        workspaceId = UUID.randomUUID().toString,
+        googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
     }
     workspacesInBillingProject1.foreach { workspace =>
       runAndWait(workspaceQuery.createOrUpdate(workspace))
@@ -167,21 +169,24 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val workspaceInBillingProject2 = workspace.copy(
       namespace = billingProject2Name.value,
       name = "workspaceInBP2",
-      workspaceId = UUID.randomUUID().toString)
+      workspaceId = UUID.randomUUID().toString,
+      googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
     runAndWait(workspaceQuery.createOrUpdate(workspaceInBillingProject2))
 
     // Create 1 Workspace in BillingProjectWithOtherPerimeter
     val workspaceInBillingProjectWithOtherPerimeter = workspace.copy(
       namespace = billingProjectNameInOtherPerimeter.value,
       name = "workspaceInOtherPerimeter",
-      workspaceId = UUID.randomUUID().toString)
+      workspaceId = UUID.randomUUID().toString,
+      googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
     runAndWait(workspaceQuery.createOrUpdate(workspaceInBillingProjectWithOtherPerimeter))
 
     // Create 1 Workspace in BillingProjectWithoutPerimeter
     val workspaceInBillingProjectWithoutPerimeter = workspace.copy(
       namespace = billingProjectNameWithoutPerimeter.value,
       name = "IDontCareAnymore",
-      workspaceId = UUID.randomUUID().toString)
+      workspaceId = UUID.randomUUID().toString,
+      googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
     runAndWait(workspaceQuery.createOrUpdate(workspaceInBillingProjectWithoutPerimeter))
 
     val expectedWorkspacesInPerimeter = workspacesInBillingProject1 :+ workspaceInBillingProject2

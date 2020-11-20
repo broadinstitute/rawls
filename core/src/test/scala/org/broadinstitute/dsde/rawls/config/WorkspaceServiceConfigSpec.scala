@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.{Config, ConfigFactory}
-import org.scalatest.Matchers
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectNumber, ServicePerimeterName}
-import org.scalatest.FunSpec
+import org.scalatest.funspec.AnyFunSpec
+import org.scalatest.matchers.should.Matchers
 
-class WorkspaceServiceConfigSpec extends FunSpec with Matchers {
+class WorkspaceServiceConfigSpec extends AnyFunSpec with Matchers {
   // Config for tests loaded from: core/src/test/resources/reference.conf
   val testConf: Config = ConfigFactory.load()
 
@@ -22,7 +22,7 @@ class WorkspaceServiceConfigSpec extends FunSpec with Matchers {
       }
 
       it("staticProjectsInPerimeters") {
-        val expectedMap = Map(ServicePerimeterName("accessPolicies/123456789/servicePerimeters/nameOfPerimeter") -> Set(GoogleProjectNumber("987654321")))
+        val expectedMap = Map(ServicePerimeterName("accessPolicies/123456789/servicePerimeters/nameOfPerimeter") -> Seq(GoogleProjectNumber("987654321")))
         workspaceServiceConfig.staticProjectsInPerimeters should contain theSameElementsAs expectedMap
       }
     }
