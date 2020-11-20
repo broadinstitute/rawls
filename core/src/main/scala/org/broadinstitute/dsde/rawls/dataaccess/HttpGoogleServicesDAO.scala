@@ -508,7 +508,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
+  override def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.IamCredentials
 
     /* Because we can't assume the identity of the Google SA that actually does the work in DM (it's in their project and we can't access it),
@@ -536,7 +536,7 @@ class HttpGoogleServicesDAO(
 
       //Now we've got an access token, test IAM permissions to see if the SA has permission to create projects.
       probeSACredential = buildCredentialFromAccessToken(tokenResponse.getAccessToken, billingProbeEmail)
-      hasAccess <- testBillingAccountAccess(billingAccountId, probeSACredential)
+      hasAccess <- testBillingAccountAccess(billingAccountName, probeSACredential)
     } yield {
       hasAccess
     }

@@ -44,8 +44,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
-  override def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
-    if (billingAccountId == inaccessibleBillingAccountName.value)
+  override def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] = {
+    if (billingAccountName == inaccessibleBillingAccountName)
       Future.successful(false)
     else
       Future.successful(true)
