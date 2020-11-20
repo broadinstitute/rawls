@@ -4,12 +4,13 @@ import java.util.UUID
 
 import akka.http.scaladsl.model._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 /**
   * Created by rtitle on 7/16/17.
   */
-class ExpansionSpec extends FlatSpec with Matchers {
+class ExpansionSpec extends AnyFlatSpec with Matchers {
 
   "the Expansion typeclass" should "expand UUIDs" in {
     val test = UUID.randomUUID

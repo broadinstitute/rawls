@@ -7,18 +7,20 @@ import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Minutes, Seconds, Span}
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import org.slf4j.{Logger => SLF4JLogger}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 /**
   * Created by rtitle on 5/16/17.
   */
-class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with BeforeAndAfterAll with Matchers with MockitoTestUtils with ScalaFutures {
+class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with BeforeAndAfterAll with Matchers with MockitoTestUtils with ScalaFutures {
   import system.dispatcher
 
   // This configures how long the calls to `whenReady(Future)` will wait for the Future

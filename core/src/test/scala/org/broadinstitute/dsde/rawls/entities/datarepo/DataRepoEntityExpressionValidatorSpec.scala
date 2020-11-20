@@ -8,11 +8,11 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
 import org.broadinstitute.dsde.rawls.expressions.DataRepoExpressionFixture
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{AgoraMethod, Attributable, AttributeString, MethodConfiguration}
-import org.scalatest.FlatSpec
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Seconds, Span}
+import org.scalatest.flatspec.AnyFlatSpec
 
-class DataRepoEntityExpressionValidatorSpec extends FlatSpec with TestDriverComponent with RawlsTestUtils with ScalaFutures with DataRepoEntityProviderSpecSupport with DataRepoExpressionFixture {
+class DataRepoEntityExpressionValidatorSpec extends AnyFlatSpec with TestDriverComponent with RawlsTestUtils with ScalaFutures with DataRepoEntityProviderSpecSupport with DataRepoExpressionFixture {
 
   def toExpressionMap(expressions: Seq[String]): Map[String, AttributeString] =
     expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap

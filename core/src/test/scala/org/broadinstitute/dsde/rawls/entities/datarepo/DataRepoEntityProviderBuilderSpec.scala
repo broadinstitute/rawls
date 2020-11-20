@@ -9,11 +9,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.DataReferenceName
-import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.Failure
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class DataRepoEntityProviderBuilderSpec extends FlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
+class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
   override implicit val executionContext = TestExecutionContext.testExecutionContext
   val defaultEntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName")))
 

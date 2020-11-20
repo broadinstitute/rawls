@@ -5,9 +5,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.Workspace
 import org.mockserver.model.StringBody
 import org.scalatest.exceptions.TestFailedException
-import org.scalatest.{Matchers, Suite}
+import org.scalatest.Suite
 
 import scala.util.matching.Regex
+import org.scalatest.matchers.should.Matchers
 
 trait RawlsTestUtils extends Suite with TestDriverComponent with Matchers {
 

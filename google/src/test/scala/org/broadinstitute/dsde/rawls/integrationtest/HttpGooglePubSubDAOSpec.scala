@@ -16,12 +16,14 @@ import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, HttpGooglePubSubDA
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.{MockitoTestUtils, Retry}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfterAll
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils {
+class HttpGooglePubSubDAOSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils {
   implicit val system = ActorSystem("HttpGooglePubSubDAOSpec")
 
   val etcConf = ConfigFactory.load()
@@ -60,7 +62,7 @@ class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfter
 
   "HttpGooglePubSubDAOSpec" should "do all of the things" in {
     //publish a few messages to the topic
-    val messages = Seq(MessageRequest("test-1"))
+    val messages = List(MessageRequest("test-1"))
     Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
 
     Await.result(gpsDAO.withMessage(defaultSubscriptionName) { msg =>
@@ -74,7 +76,7 @@ class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfter
   it should "submit more than 1000 messages" in {
     //publish a lot of messages to the topic
     val numMessages = 2877
-    val messages = Seq.fill(numMessages)(MessageRequest("foo"))
+    val messages = List.fill(numMessages)(MessageRequest("foo"))
     Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
 
     while (Await.result(gpsDAO.withMessages(defaultSubscriptionName, numMessages) { msgs =>
@@ -93,7 +95,7 @@ class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfter
 
   it should "do all of the things with multiple messages" in {
     //publish a few messages to the topic
-    val messages = Seq("test-1", "test-2", "test-3", "test-4", "test-5").map(MessageRequest(_))
+    val messages = List("test-1", "test-2", "test-3", "test-4", "test-5").map(MessageRequest(_))
     Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
 
     Await.result(gpsDAO.withMessages(defaultSubscriptionName, 5) { msg =>

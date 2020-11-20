@@ -16,8 +16,8 @@ import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpret
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mockito.MockitoSugar
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatestplus.mockito.MockitoSugar
+import org.scalatest.BeforeAndAfterAll
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 
@@ -25,8 +25,10 @@ import scala.concurrent.ExecutionContext.global
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
-class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually {
+class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
@@ -142,10 +144,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       // Store upsert json file
       Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
-      val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+      Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
       // Publish message on the request topic
-      services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId1.toString, testAttributes(importId1))))
+      services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, testAttributes(importId1))))
 
       // check if correct message was posted on request topic
       eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
@@ -180,9 +182,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     mockImportServiceDAO.imports += (importId3 -> ImportStatuses.Done)
     mockImportServiceDAO.imports += (importId4 -> ImportStatuses.Error)
 
-    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId2.toString, testAttributes(importId2))))
-    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId3.toString, testAttributes(importId3))))
-    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId4.toString, testAttributes(importId4))))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId2.toString, testAttributes(importId2))))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId3.toString, testAttributes(importId3))))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId4.toString, testAttributes(importId4))))
 
     Thread.sleep(1000)
 
@@ -210,7 +212,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
     // Publish message on the request topic
-    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId1.toString, testAttributes(importId1))))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, testAttributes(importId1))))
 
     // check if correct message was posted on request topic. This will start the upsert attempt.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
@@ -244,10 +246,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     // Store upsert json file
     Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
-    val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+    Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
     // Publish message on the request topic
-    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId1.toString, testAttributes(importId1))))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, testAttributes(importId1))))
 
     // check if correct message was posted on request topic. This will start the upsert attempt.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
@@ -285,7 +287,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // Publish message on the request topic - but ensure that the gcs: location in the pubsub message is incorrect
     val badMessageAttrs = testAttributes(importId1) ++ Map("upsertFile" ->  s"$bucketName/intentionally.nonexistent.unittest")
-    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(importId1.toString, badMessageAttrs)))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, badMessageAttrs)))
 
     // check if correct message was posted on request topic. This will start the upsert attempt.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {

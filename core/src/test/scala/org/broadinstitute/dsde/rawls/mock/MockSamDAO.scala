@@ -20,13 +20,13 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[SamCreateResourceResponse] =
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiedResourceId]): Future[SamCreateResourceResponse] =
     Future.successful(SamCreateResourceResponse(resourceTypeName.value, resourceId, authDomain,
       policies.keys.map ( policyName =>
         SamCreateResourcePolicyResponse(
           SamCreateResourceAccessPolicyIdResponse(
             policyName.value,
-            SamCreateResourceAccessPolicyIdResourceIdResponse(resourceId, resourceTypeName.value)
+            SamFullyQualifiedResourceId(resourceId, resourceTypeName.value)
           ),
           "fake-email@testing.org"
         )
@@ -105,6 +105,10 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]] = Future.successful(Set.empty)
 
   override def getAccessInstructions(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Option[String]] = ???
+
+  override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[SamFullyQualifiedResourceId]] = Future.successful(Seq.empty)
+
+  override def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]] = ???
 }
 
 class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext) extends MockSamDAO(dataSource) {
@@ -140,13 +144,13 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     }
   }
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, resourcePolicies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[SamCreateResourceResponse] = {
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, resourcePolicies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiedResourceId]): Future[SamCreateResourceResponse] = {
     // save each policy
     resourcePolicies.map { case(samResourcePolicyName, samPolicy) =>
       overwritePolicy(resourceTypeName, resourceId, samResourcePolicyName, samPolicy, userInfo)
     }
 
-    super.createResourceFull(resourceTypeName, resourceId, resourcePolicies, authDomain, userInfo)
+    super.createResourceFull(resourceTypeName, resourceId, resourcePolicies, authDomain, userInfo, parent)
   }
 
 

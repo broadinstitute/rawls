@@ -7,17 +7,17 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ExprEvalRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
-import org.scalatest.FunSuite
 
 import scala.collection.immutable.IndexedSeq
 import scala.collection.mutable.Seq
 import scala.util.{Random, Success => TrySuccess}
+import org.scalatest.funsuite.AnyFunSuite
 
 
 /**
  * Created by abaumann on 5/21/15.
  */
-class ExpressionEvaluatorTest extends FunSuite with TestDriverComponent {
+class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
   import driver.api._
 
   def withTestWorkspace[T](testCode: (Workspace) => T): T = {

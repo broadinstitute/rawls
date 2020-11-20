@@ -6,11 +6,13 @@ import org.broadinstitute.dsde.rawls.google.HttpGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.model.ServicePerimeterName
 import org.broadinstitute.dsde.rawls.util.{MockitoTestUtils, Retry}
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Seconds, Span}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class HttpGoogleAccessContextManagerDAOSpec extends FlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils with ScalaFutures {
+class HttpGoogleAccessContextManagerDAOSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils with ScalaFutures {
   implicit val system = ActorSystem("HttpGoogleAccessContextManagerDAOSpec")
 
   override implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(180, Seconds)))

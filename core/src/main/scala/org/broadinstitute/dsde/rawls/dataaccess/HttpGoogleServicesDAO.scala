@@ -94,37 +94,37 @@ object DeploymentManagerJsonSupport {
 }
 
 class HttpGoogleServicesDAO(
-  useServiceAccountForBuckets: Boolean,
-  val clientSecrets: GoogleClientSecrets,
-  clientEmail: String,
-  subEmail: String,
-  pemFile: String,
-  appsDomain: String,
-  orgID: Long,
-  groupsPrefix: String,
-  appName: String,
-  deletedBucketCheckSeconds: Int,
-  serviceProject: String,
-  tokenEncryptionKey: String,
-  tokenClientSecretsJson: String,
-  billingPemEmail: String,
-  billingPemFile: String,
-  val billingEmail: String,
-  val billingGroupEmail: String,
-  billingGroupEmailAliases: List[String],
-  billingProbeEmail: String,
-  bucketLogsMaxAge: Int,
-  maxPageSize: Int = 200,
-  googleStorageService: GoogleStorageService[IO],
-  googleServiceHttp: GoogleServiceHttp[IO],
-  topicAdmin: GoogleTopicAdmin[IO],
-  override val workbenchMetricBaseName: String,
-  proxyNamePrefix: String,
-  deploymentMgrProject: String,
-  cleanupDeploymentAfterCreating: Boolean,
-  terraBucketReaderRole: String,
-  terraBucketWriterRole: String,
-  override val accessContextManagerDAO: AccessContextManagerDAO)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+                             useServiceAccountForBuckets: Boolean,
+                             val clientSecrets: GoogleClientSecrets,
+                             clientEmail: String,
+                             subEmail: String,
+                             pemFile: String,
+                             appsDomain: String,
+                             orgID: Long,
+                             groupsPrefix: String,
+                             appName: String,
+                             deletedBucketCheckSeconds: Int,
+                             serviceProject: String,
+                             tokenEncryptionKey: String,
+                             tokenClientSecretsJson: String,
+                             billingPemEmail: String,
+                             billingPemFile: String,
+                             val billingEmail: String,
+                             val billingGroupEmail: String,
+                             billingGroupEmailAliases: List[String],
+                             billingProbeEmail: String,
+                             bucketLogsMaxAge: Int,
+                             maxPageSize: Int = 200,
+                             googleStorageService: GoogleStorageService[IO],
+                             googleServiceHttp: GoogleServiceHttp[IO],
+                             topicAdmin: GoogleTopicAdmin[IO],
+                             override val workbenchMetricBaseName: String,
+                             proxyNamePrefix: String,
+                             deploymentMgrProject: String,
+                             cleanupDeploymentAfterCreating: Boolean,
+                             terraBucketReaderRole: String,
+                             terraBucketWriterRole: String,
+                             override val accessContextManagerDAO: AccessContextManagerDAO)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
@@ -143,6 +143,7 @@ class HttpGoogleServicesDAO(
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
+  val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
   //we only have to do this once, because there's only one DM project
   lazy val getDeploymentManagerSAEmail: Future[String] = {
@@ -257,7 +258,7 @@ class HttpGoogleServicesDAO(
         getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(bucketName, bucketAcls),
         getStorage(getBucketServiceAccountCredential).defaultObjectAccessControls.insert(bucketName, defaultObjectAcls))
 
-       _ <- inserters.map(inserter => executeGoogleRequest(inserter))
+      _ <- inserters.map(inserter => executeGoogleRequest(inserter))
     } yield ()
 
     retryWithRecoverWhen500orGoogleError(
@@ -507,7 +508,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
+  override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.IamCredentials
 
     /* Because we can't assume the identity of the Google SA that actually does the work in DM (it's in their project and we can't access it),
@@ -527,25 +528,41 @@ class HttpGoogleServicesDAO(
     val saResourceName = s"projects/-/serviceAccounts/$billingProbeEmail" //the dash is required; a project name will not work. https://bit.ly/2EXrXnj
     val accessTokenRequest = getIAMCredentials(getDeploymentManagerAccountCredential).projects().serviceAccounts().generateAccessToken(saResourceName, tokenRequestBody)
 
-    val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
-
     for {
       tokenResponse <- retryWhen500orGoogleError(() => {
-                        blocking {
-                          executeGoogleRequest (accessTokenRequest)
-                        }})
+        blocking {
+          executeGoogleRequest (accessTokenRequest)
+        }})
 
       //Now we've got an access token, test IAM permissions to see if the SA has permission to create projects.
       probeSACredential = buildCredentialFromAccessToken(tokenResponse.getAccessToken, billingProbeEmail)
-      testPermissionsBody = new TestIamPermissionsRequest().setPermissions(List(BILLING_ACCOUNT_PERMISSION).asJava)
-      testPermissionsRequest = getCloudBillingManager(probeSACredential).billingAccounts().testIamPermissions(billingAccountId, testPermissionsBody)
-
-      permissionResponse <- retryWhen500orGoogleError(() => {
-                              blocking {
-                                executeGoogleRequest(testPermissionsRequest)
-                              }})
+      hasAccess <- testBillingAccountAccess(billingAccountId, probeSACredential)
     } yield {
-      Option(permissionResponse.getPermissions).exists(_.asScala.contains(BILLING_ACCOUNT_PERMISSION))
+      hasAccess
+    }
+  }
+
+  override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] = {
+    val cred = getUserCredential(userInfo)
+    for {
+      firecloudHasAccess <- testDMBillingAccountAccess(billingAccount)
+      userHasAccess <- testBillingAccountAccess(billingAccount, cred)
+    } yield {
+      firecloudHasAccess && userHasAccess
+    }
+  }
+
+  protected def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, credential: Credential)(implicit executionContext: ExecutionContext): Future[Boolean] = {
+    implicit val service = GoogleInstrumentedService.Billing
+    val testIamPermissionsRequest = new TestIamPermissionsRequest().setPermissions(List(BILLING_ACCOUNT_PERMISSION).asJava)
+    val fetcher = getCloudBillingManager(credential).billingAccounts().testIamPermissions(billingAccount.value, testIamPermissionsRequest)
+    retryWithRecoverWhen500orGoogleError(() => {
+      val response = blocking {
+        executeGoogleRequest(fetcher)
+      }
+      Option(response.getPermissions).map(_.asScala).getOrElse(List.empty).nonEmpty
+    }) {
+      case gjre: GoogleJsonResponseException if gjre.getStatusCode / 100 == 4 => false // any 4xx error means no access
     }
   }
 
@@ -586,9 +603,9 @@ class HttpGoogleServicesDAO(
 
         //Run all tests in the chunk in parallel.
         IO.fromFuture(IO(Future.traverse(chunk){ acct =>
-          val acctName = acct.getName
+          val acctName = RawlsBillingAccountName(acct.getName)
           testDMBillingAccountAccess(acctName) map { firecloudHasAccount =>
-            RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
+            RawlsBillingAccount(acctName, firecloudHasAccount, acct.getDisplayName)
           }
         }))
       }
@@ -843,8 +860,8 @@ class HttpGoogleServicesDAO(
   }
 
   /**
-   * converts a possibly null java boolean to a scala boolean, null is treated as false
-   */
+    * converts a possibly null java boolean to a scala boolean, null is treated as false
+    */
   private def toScalaBool(b: java.lang.Boolean) = Option(b).contains(java.lang.Boolean.TRUE)
 
   private def toErrorMessage(message: String, code: String): String = {
@@ -911,7 +928,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(resMgr.projects().delete(googleProject.value))
       }) {
         case e: GoogleJsonResponseException if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) => new Empty()
-          // stop trying to delete an already deleted project
+        // stop trying to delete an already deleted project
       }
     } yield {
       // nothing

@@ -31,8 +31,7 @@ object Settings {
     "-unchecked",
     "-feature",
     "-encoding", "utf8",
-    "-Xmax-classfile-name", "100",
-    "-Ywarn-unused-import",
+//    "-Ywarn-unused-import", bad option for 2.13
     "-deprecation:false", // This is tricky to enable as of 03/2020 [AEN]
     "-Xfatal-warnings"
   )
@@ -40,6 +39,13 @@ object Settings {
   //sbt assembly settings common to rawlsCore and rawlsModel
   val commonAssemblySettings = Seq(
     assemblyMergeStrategy in assembly := customMergeStrategy((assemblyMergeStrategy in assembly).value),
+    //  Try to fix the following error. We're not using akka-stream, so it should be safe to exclude `akka-protobuf`
+    //  [error] /Users/qi/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.11.4/protobuf-java-3.11.4.jar:google/protobuf/field_mask.proto
+    //  [error] /Users/qi/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/com/typesafe/akka/akka-protobuf-v3_2.12/2.6.1/akka-protobuf-v3_2.12-2.6.1.jar:google/protobuf/field_mask.proto
+    assemblyExcludedJars in assembly := {
+      val cp = (fullClasspath in assembly).value
+      cp filter {_.data.getName == "akka-protobuf-v3_2.12-2.6.3.jar"}
+    },
     test in assembly := {}
   )
 
@@ -53,11 +59,15 @@ object Settings {
     }
   )
 
+  val cross212and213 = Seq(
+    crossScalaVersions := List("2.12.11", "2.13.2")
+  )
+
   //common settings for all sbt subprojects
   val commonSettings =
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
     organization  := "org.broadinstitute.dsde",
-    scalaVersion  := "2.12.10",
+    scalaVersion  := "2.12.11", // `cromwell-client` needs to support 2.13 for rawls to be able to upgrade
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
     scalacOptions ++= commonCompilerSettings
   )
@@ -73,7 +83,7 @@ object Settings {
   //the full list of settings for the rawlsModel project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
   //thus commonSettings needs to be added first.
-  val modelSettings = commonSettings ++ List(
+  val modelSettings = cross212and213 ++ commonSettings ++ List(
     name := "rawls-model",
     libraryDependencies ++= modelDependencies
   ) ++ versionSettings ++ publishSettings

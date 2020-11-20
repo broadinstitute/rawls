@@ -6,7 +6,6 @@ import akka.http.scaladsl.model.StatusCodes
 trait StringValidationUtils {
   implicit val errorReportSource: ErrorReportSource
 
-  //in general, we only support alphanumeric, spaces, _, and - for user-input
   private lazy val userDefinedRegex = "[A-z0-9_-]+".r
   def validateUserDefinedString(s: String): Unit = {
     if(! userDefinedRegex.pattern.matcher(s).matches) {

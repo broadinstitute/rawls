@@ -67,6 +67,6 @@ class BucketDeletionMonitor(datasource: SlickDataSource, gcsDAO: GoogleServicesD
   private def deleteBucketDeletionRecord(bucketName: String): Future[Unit] = {
     datasource.inTransaction { dataAccess =>
       dataAccess.pendingBucketDeletionQuery.delete(PendingBucketDeletionRecord(bucketName))
-    } map { _ => Unit }
+    }.void
   }
 }

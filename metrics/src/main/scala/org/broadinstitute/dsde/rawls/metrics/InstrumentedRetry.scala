@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.metrics
 
 import com.typesafe.scalalogging.LazyLogging
-import nl.grons.metrics.scala.Histogram
+import nl.grons.metrics4.scala.Histogram
 import org.broadinstitute.dsde.rawls.util.Retry
 
 import scala.concurrent.{ExecutionContext, Future}

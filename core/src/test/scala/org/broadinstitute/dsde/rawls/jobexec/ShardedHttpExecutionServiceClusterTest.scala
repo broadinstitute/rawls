@@ -11,15 +11,17 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverCompo
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{FlatSpecLike, Matchers, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 import spray.json.JsonParser
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 //noinspection TypeAnnotation,RedundantBlock,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
-class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike
+class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with AnyFlatSpecLike
   with Matchers with PrivateMethodTester with ScalaFutures
   with TestDriverComponent with RawlsTestUtils {
   import driver.api._

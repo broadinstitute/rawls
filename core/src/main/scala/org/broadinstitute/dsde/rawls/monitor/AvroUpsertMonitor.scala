@@ -281,7 +281,7 @@ class AvroUpsertMonitorActor(
         val usableValue = if (attValue.value.length < 1000) attValue.value else attValue.value.take(1000) + " ..."
         (attName, usableValue)
     }
-    importServicePubSubDAO.publishMessages(importStatusPubSubTopic, Seq(GooglePubSubDAO.MessageRequest("", attributes)))
+    importServicePubSubDAO.publishMessages(importStatusPubSubTopic, scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes)))
   }
 
 
@@ -404,7 +404,7 @@ class AvroUpsertMonitorActor(
 
   private def acknowledgeMessage(ackId: String) = {
     logger.info(s"acking message with ackId $ackId")
-    pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, Seq(ackId))
+    pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, scala.collection.immutable.Seq(ackId))
   }
 
   case class AvroUpsertAttributes(workspace: WorkspaceName, userEmail: RawlsUserEmail, importId: UUID, upsertFile: String)

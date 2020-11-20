@@ -10,7 +10,7 @@ import akka.http.scaladsl.model.headers.{HttpEncodings, `Accept-Encoding`}
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.Materializer
 import com.typesafe.scalalogging.LazyLogging
-import nl.grons.metrics.scala.{Counter, Timer}
+import nl.grons.metrics4.scala.{Counter, Timer}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.ErrorReport
 

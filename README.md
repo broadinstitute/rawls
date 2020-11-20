@@ -15,8 +15,7 @@ $ git clone git@github.com:broadinstitute/rawls.git
 $ brew install git-secrets # if not already installed
 $ cd rawls
 $ sbt antlr4:antlr4Generate # Generates source code for IntellIJ IDEA
-$ cp -r hooks/* .git/hooks  #this step can be skipped if you use the rsync script to spin up locally
-$ chmod 755 .git/hooks/apply-git-secrets.sh #this step as well
+$ ./minnie-kenny.sh -f
 $ sbt clean compile test
 ```
 
@@ -60,6 +59,8 @@ Build Rawls jar and docker image
 
 ## Publish rawls-model
 
+Supported Scala versions: 2.12, 2.13
+
 Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory. You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
 - [Jenkins runs `publishSnapshot.sh` on every dev build](https://fc-jenkins.dsp-techops.broadinstitute.org/job/rawls-build/), but that makes "unofficial" `-SNAP` versions.
 - Note that you need `ARTIFACTORY_USERNAME` and `ARTIFACTORY_PASSWORD` in your env for either of these to work.
@@ -70,3 +71,5 @@ VAULT_TOKEN=$(cat ~/.vault-token) ARTIFACTORY_USERNAME=dsdejenkins ARTIFACTORY_P
 ```
 
 You can view what is in the artifactory here: https://broadinstitute.jfrog.io/broadinstitute/webapp/#/home
+
+After publishing, update `model/CHANGELOG.md` properly.

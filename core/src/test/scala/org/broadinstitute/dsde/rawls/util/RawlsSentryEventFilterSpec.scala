@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.util
 
 import io.sentry.event.{Event, EventBuilder}
-import org.scalatest.FreeSpec
+import org.scalatest.freespec.AnyFreeSpec
 
-class RawlsSentryEventFilterSpec extends FreeSpec {
+class RawlsSentryEventFilterSpec extends AnyFreeSpec {
 
   private def evt(msg: String): Event = {
     new EventBuilder().withMessage(msg)

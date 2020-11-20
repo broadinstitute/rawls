@@ -30,12 +30,12 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(accessToken).getWorkspace(workspaceId)
   }
 
-  override def createWorkspace(workspaceId: UUID, folderManagerAccessToken: OAuth2BearerToken, bodyAccessToken: OAuth2BearerToken): CreatedWorkspace = {
-    getWorkspaceApi(folderManagerAccessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).authToken(bodyAccessToken.token))
+  override def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace = {
+    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
   }
 
-  override def deleteWorkspace(workspaceId: UUID, folderManagerAccessToken: OAuth2BearerToken, bodyAccessToken: OAuth2BearerToken): Unit = {
-    getWorkspaceApi(folderManagerAccessToken).deleteWorkspace(new DeleteWorkspaceRequestBody().authToken(bodyAccessToken.token), workspaceId)
+  override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = {
+    getWorkspaceApi(accessToken).deleteWorkspace(workspaceId)
   }
 
   override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
