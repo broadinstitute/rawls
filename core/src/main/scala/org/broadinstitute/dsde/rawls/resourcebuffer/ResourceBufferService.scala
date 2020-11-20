@@ -1,37 +1,30 @@
 package org.broadinstitute.dsde.rawls.resourcebuffer
 
-import java.util.UUID
-
+import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PoolId, ProjectPoolId, ProjectPoolType, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PoolId, ProjectPoolId, ProjectPoolType}
 
 import scala.concurrent.{ExecutionContext, Future}
 
 object ResourceBufferService {
-  def constructor(resourceBufferDAO: ResourceBufferDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext): ResourceBufferService = {
-    new ResourceBufferService(resourceBufferDAO, userInfo)
+  def constructor(resourceBufferDAO: ResourceBufferDAO, config: ResourceBufferConfig)(implicit executionContext: ExecutionContext): ResourceBufferService = {
+    new ResourceBufferService(resourceBufferDAO, config)
   }
 }
-class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, protected val userInfo: UserInfo) {
+class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, config: ResourceBufferConfig) {
 
-  def GetGoogleProjectFromRBS(projectPoolType: ProjectPoolType): Future[GoogleProjectId] = getGoogleProjectFromRBS(projectPoolType)
-
-  def getGoogleProjectFromRBS(projectPoolType: ProjectPoolType = ProjectPoolType.Regular): Future[GoogleProjectId] = {
-
-    val projectPoolId: ProjectPoolId = resourceBufferDAO.getProjectPoolId(projectPoolType)
-
-    val handoutRequestId = generateHandoutRequestId(userInfo, projectPoolId)
-
+  def getGoogleProjectFromRBS(projectPoolType: ProjectPoolType = ProjectPoolType.Regular, handoutRequestId: String): Future[GoogleProjectId] = {
+    val projectPoolId: ProjectPoolId = toProjectPoolId(projectPoolType)
     resourceBufferDAO.handoutGoogleProject(PoolId(projectPoolId.value), handoutRequestId)
   }
 
-  //  handoutRequestId:
-  //        The unique identifier presented by the client for a resource request.
-  //        Using the same handoutRequestId in the same pool would get the same resource back.
-  private def generateHandoutRequestId(userInfo: UserInfo, projectPoolId: ProjectPoolId): String = {
-    val prefix: String = userInfo.userSubjectId + projectPoolId.value
-    prefix + UUID.randomUUID().toString
+  def toProjectPoolId(projectPoolType: ProjectPoolType): ProjectPoolId = {
+    val projectPoolId: ProjectPoolId = projectPoolType match {
+      case ProjectPoolType.Regular => config.regularProjectPoolId
+      case ProjectPoolType.ServicePerimeter => config.servicePerimeterProjectPoolId
+    }
+    projectPoolId
   }
 
 }

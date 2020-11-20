@@ -28,10 +28,11 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
@@ -141,6 +142,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0))
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
+    val resourceBufferConfig = ResourceBufferConfig(testConf)
+    val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -166,7 +169,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       workspaceServiceConfig,
       requesterPaysSetupService,
       entityManager,
-      resourceBufferDAO
+      resourceBufferService
     )_
 
     def cleanupSupervisor = {

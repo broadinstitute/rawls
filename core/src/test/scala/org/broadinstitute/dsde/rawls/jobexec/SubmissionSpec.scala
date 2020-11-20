@@ -11,7 +11,7 @@ import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, Ref
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -24,6 +24,7 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
@@ -338,6 +339,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0))
 
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
+      val resourceBufferConfig = ResourceBufferConfig(testConf)
+      val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
@@ -363,7 +366,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         workspaceServiceConfig,
         requesterPaysSetupService,
         entityManager,
-        resourceBufferDAO
+        resourceBufferService
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {

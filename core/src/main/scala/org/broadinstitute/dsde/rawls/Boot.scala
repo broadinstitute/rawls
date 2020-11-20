@@ -33,6 +33,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -40,7 +41,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.google2._
@@ -360,6 +361,8 @@ object Boot extends IOApp with LazyLogging {
 
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
       val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
+      val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
@@ -382,7 +385,7 @@ object Boot extends IOApp with LazyLogging {
         workspaceServiceConfig,
         requesterPaysSetupService,
         entityManager,
-        resourceBufferDAO
+        resourceBufferService
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(

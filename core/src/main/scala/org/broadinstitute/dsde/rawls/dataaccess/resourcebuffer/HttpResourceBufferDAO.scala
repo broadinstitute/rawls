@@ -3,14 +3,13 @@ package org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.rbs.generated.ApiClient
+import bio.terra.rbs.generated.{ApiClient, ApiException}
 import bio.terra.rbs.generated.controller.RbsApi
 import bio.terra.rbs.generated.model.ResourceInfo
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PoolId, ProjectPoolId, ProjectPoolType}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PoolId}
 import org.broadinstitute.dsde.rawls.util.Retry
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -24,6 +23,7 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
   override def handoutGoogleProject(poolId: PoolId, handoutRequestId: String): Future[GoogleProjectId] = {
     retry(when500) { () =>
       Future {
+        clientServiceAccountCreds.refreshToken()
         val resource = handoutResourceGeneric(poolId, handoutRequestId, OAuth2BearerToken(clientServiceAccountCreds.getAccessToken))
         GoogleProjectId(resource.getCloudResourceUid.getGoogleProjectUid.getProjectId)
       }
@@ -32,7 +32,7 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
 
   protected def when500(throwable: Throwable): Boolean = {
     throwable match {
-      case t: RawlsExceptionWithErrorReport => t.errorReport.statusCode.exists(_.intValue / 100 == 5)
+      case t: ApiException => t.getCode / 100 == 5
       case _ => false
     }
   }
@@ -50,14 +50,6 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
     client.setAccessToken(accessToken)
 
     client
-  }
-
-  override def getProjectPoolId(projectPoolType: ProjectPoolType.ProjectPoolType): ProjectPoolId = {
-    val projectPoolId: ProjectPoolId = projectPoolType match {
-      case ProjectPoolType.Regular => config.regularProjectPoolId
-      case ProjectPoolType.ServicePerimeter => config.servicePerimeterProjectPoolId
-    }
-    projectPoolId
   }
 
 }

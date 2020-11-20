@@ -14,7 +14,7 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, SwaggerConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -30,6 +30,7 @@ import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsIn
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -200,6 +201,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0))
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
+    val resourceBufferConfig = ResourceBufferConfig(testConf)
+    val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -222,7 +225,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       workspaceServiceConfig,
       requesterPaysSetupService,
       entityManager,
-      resourceBufferDAO
+      resourceBufferService
     )_
 
     override val entityServiceConstructor = EntityService.constructor(
