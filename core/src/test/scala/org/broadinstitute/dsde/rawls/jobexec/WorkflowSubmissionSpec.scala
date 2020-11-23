@@ -57,7 +57,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val pollInterval: FiniteDuration = 1 second,
     val maxActiveWorkflowsTotal: Int = 100,
     val maxActiveWorkflowsPerUser: Int = 100,
-    val runtimeOptions: Option[JsValue] = None,
+    val defaultRuntimeOptions: Option[JsValue] = None,
     val trackDetailedSubmissionMetrics: Boolean = true,
     override val workbenchMetricBaseName: String = "test",
     val requesterPaysRole: String = requesterPaysRole,
@@ -226,7 +226,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "submit a workflow with the right parameters and options" in withDefaultTestDatabase {
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, runtimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-someother"))))) {
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, defaultRuntimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-someother"))))) {
       override val executionServiceCluster = mockExecCluster
     }
 

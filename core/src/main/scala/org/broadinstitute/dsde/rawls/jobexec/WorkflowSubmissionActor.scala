@@ -38,7 +38,7 @@ object WorkflowSubmissionActor {
             pollInterval: FiniteDuration,
             maxActiveWorkflowsTotal: Int,
             maxActiveWorkflowsPerUser: Int,
-            runtimeOptions: Option[JsValue],
+            defaultRuntimeOptions: Option[JsValue],
             trackDetailedSubmissionMetrics: Boolean,
             workbenchMetricBaseName: String,
             requesterPaysRole: String,
@@ -46,7 +46,7 @@ object WorkflowSubmissionActor {
             useWorkflowCollectionLabel: Boolean,
             defaultBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, defaultRuntimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -72,7 +72,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val pollInterval: FiniteDuration,
                               val maxActiveWorkflowsTotal: Int,
                               val maxActiveWorkflowsPerUser: Int,
-                              val runtimeOptions: Option[JsValue],
+                              val defaultRuntimeOptions: Option[JsValue],
                               val trackDetailedSubmissionMetrics: Boolean,
                               override val workbenchMetricBaseName: String,
                               val requesterPaysRole: String,
@@ -123,7 +123,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val credential: Credential
   val maxActiveWorkflowsTotal: Int
   val maxActiveWorkflowsPerUser: Int
-  val runtimeOptions: Option[JsValue]
+  val defaultRuntimeOptions: Option[JsValue]
   val trackDetailedSubmissionMetrics: Boolean
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
@@ -186,7 +186,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
-  def getRuntimeZoneAttrs(googleProjectId: String, bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[JsValue]] = {
+  def getRuntimeOptions(googleProjectId: String, bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[JsValue]] = {
     println(s"******* FIND ME getRuntimeZoneAttrs")
     googleServicesDAO.getBucket(bucketName) flatMap {
       case Some(bucket) =>
@@ -194,7 +194,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         println(s"******* FIND ME getRuntimeZoneAttrs: Bucket location: ${bucket.getLocationType}")
         bucket.getLocationType match {
           case "region" =>
-            val region: String = bucket.getLocation
+            val region: String = bucket.getLocation.toLowerCase
             // get zones
             // Should RawlsBillingProject be used or googleProjectId ??
             val zonesFuture: Future[Option[List[String]]] = googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region)
@@ -205,7 +205,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                 s"for bucket `${bucket.getName}`."))
             }
             zonesAsJsValue
-          case _ => Future.successful(runtimeOptions)
+          case _ => Future.successful(defaultRuntimeOptions)
         }
       case _ => Future.failed(new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
     }
@@ -219,7 +219,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                         useCallCache: Boolean,
                         deleteIntermediateOutputFiles: Boolean,
                         useReferenceDisks: Boolean,
-                        workflowFailureMode: Option[WorkflowFailureMode]
+                        workflowFailureMode: Option[WorkflowFailureMode],
+                        runtimeOptions: Option[JsValue]
                        ): ExecutionServiceWorkflowOptions = {
     val petSAEmail = petSAJson.parseJson.asJsObject.getFields("client_email").headOption match {
       case Some(JsString(value)) => value
@@ -342,9 +343,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       _ = println(s"***** FIND ME BillingProject: ${billingProject.projectName.value} \n***** FINE ME GoogleProject: ${workspaceRec.googleProject}")
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(GoogleProjectId(workspaceRec.googleProject), RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-
       wdl <- getWdl(methodConfig, petUserInfo)
-      computeZones <- getRuntimeZoneAttrs(workspaceRec.googleProject, workspaceRec.bucketName)
+      updatedRuntimeOptions <- getRuntimeOptions(workspaceRec.googleProject, workspaceRec.bucketName)
     } yield {
 
       val wfOpts = buildWorkflowOpts(
@@ -356,7 +356,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         useCallCache = submissionRec.useCallCache,
         deleteIntermediateOutputFiles = submissionRec.deleteIntermediateOutputFiles,
         useReferenceDisks = submissionRec.useReferenceDisks,
-        workflowFailureMode = WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode)
+        workflowFailureMode = WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode),
+        runtimeOptions = updatedRuntimeOptions
       )
         val submissionAndWorkspaceLabels = Map("submission-id" -> submissionRec.id.toString,  "workspace-id" -> workspaceRec.id.toString)
         val wfLabels = workspaceRec.workflowCollection match {
