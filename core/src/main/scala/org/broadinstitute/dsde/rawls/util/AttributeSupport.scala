@@ -23,11 +23,19 @@ trait AttributeSupport {
   def withAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
     val errors = attributeNamespaceCheck(attributeNames)
     if (errors.isEmpty) op
-    else {
-      val reasons = errors.values.mkString(", ")
-      val err = ErrorReport(statusCode = StatusCodes.Forbidden, message = s"Attribute namespace validation failed: [$reasons]")
-      throw new RawlsExceptionWithErrorReport(errorReport = err)
-    }
+    else failAttributeNamespaceCheck(errors)
+  }
+
+  /**
+    * Takes a Map of errors and constructs an error message from them before throwing a Rawls Exception with the
+    * constructed error
+    * @param errors
+    * @return
+    */
+  def failAttributeNamespaceCheck(errors: Map[String, String]): Nothing = {
+    val reasons = errors.values.mkString(", ")
+    val err = ErrorReport(statusCode = StatusCodes.Forbidden, message = s"Attribute namespace validation failed: [$reasons]")
+    throw new RawlsExceptionWithErrorReport(errorReport = err)
   }
 
   def withAttributeNamespaceCheck[T](hasAttributes: Attributable)(op: => Future[T]): Future[T] =
