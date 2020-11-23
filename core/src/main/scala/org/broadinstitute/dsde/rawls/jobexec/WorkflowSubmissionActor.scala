@@ -187,26 +187,27 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   def getRuntimeZoneAttrs(googleProjectId: String, bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[JsValue]] = {
-    googleServicesDAO.getBucket(bucketName) map {
+    println(s"******* FIND ME getRuntimeZoneAttrs")
+    googleServicesDAO.getBucket(bucketName) flatMap {
       case Some(bucket) =>
-        val sdf: Option[JsValue] = bucket.getLocationType match {
-          case "Region" =>
+        println(s"******* FIND ME getRuntimeZoneAttrs: Found bucket: ${bucket.getName}")
+        println(s"******* FIND ME getRuntimeZoneAttrs: Bucket location: ${bucket.getLocationType}")
+        bucket.getLocationType match {
+          case "region" =>
             val region: String = bucket.getLocation
             // get zones
             // Should RawlsBillingProject be used or googleProjectId ??
             val zonesFuture: Future[Option[List[String]]] = googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region)
 
-            // TODO: convert this List[String] to JsValue
-            // TODO: this will return Future[Future[_]], we need to wrap it in a single Future
-            val zonesAsJsValue: Future[Option[JsValue]] = zonesFuture.map { x =>
-              x.map { y =>
-                JsObject("zones" -> JsString(y.mkString(" ")))
-              }
+            val zonesAsJsValue: Future[Option[JsValue]] = zonesFuture.flatMap {
+              case Some(zones) => Future.successful(Option(JsObject("zones" -> JsString(zones.mkString(" ")))))
+              case None => Future.failed(new RawlsException(s"Something went wrong while retrieving zones for region `${region}` " +
+                s"for bucket `${bucket.getName}`."))
             }
             zonesAsJsValue
-          case _ => runtimeOptions
+          case _ => Future.successful(runtimeOptions)
         }
-      case _ => Future.successful(None)
+      case _ => Future.failed(new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
     }
   }
 
@@ -338,12 +339,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val workflowBatchFuture = for {
       //yank things from the db. note this future has already started running and we're just waiting on it here
       (wfRecs, workflowBatch, billingProject, methodConfig) <- dbThingsFuture
-
+      _ = println(s"***** FIND ME BillingProject: ${billingProject.projectName.value} \n***** FINE ME GoogleProject: ${workspaceRec.googleProject}")
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(GoogleProjectId(workspaceRec.googleProject), RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
 
       wdl <- getWdl(methodConfig, petUserInfo)
-      computeZones <- getRuntimeZoneAttrs(workspaceRec.bucketName)
+      computeZones <- getRuntimeZoneAttrs(workspaceRec.googleProject, workspaceRec.bucketName)
     } yield {
 
       val wfOpts = buildWorkflowOpts(

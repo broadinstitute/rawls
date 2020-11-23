@@ -406,9 +406,13 @@ class HttpGoogleServicesDAO(
 
   override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[Option[List[String]]] = {
     implicit val service = GoogleInstrumentedService.Storage
-    val getter = getComputeManager(getBucketServiceAccountCredential).regions().get(googleProject.value, region)
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter).getZones.asScala.toList) }) {
-      case e: HttpResponseException => None
+    val getter = getComputeManager(getBillingServiceAccountCredential).regions().get(googleProject.value, region)
+    retryWithRecoverWhen500orGoogleError(() => {
+      val zonesAsResourceUrls = executeGoogleRequest(getter).getZones.asScala.toList
+      val zones = zonesAsResourceUrls.map(_.split("/").last)
+      Option(zones)
+    }) {
+      case e => None
     }
   }
 
@@ -1036,7 +1040,7 @@ class HttpGoogleServicesDAO(
   }
 
   def getBillingServiceAccountCredential: Credential = {
-    new GoogleCredential.Builder()
+    val abc = new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJava) // need this broad scope to create/manage projects
@@ -1044,6 +1048,10 @@ class HttpGoogleServicesDAO(
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(billingPemFile))
       .setServiceAccountUser(billingEmail)
       .build()
+
+    println(s"******* FIND ME TOKEN getBillingServiceAccountCredential: ${abc.getAccessToken}")
+
+    abc
   }
 
   def toGoogleGroupName(groupName: RawlsGroupName) = s"${proxyNamePrefix}GROUP_${groupName.value}@${appsDomain}"

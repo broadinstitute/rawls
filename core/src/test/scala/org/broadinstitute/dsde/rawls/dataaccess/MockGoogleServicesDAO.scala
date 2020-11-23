@@ -223,4 +223,5 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(billingAccount == accessibleBillingAccountName)
   }
 
+  override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[Option[List[String]]] = Future.successful(None)
 }
