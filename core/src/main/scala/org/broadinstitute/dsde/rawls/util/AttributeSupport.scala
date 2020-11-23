@@ -21,9 +21,16 @@ trait AttributeSupport {
   }
 
   def withAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
+    validateAttributeNamespace(attributeNames)
+    // validateAttributeNamespace will throw an exception if there are any problems with the AttributeNamespaces,
+    // otherwise go ahead and execute op
+    op
+  }
+
+  // Same logic as withAttributeNamespaceCheck but does not process an `op`
+  def validateAttributeNamespace(attributeNames: Iterable[AttributeName]): Unit = {
     val errors = attributeNamespaceCheck(attributeNames)
-    if (errors.isEmpty) op
-    else failAttributeNamespaceCheck(errors)
+    if (errors.nonEmpty) failAttributeNamespaceCheck(errors)
   }
 
   /**

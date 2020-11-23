@@ -10,9 +10,9 @@ import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model.{AttributeName, ErrorReport, GoogleProjectId, GoogleProjectNumber, ManagedGroupRef, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamPolicy, SamProjectRoles, SamResourcePolicyName, SamResourceTypeNames, SamWorkflowCollectionPolicyNames, SamWorkflowCollectionRoles, SamWorkspacePolicyNames, SamWorkspaceRoles, ServicePerimeterName, UserInfo, Workspace, WorkspaceAccessLevels, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, ErrorReport, GoogleProjectId, GoogleProjectNumber, ManagedGroupRef, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsGroupName, SamBillingProjectActions, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamPolicy, SamProjectRoles, SamResourcePolicyName, SamResourceTypeNames, SamWorkflowCollectionPolicyNames, SamWorkflowCollectionRoles, SamWorkspaceActions, SamWorkspacePolicyNames, SamWorkspaceRoles, ServicePerimeterName, UserInfo, Workspace, WorkspaceAccessLevels, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest, WorkspaceVersions}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
-import org.broadinstitute.dsde.rawls.util.{AttributeSupport, Retry}
+import org.broadinstitute.dsde.rawls.util.{AttributeSupport, LibraryPermissionsSupport, Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
@@ -27,29 +27,11 @@ class WorkspaceCreator(val userInfo: UserInfo,
                        val gcsDAO: GoogleServicesDAO,
                        val config: WorkspaceServiceConfig)
                       (implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
-  extends AttributeSupport with Retry with LazyLogging {
+  extends WorkspaceSupport with AttributeSupport with LibraryPermissionsSupport with Retry with LazyLogging {
 
-  /**
-    * This method will take a WorkspaceRequest and attempt to create a fully functional Terra Workspace.  This method
-    * will check that the User making the request has the required permissions on the Billing Project to create
-    * Workspaces within it.  This method will claim a Google Project from the Resource Buffering Service and perform
-    * all of the actions on the Google Project to initialize it for use by Terra, such as setting up Billing, IAM,
-    * Google Storage Bucket(s), etc.  This method will ensure that all Workspace Policies are created and populated in
-    * Sam and that they are also Sync'd with Google as necessary.  Finally, this method will attempt to add the newly
-    * created Workspace's Google Project into the Billing Project's Service Perimeter if one is defined.
-    *
-    * This method will either succeed, or a RawlsExceptionWithErrorReport will be thrown describing the reason why it
-    * failed.
-    *
-    * Note:  There is no rollback logic here, so it is possible that the creation process could fail anywhere and the
-    * Workspace will be in some partially created state
-    *
-    * @param workspaceRequest
-    * @param span
-    * @return
-    */
-  def createWorkspace(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
-    validateAttributeNamespace(workspaceRequest)
+  // shared by createWorkspace and cloneWorkspace.  They each do some of their own stuff, but all of this should be
+  // the same
+  private def sharedCreateWorkspace(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
     val authDomains = workspaceRequest.authorizationDomain.getOrElse(Set.empty)
     val noWorkspaceOwner = workspaceRequest.noWorkspaceOwner.getOrElse(false)
 
@@ -76,13 +58,89 @@ class WorkspaceCreator(val userInfo: UserInfo,
   }
 
   /**
-    * Validates the Attribute Namespace and will throw an exception if it is invalid
+    * This method will take a WorkspaceRequest and attempt to create a fully functional Terra Workspace.  This method
+    * will check that the User making the request has the required permissions on the Billing Project to create
+    * Workspaces within it.  This method will claim a Google Project from the Resource Buffering Service and perform
+    * all of the actions on the Google Project to initialize it for use by Terra, such as setting up Billing, IAM,
+    * Google Storage Bucket(s), etc.  This method will ensure that all Workspace Policies are created and populated in
+    * Sam and that they are also Sync'd with Google as necessary.  Finally, this method will attempt to add the newly
+    * created Workspace's Google Project into the Billing Project's Service Perimeter if one is defined.
+    *
+    * This method will either succeed, or a RawlsExceptionWithErrorReport will be thrown describing the reason why it
+    * failed.
+    *
+    * Note:  There is no rollback logic here, so it is possible that the creation process could fail anywhere and the
+    * Workspace will be in some partially created state
     *
     * @param workspaceRequest
+    * @param span
+    * @return
     */
-  private def validateAttributeNamespace(workspaceRequest: WorkspaceRequest): Unit = {
-    val errors = attributeNamespaceCheck(workspaceRequest.attributes.keys)
-    if (errors.nonEmpty) failAttributeNamespaceCheck(errors)
+  def createWorkspace(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
+    validateAttributeNamespace(workspaceRequest.attributes.keys)
+    sharedCreateWorkspace(workspaceRequest, span)
+  }
+
+  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
+    destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
+    val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
+
+    validateAttributeNamespace(workspaceAttributeNames)
+    validateLibraryAttributeNamespaces(libraryAttributeNames)
+
+    for {
+      // TODO: Go crazy!  Rename getWorkspaceContextAndPermissions -> getWorkspaceIfHasUserHasAction
+      // That method is used in a ton of places, the refactor is huge and should be its own commit
+      sourceWorkspace <- getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
+      destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
+      newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
+      cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
+      clonedWorkspace <- sharedCreateWorkspace(cloneWorkspaceRequest)
+      // TODO: More to do here, cloneWorkspace is NOT done, just stopping for the day
+    } yield clonedWorkspace
+  }
+
+  private def validateFileCopyPrefix(copyFilesWithPrefix: String): Unit = {
+    if(copyFilesWithPrefix.isEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""))
+  }
+
+  /**
+    * This method will query Sam to get the list of Auth Domains defined on the Source Workspace, i.e. the one that is
+    * being cloned.  It will then Union these with the Auth Domains being defined on the new cloned Workspace. An
+    * exception will be thrown if there are Auth Domains defined on the Source Workspace that are missing from the
+    * Destination Workspace.  If the Auth Domains on the Destination Workspace are valid, this method will finish
+    * processing normally and return the Union
+    *
+    * @param sourceWorkspaceId
+    * @param destWorkspaceAuthDomains
+    * @return
+    */
+  private def validateAuthDomainsForDestWorkspace(sourceWorkspaceId: String, destWorkspaceAuthDomains: Set[ManagedGroupRef]): Future[Set[ManagedGroupRef]] = {
+    samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceId, userInfo).map { sourceAuthDomainStrings =>
+      val sourceAuthDomains = sourceAuthDomainStrings.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet
+      unionAuthDomains(sourceAuthDomains, destWorkspaceAuthDomains)
+    }
+  }
+
+  /**
+    * Ever Auth Domain listed in sourceWorkspaceADs must be present in destWorkspaceADs or else an exception will be
+    * thrown.  If valid, then return the Union of sourceWorkspaceADs and destWorkspaceADs.
+    *
+    * TODO: If sourceWorkspaceADs is a subset of destWorkspaceADs, isn't the Union equivalent to destWorkspaceADs?
+    *
+    * @param sourceWorkspaceADs
+    * @param destWorkspaceADs
+    * @return
+    */
+  private def unionAuthDomains(sourceWorkspaceADs: Set[ManagedGroupRef], destWorkspaceADs: Set[ManagedGroupRef]): Set[ManagedGroupRef] = {
+    // if the source has an auth domain, the dest must also have that auth domain as a subset
+    // otherwise, the caller may choose to add to the auth domain
+    if(sourceWorkspaceADs.subsetOf(destWorkspaceADs)) sourceWorkspaceADs ++ destWorkspaceADs
+    else {
+      val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
+      val errorMsg = s"Source workspace has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg))
+    }
   }
 
   /**

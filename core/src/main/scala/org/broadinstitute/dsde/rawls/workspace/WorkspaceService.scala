@@ -2094,8 +2094,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-    traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(s1 => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, s1) {
-      traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", s1) (_ => maybeRequireBillingProjectOwnerAccess(workspaceRequest) {
+    traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(s1 => requireCreateWorkspaceAccessContext(workspaceRequest, dataAccess, s1) {
+      traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", s1) (_ => maybeRequireBillingProjectOwnerAccessContext(workspaceRequest) {
         traceDBIOWithParent("findByName", s1)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
           case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
           case None =>

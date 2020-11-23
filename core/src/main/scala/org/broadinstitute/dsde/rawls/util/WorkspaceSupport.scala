@@ -68,7 +68,7 @@ trait WorkspaceSupport {
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
   // Will process op only if User has the `createWorkspace` action on the specified Billing Project, otherwise will
   // Fail with 403 Forbidden
-  def requireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def requireCreateWorkspaceAccessContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
     for {
       userHasAction <- traceDBIOWithParent("userHasAction", parentSpan)(_ => DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, userInfo)))
@@ -81,7 +81,7 @@ trait WorkspaceSupport {
 
   // Creating a Workspace without an Owner policy is allowed only if the requesting User has the `owner` role
   // granted on the Workspace's Billing Project
-  def maybeRequireBillingProjectOwnerAccess[T](workspaceRequest: WorkspaceRequest, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def maybeRequireBillingProjectOwnerAccessContext[T](workspaceRequest: WorkspaceRequest, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     workspaceRequest.noWorkspaceOwner match {
       case Some(true) =>
         for {

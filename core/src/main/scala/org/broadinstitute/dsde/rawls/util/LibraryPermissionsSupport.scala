@@ -39,15 +39,18 @@ trait LibraryPermissionsSupport extends RoleSupport {
   }
 
   def withLibraryAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
+    validateLibraryAttributeNamespaces(attributeNames)
+    // validateLibraryAttributeNamespaces will throw an exception if there's any problem, otherwise, go ahead and
+    // execute op
+    op
+  }
+
+  def validateLibraryAttributeNamespaces(attributeNames: Iterable[AttributeName]): Unit = {
     val namespaces = attributeNames.map(_.namespace).toSet
 
     // only allow library namespace
     val invalidNamespaces = namespaces -- Set(AttributeName.libraryNamespace)
-    if (invalidNamespaces.isEmpty) op
-    else {
-      val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = s"All attributes must be in the library namespace")
-      throw new RawlsExceptionWithErrorReport(errorReport = err)
-    }
+    if (invalidNamespaces.nonEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(statusCode = StatusCodes.BadRequest, message = s"All attributes must be in the library namespace"))
   }
 
   private def maybeExecuteOp(canModify: Future[Boolean], cantModifyMessage: String, op: => Future[Workspace]) = {
