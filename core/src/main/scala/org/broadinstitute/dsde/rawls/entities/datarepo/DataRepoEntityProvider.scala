@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -35,8 +35,11 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
   override val entityStoreId: Option[String] = Option(snapshotModel.getId)
 
-  private lazy val googleProject = {
-    // determine project to be billed for the BQ job TODO: need business logic from PO!
+  private lazy val googleProject: GoogleProjectId = {
+    /* Determine project to be billed for the BQ job:
+        If a project was explicitly specified in the constructor arguments, use that.
+        Else, use the workspace's project. This requires canCompute permissions on the workspace.
+     */
     requestArguments.billingProject match {
       case Some(billing) => billing.googleProjectId
       case None => requestArguments.workspace.googleProject
@@ -86,7 +89,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       // get pet service account key for this user
       petKey <- getPetSAKey
       // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(dataProject))
+      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
     } yield {
       // translate the BQ results into a single Rawls Entity
       queryResultsToEntity(queryResults, entityType, pk)
@@ -120,7 +123,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       // get pet service account key for this user
       petKey <- getPetSAKey
       // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(dataProject))
+      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
     } yield {
       // translate the BQ results into a Rawls query result
       val page = queryResultsToEntities(queryResults, entityType, pk)
@@ -207,7 +210,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
           (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel, parsedExpressions, tableModel, entityNameColumn)
           _ = logger.debug(s"expressions [${parsedExpressions.map(_.expression).mkString(", ")}] for snapshot id [${snapshotModel.getId} produced sql query ${bqQueryJobConfig.build().getQuery}")
           petKey <- getPetSAKey
-          queryResults <- runBigQuery(bqQueryJobConfig, petKey, GoogleProject(snapshotModel.getDataProject))
+          queryResults <- runBigQuery(bqQueryJobConfig, petKey, GoogleProject(googleProject.value))
         } yield {
           val expressionResultsStream = transformQueryResultToExpressionAndResult(entityNameColumn, parsedExpressions, selectAndFroms, queryResults)
           val expressionResults = convertToListAndCheckSize(expressionResultsStream, tableModel.getRowCount)
