@@ -118,7 +118,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   import dataSource.dataAccess.driver.api._
 
-  def CreateWorkspace(workspace: WorkspaceRequest, parentSpan: Span = null) = createWorkspace(workspace, parentSpan)
+  val workspaceCreator = new WorkspaceCreator(userInfo, dataSource, samDAO, gcsDAO, config)
+
+  def CreateWorkspace(workspace: WorkspaceRequest, parentSpan: Span = null) = workspaceCreator.createWorkspace(workspace, parentSpan)
   def GetWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs, parentSpan: Span) = getWorkspace(workspaceName, params, parentSpan)
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)

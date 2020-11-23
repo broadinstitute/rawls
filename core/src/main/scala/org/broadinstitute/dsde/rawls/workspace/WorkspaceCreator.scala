@@ -19,6 +19,7 @@ import org.joda.time.DateTime
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 
 class WorkspaceCreator(val userInfo: UserInfo,
                        val dataSource: SlickDataSource,
@@ -112,6 +113,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
   private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Boolean] = {
     val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
     traceWithParent("checkUserCanCreateWorkspace", parentSpan)(_ => samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, userInfo)).map {
+      case true => true
       case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}"))
     }
   }
@@ -189,7 +191,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
         case Some(_) => Future.successful()
         case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceName} already exists"))
       }
-    }
+    }.flatten
   }
 
   /**
