@@ -43,18 +43,83 @@ class WorkspaceCreator(val userInfo: UserInfo,
 
   import dataSource.dataAccess.driver.api._
 
-  // shared by createWorkspace and cloneWorkspace.  They each do some of their own stuff, but all of this should be
-  // the same
+  /**
+    * Public method to be used for creating a new Workspace.  The bulk of the creation process is performed by
+    * `createWorkspaceInternal`
+    *
+    * @param workspaceRequest
+    * @param span
+    * @return
+    */
+  def createWorkspace(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
+    validateAttributeNamespace(workspaceRequest.attributes.keys)
+    //    createWorkspaceInternal_sequential(workspaceRequest, span)
+    createWorkspaceInternal_parallel(workspaceRequest, span)
+  }
+
+  // TODO: What's up with CloneWorkspace in Orch? Need to make sure this is doing same things as Orch
+  /**
+    * Public method for cloning an existing Workspace.  The creation of the new cloned Workspace will be performed by
+    * `createWorkspaceInternal`, but this method will need to do some work before that to make sure the user has the
+    * necessary permissions on the source Workspace and that any Auth Domain restrictions on the source Workspace are
+    * still in place on the cloned Workspace.  After the cloned Workspace is created, this method will also do things
+    * like copying Entities, Method Configs, and bucket data from the source Workspace into the cloned Workspace.
+    *
+    * @param sourceWorkspaceName
+    * @param destWorkspaceRequest
+    * @return
+    */
+  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
+    destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
+    val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
+
+    validateAttributeNamespace(workspaceAttributeNames)
+    validateLibraryAttributeNamespaces(libraryAttributeNames)
+
+    for {
+      sourceWorkspace <- getWorkspaceIfHasUserHasAction(sourceWorkspaceName, SamWorkspaceActions.read)
+      destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
+      newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
+      cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
+      //      destWorkspace <- createWorkspaceInternal_sequential(cloneWorkspaceRequest)
+      destWorkspace <- createWorkspaceInternal_parallel(cloneWorkspaceRequest)
+      _ <- copyEntitiesAndMethodConfigs(sourceWorkspace, destWorkspace)
+    } yield {
+      //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
+      //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
+      //we also don't want to block returning a response on this call because it's already a slow endpoint
+      copyBucketContents(sourceWorkspace, destWorkspace, cloneWorkspaceRequest.copyFilesWithPrefix)
+
+      destWorkspace
+    }
+  }
+
+  /**
+    * This method will take a WorkspaceRequest and attempt to create a fully functional Terra Workspace.  This method
+    * will check that the User making the request has the required permissions on the Billing Project to create
+    * Workspaces within it.  This method will claim a Google Project from the Resource Buffering Service and perform
+    * all of the actions on the Google Project to initialize it for use by Terra, such as setting up Billing, IAM,
+    * Google Storage Bucket(s), etc.  This method will ensure that all Workspace Policies are created and populated in
+    * Sam and that they are also Sync'd with Google as necessary.  Finally, this method will attempt to add the newly
+    * created Workspace's Google Project into the Billing Project's Service Perimeter if one is defined.
+    *
+    * This method will either succeed, or a RawlsExceptionWithErrorReport will be thrown describing the reason why it
+    * failed.
+    *
+    * This method is shared by createWorkspace and cloneWorkspace.  They each do some of their own stuff, but ultimately
+    * both should call this method to create the desired Workspace
+    *
+    * Note:  There is no rollback logic here, so it is possible that the creation process could fail anywhere and the
+    * Workspace will be in some partially created state
+    *
+    * @param workspaceRequest
+    * @param span
+    * @return
+    */
   private def createWorkspaceInternal_sequential(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
     val authDomains = workspaceRequest.authorizationDomain.getOrElse(Set.empty)
     val noWorkspaceOwner = workspaceRequest.noWorkspaceOwner.getOrElse(false)
 
-    // TODO:
-    // 1. Verify the ordering of things.  Generally kept the same from what was here before, but could also see
-    //    reordering a few steps possibly
-    // 2. Futures are all run in order - there were a few spots in the old code where Futures were kicked off to allow
-    //    them to run in parallel.  Can/should probably still do that below, it just makes the `for` comp a little
-    //    uglier.
     for {
       _ <- checkCreateWorkspacePermissions(workspaceRequest, span)
       billingProjectOwnerPolicyEmail <- getBillingProjectOwnerPolicyEmail(workspaceRequest, span)
@@ -136,57 +201,6 @@ class WorkspaceCreator(val userInfo: UserInfo,
         setupGoogleProjectForWorkspace(workspace, policyNameToEmailMap, billingProjectOwnerPolicyEmail, authDomains, span),
         maybeUpdateGoogleProjectsInPerimeter(billingProject)))
     } yield ()
-  }
-
-  /**
-    * This method will take a WorkspaceRequest and attempt to create a fully functional Terra Workspace.  This method
-    * will check that the User making the request has the required permissions on the Billing Project to create
-    * Workspaces within it.  This method will claim a Google Project from the Resource Buffering Service and perform
-    * all of the actions on the Google Project to initialize it for use by Terra, such as setting up Billing, IAM,
-    * Google Storage Bucket(s), etc.  This method will ensure that all Workspace Policies are created and populated in
-    * Sam and that they are also Sync'd with Google as necessary.  Finally, this method will attempt to add the newly
-    * created Workspace's Google Project into the Billing Project's Service Perimeter if one is defined.
-    *
-    * This method will either succeed, or a RawlsExceptionWithErrorReport will be thrown describing the reason why it
-    * failed.
-    *
-    * Note:  There is no rollback logic here, so it is possible that the creation process could fail anywhere and the
-    * Workspace will be in some partially created state
-    *
-    * @param workspaceRequest
-    * @param span
-    * @return
-    */
-  def createWorkspace(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
-    validateAttributeNamespace(workspaceRequest.attributes.keys)
-//    createWorkspaceInternal_sequential(workspaceRequest, span)
-    createWorkspaceInternal_parallel(workspaceRequest, span)
-  }
-
-  // TODO: What's up with CloneWorkspace in Orch? Need to make sure this is doing same things as Orch
-  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
-    destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
-    val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
-
-    validateAttributeNamespace(workspaceAttributeNames)
-    validateLibraryAttributeNamespaces(libraryAttributeNames)
-
-    for {
-      sourceWorkspace <- getWorkspaceIfHasUserHasAction(sourceWorkspaceName, SamWorkspaceActions.read)
-      destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
-      newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
-      cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
-//      destWorkspace <- createWorkspaceInternal_sequential(cloneWorkspaceRequest)
-      destWorkspace <- createWorkspaceInternal_parallel(cloneWorkspaceRequest)
-      _ <- copyEntitiesAndMethodConfigs(sourceWorkspace, destWorkspace)
-    } yield {
-      //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
-      //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
-      //we also don't want to block returning a response on this call because it's already a slow endpoint
-      copyBucketContents(sourceWorkspace, destWorkspace, cloneWorkspaceRequest.copyFilesWithPrefix)
-
-      destWorkspace
-    }
   }
 
   private def validateFileCopyPrefix(copyFilesWithPrefix: String): Unit = {
