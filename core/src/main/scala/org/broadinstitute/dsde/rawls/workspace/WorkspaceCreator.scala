@@ -5,6 +5,7 @@ import java.util.UUID
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
+import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
@@ -28,6 +29,8 @@ class WorkspaceCreator(val userInfo: UserInfo,
                        val config: WorkspaceServiceConfig)
                       (implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
   extends WorkspaceSupport with AttributeSupport with LibraryPermissionsSupport with Retry with LazyLogging {
+
+  import dataSource.dataAccess.driver.api._
 
   // shared by createWorkspace and cloneWorkspace.  They each do some of their own stuff, but all of this should be
   // the same
@@ -95,9 +98,16 @@ class WorkspaceCreator(val userInfo: UserInfo,
       destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
       newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
       cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
-      clonedWorkspace <- sharedCreateWorkspace(cloneWorkspaceRequest)
-      // TODO: More to do here, cloneWorkspace is NOT done, just stopping for the day
-    } yield clonedWorkspace
+      destWorkspace <- sharedCreateWorkspace(cloneWorkspaceRequest)
+      _ <- copyEntitiesAndMethodConfigs(sourceWorkspace, destWorkspace)
+    } yield {
+      //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
+      //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
+      //we also don't want to block returning a response on this call because it's already a slow endpoint
+      copyBucketContents(sourceWorkspace, destWorkspace, cloneWorkspaceRequest.copyFilesWithPrefix)
+
+      destWorkspace
+    }
   }
 
   private def validateFileCopyPrefix(copyFilesWithPrefix: String): Unit = {
@@ -140,6 +150,49 @@ class WorkspaceCreator(val userInfo: UserInfo,
       val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
       val errorMsg = s"Source workspace has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg))
+    }
+  }
+
+  /**
+    * Copy all of the Entities AND all of the Method Configs from sourceWorkspace into destWorkspace.
+    *
+    * This was "All or nothing" before, so keeping it that way.  If either Entities OR Method Configs fail to copy over,
+    * then neither will copy over.
+    *
+    * @param sourceWorkspace
+    * @param destWorkspace
+    * @return
+    */
+  private def copyEntitiesAndMethodConfigs(sourceWorkspace: Workspace, destWorkspace: Workspace): Future[Unit] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.entityQuery.copyAllEntities(sourceWorkspace, destWorkspace) andThen
+        dataAccess.methodConfigurationQuery.listActive(sourceWorkspace).flatMap { methodConfigShorts =>
+          val inserts = methodConfigShorts.map { methodConfigShort =>
+            dataAccess.methodConfigurationQuery.get(sourceWorkspace, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+              dataAccess.methodConfigurationQuery.create(destWorkspace, methodConfig.get)
+            }
+          }
+          DBIO.seq(inserts: _*)
+        } andThen {
+        DBIO.successful()
+      }
+    }
+  }
+
+  /**
+    * Find all the objects in sourceWorkspace's bucket that start with filePrefix and copy them to destWorkspace's
+    * bucket
+    *
+    * @param filePrefix
+    * @param sourceWorkspace
+    * @param destWorkspace
+    */
+  private def copyBucketContents(sourceWorkspace: Workspace, destWorkspace: Workspace, filePrefix: Option[String]): Future[List[Option[StorageObject]]] = {
+    filePrefix match {
+      case Some(prefix) => gcsDAO.listObjectsWithPrefix(sourceWorkspace.bucketName, prefix).flatMap { objectsToCopy =>
+        Future.traverse(objectsToCopy) { objectToCopy =>  gcsDAO.copyFile(sourceWorkspace.bucketName, objectToCopy.getName, destWorkspace.bucketName, objectToCopy.getName) }
+      }
+      case None => Future.successful(List[Option[StorageObject]]())
     }
   }
 

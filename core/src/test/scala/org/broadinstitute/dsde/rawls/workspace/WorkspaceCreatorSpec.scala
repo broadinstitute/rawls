@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.mockito.ArgumentMatchers.{any, anyBoolean}
 import org.mockito.Mockito
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
-import org.scalatest.OptionValues
+import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -37,7 +37,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRouteTest with MockitoTestUtils with TestDriverComponent with OptionValues {
+class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRouteTest with MockitoTestUtils with TestDriverComponent with OptionValues with BeforeAndAfterAll {
   protected val mockServer: RemoteServicesMockServer = RemoteServicesMockServer()
   protected val workbenchMetricBaseName = "test"
 

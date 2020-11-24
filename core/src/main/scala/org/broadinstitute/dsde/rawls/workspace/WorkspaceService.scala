@@ -129,7 +129,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def ListAllWorkspaces = listAllWorkspaces()
   def GetTags(query: Option[String]) = getTags(query)
   def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
-  def CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) = cloneWorkspace(sourceWorkspace, destWorkspace)
+  def CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) = workspaceCreator.cloneWorkspace(sourceWorkspace, destWorkspace)
   def GetACL(workspaceName: WorkspaceName) = getACL(workspaceName)
   def UpdateACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean) = updateACL(workspaceName, aclUpdates, inviteUsersNotFound)
   def SendChangeNotifications(workspaceName: WorkspaceName) = sendChangeNotifications(workspaceName)
@@ -177,7 +177,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def AdminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = adminAbortSubmission(workspaceName,submissionId)
   def AdminWorkflowQueueStatusByUser = adminWorkflowQueueStatusByUser()
 
-  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
+  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+    workspaceCreator.createWorkspace(workspaceRequest, parentSpan)
+  }
+
+  def createWorkspaceOLD(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
         for {
@@ -594,8 +598,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       .map {p => p.get(workspaceContext.workspaceIdAsUUID).get}
   }
 
-  // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
+    workspaceCreator.cloneWorkspace(sourceWorkspaceName, destWorkspaceRequest)
+  }
+
+  // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
+  def cloneWorkspaceOLD(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
     destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
 
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
