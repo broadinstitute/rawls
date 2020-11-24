@@ -68,6 +68,7 @@ import scala.io.Source
 import scala.util.matching.Regex
 
 import io.opencensus.scala.Tracing._
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 case class Resources (
                        name: String,
@@ -404,15 +405,15 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[Option[List[String]]] = {
+  override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] = {
     implicit val service = GoogleInstrumentedService.Storage
-    val getter = getComputeManager(getBillingServiceAccountCredential).regions().get(googleProject.value, region)
     retryWithRecoverWhen500orGoogleError(() => {
+      val getter = getComputeManager(getBucketServiceAccountCredential).regions().get(googleProject.value, region)
       val zonesAsResourceUrls = executeGoogleRequest(getter).getZones.asScala.toList
-      val zones = zonesAsResourceUrls.map(_.split("/").last)
-      Option(zones)
+      zonesAsResourceUrls.map(_.split("/").last)
     }) {
-      case e => None
+      case e => throw new RawlsException(s"Something went wrong while retrieving zones for region `$region` under Google " +
+        s"project `${googleProject.value}`. Error: ${ExceptionUtils.getMessage(e)}")
     }
   }
 
@@ -1040,7 +1041,7 @@ class HttpGoogleServicesDAO(
   }
 
   def getBillingServiceAccountCredential: Credential = {
-    val abc = new GoogleCredential.Builder()
+    new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJava) // need this broad scope to create/manage projects
@@ -1048,10 +1049,6 @@ class HttpGoogleServicesDAO(
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(billingPemFile))
       .setServiceAccountUser(billingEmail)
       .build()
-
-    println(s"******* FIND ME TOKEN getBillingServiceAccountCredential: ${abc.getAccessToken}")
-
-    abc
   }
 
   def toGoogleGroupName(groupName: RawlsGroupName) = s"${proxyNamePrefix}GROUP_${groupName.value}@${appsDomain}"

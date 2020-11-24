@@ -133,6 +133,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
   import dataSource.dataAccess.driver.api._
 
+  private val SingleRegionLocationType: String = "region"
+
   //Get a blob of unlaunched workflows, flip their status, and queue them for submission.
   def getUnlaunchedWorkflowBatch()(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
     val workflowRecsToLaunch = dataSource.inTransaction { dataAccess =>
@@ -192,13 +194,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       maybeRuntimeOptions <- {
         val bucket = maybeBucket.getOrElse(throw new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
         bucket.getLocationType match {
-          case "region" =>
+          case SingleRegionLocationType =>
             val region = bucket.getLocation.toLowerCase
             for {
-              maybeZones <- googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region)
+              zones <- googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region)
             } yield {
-              val zones = maybeZones.getOrElse(throw new RawlsException(s"Something went wrong while retrieving zones for region `${region}` for bucket `${bucket.getName}`."))
-              Some(JsObject("zones" -> JsString(zones.mkString(" "))))
+              Option(JsObject("zones" -> JsString(zones.mkString(" "))))
             }
           case _ => Future.successful(defaultRuntimeOptions)
         }
@@ -335,7 +336,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val workflowBatchFuture = for {
       //yank things from the db. note this future has already started running and we're just waiting on it here
       (wfRecs, workflowBatch, billingProject, methodConfig) <- dbThingsFuture
-      _ = println(s"***** FIND ME BillingProject: ${billingProject.projectName.value} \n***** FINE ME GoogleProject: ${workspaceRec.googleProject}")
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(GoogleProjectId(workspaceRec.googleProject), RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
       wdl <- getWdl(methodConfig, petUserInfo)

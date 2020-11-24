@@ -232,7 +232,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean]
 
-  def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[Option[List[String]]]
+  def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]]
 }
 
 object GoogleApiTypes {
