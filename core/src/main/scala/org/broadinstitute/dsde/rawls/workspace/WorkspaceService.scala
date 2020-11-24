@@ -219,7 +219,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     span.setStatus(Status.OK)
     span.end()
 
-    traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(s1 => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap { workspaceContext =>
+    traceWithParent("getWorkspaceIfUserHasAction", parentSpan)(s1 => getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
 
         // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
@@ -305,7 +305,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         DBIO.from(gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)) map { details =>
           RequestComplete(StatusCodes.OK, details)
@@ -353,7 +353,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =  {
-     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { ctx =>
+     getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.delete) flatMap { ctx =>
        deleteWorkspace(workspaceName, ctx)
     }
   }
@@ -441,7 +441,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
-        ctx <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+        ctx <- getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write)
         workspace <- dataSource.inTransaction({ dataAccess =>
             updateWorkspace(operations, dataAccess)(ctx.toWorkspaceName)
         }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
@@ -881,7 +881,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     for {
-      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
+      workspaceContext <- getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.own)
 
       userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)
 
@@ -953,7 +953,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] = {
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       for {
         methodConfig <- dataSource.inTransaction { dataAccess =>
           withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
@@ -967,7 +967,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[ValidatedMethodConfiguration] = {
     withAttributeNamespaceCheck(methodConfiguration) {
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
             case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")))
@@ -980,7 +980,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def deleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
           dataAccess.methodConfigurationQuery.delete(workspaceContext, methodConfigurationNamespace, methodConfigurationName).map(_ => RequestComplete(StatusCodes.NoContent))
@@ -989,7 +989,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def renameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: MethodConfigurationName): Future[PerRequestMessage] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         //It's terrible that we pass unnecessary junk that we don't read in the payload, but a big refactor of the API is going to have to wait until Some Other Time.
         if(newName.workspaceName != workspaceName) {
@@ -1014,7 +1014,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def overwriteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[ValidatedMethodConfiguration] = {
     withAttributeNamespaceCheck(methodConfiguration) {
       // check permissions
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         // create transaction
         dataSource.inTransaction { dataAccess =>
           if (methodConfiguration.namespace != methodConfigurationNamespace || methodConfiguration.name != methodConfigurationName) {
@@ -1035,7 +1035,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
     withAttributeNamespaceCheck(methodConfiguration) {
       // check permissions
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         // create transaction
         dataSource.inTransaction { dataAccess =>
           withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { _ =>
@@ -1056,7 +1056,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
           DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, methodConfig))
@@ -1067,8 +1067,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): Future[ValidatedMethodConfiguration] = {
     // split into two transactions because we need to call out to Google after retrieving the source MC
 
-    val transaction1Result = getWorkspaceContextAndPermissions(mcnp.destination.workspaceName, SamWorkspaceActions.write) flatMap { destContext =>
-      getWorkspaceContextAndPermissions(mcnp.source.workspaceName, SamWorkspaceActions.read) flatMap { sourceContext =>
+    val transaction1Result = getWorkspaceIfHasUserHasAction(mcnp.destination.workspaceName, SamWorkspaceActions.write) flatMap { destContext =>
+      getWorkspaceIfHasUserHasAction(mcnp.source.workspaceName, SamWorkspaceActions.read) flatMap { sourceContext =>
         dataSource.inTransaction { dataAccess =>
           dataAccess.methodConfigurationQuery.get(sourceContext, mcnp.source.namespace, mcnp.source.name) flatMap {
             case None =>
@@ -1099,7 +1099,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         Future.failed(new RawlsExceptionWithErrorReport(errorReport = err))
       case Some(agoraEntity) => Future.fromTry(parseAgoraEntity(agoraEntity)) flatMap { targetMethodConfig =>
         withAttributeNamespaceCheck(targetMethodConfig) {
-          getWorkspaceContextAndPermissions(methodRepoQuery.destination.workspaceName, SamWorkspaceActions.write) flatMap { destContext =>
+          getWorkspaceIfHasUserHasAction(methodRepoQuery.destination.workspaceName, SamWorkspaceActions.write) flatMap { destContext =>
             dataSource.inTransaction { dataAccess =>
               saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, dataAccess)
             }.flatMap { methodConfig =>
@@ -1129,7 +1129,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[PerRequestMessage] = {
-    getWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(methodRepoQuery.source.workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, dataAccess) { methodConfig =>
 
@@ -1153,7 +1153,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def listAgoraMethodConfigurations(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.listActive(workspaceContext).map { r =>
           RequestComplete(StatusCodes.OK, r.toList.filter(_.methodRepoMethod.repo == Agora))
@@ -1162,7 +1162,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def listMethodConfigurations(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.listActive(workspaceContext).map { r =>
           RequestComplete(StatusCodes.OK, r.toList)
@@ -1193,7 +1193,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    val costlessSubmissionsFuture = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    val costlessSubmissionsFuture = getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.submissionQuery.listWithSubmitter(workspaceContext)
       }
@@ -1227,7 +1227,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def countSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.submissionQuery.countByStatus(workspaceContext).map(RequestComplete(StatusCodes.OK, _))
       }
@@ -1250,7 +1250,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // getWorkflowFailureMode early because it does validation and better to error early
       workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
 
-      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+      workspaceContext <- getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write)
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName)
       }
@@ -1374,7 +1374,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
-    val submissionWithoutCosts = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    val submissionWithoutCosts = getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
             DBIO.successful(submission)
@@ -1405,7 +1405,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def abortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         abortSubmission(workspaceContext, submissionId, dataAccess)
       }
@@ -1443,7 +1443,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   /**
    * Get the list of outputs for a given workflow in this submission */
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withWorkflowRecord(workspaceName, submissionId, workflowId, dataAccess) { wr =>
           val outputFTs = toFutureTry(executionServiceCluster.outputs(wr, userInfo))
@@ -1470,7 +1470,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // confirm: the user can Read this Workspace, the Submission is in this Workspace,
     // and the Workflow is in the Submission
 
-    val execIdFutOpt = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    val execIdFutOpt = getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) { optExecKey =>
           withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
@@ -1505,7 +1505,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // * in practice, one shard does everything except for some older workflows on shard 2.  Revisit this if that changes!
 
     // determine which case this is, and close the DB transaction
-    val execIdFutOpt: Future[Option[ExecutionServiceId]] = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    val execIdFutOpt: Future[Option[ExecutionServiceId]] = getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) { optExecKey =>
           DBIO.successful(optExecKey)
@@ -1564,7 +1564,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
  */
   def checkBucketReadAccess(workspaceName: WorkspaceName) = {
     for {
-      (workspace, maxAccessLevel) <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      (workspace, maxAccessLevel) <- getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceIdAsUUID.toString)).map { accessLevel =>
             (workspaceContext, accessLevel)

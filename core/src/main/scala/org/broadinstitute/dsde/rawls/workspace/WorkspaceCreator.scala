@@ -104,9 +104,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
     validateLibraryAttributeNamespaces(libraryAttributeNames)
 
     for {
-      // TODO: Go crazy!  Rename getWorkspaceContextAndPermissions -> getWorkspaceIfHasUserHasAction
-      // That method is used in a ton of places, the refactor is huge and should be its own commit
-      sourceWorkspace <- getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
+      sourceWorkspace <- getWorkspaceIfHasUserHasAction(sourceWorkspaceName, SamWorkspaceActions.read)
       destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
       newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
       cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
