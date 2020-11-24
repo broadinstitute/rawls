@@ -45,7 +45,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
 
   // shared by createWorkspace and cloneWorkspace.  They each do some of their own stuff, but all of this should be
   // the same
-  private def createWorkspaceInternal(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
+  private def createWorkspaceInternal_sequential(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
     val authDomains = workspaceRequest.authorizationDomain.getOrElse(Set.empty)
     val noWorkspaceOwner = workspaceRequest.noWorkspaceOwner.getOrElse(false)
 
@@ -71,6 +71,60 @@ class WorkspaceCreator(val userInfo: UserInfo,
     } yield workspace
   }
 
+  private def createWorkspaceInternal_parallel(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
+    val authDomains = workspaceRequest.authorizationDomain.getOrElse(Set.empty)
+    val noWorkspaceOwner = workspaceRequest.noWorkspaceOwner.getOrElse(false)
+
+    for {
+      (billingProjectOwnerPolicyEmail, billingProject) <- firstSteps(workspaceRequest, span)
+      (workspace, workspaceResourceResponse) <- secondSteps(workspaceRequest, billingProject, billingProjectOwnerPolicyEmail, noWorkspaceOwner, authDomains, span)
+      _ <- thirdSteps(workspace, billingProject, workspaceResourceResponse, billingProjectOwnerPolicyEmail, authDomains, span)
+    } yield workspace
+  }
+
+  private def firstSteps(workspaceRequest: WorkspaceRequest, span: Span = null): Future[(WorkbenchEmail, RawlsBillingProject)] = {
+    val checkUserCanCreateWorksapce = checkCreateWorkspacePermissions(workspaceRequest, span)
+    val checkWorkspaceNameIsUnique = checkIfWorkspaceWithNameAlreadyExists(workspaceRequest.toWorkspaceName, span)
+    val billingProjectOwnerPolicyEmailFuture = getBillingProjectOwnerPolicyEmail(workspaceRequest, span)
+    val getBillingProjectFuture = getBillingProjectForNewWorkspace(workspaceRequest.namespace, span)
+
+    for { // These things happen in parallel, but they all need to finish before moving on
+      _ <- checkUserCanCreateWorksapce
+      _ <- checkWorkspaceNameIsUnique
+      billingProjectOwnerPolicyEmail <- billingProjectOwnerPolicyEmailFuture
+      billingProject <- getBillingProjectFuture
+    } yield (billingProjectOwnerPolicyEmail, billingProject)
+  }
+
+  private def secondSteps(workspaceRequest: WorkspaceRequest,
+                          billingProject: RawlsBillingProject,
+                          billingProjectOwnerPolicyEmail: WorkbenchEmail,
+                          noWorkspaceOwner: Boolean,
+                          authDomains: Set[ManagedGroupRef],
+                          span: Span = null): Future[(Workspace, SamCreateResourceResponse)] = {
+    for { // The following futures need to happen sequentially
+      (googleProjectId, googleProjectNumber) <- claimGoogleProject(billingProject, span)
+      workspace <- persistNewWorkspace(workspaceRequest, googleProjectId, googleProjectNumber, span)
+      workspaceResourceResponse <- createWorkspaceResourceInSam(workspace.workspaceId, billingProjectOwnerPolicyEmail, noWorkspaceOwner, authDomains, span)
+    } yield (workspace, workspaceResourceResponse)
+  }
+
+  private def thirdSteps(workspace: Workspace,
+                         billingProject: RawlsBillingProject,
+                         samCreateResourceResponse: SamCreateResourceResponse,
+                         billingProjectOwnerPolicyEmail: WorkbenchEmail,
+                         authDomains: Set[ManagedGroupRef],
+                         span: Span = null): Future[Unit] = {
+    val policyNameToEmailMap = samCreateResourceResponse.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
+    for { // Run all of these in parallel
+      _ <- Future.sequence(Seq(
+        createWorkflowCollectionForWorkspace(workspace.workspaceId, policyNameToEmailMap, span),
+        syncWorkspacePoliciesWithGoogle(workspace, policyNameToEmailMap, authDomains, span),
+        setupGoogleProjectForWorkspace(workspace, policyNameToEmailMap, billingProjectOwnerPolicyEmail, authDomains, span),
+        maybeUpdateGoogleProjectsInPerimeter(billingProject)))
+    } yield ()
+  }
+
   /**
     * This method will take a WorkspaceRequest and attempt to create a fully functional Terra Workspace.  This method
     * will check that the User making the request has the required permissions on the Billing Project to create
@@ -92,7 +146,8 @@ class WorkspaceCreator(val userInfo: UserInfo,
     */
   def createWorkspace(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
     validateAttributeNamespace(workspaceRequest.attributes.keys)
-    createWorkspaceInternal(workspaceRequest, span)
+//    createWorkspaceInternal_sequential(workspaceRequest, span)
+    createWorkspaceInternal_parallel(workspaceRequest, span)
   }
 
   // TODO: What's up with CloneWorkspace in Orch? Need to make sure this is doing same things as Orch
@@ -108,7 +163,8 @@ class WorkspaceCreator(val userInfo: UserInfo,
       destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
       newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
       cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
-      destWorkspace <- createWorkspaceInternal(cloneWorkspaceRequest)
+//      destWorkspace <- createWorkspaceInternal_sequential(cloneWorkspaceRequest)
+      destWorkspace <- createWorkspaceInternal_parallel(cloneWorkspaceRequest)
       _ <- copyEntitiesAndMethodConfigs(sourceWorkspace, destWorkspace)
     } yield {
       //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
