@@ -71,6 +71,19 @@ class WorkspaceCreator(val userInfo: UserInfo,
     } yield workspace
   }
 
+  /**
+    * Creates a new Workspace doing everything the same as createWorkspaceInternal_sequential, but this version tries
+    * to run certain steps/futures in parallel instead of running them all sequentially.  It's not super pretty.  It
+    * breaks things down into 3 different steps, each of which is its own `for` comprehension.  Why 3?  It was chosen
+    * because there was a set of steps identified that could be run first and all in parallel.  After these finish,
+    * there is a set of steps that must be executed sequentially.  After those complete, there is another set of steps
+    * that can all be kicked off in parallel.  If you need to add a new step, depending on its placement and whether it
+    * needs to be run in parallel or sequentially with existing steps, you may be able to just add it to an existing
+    * `for` comp, or you may need to add a whole new `for` comp.
+    * @param workspaceRequest
+    * @param span
+    * @return
+    */
   private def createWorkspaceInternal_parallel(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
     val authDomains = workspaceRequest.authorizationDomain.getOrElse(Set.empty)
     val noWorkspaceOwner = workspaceRequest.noWorkspaceOwner.getOrElse(false)
