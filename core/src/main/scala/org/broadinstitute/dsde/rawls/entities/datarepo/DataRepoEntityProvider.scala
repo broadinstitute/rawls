@@ -35,13 +35,13 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
   override val entityStoreId: Option[String] = Option(snapshotModel.getId)
 
-  private lazy val googleProject: GoogleProjectId = {
+  private[datarepo] lazy val googleProject: GoogleProjectId = {
     /* Determine project to be billed for the BQ job:
         If a project was explicitly specified in the constructor arguments, use that.
         Else, use the workspace's project. This requires canCompute permissions on the workspace.
      */
     requestArguments.billingProject match {
-      case Some(billing) => billing.googleProjectId
+      case Some(billing) => billing
       case None => requestArguments.workspace.googleProject
     }
   }
