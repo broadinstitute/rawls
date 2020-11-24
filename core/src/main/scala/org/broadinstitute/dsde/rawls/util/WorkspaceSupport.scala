@@ -1,12 +1,10 @@
 package org.broadinstitute.dsde.rawls.util
 
 import akka.http.scaladsl.model.StatusCodes
-import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, SamBillingProjectActions, SamProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
 
 import scala.concurrent.{ExecutionContext, Future}
 
