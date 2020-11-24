@@ -187,28 +187,23 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   def getRuntimeOptions(googleProjectId: String, bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[JsValue]] = {
-    println(s"******* FIND ME getRuntimeZoneAttrs")
-    googleServicesDAO.getBucket(bucketName) flatMap {
-      case Some(bucket) =>
-        println(s"******* FIND ME getRuntimeZoneAttrs: Found bucket: ${bucket.getName}")
-        println(s"******* FIND ME getRuntimeZoneAttrs: Bucket location: ${bucket.getLocationType}")
+    for {
+      maybeBucket <- googleServicesDAO.getBucket(bucketName)
+      maybeRuntimeOptions <- {
+        val bucket = maybeBucket.getOrElse(throw new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
         bucket.getLocationType match {
           case "region" =>
-            val region: String = bucket.getLocation.toLowerCase
-            // get zones
-            // Should RawlsBillingProject be used or googleProjectId ??
-            val zonesFuture: Future[Option[List[String]]] = googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region)
-
-            val zonesAsJsValue: Future[Option[JsValue]] = zonesFuture.flatMap {
-              case Some(zones) => Future.successful(Option(JsObject("zones" -> JsString(zones.mkString(" ")))))
-              case None => Future.failed(new RawlsException(s"Something went wrong while retrieving zones for region `${region}` " +
-                s"for bucket `${bucket.getName}`."))
+            val region = bucket.getLocation.toLowerCase
+            for {
+              maybeZones <- googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region)
+            } yield {
+              val zones = maybeZones.getOrElse(throw new RawlsException(s"Something went wrong while retrieving zones for region `${region}` for bucket `${bucket.getName}`."))
+              Some(JsObject("zones" -> JsString(zones.mkString(" "))))
             }
-            zonesAsJsValue
           case _ => Future.successful(defaultRuntimeOptions)
         }
-      case _ => Future.failed(new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
-    }
+      }
+    } yield maybeRuntimeOptions
   }
 
   def buildWorkflowOpts(workspace: WorkspaceRecord,
