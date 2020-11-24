@@ -65,39 +65,6 @@ trait WorkspaceSupport {
     }
   }
 
-  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
-  // Will process op only if User has the `createWorkspace` action on the specified Billing Project, otherwise will
-  // Fail with 403 Forbidden
-  def requireCreateWorkspaceAccessContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
-    for {
-      userHasAction <- traceDBIOWithParent("userHasAction", parentSpan)(_ => DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, userInfo)))
-      response <- userHasAction match {
-        case true => op
-        case false => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
-      }
-    } yield response
-  }
-
-  // Creating a Workspace without an Owner policy is allowed only if the requesting User has the `owner` role
-  // granted on the Workspace's Billing Project
-  def maybeRequireBillingProjectOwnerAccessContext[T](workspaceRequest: WorkspaceRequest, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    workspaceRequest.noWorkspaceOwner match {
-      case Some(true) =>
-        for {
-          billingProjectRoles <- traceDBIOWithParent("listUserRolesForResource", parentSpan)(_ => DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, userInfo)))
-          userIsBillingProjectOwner = billingProjectRoles.contains(SamProjectRoles.owner)
-          response <- userIsBillingProjectOwner match {
-            case true => op
-            case false => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"Missing ${SamProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'.")))
-          }
-        } yield response
-      case _ =>
-        op
-    }
-
-  }
-
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
   def authDomainCheck(sourceWorkspaceADs: Set[String], destWorkspaceADs: Set[String]): ReadWriteAction[Boolean] = {
     // if the source has any auth domains, the dest must also *at least* have those auth domains

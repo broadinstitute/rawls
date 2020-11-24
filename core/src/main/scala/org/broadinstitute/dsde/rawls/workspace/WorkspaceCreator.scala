@@ -95,6 +95,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
     sharedCreateWorkspace(workspaceRequest, span)
   }
 
+  // TODO: What's up with CloneWorkspace in Orch? Need to make sure this is doing same things as Orch
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
     destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
@@ -217,7 +218,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
     * @return
     */
   private def checkCreateWorkspacePermissions(workspaceRequest: WorkspaceRequest, parentSpan: Span): Future[Unit] = {
-    // Could we run these Future's in parallel instead of sequentially?
+    // TODO: Could we run these Future's in parallel instead of sequentially?
     for {
       _ <- requireCreateWorkspaceAccess(workspaceRequest, parentSpan)
       _ <- maybeRequireBillingProjectOwnerAccess(workspaceRequest, parentSpan)
@@ -263,6 +264,14 @@ class WorkspaceCreator(val userInfo: UserInfo,
     traceWithParent("getBillingProjectOwnerPolicySyncStatus", span)(_ => samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo)).map(_.email)
   }
 
+  /**
+    * Checks that Rawls has the right permissions on the BillingProject's Billing Account, and then returns the
+    * BillingProject with the latest value of invalidBillingAccount set
+    *
+    * @param billingProjectName
+    * @param parentSpan
+    * @return
+    */
   private def getBillingProjectForNewWorkspace(billingProjectName: String, parentSpan: Span = null): Future[RawlsBillingProject] = {
     for {
       maybeBillingProject <- loadBillingProject(billingProjectName, parentSpan)

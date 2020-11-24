@@ -355,7 +355,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
-    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    val workspace = Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
 
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
@@ -368,7 +368,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val workspaceRequest = WorkspaceRequest("nonexistent_namespace", "kermits_pond", Map.empty)
 
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
     }
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
@@ -383,7 +383,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val baseWorkspace = testData.workspace
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
     }
     error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
   }
@@ -400,7 +400,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val baseWorkspace = testData.workspace
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
     }
     error.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
 
