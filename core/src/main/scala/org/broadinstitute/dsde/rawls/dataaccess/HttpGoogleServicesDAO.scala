@@ -146,6 +146,8 @@ class HttpGoogleServicesDAO(
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
   val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
+  val SingleRegionLocationType: String = "region"
+
   //we only have to do this once, because there's only one DM project
   lazy val getDeploymentManagerSAEmail: Future[String] = {
     getGoogleProject(GoogleProjectId(deploymentMgrProject))
@@ -402,6 +404,16 @@ class HttpGoogleServicesDAO(
     val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
       case e: HttpResponseException => None
+    }
+  }
+
+  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
+    getBucket(bucketName) map { maybeBucket =>
+      val bucket = maybeBucket.getOrElse(throw new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
+      bucket.getLocationType match {
+        case SingleRegionLocationType => Option(bucket.getLocation.toLowerCase)
+        case _ => None
+      }
     }
   }
 

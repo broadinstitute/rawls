@@ -133,8 +133,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
   import dataSource.dataAccess.driver.api._
 
-  private val SingleRegionLocationType: String = "region"
-
   //Get a blob of unlaunched workflows, flip their status, and queue them for submission.
   def getUnlaunchedWorkflowBatch()(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
     val workflowRecsToLaunch = dataSource.inTransaction { dataAccess =>
@@ -190,18 +188,18 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
   def getRuntimeOptions(googleProjectId: String, bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[JsValue]] = {
     for {
-      maybeBucket <- googleServicesDAO.getBucket(bucketName)
+      regionOption <- googleServicesDAO.getRegionForRegionalBucket(bucketName)
       maybeRuntimeOptions <- {
-        val bucket = maybeBucket.getOrElse(throw new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
-        bucket.getLocationType match {
-          case SingleRegionLocationType =>
-            val region = bucket.getLocation.toLowerCase
+        regionOption match {
+          case Some(region) =>
             for {
               zones <- googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region)
             } yield {
               Option(JsObject("zones" -> JsString(zones.mkString(" "))))
             }
-          case _ => Future.successful(defaultRuntimeOptions)
+          case None =>
+            // if the location is `multi-region` we want the default zones from config
+            Future.successful(defaultRuntimeOptions)
         }
       }
     } yield maybeRuntimeOptions

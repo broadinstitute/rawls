@@ -224,4 +224,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   }
 
   override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] = Future.successful(List.empty[String])
+
+  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = Future.successful(None)
 }
