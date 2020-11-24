@@ -45,7 +45,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
 
   // shared by createWorkspace and cloneWorkspace.  They each do some of their own stuff, but all of this should be
   // the same
-  private def sharedCreateWorkspace(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
+  private def createWorkspaceInternal(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
     val authDomains = workspaceRequest.authorizationDomain.getOrElse(Set.empty)
     val noWorkspaceOwner = workspaceRequest.noWorkspaceOwner.getOrElse(false)
 
@@ -92,7 +92,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
     */
   def createWorkspace(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
     validateAttributeNamespace(workspaceRequest.attributes.keys)
-    sharedCreateWorkspace(workspaceRequest, span)
+    createWorkspaceInternal(workspaceRequest, span)
   }
 
   // TODO: What's up with CloneWorkspace in Orch? Need to make sure this is doing same things as Orch
@@ -108,7 +108,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
       destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
       newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
       cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
-      destWorkspace <- sharedCreateWorkspace(cloneWorkspaceRequest)
+      destWorkspace <- createWorkspaceInternal(cloneWorkspaceRequest)
       _ <- copyEntitiesAndMethodConfigs(sourceWorkspace, destWorkspace)
     } yield {
       //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
