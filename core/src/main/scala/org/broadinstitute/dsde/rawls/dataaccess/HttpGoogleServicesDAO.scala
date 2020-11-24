@@ -439,6 +439,16 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
+    getBucket(bucketName) map { maybeBucket =>
+      val bucket = maybeBucket.getOrElse(throw new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
+      bucket.getLocationType match {
+        case SingleRegionLocationType => Option(bucket.getLocation.toLowerCase)
+        case _ => None
+      }
+    }
+  }
+
   override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWithRecoverWhen500orGoogleError(() => {
