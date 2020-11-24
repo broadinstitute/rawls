@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{MockGoogleAccessContextManagerDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
-import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.{Agora, CreationStatuses, Dockstore, GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, RawlsUser, ServicePerimeterName, UserInfo, Workspace, WorkspaceName, WorkspaceRequest, WorkspaceVersions}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -29,12 +29,12 @@ import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.mockito.ArgumentMatchers.{any, anyBoolean}
 import org.mockito.Mockito
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
-import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
-import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 
 class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRouteTest with MockitoTestUtils with TestDriverComponent with OptionValues with BeforeAndAfterAll {
@@ -45,6 +45,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
+    lazy val workspaceCreator: WorkspaceCreator = workspaceCreatorConstructor(userInfo1)
     lazy val userService: UserService = userServiceConstructor(userInfo1)
 
 
@@ -134,6 +135,13 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
       entityManager
     ) _
 
+    val workspaceCreatorConstructor = WorkspaceCreator.constructor(
+      slickDataSource,
+      samDAO,
+      gcsDAO,
+      workspaceServiceConfig
+    ) _
+
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
     }
@@ -158,7 +166,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
-    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    val workspace = Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
 
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
@@ -176,7 +184,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
       // Create a Workspace in the BillingProject
       val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_${projectStatus}")
       val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
-      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
 
       // Load the newly created Workspace for assertions
       val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
@@ -188,7 +196,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val workspaceRequest = WorkspaceRequest("nonexistent_namespace", "kermits_pond", Map.empty)
 
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
     }
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
@@ -202,7 +210,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
 
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
     }
     error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
   }
@@ -219,7 +227,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     // Make the call to createWorkspace and make sure it throws an exception with the correct StatusCode
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
     }
     error.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
 
@@ -236,7 +244,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
 
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
     }
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadGateway)
@@ -250,7 +258,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val workspaceName = WorkspaceName(billingProject.projectName.value, "cool_workspace")
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
 
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
 
     // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
     // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
@@ -268,7 +276,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
 
     intercept[Exception] {
-      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
     }
 
     val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
@@ -284,7 +292,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     billingProject.servicePerimeter shouldBe empty
 
     val workspaceRequest = WorkspaceRequest(billingProject.projectName.value, newWorkspaceName, Map.empty)
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
 
     // Verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was NOT called
     verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Seq[String]])
@@ -325,7 +333,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     // Make a call to Create a new Workspace in the same Billing Project
     val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
-    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    val workspace = Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
 
     // Check that we made the call to overwrite the Perimeter exactly once (default) and that the correct perimeter
     // name was specified with the correct list of projects which should include all pre-existing Workspaces within
@@ -409,7 +417,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
 
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
     }
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadGateway)
@@ -424,7 +432,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
 
     val baseWorkspace = testData.workspace
-    Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
 
     // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
     // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
@@ -443,7 +451,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
 
     intercept[Exception] {
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
     }
 
     val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
@@ -460,7 +468,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     billingProject.servicePerimeter shouldBe empty
 
     val workspaceRequest = WorkspaceRequest(billingProject.projectName.value, newWorkspaceName, Map.empty)
-    Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
 
     // Verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was NOT called
     verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Seq[String]])
@@ -502,7 +510,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val baseWorkspace = testData.workspace
     val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
-    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    val workspace = Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
 
     // Check that we made the call to overwrite the Perimeter exactly once (default) and that the correct perimeter
     // name was specified with the correct list of projects which should include all pre-existing Workspaces within

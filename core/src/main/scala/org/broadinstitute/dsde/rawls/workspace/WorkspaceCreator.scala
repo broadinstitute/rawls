@@ -22,6 +22,17 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 
+object WorkspaceCreator {
+  def constructor(dataSource: SlickDataSource,
+                  samDAO: SamDAO,
+                  gcsDAO: GoogleServicesDAO,
+                  config: WorkspaceServiceConfig)
+                 (userInfo: UserInfo)
+                 (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceCreator = {
+    new WorkspaceCreator(userInfo, dataSource, samDAO, gcsDAO, config)
+  }
+}
+
 class WorkspaceCreator(val userInfo: UserInfo,
                        val dataSource: SlickDataSource,
                        val samDAO: SamDAO,
@@ -111,7 +122,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
   }
 
   private def validateFileCopyPrefix(copyFilesWithPrefix: String): Unit = {
-    if(copyFilesWithPrefix.isEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""))
+    if (copyFilesWithPrefix.isEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""))
   }
 
   /**
@@ -145,7 +156,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
   private def unionAuthDomains(sourceWorkspaceADs: Set[ManagedGroupRef], destWorkspaceADs: Set[ManagedGroupRef]): Set[ManagedGroupRef] = {
     // if the source has an auth domain, the dest must also have that auth domain as a subset
     // otherwise, the caller may choose to add to the auth domain
-    if(sourceWorkspaceADs.subsetOf(destWorkspaceADs)) sourceWorkspaceADs ++ destWorkspaceADs
+    if (sourceWorkspaceADs.subsetOf(destWorkspaceADs)) sourceWorkspaceADs ++ destWorkspaceADs
     else {
       val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
       val errorMsg = s"Source workspace has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"
@@ -190,7 +201,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
   private def copyBucketContents(sourceWorkspace: Workspace, destWorkspace: Workspace, filePrefix: Option[String]): Future[List[Option[StorageObject]]] = {
     filePrefix match {
       case Some(prefix) => gcsDAO.listObjectsWithPrefix(sourceWorkspace.bucketName, prefix).flatMap { objectsToCopy =>
-        Future.traverse(objectsToCopy) { objectToCopy =>  gcsDAO.copyFile(sourceWorkspace.bucketName, objectToCopy.getName, destWorkspace.bucketName, objectToCopy.getName) }
+        Future.traverse(objectsToCopy) { objectToCopy => gcsDAO.copyFile(sourceWorkspace.bucketName, objectToCopy.getName, destWorkspace.bucketName, objectToCopy.getName) }
       }
       case None => Future.successful(List[Option[StorageObject]]())
     }
@@ -299,8 +310,8 @@ class WorkspaceCreator(val userInfo: UserInfo,
   private def checkIfWorkspaceWithNameAlreadyExists(workspaceName: WorkspaceName, span: Span = null): Future[Unit] = {
     dataSource.inTransaction { dataAccess =>
       traceDBIOWithParent("findWorkspaceByName", span)(_ => dataAccess.workspaceQuery.findByName(workspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))).map {
-        case Some(_) => Future.successful()
-        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceName} already exists"))
+        case Some(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceName} already exists"))
+        case None => Future.successful()
       }
     }.flatten
   }
@@ -358,13 +369,13 @@ class WorkspaceCreator(val userInfo: UserInfo,
     * @param workspaceRequest
     * @param googleProjectId
     * @param googleProjectNumber
-    * @param parentSpan
+    * @param span
     * @return
     */
   private def persistNewWorkspace(workspaceRequest: WorkspaceRequest,
                                   googleProjectId: GoogleProjectId,
                                   googleProjectNumber: GoogleProjectNumber,
-                                  parentSpan: Span): Future[Workspace] = {
+                                  span: Span): Future[Workspace] = {
     val currentDate = DateTime.now
     val workspaceId = UUID.randomUUID.toString
     val bucketName = constructBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
@@ -386,10 +397,10 @@ class WorkspaceCreator(val userInfo: UserInfo,
     )
 
     dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("createOrUpdateWorkspace", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
+      traceDBIOWithParent("createOrUpdateWorkspace", span)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
     }.map { workspace =>
       // add the workspace id to the span so we can find and correlate it later with other services
-      parentSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspace.workspaceId))
+      if (span != null) span.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspace.workspaceId))
       workspace
     }
   }
@@ -397,10 +408,10 @@ class WorkspaceCreator(val userInfo: UserInfo,
   private def constructBucketName(workspaceId: String, secure: Boolean) = s"${config.workspaceBucketNamePrefix}-${if (secure) "secure-" else ""}${workspaceId}"
 
   private def createWorkspaceResourceInSam(workspaceId: String,
-                                   billingProjectOwnerPolicyEmail: WorkbenchEmail,
-                                   noWorkspaceOwner: Boolean,
-                                   authDomains: Set[ManagedGroupRef],
-                                   span: Span = null): Future[SamCreateResourceResponse] = {
+                                           billingProjectOwnerPolicyEmail: WorkbenchEmail,
+                                           noWorkspaceOwner: Boolean,
+                                           authDomains: Set[ManagedGroupRef],
+                                           span: Span = null): Future[SamCreateResourceResponse] = {
     val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(billingProjectOwnerPolicyEmail), Set.empty, Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner))
     val ownerPolicyMembership: Set[WorkbenchEmail] = if (noWorkspaceOwner) {
       Set.empty
@@ -464,7 +475,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
         } else if (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined) {
           // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
           // granted bucket access (and thus need a google group)
-          traceWithParent(s"syncPolicy-${policyName}", s1)( _ => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspace.workspaceId, policyName))
+          traceWithParent(s"syncPolicy-${policyName}", s1)(_ => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspace.workspaceId, policyName))
         } else {
           Future.successful(())
         }
