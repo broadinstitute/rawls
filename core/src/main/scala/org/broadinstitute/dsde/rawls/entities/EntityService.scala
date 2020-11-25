@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls.entities
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
@@ -192,9 +194,19 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         PerRequest.RequestComplete(StatusCodes.OK, entities)
       }
 
+      // TODO: other methods want to handle exceptions similarly. Wrap this in something reusable.
       queryFuture.recover {
-        case dee:DataEntityException => RequestComplete(ErrorReport(dee.code, dee.getMessage))
-        case ex => RequestComplete(ErrorReport(StatusCodes.InternalServerError, ex))
+        case dee:DataEntityException =>
+          RequestComplete(ErrorReport(dee.code, dee.getMessage))
+        case bqe:BigQueryException =>
+          RequestComplete(ErrorReport(StatusCodes.getForKey(bqe.getCode).getOrElse(StatusCodes.InternalServerError), bqe.getMessage))
+        case gjre:GoogleJsonResponseException =>
+          // unlikely to hit this case; we should see BigQueryExceptions instead of GoogleJsonResponseExceptions
+          RequestComplete(ErrorReport(StatusCodes.getForKey(gjre.getStatusCode).getOrElse(StatusCodes.InternalServerError), gjre.getMessage))
+        case report:RawlsExceptionWithErrorReport =>
+          throw report // don't rewrap these, just rethrow
+        case ex =>
+          RequestComplete(ErrorReport(StatusCodes.InternalServerError, s"Unexpected error: ${ex.getMessage}", ex))
       }
     }
   }
