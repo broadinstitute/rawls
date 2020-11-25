@@ -1235,7 +1235,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val ex = intercept[DataEntityException] {
         Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
       }
-      ex.code shouldBe Option(StatusCodes.NotFound) // TODO: will this code change have any repercussions?
+      ex.code shouldBe StatusCodes.NotFound // TODO: will this code change have any repercussions?
       ex.getMessage shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
     }
   }
