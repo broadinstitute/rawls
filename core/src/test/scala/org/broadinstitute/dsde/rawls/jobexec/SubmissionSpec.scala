@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
+import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
@@ -1231,11 +1232,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         deleteIntermediateOutputFiles = false
       )
 
-      val ex = intercept[RawlsExceptionWithErrorReport] {
+      val ex = intercept[DataEntityException] {
         Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
       }
-      ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
-      ex.errorReport.message shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
+      ex.code shouldBe Option(StatusCodes.BadRequest)
+      ex.getMessage shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
     }
   }
 

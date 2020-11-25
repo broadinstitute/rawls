@@ -144,7 +144,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
-      assertResult("sam error") { ex.getMessage }
+      assertResult("Error attempting to use project namespace. The project does not exist or you do not have permission to use it: sam error") { ex.getMessage }
     }
   }
 
