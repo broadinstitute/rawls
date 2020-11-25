@@ -14,7 +14,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, S
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.model.DataReferenceName
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport}
 
 import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
@@ -39,8 +40,24 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
       snapshotModel <- Try(dataRepoDAO.getSnapshot(snapshotId, requestArguments.userInfo.accessToken)).recoverWith {
         case notFound: DatarepoApiException if notFound.getCode == StatusCodes.NotFound.intValue =>
           Failure(new DataEntityException(s"Snapshot id $snapshotId does not exist or you do not have access", notFound))
-        case forbidden: DatarepoApiException if forbidden.getCode == StatusCodes.Forbidden.intValue =>
-          Failure(new DataEntityException(s"Snapshot id $snapshotId exists but access was denied", forbidden))
+
+        // Data Repo returns 401 Unauthorized if the user has a valid token but does not have the proper permission on the snapshot
+        case forbidden: DatarepoApiException if forbidden.getCode == StatusCodes.Forbidden.intValue || forbidden.getCode == StatusCodes.Unauthorized.intValue =>
+          // attempt to extract buried message
+          // raw response looks like: {"message":"User 'davidan.dev2@gmail.com' does not have required action: read_data","errorDetail":[]}
+          // TODO: probably want this logic elsewhere, extract to a reusable method?
+          import spray.json._
+          val innerErrorMessage: String = Try(forbidden.getMessage.parseJson.asJsObject.fields.get("message"))
+            .toOption.flatten.collect {
+              case jss:JsString => jss.value
+            }
+            .getOrElse("[error could not be deserialized]")
+
+          val finalErrMessage = s"Snapshot id $snapshotId exists but access was denied: $innerErrorMessage"
+
+          // log the full error, but don't include giant stack traces in the failure we bubble up to the end user
+          logger.warn(finalErrMessage, forbidden)
+          Failure(new DataEntityException(code = StatusCodes.Forbidden, message = finalErrMessage))
       }
     } yield new DataRepoEntityProvider(snapshotModel, requestArguments, samDAO, bqServiceFactory, config)
   }

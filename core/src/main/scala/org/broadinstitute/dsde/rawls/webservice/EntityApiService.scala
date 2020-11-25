@@ -27,8 +27,9 @@ trait EntityApiService extends UserInfoDirectives {
   val entityServiceConstructor: UserInfo => EntityService
 
   val entityRoutes: server.Route = requireUserInfo() { userInfo =>
-    parameters("dataReference".?, "billingProject".?) { (dataReferenceString, billingProject) =>
+    parameters("dataReference".?, "billingProject".?) { (dataReferenceString, billingProjectString) =>
       val dataReference = dataReferenceString.map(DataReferenceName)
+      val billingProject = billingProjectString.map(GoogleProjectId)
       path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
         get {
           parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
@@ -42,7 +43,7 @@ trait EntityApiService extends UserInfoDirectives {
 
             if (errors.isEmpty) {
               val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
-              complete { entityServiceConstructor(userInfo).QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery) }
+              complete { entityServiceConstructor(userInfo).QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject) }
             } else {
               complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
             }
@@ -51,7 +52,7 @@ trait EntityApiService extends UserInfoDirectives {
       } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
           get {
-            complete { entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference) }
+            complete { entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, billingProject) }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
@@ -67,7 +68,7 @@ trait EntityApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           get {
-            complete { entityServiceConstructor(userInfo).GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, dataReference) }
+            complete { entityServiceConstructor(userInfo).GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, dataReference, billingProject) }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
@@ -80,7 +81,7 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / "delete") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[AttributeEntityReference]]) { entities =>
-              complete { entityServiceConstructor(userInfo).DeleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, dataReference) }
+              complete { entityServiceConstructor(userInfo).DeleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, dataReference, billingProject) }
             }
           }
         } ~
