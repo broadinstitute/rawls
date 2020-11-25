@@ -439,28 +439,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
-    getBucket(bucketName) map { maybeBucket =>
-      val bucket = maybeBucket.getOrElse(throw new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
-      bucket.getLocationType match {
-        case SingleRegionLocationType => Option(bucket.getLocation.toLowerCase)
-        case _ => None
-      }
-    }
-  }
-
-  override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    retryWithRecoverWhen500orGoogleError(() => {
-      val getter = getComputeManager(getBucketServiceAccountCredential).regions().get(googleProject.value, region)
-      val zonesAsResourceUrls = executeGoogleRequest(getter).getZones.asScala.toList
-      zonesAsResourceUrls.map(_.split("/").last)
-    }) {
-      case e => throw new RawlsException(s"Something went wrong while retrieving zones for region `$region` under Google " +
-        s"project `${googleProject.value}`. Error: ${ExceptionUtils.getMessage(e)}")
-    }
-  }
-
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Groups
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
