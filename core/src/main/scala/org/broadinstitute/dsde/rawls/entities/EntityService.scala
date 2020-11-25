@@ -23,12 +23,10 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object EntityService {
-  // TODO: constructor should accept userInfo, dataReferenceName, billingProject, anything else needed to resolve provider
   def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, entityManager: EntityManager)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): EntityService = {
 
-    // TODO: resolve the provider here, pass to EntityService so implementations never have to resolve
     new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName)
   }
 }
@@ -64,10 +62,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
-      // we haven't done this yet because we don't know the business logic around which billing project to use for each user.
-      // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
-      // EntityService constructor, or other higher-level method
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
       val entityFuture = for {
@@ -78,8 +72,10 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
 
       entityFuture.recover {
-        case _: EntityNotFoundException => RequestComplete(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName")
-      }
+        case _: EntityNotFoundException =>
+          // TODO: should move this error message into EntityNotFoundException and allow it to bubble up
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName"))
+      }.recover(bigQueryRecover)
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
@@ -105,9 +101,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
-      // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
-      // EntityService constructor, or other higher-level method
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
       val deleteFuture = for {
@@ -119,7 +112,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
       deleteFuture.recover {
         case delEx: DeleteEntitiesConflictException => RequestComplete(StatusCodes.Conflict, delEx.referringEntities)
-      }
+      }.recover(bigQueryRecover)
     }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =
@@ -164,15 +157,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      // TODO: AS-321 insert the billing project, if present. May want to use EntityRequestArguments or other container class.
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
-      for {
+      val metadataFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         metadata <- entityProvider.entityTypeMetadata()
       } yield {
         PerRequest.RequestComplete(StatusCodes.OK, metadata)
       }
+
+      metadataFuture.recover(bigQueryRecover)
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =
@@ -194,20 +188,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         PerRequest.RequestComplete(StatusCodes.OK, entities)
       }
 
-      // TODO: other methods want to handle exceptions similarly. Wrap this in something reusable.
-      queryFuture.recover {
-        case dee:DataEntityException =>
-          RequestComplete(ErrorReport(dee.code, dee.getMessage))
-        case bqe:BigQueryException =>
-          RequestComplete(ErrorReport(StatusCodes.getForKey(bqe.getCode).getOrElse(StatusCodes.InternalServerError), bqe.getMessage))
-        case gjre:GoogleJsonResponseException =>
-          // unlikely to hit this case; we should see BigQueryExceptions instead of GoogleJsonResponseExceptions
-          RequestComplete(ErrorReport(StatusCodes.getForKey(gjre.getStatusCode).getOrElse(StatusCodes.InternalServerError), gjre.getMessage))
-        case report:RawlsExceptionWithErrorReport =>
-          throw report // don't rewrap these, just rethrow
-        case ex =>
-          RequestComplete(ErrorReport(StatusCodes.InternalServerError, s"Unexpected error: ${ex.getMessage}", ex))
-      }
+      queryFuture.recover(bigQueryRecover)
     }
   }
 
@@ -293,6 +274,20 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     */
   def applyOperationsToEntity(entity: Entity, operations: Seq[AttributeUpdateOperation]): Entity = {
     entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
+  }
+
+  private def bigQueryRecover: PartialFunction[Throwable, PerRequestMessage] = {
+    case dee:DataEntityException =>
+      RequestComplete(ErrorReport(dee.code, dee.getMessage))
+    case bqe:BigQueryException =>
+      RequestComplete(ErrorReport(StatusCodes.getForKey(bqe.getCode).getOrElse(StatusCodes.InternalServerError), bqe.getMessage))
+    case gjre:GoogleJsonResponseException =>
+      // unlikely to hit this case; we should see BigQueryExceptions instead of GoogleJsonResponseExceptions
+      RequestComplete(ErrorReport(StatusCodes.getForKey(gjre.getStatusCode).getOrElse(StatusCodes.InternalServerError), gjre.getMessage))
+    case report:RawlsExceptionWithErrorReport =>
+      throw report // don't rewrap these, just rethrow
+    case ex:Exception =>
+      RequestComplete(ErrorReport(StatusCodes.InternalServerError, s"Unexpected error: ${ex.getMessage}", ex))
   }
 
 }
