@@ -229,8 +229,17 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   }
 
   private def getPetSAKey: IO[String] = {
-    logger.debug(s"getPetSAKey attempting against project  ${googleProject.value}")
-    IO.fromFuture(IO(samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)))
+    logger.debug(s"getPetSAKey attempting against project ${googleProject.value}")
+    IO.fromFuture(IO(
+      samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)
+        .recover {
+          case report:RawlsExceptionWithErrorReport =>
+            val errMessage = s"Error attempting to use project ${googleProject.value}. " +
+              s"The project does not exist or you do not have permission to use it: ${report.errorReport.message}"
+            throw new RawlsExceptionWithErrorReport(report.errorReport.copy(message = errMessage))
+          case err:Exception => throw new RawlsException(s"Error attempting to use project ${googleProject.value}. " +
+            s"The project does not exist or you do not have permission to use it: ${err.getMessage}")
+        }))
   }
 
   private def getEntityNames(bqExpressionResults: Seq[ExpressionAndResult]): Seq[EntityName] = {
