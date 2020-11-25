@@ -70,9 +70,9 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
       requestArguments.userInfo.accessToken)).recoverWith {
 
       case notFound: WorkspaceApiException if notFound.getCode == StatusCodes.NotFound.intValue =>
-        Failure(new DataEntityException(s"Reference name ${dataReferenceName.value} does not exist in workspace ${requestArguments.workspace.toWorkspaceName}.", notFound))
+        Failure(new DataEntityException(s"Reference name ${dataReferenceName.value} does not exist in workspace ${requestArguments.workspace.toWorkspaceName}.", notFound, StatusCodes.NotFound))
       case forbidden: WorkspaceApiException if forbidden.getCode == StatusCodes.Forbidden.intValue =>
-        Failure(new DataEntityException(s"Access denied for reference name ${dataReferenceName.value}.", forbidden))
+        Failure(new DataEntityException(s"Access denied for reference name ${dataReferenceName.value}.", forbidden, StatusCodes.Forbidden))
     }
 
     // trigger any exceptions
