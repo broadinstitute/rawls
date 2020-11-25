@@ -299,10 +299,13 @@ class WorkspaceCreator(val userInfo: UserInfo,
     * @return
     */
   private def checkCreateWorkspacePermissions(workspaceRequest: WorkspaceRequest, parentSpan: Span): Future[Unit] = {
-    // TODO: Could we run these Future's in parallel instead of sequentially?
+    // Running futures in parallel
+    val requireCreateWorkspaceAccessFuture = requireCreateWorkspaceAccess(workspaceRequest, parentSpan)
+    val maybeRequireBillingProjectOwnerAccessFuture = maybeRequireBillingProjectOwnerAccess(workspaceRequest, parentSpan)
+
     for {
-      _ <- requireCreateWorkspaceAccess(workspaceRequest, parentSpan)
-      _ <- maybeRequireBillingProjectOwnerAccess(workspaceRequest, parentSpan)
+      _ <- requireCreateWorkspaceAccessFuture
+      _ <- maybeRequireBillingProjectOwnerAccessFuture
     } yield ()
   }
 
