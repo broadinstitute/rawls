@@ -263,6 +263,23 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     }
   }
 
+  it should "submit a workflow with the right zones for a regional bucket" in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, defaultRuntimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-some-other"))))) {
+      override val executionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(testData.regionalWorkspace) { ctx =>
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.regionalSubmission, testData.regionalWorkspace)
+
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      val workflowOptions = mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+
+      workflowOptions.get.default_runtime_attributes shouldBe Some(JsObject(Map("zones" -> JsString("europe-north1-a europe-north1-b europe-north1-c"))))
+    }
+  }
+
   it should "submit a workflow that sets the workflow collection as neither a label nor a field in the request" in withDefaultTestDatabase {
     testWorkflowCollectionFieldAndLabels(false, false) { (mockExecService: MockExecutionServiceDAO, submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord) =>
       mockExecService.collection shouldEqual None
