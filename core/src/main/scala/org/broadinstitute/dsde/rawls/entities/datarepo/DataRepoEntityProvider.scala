@@ -229,6 +229,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   }
 
   private def getPetSAKey: IO[String] = {
+    logger.debug(s"getPetSAKey attempting against project  ${googleProject.value}")
     IO.fromFuture(IO(samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)))
   }
 
@@ -279,6 +280,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   }
 
   private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String, projectToBill: GoogleProject): IO[TableResult] = {
+    logger.debug(s"runBigQuery attempting against project  ${projectToBill.value}")
     bqServiceFactory.getServiceForPet(petKey, projectToBill).use(_.query(
       bqQueryJobConfigBuilder
         .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
