@@ -189,7 +189,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   def getRuntimeOptions(googleProjectId: String, bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[JsValue]] = {
     for {
       regionOption <- googleServicesDAO.getRegionForRegionalBucket(bucketName)
-      maybeRuntimeOptions <- {
+      runtimeOptions <- {
         regionOption match {
           case Some(region) =>
             for {
@@ -202,7 +202,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
             Future.successful(defaultRuntimeOptions)
         }
       }
-    } yield maybeRuntimeOptions
+    } yield runtimeOptions
   }
 
   def buildWorkflowOpts(workspace: WorkspaceRecord,

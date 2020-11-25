@@ -401,9 +401,11 @@ class HttpGoogleServicesDAO(
 
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
     implicit val service = GoogleInstrumentedService.Storage
-    val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
-      case e: HttpResponseException => None
+    retryWithRecoverWhen500orGoogleError(() => {
+      val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
+      Option(executeGoogleRequest(getter))
+    }) {
+      case _: HttpResponseException => None
     }
   }
 
