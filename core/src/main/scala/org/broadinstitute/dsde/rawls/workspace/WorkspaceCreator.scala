@@ -80,7 +80,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
       destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
       newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
       cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
-      destWorkspace <- createWorkspaceInternal(cloneWorkspaceRequest, span)
+      destWorkspace <- createWorkspaceInternal(cloneWorkspaceRequest)
       _ <- copyEntitiesAndMethodConfigs(sourceWorkspace, destWorkspace)
     } yield {
       //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
