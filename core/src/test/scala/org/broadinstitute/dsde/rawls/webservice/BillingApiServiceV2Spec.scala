@@ -32,7 +32,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   def withApiServices[T](dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test"))(testCode: TestApiService =>  T): T = {
-    val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
+    val apiService = TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {
@@ -182,7 +182,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         val projects: Seq[RawlsBillingProjectRecord] = runAndWait(query)
         projects match {
           case Seq() => fail("project does not exist in db")
-          case Seq(project) =>
+          case Seq(_) =>
           case _ => fail("too many projects")
         }
       }
@@ -405,7 +405,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     verify(services.samDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
     verify(services.samDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)
   }
-  it should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>
+  it should "return 204 on delete - without google project" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
     when(services.samDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Seq.empty[SamFullyQualifiedResourceId]))
@@ -422,7 +422,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     verify(services.samDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
   }
 
-  it should "return 400 if workspaces exist" in withEmptyDatabaseAndApiServices { services =>
+  it should "return 400 on delete if workspaces exist" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     runAndWait(workspaceQuery.createOrUpdate(Workspace(project.projectName.value, "workspace", UUID.randomUUID().toString, "", None, new DateTime(), new DateTime(), "", Map.empty)))
 
@@ -439,7 +439,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 403 if user does not have access" in withEmptyDatabaseAndApiServices { services =>
+  it should "return 403 on delete if user does not have access" in withEmptyDatabaseAndApiServices { services =>
     val project = billingProjectFromName("no_access")
     when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(false))
 
@@ -452,7 +452,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  "GET /billing/v2" should "list all my projects" in withEmptyDatabaseAndApiServices { services =>
+  "GET /billing/v2" should "list all my projects with workspaces" in withEmptyDatabaseAndApiServices { services =>
     val projects = List.fill(20) { createProject(UUID.randomUUID().toString) }
     val possibleRoles = List(Option(SamProjectRoles.workspaceCreator), Option(SamProjectRoles.owner), None)
     val samUserResources = projects.flatMap { p =>
@@ -470,8 +470,26 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           Set.empty))
       }
     }
+    val workspaces = projects.flatMap(project => {
+      val workspaceWithValidBillingAccount = new EmptyWorkspaceWithProjectAndBillingAccount(project, project.billingAccount)
+      val workspaceTwoWithValidBillingAccount = new EmptyWorkspaceWithProjectAndBillingAccount(project, project.billingAccount)
+      val workspaceWithInvalidBillingAccount = new EmptyWorkspaceWithProjectAndBillingAccount(project, Some(RawlsBillingAccountName("invalid-billing-account")))
+      val workspaceTwoWithInvalidBillingAccount = new EmptyWorkspaceWithProjectAndBillingAccount(project, Some(RawlsBillingAccountName("invalid-billing-account")))
+      List(workspaceWithValidBillingAccount, workspaceTwoWithValidBillingAccount, workspaceWithInvalidBillingAccount, workspaceTwoWithInvalidBillingAccount)
+    })
+    workspaces.foreach(workspace => runAndWait(workspace.save()))
+    val samWorkspaceUserResources = workspaces.flatMap { w =>
+      Option(SamUserResource(
+        w.wsName.toString,
+        SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+        SamRolesAndActions(Set.empty, Set.empty),
+        SamRolesAndActions(Set.empty, Set.empty),
+        Set.empty,
+        Set.empty))
+    }
 
     when(services.samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(samUserResources))
+    when(services.samDAO.listUserResources(SamResourceTypeNames.workspace, userInfo)).thenReturn(Future.successful(samWorkspaceUserResources))
 
     val expected = projects.flatMap { p =>
       samUserResources.find(_.resourceId == p.projectName.value).map { samResource =>
@@ -484,8 +502,14 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
             case SamProjectRoles.owner => ProjectRoles.Owner
             case SamProjectRoles.workspaceCreator => ProjectRoles.User
           },
-          Set(),
-          Set()
+          workspaces
+            .filter(workspace => workspace.wsName.namespace == p.projectName.value
+              && workspace.billingAccount == p.billingAccount)
+            .map(workspace => workspace.wsName).toSet,
+          workspaces
+            .filter(workspace => workspace.wsName.namespace == p.projectName.value
+              && workspace.billingAccount != p.billingAccount)
+            .map(workspace => WorkspaceBillingAccount(workspace.wsName, workspace.billingAccount)).toSet
         )
       }
     }
@@ -496,7 +520,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           status
         }
 
-        responseAs[Seq[RawlsBillingProjectResponse]] should contain theSameElementsAs(expected)
+        responseAs[Seq[RawlsBillingProjectResponse]] should contain theSameElementsAs expected
       }
   }
 }

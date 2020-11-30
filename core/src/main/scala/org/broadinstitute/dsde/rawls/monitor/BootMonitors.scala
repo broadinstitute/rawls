@@ -78,6 +78,9 @@ object BootMonitors extends LazyLogging {
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
 
+    //Boot workspace billing account monitor
+    startWorkspaceBillingAccountMonitor(system, slickDataSource, gcsDAO)
+
     val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollJitter")),
@@ -187,6 +190,10 @@ object BootMonitors extends LazyLogging {
 
   private def startBucketDeletionMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
+  }
+
+  private def startWorkspaceBillingAccountMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
+    system.actorOf(WorkspaceBillingAccountMonitor.props(slickDataSource, gcsDAO, 60 seconds, 6 hours))
   }
 
   private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig, dataSource: SlickDataSource)(implicit cs: ContextShift[IO]) = {

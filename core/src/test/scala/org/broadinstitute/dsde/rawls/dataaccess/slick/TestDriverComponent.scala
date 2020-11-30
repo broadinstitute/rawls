@@ -23,6 +23,7 @@ import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
@@ -179,6 +180,27 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     override def save() = {
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace)
+      )
+    }
+  }
+
+  class EmptyWorkspaceWithProjectAndBillingAccount(project: RawlsBillingProject, maybeBillingAccount: Option[RawlsBillingAccountName]) extends TestData {
+    val userOwner = RawlsUser(userInfo)
+    val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
+    val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
+    val wsName = WorkspaceName(project.projectName.value, UUID.randomUUID().toString)
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
+    val workspaceVersion = WorkspaceVersions.V2
+    val googleProjectId = project.googleProjectId
+    val billingAccount = maybeBillingAccount
+
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, billingAccount)
+
+    override def save() = {
+      DBIO.seq(
+        workspaceQuery.save(workspace)
       )
     }
   }
