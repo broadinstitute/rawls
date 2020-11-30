@@ -1232,11 +1232,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         deleteIntermediateOutputFiles = false
       )
 
-      val ex = intercept[DataEntityException] {
+      val ex = intercept[RawlsExceptionWithErrorReport] {
         Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
       }
-      ex.code shouldBe StatusCodes.NotFound // TODO: will this code change have any repercussions?
-      ex.getMessage shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
+      ex.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+      ex.errorReport.message shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
     }
   }
 
