@@ -748,7 +748,8 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Billing
     val billingServiceAccountCredential = getBillingServiceAccountCredential
     val billingManager = getCloudBillingManager(billingServiceAccountCredential)
-    val projectBillingInfo = new ProjectBillingInfo().setBillingAccountName(s"billingAccounts/${billingAccountName.value}").setBillingEnabled(billingEnabled)
+    // value sent to google should have prefix "billingAccounts/" like: "billingAccounts/some-billing-acct-uuid"
+    val projectBillingInfo = new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(billingEnabled)
     retryWhen500orGoogleError(() => {
       executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo))
     })
