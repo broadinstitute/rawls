@@ -64,13 +64,12 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     * @return
     */
   def resolveProviderFuture(entityRequestArguments: EntityRequestArguments)(implicit executionContext: ExecutionContext): Future[EntityProvider] = {
-    // TODO: (DA) the recoverWith here seems to make error-handling more complicated as it swallows and rewrites
-    // all DataEntityExceptions, including adding big stack traces to it. Why does it exist?
     Future.fromTry(resolveProvider(entityRequestArguments))
-//      .recoverWith {
-//        case regrets: DataEntityException =>
-//          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, regrets)))
-//      }
+      .recoverWith {
+        case regrets: DataEntityException =>
+          // bubble up the status code from the DataEntityException
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets)))
+      }
   }
 }
 
