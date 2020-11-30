@@ -928,7 +928,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Workspace, Method Configuration or Entity not found
+          description: Workspace, Method Configuration, Data Reference, or Entity not found
           content:
             'application/json':
               schema:
