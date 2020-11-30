@@ -244,7 +244,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         Some(
           ExecutionServiceWorkflowOptions(
             jes_gcs_root = s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}",
-            google_project = testData.wsName.namespace,
+            google_project = testData.workspace.googleProjectId.value,
             account_name = testData.userOwner.userEmail.value,
             google_compute_service_account = "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
             user_service_account_json =
