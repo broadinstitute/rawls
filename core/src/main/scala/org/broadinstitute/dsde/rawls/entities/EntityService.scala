@@ -73,7 +73,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
       entityFuture.recover {
         case _: EntityNotFoundException =>
-          // TODO: should move this error message into EntityNotFoundException and allow it to bubble up
+          // could move this error message into EntityNotFoundException and allow it to bubble up
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName"))
       }.recover(bigQueryRecover)
     }

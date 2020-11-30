@@ -45,7 +45,6 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
         case forbidden: DatarepoApiException if forbidden.getCode == StatusCodes.Forbidden.intValue || forbidden.getCode == StatusCodes.Unauthorized.intValue =>
           // attempt to extract buried message
           // raw response looks like: {"message":"User 'davidan.dev2@gmail.com' does not have required action: read_data","errorDetail":[]}
-          // TODO: probably want this logic elsewhere, extract to a reusable method?
           import spray.json._
           val innerErrorMessage: String = Try(forbidden.getMessage.parseJson.asJsObject.fields.get("message"))
             .toOption.flatten.collect {
