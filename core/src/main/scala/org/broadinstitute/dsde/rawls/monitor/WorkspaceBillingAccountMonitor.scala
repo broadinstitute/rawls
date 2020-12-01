@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.{ContextShift, IO}
+import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
@@ -34,10 +35,9 @@ class WorkspaceBillingAccountMonitor(datasource: SlickDataSource, gcsDAO: Google
       workspacesToUpdate <- datasource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.listWorkspaceGoogleProjectsWithIncorrectBillingAccounts()
       }
-      // TODO: Come back to Future.traverse
-      _ <- Future.traverse(workspacesToUpdate) {
-        case (googleProjectId, billingAccount) => updateGoogleAndDatabase(googleProjectId, billingAccount)
-      }
+      _ <- workspacesToUpdate.toList.traverse {
+        case (googleProjectId, billingAccount) => IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, billingAccount)))
+      }.unsafeToFuture()
     } yield()
   }
 
