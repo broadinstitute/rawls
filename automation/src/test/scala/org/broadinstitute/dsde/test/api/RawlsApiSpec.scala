@@ -220,6 +220,101 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
     }
 
+    "should be able to run sub-workflow tasks in non-US regions" in {
+      implicit val token: AuthToken = studentBToken
+
+      // this will run scatterCount^levels workflows, so be careful if increasing these values!
+      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
+
+      withCleanBillingProject(studentB) { projectName =>
+        withWorkspace(projectName, "rawls-subworkflows-in-regions", workspaceRegion = Option("europe-north1")) { workspaceName =>
+          withCleanUp {
+            Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+              projectName, workspaceName,
+              topLevelMethod,
+              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+              topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
+
+            Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+
+            // it currently takes ~ 5 min for google bucket read permissions to propagate.
+            // We can't launch a workflow until this happens.
+            // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+
+            Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+            val submissionId = Rawls.submissions.launchWorkflow(
+              projectName,
+              workspaceName,
+              topLevelMethodConfiguration.configNamespace,
+              topLevelMethodConfiguration.configName,
+              "participant",
+              SingleParticipant.entityId,
+              "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
+            // clean up: Abort submission
+            register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+
+            // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
+
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
+            implicit val patienceConfig: PatienceConfig = submissionPatience
+
+            // Get workflow IDs from submission details
+            val firstTierWorkflowIds: List[String] = eventually {
+              val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+              withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
+                status should (be("Submitted") or be("Done")) // very unlikely it's already done, but let's handle that case.
+                workflows.length should be(3)
+                workflows
+              }
+            }
+
+            // Fetch ALL call metadata from ALL subworkflows:
+            val callMetadataSections: List[JsonNode] = eventually {
+              for {
+                firstWorkflowId: String <- firstTierWorkflowIds
+                cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
+
+                // validate options contain the :
+                submittedOptions = parseWorkflowOptionsFromMetadata(cromwellMetadata)
+                _ = submittedOptions should include ("europe-north1a")
+                _ = submittedOptions should include ("europe-north1b")
+                _ = submittedOptions should include ("europe-north1c")
+
+                subworkflowMetadata: JsonNode <- parseCallsFromMetadata(cromwellMetadata)
+                callMetadataWithinSubworkflows: JsonNode <- parseCallsFromMetadata(subworkflowMetadata)
+
+                _ = callMetadataWithinSubworkflows.get("executionStatus") should be("Done")
+
+              } yield callMetadataWithinSubworkflows
+            }
+
+
+            // verify that Rawls can retrieve the sub-sub-workflow's metadata without throwing an exception.
+
+            eventually {
+              Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
+            }
+
+            // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
+            // https://github.com/DataBiosphere/firecloud-app/issues/157
+
+            val outputsTimeout = Timeout(scaled(Span(10, Seconds)))
+            eventually(outputsTimeout) {
+              Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
+              // nope https://github.com/DataBiosphere/firecloud-app/issues/160
+              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubWorkflowId)
+              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
+            }
+          }
+        }
+      }
+
+    }
+
 //    Disabling this test until we decide what to do with it. See AP-177
 
 //    "should retrieve metadata with widely scattered sub-workflows in a short time" in {
