@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.model.ProjectPoolId
 case class ResourceBufferConfig(
                                  url: String,
                                  regularProjectPoolId: ProjectPoolId,
-                                 servicePerimeterProjectPoolId: ProjectPoolId
+                                 networkMonitoredProjectPoolId: ProjectPoolId
                                )
 
 object ResourceBufferConfig{

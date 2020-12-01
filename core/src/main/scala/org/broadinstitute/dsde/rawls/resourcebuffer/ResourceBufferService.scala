@@ -22,7 +22,7 @@ class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, config: Resour
   def toProjectPoolId(projectPoolType: ProjectPoolType): ProjectPoolId = {
     val projectPoolId: ProjectPoolId = projectPoolType match {
       case ProjectPoolType.Regular => config.regularProjectPoolId
-      case ProjectPoolType.ServicePerimeter => config.servicePerimeterProjectPoolId
+      case ProjectPoolType.ServicePerimeter => config.networkMonitoredProjectPoolId
     }
     projectPoolId
   }
