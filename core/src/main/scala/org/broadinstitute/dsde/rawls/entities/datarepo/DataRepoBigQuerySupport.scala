@@ -306,7 +306,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
   def queryConfigForQueryEntities(dataProject: String, viewName: String, entityType: String, entityQuery: EntityQuery): QueryJobConfiguration.Builder = {
     // generate BQ SQL for this entity
     val query = s"SELECT * FROM ${tableNameInQuery(dataProject, viewName, entityType)} " +
-      s"ORDER BY ${validateSql(entityQuery.sortField)} ${SortDirections.toSql(entityQuery.sortDirection)} " +
+      s"ORDER BY `${validateSql(entityQuery.sortField)}` ${SortDirections.toSql(entityQuery.sortDirection)} " +
       s"LIMIT ${entityQuery.pageSize} " +
       s"OFFSET ${translatePaginationOffset(entityQuery).toLong};"
 

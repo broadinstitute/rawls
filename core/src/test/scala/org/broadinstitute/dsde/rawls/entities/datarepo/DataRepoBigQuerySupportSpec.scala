@@ -345,7 +345,7 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
         val entityQuery = EntityQuery(page = 1, pageSize = 20, sortField = "mySortField", sortDirection = sortDirection, filterTerms = None)
         val actual = queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
 
-        assert(actual.build.getQuery.contains(s"ORDER BY mySortField ${SortDirections.toSql(sortDirection)}"),
+        assert(actual.build.getQuery.contains(s"ORDER BY `mySortField` ${SortDirections.toSql(sortDirection)}"),
           "generated BQ SQL does not contain correct ORDER BY clause")
 
       }
