@@ -410,7 +410,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         val dedupFunctionDef = dedupFunction(dedupFunctionName, selectAndFrom)
         (
           // important that selectAndFrom.selectColumns added in order so that the indexes in the result set are as expected
-          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(c => s"`${c.qualifiedName}`").mkString(", ")}))) ${relationship.alias}"),
+          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(c => s"`${c.qualifiedName}`").mkString(", ")}))) `${relationship.alias}`"),
           scala.Option(dedupFunctionDef)
         )
       }
