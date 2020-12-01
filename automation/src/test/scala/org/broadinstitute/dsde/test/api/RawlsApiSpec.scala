@@ -50,6 +50,21 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     Await.result(find, 1.minute)
   }
 
+  def parseCallsFromMetadata(metadata: String): List[JsonNode] = {
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+
+    // "calls" is a top-level key of metadata, whose value is a JSON object.
+    // Get that object's values.
+    val calls: List[JsonNode] = mapper.readTree(metadata).get("calls").elements().asScala.toList
+
+    // Call values are arrays of scatter shards.
+    // Get the shards, which are JSON objects.
+    val scatterShards: List[JsonNode] = calls flatMap { c =>
+      c.elements().asScala.toList
+    }
+  }
+
   def parseSubWorkflowIdsFromMetadata(metadata: String): List[String] = {
     /*
     Workflow metadata has this structure:
@@ -64,19 +79,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
       },  ...
     }
     */
-
-    val mapper = new ObjectMapper()
-    mapper.registerModule(DefaultScalaModule)
-
-    // "calls" is a top-level key of metadata, whose value is a JSON object.
-    // Get that object's values.
-    val calls: List[JsonNode] = mapper.readTree(metadata).get("calls").elements().asScala.toList
-
-    // Call values are arrays of scatter shards.
-    // Get the shards, which are JSON objects.
-    val scatterShards: List[JsonNode] = calls flatMap { c =>
-      c.elements().asScala.toList
-    }
+    val scatterShards: List[JsonNode] = parseCallsFromMetadata(metadata)
 
     // Return the values corresponding to each scatter shard's "subWorkflowId" key
     scatterShards map { s =>
@@ -100,6 +103,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     val outputFieldJson = Option(outputsJson.get(outputField))
       .getOrElse(fail(s"Unable to find metadata output $outputField"))
     outputFieldJson.asText()
+  }
+
+  def parseWorkflowOptionsFromMetadata(metadata: String): String = {
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+
+    val metadataJson = mapper.readTree(metadata)
+    metadataJson.get("submittedFiles").get("options").asText()
   }
 
   // if these prove useful anywhere else, they should move into workbench-libs
