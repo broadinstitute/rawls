@@ -226,14 +226,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   private def constructBillingProjectResponses(samUserResources: Seq[SamUserResource], billingProjectsInRawlsDB: Seq[RawlsBillingProject]): Future[List[RawlsBillingProjectResponse]] = {
     val projectsByName = billingProjectsInRawlsDB.map(p => p.projectName -> p).toMap
     for {
-      foo <- samUserResources.toList.traverse { samUserResource =>
+      billingProjectResponses <- samUserResources.toList.traverse { samUserResource =>
         val allSamRoles = samUserResource.direct.roles ++ samUserResource.inherited.roles
         val projectRoles = samRolesToProjectRoles(allSamRoles)
         projectsByName.get(RawlsBillingProjectName(samUserResource.resourceId))
           .traverse(billingProject => constructBillingProjectResponseWithUserRoles(projectRoles, billingProject))
       }
     } yield {
-      foo.flatten.sortBy(value => value.projectName.value)
+      billingProjectResponses.flatten.sortBy(value => value.projectName.value)
     }
   }
 

@@ -642,9 +642,9 @@ class HttpGoogleServicesDAO(
         val projectBillingInfo = executeGoogleRequest(fetcher)
         val shouldUpdate = billingAccount match {
           case Some(RawlsBillingAccountName(billingAccountName)) =>
-            projectBillingInfo.getBillingAccountName == billingAccountName && projectBillingInfo.getBillingEnabled == true
+            projectBillingInfo.getBillingAccountName != billingAccountName || projectBillingInfo.getBillingEnabled == false
           case None =>
-            projectBillingInfo.getBillingEnabled == false
+            projectBillingInfo.getBillingEnabled == true
         }
         if (shouldUpdate) {
           executeGoogleRequest(updater)
