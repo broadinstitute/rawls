@@ -692,10 +692,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = new DataRepoBigQuerySupport {}
     provider.generateExpressionSQL(selectAndFroms) shouldBe
       """CREATE TEMP FUNCTION dedup_1(val ANY TYPE) AS ((
-        |  SELECT ARRAY_AGG(STRUCT(datarepo_row_id, another, zoe, bob)) FROM (
-        |    SELECT datarepo_row_id, another, ARRAY_AGG(DISTINCT ac_2) zoe, ARRAY_AGG(DISTINCT ac_3) bob
-        |    FROM (SELECT DISTINCT datarepo_row_id, another, ac_2, ac_3 FROM UNNEST(val) v, UNNEST(v.zoe) ac_2, UNNEST(v.bob) ac_3)
-        |    GROUP BY datarepo_row_id, another
+        |  SELECT ARRAY_AGG(STRUCT(`datarepo_row_id`, `another`, `zoe`, `bob`)) FROM (
+        |    SELECT `datarepo_row_id`, `another`, ARRAY_AGG(DISTINCT `ac_2`) `zoe`, ARRAY_AGG(DISTINCT `ac_3`) `bob`
+        |    FROM (SELECT DISTINCT `datarepo_row_id`, `another`, `ac_2`, `ac_3` FROM UNNEST(val) v, UNNEST(v.`zoe`) `ac_2`, UNNEST(v.`bob`) `ac_3`)
+        |    GROUP BY `datarepo_row_id`, `another`
         |  )
         |));
         |SELECT `root.zoe`, `root.bob`,
@@ -718,10 +718,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = new DataRepoBigQuerySupport {}
     provider.generateExpressionSQL(selectAndFroms) shouldBe
       """CREATE TEMP FUNCTION dedup_1(val ANY TYPE) AS ((
-        |  SELECT ARRAY_AGG(STRUCT(datarepo_row_id, another, zoe, bob)) FROM (
-        |    SELECT datarepo_row_id, another, ARRAY_AGG(DISTINCT ac_2) zoe, ARRAY_AGG(DISTINCT ac_3) bob
-        |    FROM (SELECT DISTINCT datarepo_row_id, another, ac_2, ac_3 FROM UNNEST(val) v, UNNEST(v.zoe) ac_2, UNNEST(v.bob) ac_3)
-        |    GROUP BY datarepo_row_id, another
+        |  SELECT ARRAY_AGG(STRUCT(`datarepo_row_id`, `another`, `zoe`, `bob`)) FROM (
+        |    SELECT `datarepo_row_id`, `another`, ARRAY_AGG(DISTINCT `ac_2`) `zoe`, ARRAY_AGG(DISTINCT `ac_3`) `bob`
+        |    FROM (SELECT DISTINCT `datarepo_row_id`, `another`, `ac_2`, `ac_3` FROM UNNEST(val) v, UNNEST(v.`zoe`) `ac_2`, UNNEST(v.`bob`) `ac_3`)
+        |    GROUP BY `datarepo_row_id`, `another`
         |  )
         |));
         |SELECT `root.zoe`, `root.bob`,
@@ -749,10 +749,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = new DataRepoBigQuerySupport {}
     provider.generateExpressionSQL(selectAndFroms) shouldBe
       """CREATE TEMP FUNCTION dedup_1(val ANY TYPE) AS ((
-        |  SELECT ARRAY_AGG(STRUCT(bob, zoe)) FROM (
-        |    SELECT bob, ARRAY_AGG(DISTINCT ac_2) zoe
-        |    FROM (SELECT DISTINCT bob, ac_2 FROM UNNEST(val) v, UNNEST(v.zoe) ac_2)
-        |    GROUP BY bob
+        |  SELECT ARRAY_AGG(STRUCT(`bob`, `zoe`)) FROM (
+        |    SELECT `bob`, ARRAY_AGG(DISTINCT `ac_2`) `zoe`
+        |    FROM (SELECT DISTINCT `bob`, `ac_2` FROM UNNEST(val) v, UNNEST(v.`zoe`) `ac_2`)
+        |    GROUP BY `bob`
         |  )
         |));
         |SELECT `root.zoe`, `root.bob`,

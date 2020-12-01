@@ -445,9 +445,9 @@ trait DataRepoBigQuerySupport extends LazyLogging {
   private[datarepo] def dedupFunction(dedupFunctionName: String, selectAndFrom: SelectAndFrom): String = {
     val (arrayColumns, scalarColumns) = selectAndFrom.selectColumns.partition(_.isArray)
     val dedupFunctionDef = if (arrayColumns.nonEmpty) {
-      val arrayColumnNames = arrayColumns.map(c => validateSql(c.column))
-      val arrayColumnNameWithAliases = arrayColumnNames.zip(Seq.fill(arrayColumnNames.size)(nextAlias("ac")))
-      val scalarColumnNames = scalarColumns.map(c => validateSql(c.column))
+      val arrayColumnNames = arrayColumns.map(c => s"`${validateSql(c.column)}`")
+      val arrayColumnNameWithAliases = arrayColumnNames.zip(Seq.fill(arrayColumnNames.size)(s"`${nextAlias("ac")}`"))
+      val scalarColumnNames = scalarColumns.map(c => s"`${validateSql(c.column)}`")
 
       val scalarColumnList = scalarColumnNames.mkString(", ")
       val arrayAliasList = arrayColumnNameWithAliases.map(_._2).mkString(", ")
