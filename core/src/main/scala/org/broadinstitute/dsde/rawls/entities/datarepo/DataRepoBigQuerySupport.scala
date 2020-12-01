@@ -396,7 +396,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
       throw new DataEntityException(s"expected rootTableJoin.join to be None")
     }
 
-    val rootSelectFragment = (rootTableJoin.selectColumns).map(_.qualifiedName).mkString(", ")
+    val rootSelectFragment = (rootTableJoin.selectColumns).map(c => s"`${c.qualifiedName}`").mkString(", ")
     val rootFromFragment = rootTableJoin.fromTable.nameInQuery
 
     val (selectFragments, fromFragments, dedupFunctionDefs) = selectAndFroms.tail.map { selectAndFrom =>
@@ -410,7 +410,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         val dedupFunctionDef = dedupFunction(dedupFunctionName, selectAndFrom)
         (
           // important that selectAndFrom.selectColumns added in order so that the indexes in the result set are as expected
-          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(_.qualifiedName).mkString(", ")}))) ${relationship.alias}"),
+          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(c => s"`${c.qualifiedName}`").mkString(", ")}))) ${relationship.alias}"),
           scala.Option(dedupFunctionDef)
         )
       }
@@ -569,10 +569,10 @@ trait DataRepoBigQuerySupport extends LazyLogging {
       // in this case the "from" column is an array so the join needs more fancy
       // note alias must not start with a number
       val unnestJoinAlias = nextAlias("unnest")
-      s"""LEFT JOIN UNNEST(${relationship.from.qualifiedName}) $unnestJoinAlias
-         |LEFT JOIN ${relationship.to.table.nameInQuery} ON $unnestJoinAlias = ${relationship.to.qualifiedName}""".stripMargin
+      s"""LEFT JOIN UNNEST(`${relationship.from.qualifiedName}`) `$unnestJoinAlias`
+         |LEFT JOIN ${relationship.to.table.nameInQuery} ON `$unnestJoinAlias` = `${relationship.to.qualifiedName}`""".stripMargin
     } else {
-      s"LEFT JOIN ${relationship.to.table.nameInQuery} ON ${relationship.from.qualifiedName} = ${relationship.to.qualifiedName}"
+      s"LEFT JOIN ${relationship.to.table.nameInQuery} ON `${relationship.from.qualifiedName}` = `${relationship.to.qualifiedName}`"
     }
   }
 
