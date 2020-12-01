@@ -5629,6 +5629,9 @@ components:
         workspaceVersion:
           type: string
           description: internal use
+        billingAccount:
+          type: string
+          description: billing account being used for the workspace
       description: ""
     WorkspaceSubmissionStats:
       required:
