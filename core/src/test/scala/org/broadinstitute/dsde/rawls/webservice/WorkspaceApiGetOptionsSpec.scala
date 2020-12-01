@@ -67,7 +67,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     val workspace2Name = WorkspaceName(billingProject.projectName.value, "emptyattrs")
 
     val workspace1Id = UUID.randomUUID().toString
-    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", Some(workspace1Id), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x"), AttributeName.withDefaultNS("description") -> AttributeString("my description")), false)
+    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", Some(workspace1Id), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x"), AttributeName.withDefaultNS("description") -> AttributeString("my description")), false, WorkspaceVersions.V2, billingProject.googleProjectId, Some(RawlsBillingAccountName("billing-account")))
 
     val workspace2Id = UUID.randomUUID().toString
     val workspace2 = makeWorkspaceWithUsers(billingProject, workspace2Name.name, workspace2Id, "bucket2", Some(workspace2Id), testDate, testDate, "testUser", Map(), false)
@@ -127,9 +127,9 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
             entityQuery.save(ctx, sample5),
             entityQuery.save(ctx, sample6),
             entityQuery.save(ctx, sampleSet),
-    
+
             methodConfigurationQuery.create(ctx, methodConfig),
-    
+
             submissionQuery.create(ctx, submissionSuccess),
             submissionQuery.create(ctx, submissionFail),
             submissionQuery.create(ctx, submissionRunning1),

@@ -165,6 +165,22 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)))
   }
+  def makeWorkspaceWithUsers(project: RawlsBillingProject,
+                             name: String,
+                             workspaceId: String,
+                             bucketName: String,
+                             workflowCollectionName: Option[String],
+                             createdDate: DateTime,
+                             lastModified: DateTime,
+                             createdBy: String,
+                             attributes: AttributeMap,
+                             isLocked: Boolean,
+                             workspaceVersion: WorkspaceVersion,
+                             googleProjectId: GoogleProjectId,
+                             billingAccount: Option[RawlsBillingAccountName]) = {
+
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, billingAccount)
+  }
 
   class EmptyWorkspace() extends TestData {
     val userOwner = RawlsUser(userInfo)
