@@ -403,7 +403,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     verify(services.samDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
     verify(services.samDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)
   }
-  it should "return 204 on delete - without google project" in withEmptyDatabaseAndApiServices { services =>
+  it should "return 204 - without google project" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
     when(services.samDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Seq.empty[SamFullyQualifiedResourceId]))
@@ -420,7 +420,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     verify(services.samDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
   }
 
-  it should "return 400 on delete if workspaces exist" in withEmptyDatabaseAndApiServices { services =>
+  it should "return 400 if workspaces exist" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     runAndWait(workspaceQuery.createOrUpdate(Workspace(project.projectName.value, "workspace", UUID.randomUUID().toString, "", None, new DateTime(), new DateTime(), "", Map.empty)))
 
@@ -437,7 +437,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 403 on delete if user does not have access" in withEmptyDatabaseAndApiServices { services =>
+  it should "return 403 if user does not have access" in withEmptyDatabaseAndApiServices { services =>
     val project = billingProjectFromName("no_access")
     when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(false))
 
