@@ -60,7 +60,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
     // Call values are arrays of scatter shards.
     // Get the shards, which are JSON objects.
-    val scatterShards: List[JsonNode] = calls flatMap { c =>
+    calls flatMap { c =>
       c.elements().asScala.toList
     }
   }
@@ -273,7 +273,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             }
 
             // Fetch ALL call metadata from ALL subworkflows:
-            val callMetadataSections: List[JsonNode] = eventually {
+            val callMetadataSections = eventually {
               for {
                 firstWorkflowId: String <- firstTierWorkflowIds
                 cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
@@ -284,31 +284,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
                 _ = submittedOptions should include ("europe-north1b")
                 _ = submittedOptions should include ("europe-north1c")
 
-                subworkflowMetadata: JsonNode <- parseCallsFromMetadata(cromwellMetadata)
-                callMetadataWithinSubworkflows: JsonNode <- parseCallsFromMetadata(subworkflowMetadata)
+                subworkflowId: String <- parseSubWorkflowIdsFromMetadata(cromwellMetadata)
+                callMetadataWithinSubworkflows = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, subworkflowId)
 
-                _ = callMetadataWithinSubworkflows.get("executionStatus") should be("Done")
+                _ = callMetadataWithinSubworkflows should include (""""executionStatus": "Done"""")
 
               } yield callMetadataWithinSubworkflows
             }
 
-
-            // verify that Rawls can retrieve the sub-sub-workflow's metadata without throwing an exception.
-
-            eventually {
-              Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
-            }
-
-            // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
-            // https://github.com/DataBiosphere/firecloud-app/issues/157
-
-            val outputsTimeout = Timeout(scaled(Span(10, Seconds)))
-            eventually(outputsTimeout) {
-              Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
-              // nope https://github.com/DataBiosphere/firecloud-app/issues/160
-              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubWorkflowId)
-              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
-            }
           }
         }
       }
