@@ -21,7 +21,7 @@ object DataRepoBigQuerySupport {
   val datarepoRowIdColumn = "datarepo_row_id"
 
   def tableNameInQuery(dataProject: String, viewName: String, tableName: String, alias: scala.Option[String] = None): String = {
-    val aliasString = alias.map(a => " " + validateSql(a)).getOrElse("")
+    val aliasString = alias.map(a => s" `${validateSql(a)}`").getOrElse("")
     s"`${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(tableName)}`$aliasString"
   }
 

@@ -629,7 +629,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(SelectAndFrom(table, None, Seq(EntityColumn(table, "zoe", false), EntityColumn(table, "bob", true))))
 
     val provider = new DataRepoBigQuerySupport {}
-    provider.generateExpressionSQL(selectAndFroms) shouldBe "SELECT root.zoe, root.bob FROM `proj.view.table` root;"
+    provider.generateExpressionSQL(selectAndFroms) shouldBe "SELECT root.zoe, root.bob FROM `proj.view.table` `root`;"
   }
 
   it should "create query with regular joins" in {
@@ -650,8 +650,8 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         |));
         |SELECT root.zoe, root.bob,
         |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob))) foo
-        |FROM `proj.view.rootTable` root
-        |LEFT JOIN `proj.view.debTable` dep ON root.fk = dep.fk
+        |FROM `proj.view.rootTable` `root`
+        |LEFT JOIN `proj.view.debTable` `dep` ON root.fk = dep.fk
         |GROUP BY root.zoe, root.bob;""".stripMargin
   }
 
@@ -673,9 +673,9 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         |));
         |SELECT root.zoe, root.bob,
         |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob))) foo
-        |FROM `proj.view.rootTable` root
+        |FROM `proj.view.rootTable` `root`
         |LEFT JOIN UNNEST(root.fk) unnest_2
-        |LEFT JOIN `proj.view.debTable` dep ON unnest_2 = dep.fk
+        |LEFT JOIN `proj.view.debTable` `dep` ON unnest_2 = dep.fk
         |GROUP BY root.zoe, root.bob;""".stripMargin
   }
 
@@ -700,8 +700,8 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         |));
         |SELECT root.zoe, root.bob,
         |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob, dep.datarepo_row_id, dep.another))) foo
-        |FROM `proj.view.rootTable` root
-        |LEFT JOIN `proj.view.debTable` dep ON root.fk = dep.fk
+        |FROM `proj.view.rootTable` `root`
+        |LEFT JOIN `proj.view.debTable` `dep` ON root.fk = dep.fk
         |GROUP BY root.zoe, root.bob;""".stripMargin
   }
 
@@ -726,9 +726,9 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         |));
         |SELECT root.zoe, root.bob,
         |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob, dep.datarepo_row_id, dep.another))) foo
-        |FROM `proj.view.rootTable` root
+        |FROM `proj.view.rootTable` `root`
         |LEFT JOIN UNNEST(root.fk) unnest_4
-        |LEFT JOIN `proj.view.debTable` dep ON unnest_4 = dep.fk
+        |LEFT JOIN `proj.view.debTable` `dep` ON unnest_4 = dep.fk
         |GROUP BY root.zoe, root.bob;""".stripMargin
   }
 
@@ -757,9 +757,9 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         |));
         |SELECT root.zoe, root.bob,
         |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob))) bar
-        |FROM `proj.view.rootTable` root
-        |LEFT JOIN `proj.view.debTable` dep ON root.fk = dep.fk
-        |LEFT JOIN `proj.view.debTable2` dep2 ON dep.fk2 = dep2.fk2
+        |FROM `proj.view.rootTable` `root`
+        |LEFT JOIN `proj.view.debTable` `dep` ON root.fk = dep.fk
+        |LEFT JOIN `proj.view.debTable2` `dep2` ON dep.fk2 = dep2.fk2
         |GROUP BY root.zoe, root.bob;""".stripMargin
   }
 
