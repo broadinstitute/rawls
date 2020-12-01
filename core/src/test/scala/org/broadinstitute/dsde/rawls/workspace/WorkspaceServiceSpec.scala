@@ -1168,6 +1168,14 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
+  "getGoogleProjectFromRBS" should "get a Google Project ID" in withTestDataServices { services =>
+    val expected = GoogleProjectId("project-from-rbs")
+
+    services.resourceBufferService.getGoogleProjectFromRBS(ProjectPoolType.Regular, "workspaceId") map {projectId =>
+      assert(projectId == expected)
+    }
+  }
+
   "createWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
