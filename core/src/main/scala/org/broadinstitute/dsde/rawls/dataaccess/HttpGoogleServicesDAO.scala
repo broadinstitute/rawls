@@ -190,7 +190,13 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo,
+                              googleProject: GoogleProjectId,
+                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                              bucketName: String,
+                              labels: Map[String, String],
+                              parentSpan: Span = null,
+                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
     def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
@@ -243,7 +249,16 @@ class HttpGoogleServicesDAO(
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(googleProject.value), GcsBucketName(bucketName), None, labels, Option(traceId), true, Option(GcsBucketName(getStorageLogsBucketName(googleProject)))).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(
+        googleProject = GoogleProject(googleProject.value),
+        bucketName = GcsBucketName(bucketName),
+        acl = None,
+        labels = labels,
+        traceId = Option(traceId),
+        bucketPolicyOnlyEnabled = true,
+        logBucket = Option(GcsBucketName(getStorageLogsBucketName(googleProject))),
+        location = bucketLocation
+      ).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
       updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
       insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
       _ <- updateBucketIamFuture
@@ -436,6 +451,17 @@ class HttpGoogleServicesDAO(
     }) {
       case e => throw new RawlsException(s"Something went wrong while retrieving zones for region `$region` under Google " +
         s"project `${googleProject.value}`.", e)
+    }
+  }
+
+  // TODO: REMOVE BEFORE MERGING. Another PR (#1319) already has implemented this
+  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
+    getBucket(bucketName) map { maybeBucket =>
+      val bucket = maybeBucket.getOrElse(throw new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
+      bucket.getLocationType match {
+        case "region" => Option(bucket.getLocation.toLowerCase)
+        case _ => None
+      }
     }
   }
 

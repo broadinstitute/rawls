@@ -92,8 +92,13 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
-  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span =  null
-                             ): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo,
+                              googleProject: GoogleProjectId,
+                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                              bucketName: String,
+                              labels: Map[String, String],
+                              parentSpan: Span =  null,
+                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
 
     val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
     Future.successful(googleWorkspaceInfo)

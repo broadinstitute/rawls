@@ -105,14 +105,13 @@ object WorkspaceVersions {
   }
 }
 
-case class WorkspaceRequest (
-                              namespace: String,
-                              name: String,
-                              attributes: AttributeMap,
-                              authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
-                              copyFilesWithPrefix: Option[String] = None,
-                              noWorkspaceOwner: Option[Boolean] = None
-                      ) extends Attributable {
+case class WorkspaceRequest(namespace: String,
+                            name: String,
+                            attributes: AttributeMap,
+                            authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
+                            copyFilesWithPrefix: Option[String] = None,
+                            noWorkspaceOwner: Option[Boolean] = None,
+                            bucketLocation: Option[String] = None) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
@@ -708,7 +707,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityFormat = jsonFormat3(Entity)
 
-  implicit val WorkspaceRequestFormat = jsonFormat6(WorkspaceRequest)
+  implicit val WorkspaceRequestFormat = jsonFormat7(WorkspaceRequest)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
