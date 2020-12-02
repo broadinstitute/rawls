@@ -66,6 +66,8 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
 
     val testConf = ConfigFactory.load()
 
+    override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
+
     val entityServiceConstructor = EntityService.constructor(
       slickDataSource,
       samDAO,

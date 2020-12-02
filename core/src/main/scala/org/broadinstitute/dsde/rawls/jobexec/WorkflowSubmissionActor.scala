@@ -193,6 +193,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                         billingProject: RawlsBillingProject,
                         useCallCache: Boolean,
                         deleteIntermediateOutputFiles: Boolean,
+                        useReferenceDisks: Boolean,
                         workflowFailureMode: Option[WorkflowFailureMode]
                        ): ExecutionServiceWorkflowOptions = {
     val petSAEmail = petSAJson.parseJson.asJsObject.getFields("client_email").headOption match {
@@ -211,6 +212,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       runtimeOptions,
       useCallCache,
       deleteIntermediateOutputFiles,
+      useReferenceDisks,
       billingProject.cromwellBackend.getOrElse(defaultBackend),
       workflowFailureMode,
       google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
@@ -327,6 +329,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         billingProject = billingProject,
         useCallCache = submissionRec.useCallCache,
         deleteIntermediateOutputFiles = submissionRec.deleteIntermediateOutputFiles,
+        useReferenceDisks = submissionRec.useReferenceDisks,
         workflowFailureMode = WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode)
       )
         val submissionAndWorkspaceLabels = Map("submission-id" -> submissionRec.id.toString,  "workspace-id" -> workspaceRec.id.toString)

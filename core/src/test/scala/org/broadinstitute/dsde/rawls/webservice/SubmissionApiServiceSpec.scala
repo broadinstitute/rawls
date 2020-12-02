@@ -867,6 +867,43 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   }
 
+  private val useReferenceDisksCases = Table(
+    ("description", "useReferenceDisksOption", "useReferenceDisksResult"),
+    ("allow submission with useReferenceDisks unset", None, false),
+    ("allow submission with useReferenceDisks false", Option(false), false),
+    ("allow submission with useReferenceDisks true", Option(true), true),
+  )
+
+  forAll(useReferenceDisksCases) {
+    (description, useReferenceDisksOption, useReferenceDisksResult) =>
+
+      it should description in {
+        withTestDataApiServices { services =>
+          val workspaceName = testData.wsName
+          val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+          ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+          Post(
+            s"${workspaceName.path}/submissions",
+            JsObject(
+              requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+                List(
+                  useReferenceDisksOption.map(x => "useReferenceDisks" -> x.toJson),
+                ).flatten: _*
+            )
+          ) ~>
+            sealRoute(services.submissionRoutes) ~>
+            check {
+              val response = responseAs[String]
+              status should be(StatusCodes.Created)
+              val requestUseReferenceDisksOption = getResponseField(response, "useReferenceDisks")
+              requestUseReferenceDisksOption should be(Option(JsBoolean(useReferenceDisksResult)))
+            }
+        }
+      }
+
+  }
+
   it should "return 400 Bad Request when deleteIntermediateOutputFiles is an integer" in {
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName

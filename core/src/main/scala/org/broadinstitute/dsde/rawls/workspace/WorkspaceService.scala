@@ -1438,6 +1438,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         status = SubmissionStatuses.Submitted,
         useCallCache = submissionRequest.useCallCache,
         deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
+        useReferenceDisks = submissionRequest.useReferenceDisks,
         workflowFailureMode = workflowFailureMode,
         externalEntityInfo = for {
           entityType <- header.entityType
