@@ -621,7 +621,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, billingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
     val billingSvcCred = getBillingServiceAccountCredential
     implicit val service = GoogleInstrumentedService.Billing
     val googleProjectName = s"projects/${googleProjectId.value}"
@@ -629,7 +629,7 @@ class HttpGoogleServicesDAO(
 
     val fetcher = cloudBillingProjectsApi.getBillingInfo(googleProjectName)
 
-    val updater = billingAccount match {
+    val updater = newBillingAccount match {
       case Some(RawlsBillingAccountName(billingAccountName)) =>
         cloudBillingProjectsApi.updateBillingInfo(googleProjectName,
           new ProjectBillingInfo().setBillingAccountName(billingAccountName).setBillingEnabled(true))
@@ -640,7 +640,7 @@ class HttpGoogleServicesDAO(
     retryWithRecoverWhen500orGoogleError(() => {
       blocking {
         val projectBillingInfo = executeGoogleRequest(fetcher)
-        val shouldUpdate = billingAccount match {
+        val shouldUpdate = newBillingAccount match {
           case Some(RawlsBillingAccountName(billingAccountName)) =>
             projectBillingInfo.getBillingAccountName != billingAccountName || projectBillingInfo.getBillingEnabled == false
           case None =>
@@ -656,7 +656,7 @@ class HttpGoogleServicesDAO(
       case gjre: GoogleJsonResponseException
         if gjre.getStatusCode == StatusCodes.Forbidden.intValue =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
-          s"Rawls service account does not have access to billing account [${billingAccount.map(_.value)}]", gjre))
+          s"Rawls service account does not have access to billing account [${newBillingAccount.map(_.value)}]", gjre))
     }
   }
 

@@ -137,7 +137,7 @@ case class Workspace(
                       workspaceVersion: WorkspaceVersion,
                       googleProjectId: GoogleProjectId,
                       googleProjectNumber: Option[GoogleProjectNumber],
-                      billingAccount: Option[RawlsBillingAccountName]
+                      currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -580,7 +580,7 @@ object WorkspaceDetails {
       workspace.workspaceVersion,
       workspace.googleProjectId,
       workspace.googleProjectNumber,
-      workspace.billingAccount
+      workspace.currentBillingAccountOnGoogleProject
     )
   }
 }

@@ -49,7 +49,7 @@ case class RawlsBillingProject(projectName: RawlsBillingProjectName, status: Cre
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
 }
 
-case class WorkspaceBillingAccount(workspaceName: WorkspaceName, billingAccountName: Option[RawlsBillingAccountName])
+case class WorkspaceBillingAccount(workspaceName: WorkspaceName, currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName])
 
 case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName,
                                        billingAccount: Option[RawlsBillingAccountName],

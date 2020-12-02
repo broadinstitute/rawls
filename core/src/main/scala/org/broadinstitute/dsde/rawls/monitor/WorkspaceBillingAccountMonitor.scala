@@ -36,21 +36,21 @@ class WorkspaceBillingAccountMonitor(datasource: SlickDataSource, gcsDAO: Google
         dataAccess.workspaceQuery.listWorkspaceGoogleProjectsToUpdateWithNewBillingAccount()
       }
       _ <- workspacesToUpdate.toList.traverse {
-        case (googleProjectId, billingAccount) => IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, billingAccount)))
+        case (googleProjectId, newBillingAccount) => IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount)))
       }.unsafeToFuture()
     } yield()
   }
 
-  private def updateGoogleAndDatabase(googleProjectId: GoogleProjectId, billingAccount: Option[RawlsBillingAccountName]): Future[Int] = {
+  private def updateGoogleAndDatabase(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[Int] = {
     for {
-      _ <- gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, billingAccount).recoverWith {
-        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && billingAccount.isDefined =>
+      _ <- gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, newBillingAccount).recoverWith {
+        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
           datasource.inTransaction( { dataAccess =>
-            dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccount.get, isInvalid = true)
+            dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(newBillingAccount.get, isInvalid = true)
           }).map(_ => throw e)
       }
       dbResult <- datasource.inTransaction( { dataAccess =>
-        dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, billingAccount)
+        dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
       })
     } yield dbResult
   }
