@@ -1850,7 +1850,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     * @param span
     * @return Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
     */
-  private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null): Future[(GoogleProjectId, GoogleProjectNumber)] = {
+  private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null, workspaceId: String) = {
     // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
     // Option, so we are being thorough
     val billingAccount = billingProject.billingAccount match {
@@ -2103,7 +2103,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
 
             traceDBIOWithParent("getPolicySyncStatus", s1)(_ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { projectOwnerPolicyEmail =>
-              traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, s1))).flatMap { case (googleProjectId, googleProjectNumber) =>
+              traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, s1, workspaceId))).flatMap { case (googleProjectId, googleProjectNumber) =>
                 traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
                   for {
                     //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
