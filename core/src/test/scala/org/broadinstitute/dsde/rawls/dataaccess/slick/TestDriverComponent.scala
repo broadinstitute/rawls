@@ -162,7 +162,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                     attributes: AttributeMap,
                     isLocked: Boolean) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)))
   }
 
   class EmptyWorkspace() extends TestData {
@@ -178,7 +178,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace)
+        workspaceQuery.createOrUpdate(workspace)
       )
     }
   }
@@ -196,7 +196,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq (
-        workspaceQuery.save(workspace)
+        workspaceQuery.createOrUpdate(workspace)
       )
     }
   }
@@ -227,16 +227,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
     val dbGapAuthorizedUsersGroup = ManagedGroupRef(RawlsGroupName("dbGapAuthorizedUsers"))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), CreationStatuses.Ready, None, None)
+    val billingAccountName = RawlsBillingAccountName("fakeBillingAcct")
+
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1 = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, None, None)
+    val testProject1 = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject2Name = RawlsBillingProjectName("project2")
-    val testProject2 = RawlsBillingProject(testProject2Name, CreationStatuses.Ready, None, None)
+    val testProject2 = RawlsBillingProject(testProject2Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject3Name = RawlsBillingProjectName("project3")
-    val testProject3 = RawlsBillingProject(testProject3Name, CreationStatuses.Ready, None, None)
+    val testProject3 = RawlsBillingProject(testProject3Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -821,7 +823,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceWorkflowFailureMode,
       workspaceToTestGrant,
       workspaceConfigCopyDestination)
-    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
+    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
 
     override def save() = {
       DBIO.seq(
@@ -978,8 +980,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspace2)
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(workspace2)
       )
     }
   }
@@ -1114,7 +1116,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
             entityQuery.save(context, allEntities),

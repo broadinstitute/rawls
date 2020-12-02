@@ -212,8 +212,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
 
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspace2),
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(workspace2),
 
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
@@ -277,29 +277,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           header("Location")
         }
       }
-  }
-
-  it should "return 400 for post to workspaces with not ready project" in withTestDataApiServices { services =>
-    val newWorkspace = WorkspaceRequest(
-      namespace = testData.billingProject.projectName.value,
-      name = "newWorkspace",
-      Map.empty
-    )
-
-    Seq(CreationStatuses.Creating, CreationStatuses.Error).foreach { projectStatus =>
-      runAndWait(rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.billingProject.copy(status = projectStatus))))
-
-      Post(s"/workspaces", httpJson(newWorkspace)) ~>
-        sealRoute(services.workspaceRoutes) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
-          assertResult(None) {
-            header("Location")
-          }
-        }
-    }
   }
 
   it should "return 403 on create workspace with invalid-namespace attributes" in withTestDataApiServices { services =>
@@ -935,7 +912,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "return 201 on clone workspace with existing library-namespace attributes" in withTestDataApiServices { services =>
 
     val updatedWorkspace = testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo")))
-    runAndWait(workspaceQuery.save(updatedWorkspace))
+    runAndWait(workspaceQuery.createOrUpdate(updatedWorkspace))
 
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
@@ -1465,11 +1442,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServicesMockitoSam { services =>
+    val billingProjectName = testData.wsName.namespace.value
     when(services.samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
-    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, "no_access", SamBillingProjectActions.createWorkspace, userInfo)).thenReturn(Future.successful(false))
+    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, billingProjectName, SamBillingProjectActions.createWorkspace, userInfo)).thenReturn(Future.successful(false))
 
     val newWorkspace = WorkspaceRequest(
-      namespace = "no_access",
+      namespace = billingProjectName,
       name = "newWorkspace",
       Map.empty
     )
@@ -1477,7 +1455,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.Forbidden, responseAs[String]) {
           status
         }
       }

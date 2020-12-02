@@ -115,8 +115,8 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
 
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspace2),
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(workspace2),
 
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
@@ -303,7 +303,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
         check {
           assertResult(StatusCodes.OK) { status }
           val actual = responseAs[String].parseJson.asJsObject
-          val workspaceFields  = actual.fields.get("workspace").getOrElse(new JsObject(Map.empty)).asJsObject.fields
+          val workspaceFields  = actual.fields.getOrElse("workspace", new JsObject(Map.empty)).asJsObject.fields
           assert(workspaceFields.contains(workspaceKey))
         }
     }

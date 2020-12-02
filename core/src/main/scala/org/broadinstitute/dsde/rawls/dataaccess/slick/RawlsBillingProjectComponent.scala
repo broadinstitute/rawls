@@ -89,10 +89,14 @@ trait RawlsBillingProjectComponent {
 
     def listProjectsWithServicePerimeterAndStatus(servicePerimeter: ServicePerimeterName, statuses: CreationStatus*): ReadWriteAction[Seq[RawlsBillingProject]] = {
       for {
-        projectRecords <- filter(rec => rec.servicePerimeter === servicePerimeter.value && rec.creationStatus.inSetBind(statuses.map(_.toString))).result
+        projectRecords <- getProjectsWithPerimeterAndStatusQuery(servicePerimeter, statuses).result
       } yield {
         projectRecords.map(unmarshalBillingProject)
       }
+    }
+
+    def getProjectsWithPerimeterAndStatusQuery(servicePerimeter: ServicePerimeterName, statuses: Seq[CreationStatus]): RawlsBillingProjectQuery = {
+      filter(rec => rec.servicePerimeter === servicePerimeter.value && rec.creationStatus.inSetBind(statuses.map(_.toString)))
     }
 
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {

@@ -239,12 +239,12 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
-      val petJson = Await.result(workflowSubmission.samDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProject, testData.userOwner.userEmail), Duration.Inf)
+      val petJson = Await.result(workflowSubmission.samDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId, testData.userOwner.userEmail), Duration.Inf)
       assertResult(
         Some(
           ExecutionServiceWorkflowOptions(
             jes_gcs_root = s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}",
-            google_project = testData.wsName.namespace,
+            google_project = testData.workspace.googleProjectId.value,
             account_name = testData.userOwner.userEmail.value,
             google_compute_service_account = "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
             user_service_account_json =
@@ -333,7 +333,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(ctx.googleProject)(requesterPaysRole) should contain theSameElementsAs
+      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
         List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
     }
   }
@@ -366,7 +366,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(ctx.googleProject)(requesterPaysRole) should contain theSameElementsAs
+      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
         List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
     }
   }
@@ -408,7 +408,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       // Verify
       val expectedClientEmail = List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
-      mockGoogleServicesDAO.policies(ctx.googleProject)(requesterPaysRole) should contain theSameElementsAs expectedClientEmail
+      mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs expectedClientEmail
     }
   }
 

@@ -11,7 +11,7 @@ import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, Ref
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -26,7 +26,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -258,7 +258,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sample1),
@@ -887,7 +887,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val workspaceAttrValue = "foobar"
       val inputsWithWorkspaceExpression = methodConfig.inputs.map { case (name, expr) => name -> AttributeString(s"""{"entity": ${expr.value}, "workspace": workspace.$workspaceAttrName}""")}
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(inputs =  inputsWithWorkspaceExpression)))
-      runAndWait(workspaceQuery.save(minimalTestData.workspace.copy(attributes = Map(AttributeName.withDefaultNS(workspaceAttrName) -> AttributeString(workspaceAttrValue)))))
+      runAndWait(workspaceQuery.createOrUpdate(minimalTestData.workspace.copy(attributes = Map(AttributeName.withDefaultNS(workspaceAttrName) -> AttributeString(workspaceAttrValue)))))
 
       val vComplete = Await.result(workspaceService.createSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
       val (vStatus, resultSubmission) = vComplete.response

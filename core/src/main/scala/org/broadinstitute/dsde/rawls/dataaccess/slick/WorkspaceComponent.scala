@@ -19,18 +19,19 @@ import scala.language.postfixOps
  * Created by dvoet on 2/4/16.
  */
 case class WorkspaceRecord(
-  namespace: String,
-  name: String,
-  id: UUID,
-  bucketName: String,
-  workflowCollection: Option[String],
-  createdDate: Timestamp,
-  lastModified: Timestamp,
-  createdBy: String,
-  isLocked: Boolean,
-  recordVersion: Long,
-  workspaceVersion: String,
-  googleProject: String) {
+                            namespace: String,
+                            name: String,
+                            id: UUID,
+                            bucketName: String,
+                            workflowCollection: Option[String],
+                            createdDate: Timestamp,
+                            lastModified: Timestamp,
+                            createdBy: String,
+                            isLocked: Boolean,
+                            recordVersion: Long,
+                            workspaceVersion: String,
+                            googleProjectId: String,
+                            googleProjectNumber: Option[String]) {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
 }
 
@@ -40,7 +41,8 @@ trait WorkspaceComponent {
     with EntityComponent
     with SubmissionComponent
     with WorkflowComponent
-    with MethodConfigurationComponent =>
+    with MethodConfigurationComponent
+    with RawlsBillingProjectComponent =>
 
   import driver.api._
 
@@ -56,11 +58,12 @@ trait WorkspaceComponent {
     def isLocked = column[Boolean]("is_locked")
     def recordVersion = column[Long]("record_version")
     def workspaceVersion = column[String]("workspace_version")
-    def googleProject = column[String]("google_project")
+    def googleProjectId = column[String]("google_project_id")
+    def googleProjectNumber = column[Option[String]]("google_project_number")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProject) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   /** raw/optimized SQL queries for working with workspace attributes
@@ -152,7 +155,14 @@ trait WorkspaceComponent {
       loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
     }
 
-    def save(workspace: Workspace): ReadWriteAction[Workspace] = {
+    /**
+      * Creates or updates the provided Workspace.  First queries the database to see if a Workspace record already
+      * exists with the same workspaceId.  If yes, then the existing Workspace record will be updated, otherwise a new
+      * Workspace record will be created.
+      * @param workspace
+      * @return The updated or created Workspace
+      */
+    def createOrUpdate(workspace: Workspace): ReadWriteAction[Workspace] = {
       validateUserDefinedString(workspace.namespace)
       validateWorkspaceName(workspace.name)
       workspace.attributes.keys.foreach { attrName =>
@@ -206,6 +216,10 @@ trait WorkspaceComponent {
 
     def listByIds(workspaceIds: Seq[UUID], attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Seq[Workspace]] = {
       loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
+    }
+
+    def listByNamespaces(namespaceNames: Seq[RawlsBillingProjectName]): ReadAction[Seq[Workspace]] = {
+      loadWorkspaces(findByNamespacesQuery(namespaceNames))
     }
 
     def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] = {
@@ -262,6 +276,15 @@ trait WorkspaceComponent {
         attribute <- workspaceAttributeQuery.queryByAttribute(attrName, attrValue)
         workspace <- workspaceQuery if workspace.id === attribute.ownerId
       } yield workspace
+    }
+
+    def getWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): ReadAction[Seq[Workspace]] = {
+      val workspaces = for {
+        billingProject <- rawlsBillingProjectQuery.getProjectsWithPerimeterAndStatusQuery(servicePerimeterName, CreationStatuses.all.toSeq)
+        workspace <- workspaceQuery if workspace.namespace === billingProject.projectName
+      } yield workspace
+
+      loadWorkspaces(workspaces)
     }
 
     /**
@@ -370,6 +393,10 @@ trait WorkspaceComponent {
       filter(rec => (rec.namespace === namespaceName.value))
     }
 
+    private def findByNamespacesQuery(namespaceNames: Seq[RawlsBillingProjectName]): WorkspaceQueryType = {
+      filter(_.namespace.inSetBind(namespaceNames.map(_.value)))
+    }
+
     private def loadWorkspace(lookup: WorkspaceQueryType, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Option[Workspace]] = {
         uniqueResult(loadWorkspaces(lookup, attributeSpecs))
     }
@@ -389,12 +416,12 @@ trait WorkspaceComponent {
       }
     }
 
-    private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProject.value)
+    private def marshalNewWorkspace(workspace: Workspace): WorkspaceRecord = {
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value))
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProject))
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProjectId), workspaceRec.googleProjectNumber.map(GoogleProjectNumber))
     }
   }
 

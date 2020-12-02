@@ -22,7 +22,7 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
   def grantRequesterPaysToLinkedSAs(userInfo: UserInfo, workspace: Workspace): Future[List[BondServiceAccountEmail]] = {
     for {
       emails <- getBondProviderServiceAccountEmails(userInfo)
-      _ <- googleServicesDAO.addPolicyBindings(workspace.googleProject, Map(requesterPaysRole -> emails.toSet.map{mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
+      _ <- googleServicesDAO.addPolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.toSet.map{ mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
       _ <- dataSource.inTransaction { dataAccess => dataAccess.workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName, userInfo.userEmail, emails.toSet) }
     } yield {
       emails
@@ -49,7 +49,7 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
       _ <- if (keepBindings) {
         Future.successful(())
       } else {
-        googleServicesDAO.removePolicyBindings(workspace.googleProject, Map(requesterPaysRole -> emails.map("serviceAccount:" + _)))
+        googleServicesDAO.removePolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.map("serviceAccount:" + _)))
       }
     } yield ()
   }

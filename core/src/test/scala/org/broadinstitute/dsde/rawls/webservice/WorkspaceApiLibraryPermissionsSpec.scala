@@ -78,7 +78,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
       import driver.api._
 
       DBIO.seq(
-        workspaceQuery.save(unpublishedWorkspace),
+        workspaceQuery.createOrUpdate(unpublishedWorkspace),
       )
     }
   }

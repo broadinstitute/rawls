@@ -422,7 +422,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   it should "return 400 if workspaces exist" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
-    runAndWait(workspaceQuery.save(Workspace(project.projectName.value, "workspace", UUID.randomUUID().toString, "", None, new DateTime(), new DateTime(), "", Map.empty)))
+    runAndWait(workspaceQuery.createOrUpdate(Workspace(project.projectName.value, "workspace", UUID.randomUUID().toString, "", None, new DateTime(), new DateTime(), "", Map.empty)))
 
     when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
     when(services.samDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Seq.empty[SamFullyQualifiedResourceId]))

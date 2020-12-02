@@ -38,7 +38,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     // determine project to be billed for the BQ job TODO: need business logic from PO!
     requestArguments.billingProject match {
       case Some(billing) => billing.googleProjectId
-      case None => requestArguments.workspace.googleProject
+      case None => requestArguments.workspace.googleProjectId
     }
   }
 

@@ -32,6 +32,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getGoogleProject(googleProject: GoogleProjectId): Future[Project]
 
+  def setBillingAccountForProject(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, billingEnabled: Boolean = true): Future[Unit]
+
   /** Mark all objects in the bucket for deletion, then attempts to delete the bucket from Google Cloud Storage.
     *
     * The bucket's lifecycle rule is set to delete any objects older than 0 days. This
@@ -103,6 +105,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit]
 
   def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]]
+
+  def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean]
 
   /**
     * Lists Google billing accounts using the billing service account.

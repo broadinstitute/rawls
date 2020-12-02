@@ -120,6 +120,9 @@ case class WorkspaceRequest (
 
 case class GoogleProjectId(value: String) extends ValueObject
 
+// All Workspaces are backed by a Google Project identified by googleProjectId.  The googleProjectNumber is a different
+// identifier that we only really need when adding the Workspace to a Service Perimeter.  For efficiency, we added the
+// GoogleProjectNumber field here.
 case class Workspace(
                       namespace: String,
                       name: String,
@@ -132,7 +135,8 @@ case class Workspace(
                       attributes: AttributeMap,
                       isLocked: Boolean,
                       workspaceVersion: WorkspaceVersion,
-                      googleProject: GoogleProjectId
+                      googleProjectId: GoogleProjectId,
+                      googleProjectNumber: Option[GoogleProjectNumber]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -143,18 +147,17 @@ case class Workspace(
 object Workspace {
   /** convenience constructor that defaults workspace version to v1 and google project to namespace */
   def apply(namespace: String,
-           name: String,
-           workspaceId: String,
-           bucketName: String,
-           workflowCollectionName: Option[String],
-           createdDate: DateTime,
-           lastModified: DateTime,
-           createdBy: String,
-           attributes: AttributeMap,
-           isLocked: Boolean = false): Workspace = {
-    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace))
+    name: String,
+    workspaceId: String,
+    bucketName: String,
+    workflowCollectionName: Option[String],
+    createdDate: DateTime,
+    lastModified: DateTime,
+    createdBy: String,
+    attributes: AttributeMap,
+    isLocked: Boolean = false): Workspace = {
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace), None)
   }
-
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -500,8 +503,9 @@ case class WorkspaceDetails(namespace: String,
                             isLocked: Boolean = false,
                             authorizationDomain: Option[Set[ManagedGroupRef]],
                             workspaceVersion: WorkspaceVersion,
-                            googleProject: GoogleProjectId) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject)
+                            googleProjectId: GoogleProjectId,
+                            googleProjectNumber: Option[GoogleProjectNumber]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProjectId, googleProjectNumber)
 }
 
 
@@ -571,7 +575,8 @@ object WorkspaceDetails {
       workspace.isLocked,
       optAuthorizationDomain,
       workspace.workspaceVersion,
-      workspace.googleProject
+      workspace.googleProjectId,
+      workspace.googleProjectNumber
     )
   }
 }
@@ -774,6 +779,8 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val GoogleProjectIdFormat = ValueObjectFormat(GoogleProjectId)
 
+  implicit val GoogleProjectNumberFormat = ValueObjectFormat(GoogleProjectNumber)
+
   implicit val MethodConfigurationFormat = jsonFormat11(MethodConfiguration)
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
@@ -788,7 +795,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat13(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat14(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

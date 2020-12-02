@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.scalatest.concurrent.Eventually
-import org.scalatest.BeforeAndAfterEach
+import org.scalatest.{BeforeAndAfterEach, OptionValues}
 import org.mockito.{ArgumentMatcher, ArgumentMatchers}
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
@@ -21,7 +21,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
-class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterEach with Eventually {
+class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterEach with Eventually with OptionValues {
   val defaultExecutionContext: ExecutionContext = executionContext
 
   val defaultServicePerimeterName: ServicePerimeterName = ServicePerimeterName("accessPolicies/policyName/servicePerimeters/servicePerimeterName")
@@ -41,7 +41,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLik
 
   "CreatingBillingProjectMonitor" should "set project status to 'AddingToPerimeter' when it's been successfully created and it has a service perimeter" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Creating, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Creating, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = None)
       val creatingOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", true, None, GoogleApiTypes.DeploymentManagerApi)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -53,10 +53,11 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLik
         Await.result(creatingBillingProjectMonitor.checkCreatingProjects(), Duration.Inf)
       }
 
-      // the only thing that should change is the status
-      assertResult(Some(billingProject.copy(status = CreationStatuses.AddingToPerimeter))) {
-        runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
-      }
+      // If the project was successfully created, we should see that the Billing Project Status is set to
+      // AddingToPerimeter, and we should also see that the Google Project Number field is now populated
+      val billingProjectResult = runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
+      billingProjectResult.value.status shouldEqual CreationStatuses.AddingToPerimeter
+      billingProjectResult.value.googleProjectNumber shouldBe defined
     }
   }
 
@@ -71,7 +72,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLik
       runAndWait(rawlsBillingProjectQuery.create(existingBillingProject))
 
       val mockAcmDAO = mock[AccessContextManagerDAO](RETURNS_SMART_NULLS)
-      when(mockAcmDAO.overwriteProjectsInServicePerimeter(ArgumentMatchers.any[ServicePerimeterName], ArgumentMatchers.any[Seq[String]])).thenReturn(Future.successful(new Operation().setDone(false).setName("test-op-id")))
+      when(mockAcmDAO.overwriteProjectsInServicePerimeter(ArgumentMatchers.any[ServicePerimeterName], ArgumentMatchers.any[Set[String]])).thenReturn(Future.successful(new Operation().setDone(false).setName("test-op-id")))
 
       val mockGcsDAO = new MockGoogleServicesDAO("test", accessContextManagerDAO = mockAcmDAO)
       val creatingBillingProjectMonitor = getCreatingBillingProjectMonitor(dataSource, mockGcsDAO)
@@ -80,14 +81,8 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLik
         Await.result(creatingBillingProjectMonitor.checkCreatingProjects(), Duration.Inf)
       }
 
-      // seqs are ordered, but we don't care about that so this will match regardless of order
-      val seqMatcher = new ArgumentMatcher[Seq[String]] {
-        override def matches(argument: Seq[String]): Boolean = {
-          val expected = Seq(newBillingProjectNumber.value, existingBillingProjectNumber.value)
-          expected.sorted == argument.sorted
-        }
-      }
-      verify(mockAcmDAO, times(1)).overwriteProjectsInServicePerimeter(ArgumentMatchers.eq(defaultServicePerimeterName), ArgumentMatchers.argThat(seqMatcher))
+      val expectedProjectsInPerimeter = Set(newBillingProjectNumber.value, existingBillingProjectNumber.value)
+      verify(mockAcmDAO, times(1)).overwriteProjectsInServicePerimeter(ArgumentMatchers.eq(defaultServicePerimeterName), ArgumentMatchers.eq(expectedProjectsInPerimeter))
     }
   }
 
@@ -112,17 +107,11 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLik
       val mockAcmDAO = mock[AccessContextManagerDAO](RETURNS_SMART_NULLS)
 
       val otherPerimeterOpId = "add-to-other-perimeter"
-      when(mockAcmDAO.overwriteProjectsInServicePerimeter(otherServicePerimeter, Seq(projectNumber3.value))).thenReturn(Future.successful(new Operation().setDone(false).setName(otherPerimeterOpId)))
+      when(mockAcmDAO.overwriteProjectsInServicePerimeter(otherServicePerimeter, Set(projectNumber3.value))).thenReturn(Future.successful(new Operation().setDone(false).setName(otherPerimeterOpId)))
 
-      // seqs are ordered, but we don't care about that so this will match regardless of order
-      val seqMatcher = new ArgumentMatcher[Seq[String]] {
-        override def matches(argument: Seq[String]): Boolean = {
-          val expected = Seq(projectNumber1.value, projectNumber2.value)
-          expected.sorted == argument.sorted
-        }
-      }
       val defaultPerimeterOpId = "two-projects-default-perimeter"
-      when(mockAcmDAO.overwriteProjectsInServicePerimeter(ArgumentMatchers.eq(defaultServicePerimeterName), ArgumentMatchers.argThat(seqMatcher))).thenReturn(Future.successful(new Operation().setDone(false).setName(defaultPerimeterOpId)))
+      val argProjectsInPerimeter = Set(projectNumber1.value, projectNumber2.value)
+      when(mockAcmDAO.overwriteProjectsInServicePerimeter(ArgumentMatchers.eq(defaultServicePerimeterName), ArgumentMatchers.eq(argProjectsInPerimeter))).thenReturn(Future.successful(new Operation().setDone(false).setName(defaultPerimeterOpId)))
 
       val mockGcsDAO = new MockGoogleServicesDAO("test", accessContextManagerDAO = mockAcmDAO)
       val creatingBillingProjectMonitor = getCreatingBillingProjectMonitor(dataSource, mockGcsDAO)
@@ -131,8 +120,8 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLik
         Await.result(creatingBillingProjectMonitor.checkCreatingProjects(), Duration.Inf)
       }
 
-      verify(mockAcmDAO, times(1)).overwriteProjectsInServicePerimeter(otherServicePerimeter, Seq(projectNumber3.value))
-      verify(mockAcmDAO, times(1)).overwriteProjectsInServicePerimeter(ArgumentMatchers.eq(defaultServicePerimeterName), ArgumentMatchers.argThat(seqMatcher))
+      verify(mockAcmDAO, times(1)).overwriteProjectsInServicePerimeter(otherServicePerimeter, Set(projectNumber3.value))
+      verify(mockAcmDAO, times(1)).overwriteProjectsInServicePerimeter(ArgumentMatchers.eq(defaultServicePerimeterName), ArgumentMatchers.eq(argProjectsInPerimeter))
       runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(billingProject1.projectName, billingProject2.projectName, billingProject3.projectName), GoogleOperationNames.AddProjectToPerimeter)) should contain theSameElementsAs Seq(
         RawlsBillingProjectOperationRecord(billingProject1.projectName.value, GoogleOperationNames.AddProjectToPerimeter, defaultPerimeterOpId, false, None, GoogleApiTypes.AccessContextManagerApi),
         RawlsBillingProjectOperationRecord(billingProject2.projectName.value, GoogleOperationNames.AddProjectToPerimeter, defaultPerimeterOpId, false, None, GoogleApiTypes.AccessContextManagerApi),
@@ -260,7 +249,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with AnyFlatSpecLik
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
 
       val mockAcmDAO = mock[AccessContextManagerDAO](RETURNS_SMART_NULLS)
-      when(mockAcmDAO.overwriteProjectsInServicePerimeter(defaultServicePerimeterName, Seq(number.value))).thenReturn(Future.failed(new Exception("this failed")))
+      when(mockAcmDAO.overwriteProjectsInServicePerimeter(defaultServicePerimeterName, Set(number.value))).thenReturn(Future.failed(new Exception("this failed")))
 
       val mockGcsDAO = new MockGoogleServicesDAO("test", accessContextManagerDAO = mockAcmDAO)
       val creatingBillingProjectMonitor = getCreatingBillingProjectMonitor(dataSource, mockGcsDAO)

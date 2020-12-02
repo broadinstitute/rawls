@@ -508,7 +508,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  protected def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
+  override def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.IamCredentials
 
     /* Because we can't assume the identity of the Google SA that actually does the work in DM (it's in their project and we can't access it),
@@ -536,7 +536,7 @@ class HttpGoogleServicesDAO(
 
       //Now we've got an access token, test IAM permissions to see if the SA has permission to create projects.
       probeSACredential = buildCredentialFromAccessToken(tokenResponse.getAccessToken, billingProbeEmail)
-      hasAccess <- testBillingAccountAccess(billingAccountId, probeSACredential)
+      hasAccess <- testBillingAccountAccess(billingAccountName, probeSACredential)
     } yield {
       hasAccess
     }
@@ -740,6 +740,17 @@ class HttpGoogleServicesDAO(
     val configContents = ConfigContents(Seq(Resources(googleProject.value, dmTemplatePath, properties)))
     val jsonVersion = io.circe.jawn.parse(configContents.toJson.toString).valueOr(throw _)
     jsonVersion.asYaml.spaces2
+  }
+
+  override def setBillingAccountForProject(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, billingEnabled: Boolean = true): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Billing
+    val billingServiceAccountCredential = getBillingServiceAccountCredential
+    val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+    // value sent to google should have prefix "billingAccounts/" like: "billingAccounts/some-billing-acct-uuid"
+    val projectBillingInfo = new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(billingEnabled)
+    retryWhen500orGoogleError(() => {
+      executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo))
+    })
   }
 
   /*
