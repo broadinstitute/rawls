@@ -25,6 +25,7 @@ trait EntityApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val entityServiceConstructor: UserInfo => EntityService
+  val batchUpsertMaxBytes: Long
 
   val entityRoutes: server.Route = requireUserInfo() { userInfo =>
     parameters("dataReference".?, "billingProject".?) { (dataReferenceString, billingProject) =>
@@ -86,8 +87,12 @@ trait EntityApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
           post {
-            entity(as[Array[EntityUpdateDefinition]]) { operations =>
-              complete { entityServiceConstructor(userInfo).BatchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+            withSizeLimit(batchUpsertMaxBytes) {
+              entity(as[Array[EntityUpdateDefinition]]) { operations =>
+                complete {
+                  entityServiceConstructor(userInfo).BatchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations)
+                }
+              }
             }
           }
         } ~

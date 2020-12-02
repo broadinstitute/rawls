@@ -418,6 +418,7 @@ object Boot extends IOApp with LazyLogging {
         ),
         clientSecrets.getDetails.getClientId,
         submissionTimeout,
+        conf.getLong("entityUpsert.maxContentSizeBytes"),
         metricsPrefix,
         samDAO,
         conf.as[SwaggerConfig]("swagger")

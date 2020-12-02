@@ -1439,6 +1439,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         status = SubmissionStatuses.Submitted,
         useCallCache = submissionRequest.useCallCache,
         deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
+        useReferenceDisks = submissionRequest.useReferenceDisks,
         workflowFailureMode = workflowFailureMode,
         externalEntityInfo = for {
           entityType <- header.entityType
@@ -1836,8 +1837,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-
-
   /**
     * Gets a Google Project from the Resource Buffering Service (RBS) and sets it up to be usable by Rawls as the backing
     * Google Project for a Workspace.  The specific entities in the Google Project (like Buckets or compute nodes or
@@ -1851,7 +1850,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     * @param span
     * @return Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
     */
-  private def setupGoogleProject(billingProject: RawlsBillingProject, workspaceId: String, span: Span = null) = {
+  private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null): Future[(GoogleProjectId, GoogleProjectNumber)] = {
     // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
     // Option, so we are being thorough
     val billingAccount = billingProject.billingAccount match {
@@ -1925,7 +1924,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def overwriteGoogleProjectsInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Unit] = {
     collectWorkspacesInPerimeter(servicePerimeterName).map { workspacesInPerimeter =>
       val projectNumbers = workspacesInPerimeter.flatMap(_.googleProjectNumber) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
-      val projectNumberStrings = projectNumbers.map(_.value)
+      val projectNumberStrings = projectNumbers.map(_.value).toSet
 
       // Make the call to Google to overwrite the project.  Poll and wait for the Google Operation to complete
       gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, projectNumberStrings).map { operation =>
@@ -2104,7 +2103,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
 
             traceDBIOWithParent("getPolicySyncStatus", s1)(_ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { projectOwnerPolicyEmail =>
-              traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, workspaceId, s1))).flatMap { case (googleProjectId, googleProjectNumber) =>
+              traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, s1))).flatMap { case (googleProjectId, googleProjectNumber) =>
                 traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
                   for {
                     //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have

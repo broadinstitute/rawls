@@ -78,7 +78,7 @@ object Settings {
   val googleSettings = commonSettings ++ List(
     name := "workbench-google",
     libraryDependencies ++= googleDependencies
-  ) ++ versionSettings ++ publishSettings
+  ) ++ versionSettings ++ noPublishSettings
 
   //the full list of settings for the rawlsModel project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -94,7 +94,7 @@ object Settings {
   val utilSettings = commonSettings ++ List(
     name := "workbench-util",
     libraryDependencies ++= utilDependencies
-  ) ++ versionSettings ++ publishSettings
+  ) ++ versionSettings ++ noPublishSettings
 
   //the full list of settings for the workbenchMetrics project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -102,7 +102,7 @@ object Settings {
   val metricsSettings = commonSettings ++ List(
     name := "workbench-metrics",
     libraryDependencies ++= metricsDependencies
-  ) ++ versionSettings ++ publishSettings
+  ) ++ versionSettings ++ noPublishSettings
 
   //the full list of settings for the rawlsCore project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.

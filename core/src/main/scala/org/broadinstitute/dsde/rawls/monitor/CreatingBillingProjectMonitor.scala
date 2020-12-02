@@ -160,7 +160,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
         // projects are not forgotten
         allProjectNumbers = rawlsProjectsInPerimeter ++ loadStaticProjectsForPerimeter(servicePerimeterName)
         // Initiate operation to overwrite the list of projects in the Perimeter on Google
-        operationTry <- gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, allProjectNumbers).toTry
+        operationTry <- gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, allProjectNumbers.toSet).toTry
 
         _ <- persistUpdatesFromOperation(operationTry, servicePerimeterName, newProjectsInPerimeter)
       } yield ()
