@@ -295,7 +295,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
 
     // Verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was NOT called
-    verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Seq[String]])
+    verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]])
   }
 
   it should "claim a Google Project from Resource Buffering Service" in pending
@@ -339,9 +339,9 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     // name was specified with the correct list of projects which should include all pre-existing Workspaces within
     // Billing Projects using the same Service Perimeter, all static Google Project Numbers specified by the Config, and
     // the new Google Project Number that we just created
-    val existingProjectNumbersInPerimeter = workspacesInPerimeter.map(_.googleProjectNumber.get.value)
-    val expectedGoogleProjectNumbers: Seq[String] = (existingProjectNumbersInPerimeter ++ staticProjectNumbersInPerimeter) :+ workspace.googleProjectNumber.get.value
-    val projectNumbersCaptor = captor[Seq[String]]
+    val existingProjectNumbersInPerimeter: Set[String] = workspacesInPerimeter.map(_.googleProjectNumber.get.value).toSet
+    val expectedGoogleProjectNumbers: Set[String] = (existingProjectNumbersInPerimeter ++ staticProjectNumbersInPerimeter) + workspace.googleProjectNumber.get.value
+    val projectNumbersCaptor = captor[Set[String]]
     val servicePerimeterNameCaptor = captor[ServicePerimeterName]
     // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
     // the arguments passed to it so that we can verify that they were correct
@@ -471,7 +471,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
 
     // Verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was NOT called
-    verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Seq[String]])
+    verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]])
   }
 
   it should "claim a Google Project from Resource Buffering Service" in pending
@@ -516,9 +516,9 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     // name was specified with the correct list of projects which should include all pre-existing Workspaces within
     // Billing Projects using the same Service Perimeter, all static Google Project Numbers specified by the Config, and
     // the new Google Project Number that we just created
-    val existingProjectNumbersInPerimeter = workspacesInPerimeter.map(_.googleProjectNumber.get.value)
-    val expectedGoogleProjectNumbers: Seq[String] = (existingProjectNumbersInPerimeter ++ staticProjectNumbersInPerimeter) :+ workspace.googleProjectNumber.get.value
-    val projectNumbersCaptor = captor[Seq[String]]
+    val existingProjectNumbersInPerimeter: Set[String] = workspacesInPerimeter.map(_.googleProjectNumber.get.value).toSet
+    val expectedGoogleProjectNumbers: Set[String] = (existingProjectNumbersInPerimeter ++ staticProjectNumbersInPerimeter) + workspace.googleProjectNumber.get.value
+    val projectNumbersCaptor = captor[Set[String]]
     val servicePerimeterNameCaptor = captor[ServicePerimeterName]
     // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
     // the arguments passed to it so that we can verify that they were correct

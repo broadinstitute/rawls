@@ -640,7 +640,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
   private def overwriteGoogleProjectsInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Unit] = {
     collectWorkspacesInPerimeter(servicePerimeterName).map { workspacesInPerimeter =>
       val projectNumbers = workspacesInPerimeter.flatMap(_.googleProjectNumber) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
-      val projectNumberStrings = projectNumbers.map(_.value)
+      val projectNumberStrings: Set[String] = projectNumbers.map(_.value).toSet
 
       // Make the call to Google to overwrite the project.  Poll and wait for the Google Operation to complete
       gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, projectNumberStrings).map { operation =>
