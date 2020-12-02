@@ -140,6 +140,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val testConf = ConfigFactory.load()
 
+    override val batchUpsertMaxBytes = testConf.getLong("entityUpsert.maxContentSizeBytes")
+
     val googleGroupSyncTopic = "test-topic-name"
 
     val notificationTopic = "test-notification-topic"

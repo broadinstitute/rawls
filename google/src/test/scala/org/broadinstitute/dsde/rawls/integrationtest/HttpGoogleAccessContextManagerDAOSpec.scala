@@ -36,7 +36,7 @@ class HttpGoogleAccessContextManagerDAOSpec extends AnyFlatSpec with Matchers wi
     val servicePerimeterName = ServicePerimeterName("accessPolicies/228353087260/servicePerimeters/terra_dev_aou_test_service_perimeter")
     val billingProjectNumber = "624692839739"
 
-    val additionResponse = gacmDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, Seq(billingProjectNumber)).futureValue
+    val additionResponse = gacmDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, Set(billingProjectNumber)).futureValue
 
     println("OPERATION ID " + additionResponse)
 

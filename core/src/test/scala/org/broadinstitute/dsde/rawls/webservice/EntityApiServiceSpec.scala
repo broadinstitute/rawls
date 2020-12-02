@@ -85,6 +85,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   def dbId(ent: Entity): Long = runAndWait(entityQuery.getEntityRecords(testData.workspace.workspaceIdAsUUID, Set(ent.toReference))).head.id
   def dbName(id: Long): String = runAndWait(entityQuery.getEntities(Seq(id))).head._2.name
 
+  def entityOfSize(size: Long) = {
+    val json = s"""[{"name":"${"0" * (size - 56).toInt}","entityType":"participant","operations":[]}]""" //template already includes 56 bytes, subtract that from repeated string
+
+    assert(json.getBytes.length == size)
+
+    HttpEntity(ContentTypes.`application/json`, json)
+  }
+
   "EntityApi" should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.copy(name = "DNE").path}/entities", httpJson(testData.sample2)) ~>
       sealRoute(services.entityRoutes) ~>
@@ -207,6 +215,26 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
+      }
+  }
+
+  it should "allow an entity of the max content size to be consumed by batchUpsert" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/batchUpsert", entityOfSize(services.batchUpsertMaxBytes)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        //under the hood this will throw a 500. that's expected because the entity name is larger than the DB allows.
+        //all we care about for this test is that we do not hit a Payload Too Large error
+        assert(status != StatusCodes.PayloadTooLarge)
+      }
+  }
+
+  it should "not allow an entity larger than the max content size to be consumed by batchUpsert" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/batchUpsert", entityOfSize(services.batchUpsertMaxBytes + 1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.PayloadTooLarge) {
+          status
+        }
       }
   }
 

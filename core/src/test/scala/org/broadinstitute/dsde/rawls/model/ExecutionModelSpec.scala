@@ -23,7 +23,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
        |"useCallCache": true,
        |"expression": null,
        |"workflowFailureMode": null,
-       |"deleteIntermediateOutputFiles": false
+       |"deleteIntermediateOutputFiles": false,
+       |"useReferenceDisks": true
        |}""".stripMargin.parseJson.asJsObject
 
     SubmissionRequestFormat.read(inputJSON) shouldEqual {
@@ -35,7 +36,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         entityName = None,
         expression = None,
         workflowFailureMode = None,
-        deleteIntermediateOutputFiles = false
+        deleteIntermediateOutputFiles = false,
+        useReferenceDisks = true
       )
     }
   }
@@ -142,6 +144,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       default_runtime_attributes = None,
       read_from_cache = true,
       delete_intermediate_output_files = true,
+      use_reference_disks = true,
       backend = CromwellBackend("PAPIv2"),
       workflow_failure_mode = Some(WorkflowFailureModes.ContinueWhilePossible)
     )
@@ -158,6 +161,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "final_workflow_log_dir": "final_workflow_log_dir",
         |  "read_from_cache": true,
         |  "delete_intermediate_output_files": true,
+        |  "use_reference_disks": true,
         |  "backend": "PAPIv2",
         |  "workflow_failure_mode": "ContinueWhilePossible"
         |}
@@ -182,6 +186,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "final_workflow_log_dir": "final_workflow_log_dir",
         |  "read_from_cache": true,
         |  "delete_intermediate_output_files": true,
+        |  "use_reference_disks": true,
         |  "backend": "PAPIv2"
         |}
       """.stripMargin.parseJson

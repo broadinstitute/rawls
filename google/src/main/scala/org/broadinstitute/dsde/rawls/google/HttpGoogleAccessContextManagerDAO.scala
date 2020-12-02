@@ -39,7 +39,7 @@ class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, ap
     new AccessContextManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
-  def overwriteProjectsInServicePerimeter(servicePerimeterName: ServicePerimeterName, billingProjectNumbers: Seq[String]): Future[Operation] = {
+  def overwriteProjectsInServicePerimeter(servicePerimeterName: ServicePerimeterName, billingProjectNumbers: Set[String]): Future[Operation] = {
     implicit val service = GoogleInstrumentedService.AccessContextManager
 
     retryWhen500orGoogleError(() =>
@@ -47,7 +47,7 @@ class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, ap
       val creds = getAccessContextManagerCredential
       val accessContextManager = getAccessContextManager(creds)
 
-      val fullyQualifiedProjects = billingProjectNumbers.map("projects/" + _)
+      val fullyQualifiedProjects: List[String] = billingProjectNumbers.map("projects/" + _).toList
       val servicePerimeter = new ServicePerimeter().setStatus(new ServicePerimeterConfig().setResources(fullyQualifiedProjects.asJava))
 
       val patchRequest = accessContextManager.accessPolicies().servicePerimeters().patch(servicePerimeterName.value, servicePerimeter).setUpdateMask("status.resources")
