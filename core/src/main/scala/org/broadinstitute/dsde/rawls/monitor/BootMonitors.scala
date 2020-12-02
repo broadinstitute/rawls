@@ -78,8 +78,10 @@ object BootMonitors extends LazyLogging {
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
 
+    val workspaceBillingAccountMonitorConfigRoot = conf.getConfig("submissionmonitor")
+    val workspaceBillingAccountMonitorConfig = WorkspaceBillingAccountMonitorConfig(util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("pollInterval")), util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("initialDelay")))
     //Boot workspace billing account monitor
-    startWorkspaceBillingAccountMonitor(system, slickDataSource, gcsDAO)
+    startWorkspaceBillingAccountMonitor(system, workspaceBillingAccountMonitorConfig, slickDataSource, gcsDAO)
 
     val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
@@ -192,8 +194,8 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startWorkspaceBillingAccountMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
-    system.actorOf(WorkspaceBillingAccountMonitor.props(slickDataSource, gcsDAO, 60 seconds, 6 hours))
+  private def startWorkspaceBillingAccountMonitor(system: ActorSystem, workspaceBillingAccountMonitorConfig: WorkspaceBillingAccountMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
+    system.actorOf(WorkspaceBillingAccountMonitor.props(slickDataSource, gcsDAO, workspaceBillingAccountMonitorConfig.initialDelay, workspaceBillingAccountMonitorConfig.pollInterval))
   }
 
   private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig, dataSource: SlickDataSource)(implicit cs: ContextShift[IO]) = {

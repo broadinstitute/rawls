@@ -55,3 +55,5 @@ class WorkspaceBillingAccountMonitor(datasource: SlickDataSource, gcsDAO: Google
     } yield dbResult
   }
 }
+
+final case class WorkspaceBillingAccountMonitorConfig(pollInterval: FiniteDuration, initialDelay: FiniteDuration)
