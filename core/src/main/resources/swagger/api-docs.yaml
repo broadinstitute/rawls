@@ -5631,7 +5631,7 @@ components:
           description: internal use
         currentBillingAccountOnGoogleProject:
           type: string
-          description: The current project the workspace is being billed to. For desired billing account, look to the workspace's billing project
+          description: The current billing account being charged for activity within this workspace. For desired billing account, look to the billing account specified on this workspace's billing project
       description: ""
     WorkspaceSubmissionStats:
       required:
