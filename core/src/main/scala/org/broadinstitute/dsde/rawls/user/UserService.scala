@@ -205,6 +205,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       workspacesWithIncorrectBillingAccount.map(workspace => WorkspaceBillingAccount(workspace.toWorkspaceName, workspace.billingAccount)).toSet)
   }
 
+  // This returns two seqs of Workspace. The first seq is the ones with the correct billing account, the second seq is the ones with incorrect billing accounts
   private def loadAndPartitionWorkspacesByMatchingBillingProjectBillingAccount(billingProject: RawlsBillingProject): Future[(Seq[Workspace], Seq[Workspace])] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.listWithBillingProject(billingProject.projectName).map(workspaces => {

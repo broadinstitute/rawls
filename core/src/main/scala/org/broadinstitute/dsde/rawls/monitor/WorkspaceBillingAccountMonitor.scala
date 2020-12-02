@@ -33,7 +33,7 @@ class WorkspaceBillingAccountMonitor(datasource: SlickDataSource, gcsDAO: Google
   private def checkAll() = {
     for {
       workspacesToUpdate <- datasource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listWorkspaceGoogleProjectsWithIncorrectBillingAccounts()
+        dataAccess.workspaceQuery.listWorkspaceGoogleProjectsToUpdateWithNewBillingAccount()
       }
       _ <- workspacesToUpdate.toList.traverse {
         case (googleProjectId, billingAccount) => IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, billingAccount)))
