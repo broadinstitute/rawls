@@ -167,8 +167,7 @@ object Boot extends IOApp with LazyLogging {
         terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
         terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
         accessContextManagerDAO = accessContextManagerDAO,
-        resourceBufferPemFile = gcsConfig.getString("pathToResourceBufferPem"),
-        resourceBufferPemEmail = gcsConfig.getString("resourceBufferPemEmail")
+        resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
       )
 
 

@@ -34,8 +34,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   billingGroupEmail: String,
   billingGroupEmailAliases: List[String],
   bucketLogsMaxAge: Int,
-  resourceBufferPemFile: String,
-  resourceBufferPemEmail: String)
+  resourceBufferJsonFile: String)
   (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val cs: ContextShift[IO], override val timer: Timer[IO])
   extends HttpGoogleServicesDAO(
     true,
@@ -68,8 +67,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     terraBucketReaderRole = "fakeTerraBucketReader",
     terraBucketWriterRole = "fakeTerraBucketWriter",
     accessContextManagerDAO = new MockGoogleAccessContextManagerDAO,
-    resourceBufferPemFile = resourceBufferPemFile,
-    resourceBufferPemEmail = resourceBufferPemEmail)(system, materializer, executionContext, cs, timer) {
+    resourceBufferJsonFile = resourceBufferJsonFile)(system, materializer, executionContext, cs, timer) {
 
   private var token: String = null
   private var tokenDate: DateTime = null
