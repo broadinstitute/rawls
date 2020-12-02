@@ -7,6 +7,7 @@ import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{BigQuery, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, TableResult}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
@@ -94,7 +95,7 @@ object MockBigQueryServiceFactory {
 class MockBigQueryServiceFactory(blocker: Blocker, queryResponse: Either[Throwable, TableResult])(implicit val executionContext: ExecutionContext)
   extends GoogleBigQueryServiceFactory(blocker: Blocker)(executionContext: ExecutionContext) {
 
-  override def getServiceForPet(petKey: String): Resource[IO, GoogleBigQueryService[IO]] = {
+  override def getServiceForPet(petKey: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
   }
 }

@@ -1187,7 +1187,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Workspace, Method Configuration or Entity not found
+          description: Workspace, Method Configuration, Data Reference, or Entity not found
           content:
             'application/json':
               schema:
@@ -2507,7 +2507,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidatedMethodConfiguration'
         404:
-          description: Workspace or Method Configuration not found
+          description: Workspace, Method Configuration, or Data Reference not found
           content:
             'application/json':
               schema:

@@ -8,13 +8,14 @@ import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.ExpressionAndResult
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, DataReferenceName, Entity, EntityTypeMetadata, GoogleProjectId, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 
 import scala.collection.JavaConverters._
@@ -28,6 +29,34 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
+  behavior of "DataRepoEntityProvider.googleProject"
+
+  it should "use an explicit project if one was provided" in {
+    val randStr = java.util.UUID.randomUUID().toString
+    val gProject = GoogleProjectId(randStr)
+    // arguments include an explicit billingProject
+    val args = EntityRequestArguments(
+      workspace = workspace,
+      userInfo = userInfo,
+      dataReference = scala.Option(DataReferenceName("referenceName")),
+      billingProject = scala.Option(gProject))
+    val provider = createTestProvider(entityRequestArguments = args)
+    provider.googleProject should be (gProject)
+  }
+
+  it should "use the workspace's project if no explicit project was provided" in {
+    val randStr = java.util.UUID.randomUUID().toString
+    val gProject = GoogleProjectId(randStr)
+    val testWorkspace = workspace.copy(googleProject = gProject)
+    // arguments specify None for billingProject, but pass our random string inside the workspace
+    val args = EntityRequestArguments(
+      workspace = testWorkspace,
+      userInfo = userInfo,
+      dataReference = scala.Option(DataReferenceName("referenceName")),
+      billingProject = None)
+    val provider = createTestProvider(entityRequestArguments = args)
+    provider.googleProject should be (gProject)
+  }
 
   behavior of "DataEntityProvider.entityTypeMetadata()"
 
@@ -115,7 +144,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
-      assertResult("sam error") { ex.getMessage }
+      assertResult("Error attempting to use project namespace. The project does not exist or you do not have permission to use it: sam error") { ex.getMessage }
     }
   }
 

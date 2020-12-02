@@ -15,9 +15,10 @@ import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
 
 import scala.collection.JavaConverters._
@@ -34,10 +35,13 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
   override val entityStoreId: Option[String] = Option(snapshotModel.getId)
 
-  private lazy val googleProject = {
-    // determine project to be billed for the BQ job TODO: need business logic from PO!
+  private[datarepo] lazy val googleProject: GoogleProjectId = {
+    /* Determine project to be billed for the BQ job:
+        If a project was explicitly specified in the constructor arguments, use that.
+        Else, use the workspace's project. This requires canCompute permissions on the workspace.
+     */
     requestArguments.billingProject match {
-      case Some(billing) => billing.googleProjectId
+      case Some(billing) => billing
       case None => requestArguments.workspace.googleProject
     }
   }
@@ -85,7 +89,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       // get pet service account key for this user
       petKey <- getPetSAKey
       // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey)
+      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
     } yield {
       // translate the BQ results into a single Rawls Entity
       queryResultsToEntity(queryResults, entityType, pk)
@@ -119,7 +123,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       // get pet service account key for this user
       petKey <- getPetSAKey
       // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey)
+      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
     } yield {
       // translate the BQ results into a Rawls query result
       val page = queryResultsToEntities(queryResults, entityType, pk)
@@ -206,7 +210,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
           (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel, parsedExpressions, tableModel, entityNameColumn)
           _ = logger.debug(s"expressions [${parsedExpressions.map(_.expression).mkString(", ")}] for snapshot id [${snapshotModel.getId} produced sql query ${bqQueryJobConfig.build().getQuery}")
           petKey <- getPetSAKey
-          queryResults <- runBigQuery(bqQueryJobConfig, petKey)
+          queryResults <- runBigQuery(bqQueryJobConfig, petKey, GoogleProject(googleProject.value))
         } yield {
           val expressionResultsStream = transformQueryResultToExpressionAndResult(entityNameColumn, parsedExpressions, selectAndFroms, queryResults)
           val expressionResults = convertToListAndCheckSize(expressionResultsStream, tableModel.getRowCount)
@@ -225,7 +229,17 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   }
 
   private def getPetSAKey: IO[String] = {
-    IO.fromFuture(IO(samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)))
+    logger.debug(s"getPetSAKey attempting against project ${googleProject.value}")
+    IO.fromFuture(IO(
+      samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)
+        .recover {
+          case report:RawlsExceptionWithErrorReport =>
+            val errMessage = s"Error attempting to use project ${googleProject.value}. " +
+              s"The project does not exist or you do not have permission to use it: ${report.errorReport.message}"
+            throw new RawlsExceptionWithErrorReport(report.errorReport.copy(message = errMessage))
+          case err:Exception => throw new RawlsException(s"Error attempting to use project ${googleProject.value}. " +
+            s"The project does not exist or you do not have permission to use it: ${err.getMessage}")
+        }))
   }
 
   private def getEntityNames(bqExpressionResults: Seq[ExpressionAndResult]): Seq[EntityName] = {
@@ -274,8 +288,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
   }
 
-  private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String): IO[TableResult] = {
-    bqServiceFactory.getServiceForPet(petKey).use(_.query(
+  private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String, projectToBill: GoogleProject): IO[TableResult] = {
+    logger.debug(s"runBigQuery attempting against project  ${projectToBill.value}")
+    bqServiceFactory.getServiceForPet(petKey, projectToBill).use(_.query(
       bqQueryJobConfigBuilder
         .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
         .build()))
