@@ -454,17 +454,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  // TODO: REMOVE BEFORE MERGING. Another PR (#1319) already has implemented this
-  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
-    getBucket(bucketName) map { maybeBucket =>
-      val bucket = maybeBucket.getOrElse(throw new RawlsException(s"Failed to retrieve bucket `$bucketName`"))
-      bucket.getLocationType match {
-        case "region" => Option(bucket.getLocation.toLowerCase)
-        case _ => None
-      }
-    }
-  }
-
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Groups
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
