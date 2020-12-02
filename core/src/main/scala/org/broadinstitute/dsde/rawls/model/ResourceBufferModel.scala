@@ -6,5 +6,5 @@ case class ProjectPoolId(value: String)
 // enum for project pools
 object ProjectPoolType extends Enumeration {
   type ProjectPoolType = Value
-  val Regular, ServicePerimeter = Value
+  val Regular, ExfiltrationControlled = Value
 }

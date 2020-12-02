@@ -1860,7 +1860,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     val projectPoolType = billingProject.servicePerimeter match {
-      case Some(_) => ProjectPoolType.ServicePerimeter
+      case Some(_) => ProjectPoolType.ExfiltrationControlled
       case _ => ProjectPoolType.Regular
     }
 

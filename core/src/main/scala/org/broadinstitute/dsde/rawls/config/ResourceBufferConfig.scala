@@ -14,7 +14,7 @@ object ResourceBufferConfig{
     ResourceBufferConfig(
       conf.getString("url"),
       ProjectPoolId(conf.getString("projectPool.regular")),
-      ProjectPoolId(conf.getString("projectPool.servicePerimeter"))
+      ProjectPoolId(conf.getString("projectPool.exfiltrationControlled"))
     )
   }
 }
