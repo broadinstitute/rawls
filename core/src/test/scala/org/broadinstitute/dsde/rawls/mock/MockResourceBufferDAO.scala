@@ -8,7 +8,7 @@ import scala.concurrent.Future
 class MockResourceBufferDAO extends ResourceBufferDAO {
 
   def handoutGoogleProject(projectPoolId: ProjectPoolId, handoutRequestId: String): Future[GoogleProjectId] = {
-    val googleProjectId = GoogleProjectId("project-from-rbs")
+    val googleProjectId = GoogleProjectId("project-from-buffer")
     Future.successful(googleProjectId)
   }
 

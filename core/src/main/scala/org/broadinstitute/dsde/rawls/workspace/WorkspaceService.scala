@@ -1864,7 +1864,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     for {
-      googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => resourceBufferService.getGoogleProjectFromRBS(projectPoolType, workspaceId))
+      googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
       _ <- traceWithParent("updateBillingAccountForProject", span)(_ => gcsDAO.setBillingAccountForProject(googleProjectId, billingAccount))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
     } yield (googleProjectId, googleProjectNumber)

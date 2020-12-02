@@ -14,7 +14,7 @@ object ResourceBufferService {
 }
 class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, config: ResourceBufferConfig) {
 
-  def getGoogleProjectFromRBS(projectPoolType: ProjectPoolType = ProjectPoolType.Regular, handoutRequestId: String): Future[GoogleProjectId] = {
+  def getGoogleProjectFromBuffer(projectPoolType: ProjectPoolType = ProjectPoolType.Regular, handoutRequestId: String): Future[GoogleProjectId] = {
     val projectPoolId: ProjectPoolId = toProjectPoolId(projectPoolType)
     resourceBufferDAO.handoutGoogleProject(projectPoolId, handoutRequestId)
   }
