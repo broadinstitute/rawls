@@ -32,6 +32,7 @@ import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, Deplo
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
@@ -143,7 +144,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
-    val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+    val resourceBufferService = Mockito.spy(new ResourceBufferService(resourceBufferDAO, resourceBufferConfig))
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -1303,7 +1304,14 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]])
   }
 
-  it should "claim a Google Project from Resource Buffering Service" in pending
+  it should "claim a Google Project from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.resourceBufferService, Mockito.atLeastOnce()).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+  }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
@@ -1479,7 +1487,15 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]])
   }
 
-  it should "claim a Google Project from Resource Buffering Service" in pending
+  it should "claim a Google Project from Resource Buffering Service" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    verify(services.resourceBufferService, Mockito.atLeastOnce()).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+  }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
