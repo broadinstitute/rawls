@@ -85,7 +85,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   }
 
   override def getBucketServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
-  override def getResourceBufferServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
+  lazy val getResourceBufferServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
 
   override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
     Future.successful(Option(token))

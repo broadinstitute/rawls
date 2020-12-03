@@ -1850,7 +1850,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     * @param span
     * @return Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
     */
-  private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null, workspaceId: String) = {
+  private def setupGoogleProject(billingProject: RawlsBillingProject, span: Span = null, workspaceId: String): Future[(GoogleProjectId, GoogleProjectNumber)] = {
     // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
     // Option, so we are being thorough
     val billingAccount = billingProject.billingAccount match {

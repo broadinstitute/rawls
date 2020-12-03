@@ -1050,7 +1050,7 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  def getResourceBufferServiceAccountCredential: Credential = {
+  lazy val getResourceBufferServiceAccountCredential: Credential = {
     val file = new java.io.File(resourceBufferJsonFile)
     val inputStream: InputStream = new FileInputStream(file)
     GoogleCredential.fromStream(inputStream).toBuilder.setServiceAccountScopes(workbenchLoginScopes.asJava).build()
