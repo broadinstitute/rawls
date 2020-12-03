@@ -21,6 +21,7 @@ import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
+import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
@@ -32,6 +33,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -39,7 +41,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.google2._
@@ -164,7 +166,8 @@ object Boot extends IOApp with LazyLogging {
         cleanupDeploymentAfterCreating = dmConfig.cleanupDeploymentAfterCreating,
         terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
         terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
-        accessContextManagerDAO = accessContextManagerDAO
+        accessContextManagerDAO = accessContextManagerDAO,
+        resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
       )
 
 
@@ -355,6 +358,11 @@ object Boot extends IOApp with LazyLogging {
       // create the entity manager.
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO, appDependencies.bigQueryServiceFactory, DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")))
 
+      val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
+      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
+      val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+
+
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
@@ -375,7 +383,8 @@ object Boot extends IOApp with LazyLogging {
         submissionCostService,
         workspaceServiceConfig,
         requesterPaysSetupService,
-        entityManager
+        entityManager,
+        resourceBufferService
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
