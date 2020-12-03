@@ -8,10 +8,10 @@ object Dependencies {
   val jacksonV      = "2.11.3"
 
   val serviceTestV = "0.18-135086e1-SNAP"
-  val workbenchGoogleV = "0.21-890a74f"
+  val workbenchGoogleV = "0.21-64a7b29"
   val workbenchGoogle2V = "0.17-135086e1-SNAP"
-  val workbenchModelV  = "0.13-58c913d"
-  val workbenchMetricsV  = "0.5-4c7acd5"
+  val workbenchModelV  = "0.14-65bba14"
+  val workbenchMetricsV  = "0.5-64a7b29"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model" % workbenchModelV
   val workbenchMetrics: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-metrics" % workbenchMetricsV
