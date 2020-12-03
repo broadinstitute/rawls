@@ -180,8 +180,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
             val firstSubWorkflowId = eventually {
               val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
+              val submittedOptions = parseWorkflowOptionsFromMetadata(cromwellMetadata)
               val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
               withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstWorkflowId)) {
+                // check the computes zones belong to `us-central1`
+                submittedOptions should include ("us-central1-")
+
                 subIds should not be (empty)
                 subIds.head
               }
@@ -223,8 +227,10 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     "should be able to run sub-workflow tasks in non-US regions" in {
       implicit val token: AuthToken = studentBToken
 
-      // this will run scatterCount^levels workflows, so be careful if increasing these values!
+      // this will create a method with 2 levels and 3 scatter count i.e. it will create a workflow with 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
+
+      val europeNorth1ZonesPrefix = "europe-north1-"
 
       withCleanBillingProject(studentB) { projectName =>
         withWorkspace(projectName, "rawls-subworkflows-in-regions", workspaceRegion = Option("europe-north1")) { workspaceName =>
@@ -257,61 +263,61 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
-            // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
-
+            // may need to wait for Cromwell to start processing workflows
             val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
-            // Get workflow IDs from submission details
-            val firstTierWorkflowIds: String = eventually {
+            // Get workflow ID from submission details
+            val rootWorkflowId: String = eventually {
               val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
               withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
                 status should (be("Submitted") or be("Done")) // very unlikely it's already done, but let's handle that case.
-
-                // TODO: Not sure why the #workflow ids is only 1 ?
-                // workflows.length should be(3)
                 workflows should not be (empty)
                 workflows.head
               }
             }
 
-            // TODO: Need to refactor this ?
-            eventually {
-              val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstTierWorkflowIds)
+            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-north1` region
+            val subWorkflowIds: List[String] = eventually {
+              val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
               val submittedOptions = parseWorkflowOptionsFromMetadata(cromwellMetadata)
-
               val subWorkflowIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
+
+              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, rootWorkflowId)) {
+                submittedOptions should include (europeNorth1ZonesPrefix)
+
+                subWorkflowIds should not be (empty)
+                subWorkflowIds.length shouldBe(3)
+
+                subWorkflowIds
+              }
+            }
+
+            /*
+              Once the sub-workflows have finished running, check
+                - the zones for each job that were determined by Cromwell and
+                - the worker assigned for the tasks
+              belong to `europe-north1`
+            */
+            eventually {
               val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
 
               val subWorkflowCallMetadata = subWorkflowsMetadata flatMap parseCallsFromMetadata
-
               val callZones = subWorkflowCallMetadata.map(_.get("runtimeAttributes").get("zones").asText())
+
               val workerAssignedExecEvents = subWorkflowCallMetadata.flatMap{ x =>
                 val flattenedExecutionEvents = x.get("executionEvents").elements().asScala.toList
                 val descriptions = flattenedExecutionEvents.map(_.get("description").asText())
                 descriptions.filter(desc => desc.startsWith("Worker") && desc.contains("assigned"))
               }
 
-              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstTierWorkflowIds)) {
-                submittedOptions should include ("europe-north1-a")
-                submittedOptions should include ("europe-north1-b")
-                submittedOptions should include ("europe-north1-c")
+              subWorkflowsMetadata foreach { x => x should include (""""executionStatus":"Done"""") }
 
-                subWorkflowIds should not be (empty)
-                subWorkflowIds.length shouldBe(3)
+              callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
 
-                subWorkflowsMetadata foreach { x => x should include (""""executionStatus":"Done"""") }
-
-                callZones foreach { zonesList =>
-                  zonesList should include("europe-north1-a")
-                  zonesList should include("europe-north1-b")
-                  zonesList should include("europe-north1-c")
-                }
-
-                workerAssignedExecEvents should not be (empty)
-                workerAssignedExecEvents foreach { event =>
-                  event should (include ("europe-north1-a") or include ("europe-north1-b") or include ("europe-north1-c"))
-                }
+              workerAssignedExecEvents should not be (empty)
+              workerAssignedExecEvents foreach { event =>
+                event should include (europeNorth1ZonesPrefix)
               }
             }
           }
