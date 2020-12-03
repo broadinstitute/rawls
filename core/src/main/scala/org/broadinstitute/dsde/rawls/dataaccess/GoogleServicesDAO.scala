@@ -150,7 +150,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getBucketServiceAccountCredential: Credential
 
-  val getResourceBufferServiceAccountCredential: Credential
+  def getResourceBufferServiceAccountCredential: Credential
 
   def getServiceAccountRawlsUser(): Future[RawlsUser]
 

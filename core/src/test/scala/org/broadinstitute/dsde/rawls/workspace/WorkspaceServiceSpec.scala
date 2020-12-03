@@ -1310,7 +1310,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
-    verify(services.resourceBufferService, Mockito.atLeastOnce()).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+    verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
@@ -1494,7 +1494,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
 
-    verify(services.resourceBufferService, Mockito.atLeastOnce()).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+    verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
