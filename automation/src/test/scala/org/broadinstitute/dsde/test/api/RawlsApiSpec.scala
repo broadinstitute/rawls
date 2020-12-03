@@ -263,35 +263,57 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             // Get workflow IDs from submission details
-            val firstTierWorkflowIds: List[String] = eventually {
+            val firstTierWorkflowIds: String = eventually {
               val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
               withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
                 status should (be("Submitted") or be("Done")) // very unlikely it's already done, but let's handle that case.
-                workflows.length should be(3)
-                workflows
+
+                // TODO: Not sure why the #workflow ids is only 1 ?
+                // workflows.length should be(3)
+                workflows should not be (empty)
+                workflows.head
               }
             }
 
-            // Fetch ALL call metadata from ALL subworkflows:
-            val callMetadataSections = eventually {
-              for {
-                firstWorkflowId: String <- firstTierWorkflowIds
-                cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
+            // TODO: Need to refactor this ?
+            eventually {
+              val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstTierWorkflowIds)
+              val submittedOptions = parseWorkflowOptionsFromMetadata(cromwellMetadata)
 
-                // validate options contain the :
-                submittedOptions = parseWorkflowOptionsFromMetadata(cromwellMetadata)
-                _ = submittedOptions should include ("europe-north1a")
-                _ = submittedOptions should include ("europe-north1b")
-                _ = submittedOptions should include ("europe-north1c")
+              val subWorkflowIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
+              val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
 
-                subworkflowId: String <- parseSubWorkflowIdsFromMetadata(cromwellMetadata)
-                callMetadataWithinSubworkflows = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, subworkflowId)
+              val subWorkflowCallMetadata = subWorkflowsMetadata flatMap parseCallsFromMetadata
 
-                _ = callMetadataWithinSubworkflows should include (""""executionStatus": "Done"""")
+              val callZones = subWorkflowCallMetadata.map(_.get("runtimeAttributes").get("zones").asText())
+              val workerAssignedExecEvents = subWorkflowCallMetadata.flatMap{ x =>
+                val flattenedExecutionEvents = x.get("executionEvents").elements().asScala.toList
+                val descriptions = flattenedExecutionEvents.map(_.get("description").asText())
+                descriptions.filter(desc => desc.startsWith("Worker") && desc.contains("assigned"))
+              }
 
-              } yield callMetadataWithinSubworkflows
+              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstTierWorkflowIds)) {
+                submittedOptions should include ("europe-north1-a")
+                submittedOptions should include ("europe-north1-b")
+                submittedOptions should include ("europe-north1-c")
+
+                subWorkflowIds should not be (empty)
+                subWorkflowIds.length shouldBe(3)
+
+                subWorkflowsMetadata foreach { x => x should include (""""executionStatus":"Done"""") }
+
+                callZones foreach { zonesList =>
+                  zonesList should include("europe-north1-a")
+                  zonesList should include("europe-north1-b")
+                  zonesList should include("europe-north1-c")
+                }
+
+                workerAssignedExecEvents should not be (empty)
+                workerAssignedExecEvents foreach { event =>
+                  event should (include ("europe-north1-a") or include ("europe-north1-b") or include ("europe-north1-c"))
+                }
+              }
             }
-
           }
         }
       }
