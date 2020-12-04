@@ -276,7 +276,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowOptions = mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
 
-      workflowOptions.get.default_runtime_attributes shouldBe Some(JsObject(Map("zones" -> JsString("europe-north1-a europe-north1-b europe-north1-c"))))
+      val actualZones: JsValue = workflowOptions.get.default_runtime_attributes.get.asJsObject.fields("zones")
+      val actualZonesList: List[String] = actualZones.convertTo[String].split(" ").toList
+
+      actualZonesList should not be (empty)
+      actualZonesList.foreach { z => z should startWith("europe-north1-") }
     }
   }
 

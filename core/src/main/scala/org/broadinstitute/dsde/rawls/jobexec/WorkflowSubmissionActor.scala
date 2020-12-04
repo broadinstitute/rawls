@@ -191,12 +191,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       regionOption <- googleServicesDAO.getRegionForRegionalBucket(bucketName)
       runtimeOptions <- {
         regionOption match {
-          case Some(region) =>
-            for {
-              zones <- googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region)
-            } yield {
-              Option(JsObject("zones" -> JsString(zones.mkString(" "))))
-            }
+          case Some(region) => googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region) map { zones =>
+            Option(JsObject("zones" -> JsString(zones.mkString(" "))))
+          }
           case None =>
             // if the location is `multi-region` we want the default zones from config
             Future.successful(defaultRuntimeOptions)
