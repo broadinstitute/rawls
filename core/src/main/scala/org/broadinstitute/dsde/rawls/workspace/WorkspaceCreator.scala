@@ -34,8 +34,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
   import dataSource.dataAccess.driver.api._
 
   /**
-    * Public method to be used for creating a new Workspace.  The bulk of the creation process is performed by
-    * `createWorkspaceInternal`
+    * Public method to be used for creating a new Workspace.
     *
     * @param workspaceRequest
     * @param span
