@@ -316,10 +316,10 @@ class WorkspaceCreator(val userInfo: UserInfo,
     * @param parentSpan
     * @return
     */
-  private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Boolean] = {
+  private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Unit] = {
     val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
     traceWithParent("checkUserCanCreateWorkspace", parentSpan)(_ => samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, userInfo)).map {
-      case true => true
+      case true => ()
       case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}"))
     }
   }

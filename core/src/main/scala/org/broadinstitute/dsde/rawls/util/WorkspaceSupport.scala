@@ -48,7 +48,7 @@ trait WorkspaceSupport {
 
   def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] = {
     for {
-      workspaceContext <- getWorkspace(workspaceName)
+      workspaceContext <- loadWorkspace(workspaceName)
       hasCompute <- {
         samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.compute, userInfo).flatMap { launchBatchCompute =>
           if (launchBatchCompute) Future.successful(())
@@ -78,12 +78,12 @@ trait WorkspaceSupport {
 
   def getWorkspaceIfUserHasAction(workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
     for {
-      workspaceContext <- getWorkspace(workspaceName, attributeSpecs)
+      workspaceContext <- loadWorkspace(workspaceName, attributeSpecs)
       _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
   }
 
-  def getWorkspace(workspaceName: WorkspaceName, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
+  def loadWorkspace(workspaceName: WorkspaceName, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
         DBIO.successful(workspaceContext)

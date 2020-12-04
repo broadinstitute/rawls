@@ -425,7 +425,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
       for {
         isCurator <- tryIsCurator(userInfo.userEmail)
-        workspace <- getWorkspace(workspaceName) flatMap { workspace =>
+        workspace <- loadWorkspace(workspaceName) flatMap { workspace =>
           withLibraryPermissions(workspace, operations, userInfo, isCurator) {
             dataSource.inTransaction ({ dataAccess =>
               updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName)
@@ -897,7 +897,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     //don't do the sam REST call inside the db transaction.
-    getWorkspace(workspaceName) flatMap { workspace =>
+    loadWorkspace(workspaceName) flatMap { workspace =>
       requireAccessIgnoreLockF(workspace, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
@@ -916,7 +916,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     //don't do the sam REST call inside the db transaction.
-    getWorkspace(workspaceName) flatMap { workspace =>
+    loadWorkspace(workspaceName) flatMap { workspace =>
       requireAccessIgnoreLockF(workspace, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
@@ -1654,7 +1654,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     //don't do the sam REST call inside the db transaction.
-    getWorkspace(workspaceName) flatMap { workspace =>
+    loadWorkspace(workspaceName) flatMap { workspace =>
       requireAccessIgnoreLockF(workspace, SamWorkspaceActions.write) {
         //if we get here, we passed all the hoops, otherwise an exception would have been thrown
 
