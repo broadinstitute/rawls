@@ -119,7 +119,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   import dataSource.dataAccess.driver.api._
 
-  val workspaceCreator = new WorkspaceCreator(userInfo, dataSource, samDAO, gcsDAO, config)
+  val workspaceCreator = new WorkspaceCreator(userInfo, dataSource, samDAO, gcsDAO, config, resourceBufferService)
 
   def CreateWorkspace(workspace: WorkspaceRequest, parentSpan: Span = null) = workspaceCreator.createWorkspace(workspace, parentSpan)
   def GetWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs, parentSpan: Span) = getWorkspace(workspaceName, params, parentSpan)

@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
@@ -10,18 +9,21 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{MockGoogleAccessContextManagerDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.mock._
+import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.{Agora, CreationStatuses, Dockstore, GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, RawlsUser, ServicePerimeterName, UserInfo, Workspace, WorkspaceName, WorkspaceRequest, WorkspaceVersions}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, SubmissionApiService, WorkspaceApiService}
@@ -45,7 +47,7 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
-    lazy val workspaceCreator: WorkspaceCreator = workspaceCreatorConstructor(userInfo1)
+    lazy val workspaceCreator: WorkspaceCreator = workspaceService.workspaceCreator
     lazy val userService: UserService = userServiceConstructor(userInfo1)
 
 
@@ -109,6 +111,10 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
     val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0))
 
+    val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
+    val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
+    val resourceBufferService = Mockito.spy(new ResourceBufferService(resourceBufferDAO, resourceBufferConfig))
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -132,15 +138,9 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
       submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager
-    ) _
-
-    val workspaceCreatorConstructor = WorkspaceCreator.constructor(
-      slickDataSource,
-      samDAO,
-      gcsDAO,
-      workspaceServiceConfig
-    ) _
+      entityManager,
+      resourceBufferService
+      ) _
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
@@ -298,7 +298,14 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]])
   }
 
-  it should "claim a Google Project from Resource Buffering Service" in pending
+  it should "claim a Google Project from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceCreator.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+  }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
@@ -474,7 +481,15 @@ class WorkspaceCreatorSpec extends AnyFlatSpec with Matchers with ScalatestRoute
     verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]])
   }
 
-  it should "claim a Google Project from Resource Buffering Service" in pending
+  it should "claim a Google Project from Resource Buffering Service" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceCreator.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+  }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter

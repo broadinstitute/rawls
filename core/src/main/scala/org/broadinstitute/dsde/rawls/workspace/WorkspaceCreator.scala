@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
@@ -11,7 +10,8 @@ import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model.{AttributeName, ErrorReport, GoogleProjectId, GoogleProjectNumber, ManagedGroupRef, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsGroupName, SamBillingProjectActions, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamPolicy, SamProjectRoles, SamResourcePolicyName, SamResourceTypeNames, SamWorkflowCollectionPolicyNames, SamWorkflowCollectionRoles, SamWorkspaceActions, SamWorkspacePolicyNames, SamWorkspaceRoles, ServicePerimeterName, UserInfo, Workspace, WorkspaceAccessLevels, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, ErrorReport, GoogleProjectId, GoogleProjectNumber, ManagedGroupRef, ProjectPoolType, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsGroupName, SamBillingProjectActions, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamPolicy, SamProjectRoles, SamResourcePolicyName, SamResourceTypeNames, SamWorkflowCollectionPolicyNames, SamWorkflowCollectionRoles, SamWorkspaceActions, SamWorkspacePolicyNames, SamWorkspaceRoles, ServicePerimeterName, UserInfo, Workspace, WorkspaceAccessLevels, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, LibraryPermissionsSupport, Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -22,22 +22,12 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 
-object WorkspaceCreator {
-  def constructor(dataSource: SlickDataSource,
-                  samDAO: SamDAO,
-                  gcsDAO: GoogleServicesDAO,
-                  config: WorkspaceServiceConfig)
-                 (userInfo: UserInfo)
-                 (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceCreator = {
-    new WorkspaceCreator(userInfo, dataSource, samDAO, gcsDAO, config)
-  }
-}
-
 class WorkspaceCreator(val userInfo: UserInfo,
                        val dataSource: SlickDataSource,
                        val samDAO: SamDAO,
                        val gcsDAO: GoogleServicesDAO,
-                       val config: WorkspaceServiceConfig)
+                       val config: WorkspaceServiceConfig,
+                       val resourceBufferService: ResourceBufferService)
                       (implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
   extends WorkspaceSupport with AttributeSupport with LibraryPermissionsSupport with Retry with LazyLogging {
 
@@ -129,8 +119,9 @@ class WorkspaceCreator(val userInfo: UserInfo,
       billingProjectOwnerPolicyEmail <- getBillingProjectOwnerPolicyEmail(workspaceRequest, span)
       _ <- checkIfWorkspaceWithNameAlreadyExists(workspaceRequest.toWorkspaceName, span)
       billingProject <- getBillingProjectForNewWorkspace(workspaceRequest.namespace, span)
-      (googleProjectId, googleProjectNumber) <- claimGoogleProject(billingProject, span)
-      workspace <- persistNewWorkspace(workspaceRequest, googleProjectId, googleProjectNumber, span)
+      workspaceId = UUID.randomUUID.toString
+      (googleProjectId, googleProjectNumber) <- claimGoogleProject(billingProject, workspaceId, span)
+      workspace <- persistNewWorkspace(workspaceRequest, googleProjectId, googleProjectNumber, workspaceId, span)
       workspaceResourceResponse <- createWorkspaceResourceInSam(workspace.workspaceId, billingProjectOwnerPolicyEmail, noWorkspaceOwner, authDomains, span)
       policyNameToEmailMap: Map[SamResourcePolicyName, WorkbenchEmail] = workspaceResourceResponse.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
       _ <- createWorkflowCollectionForWorkspace(workspace.workspaceId, policyNameToEmailMap, span)
@@ -184,9 +175,10 @@ class WorkspaceCreator(val userInfo: UserInfo,
                           noWorkspaceOwner: Boolean,
                           authDomains: Set[ManagedGroupRef],
                           span: Span = null): Future[(Workspace, SamCreateResourceResponse)] = {
+    val workspaceId = UUID.randomUUID.toString
     for { // The following futures need to happen sequentially
-      (googleProjectId, googleProjectNumber) <- claimGoogleProject(billingProject, span)
-      workspace <- persistNewWorkspace(workspaceRequest, googleProjectId, googleProjectNumber, span)
+      (googleProjectId, googleProjectNumber) <- claimGoogleProject(billingProject, workspaceId, span)
+      workspace <- persistNewWorkspace(workspaceRequest, googleProjectId, googleProjectNumber, workspaceId, span)
       workspaceResourceResponse <- createWorkspaceResourceInSam(workspace.workspaceId, billingProjectOwnerPolicyEmail, noWorkspaceOwner, authDomains, span)
     } yield (workspace, workspaceResourceResponse)
   }
@@ -427,7 +419,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
     * @param span
     * @return Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
     */
-  private def claimGoogleProject(billingProject: RawlsBillingProject, span: Span = null): Future[(GoogleProjectId, GoogleProjectNumber)] = {
+  private def claimGoogleProject(billingProject: RawlsBillingProject, workspaceId: String, span: Span = null): Future[(GoogleProjectId, GoogleProjectNumber)] = {
     // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
     // Option, so we are being thorough
     val billingAccount = billingProject.billingAccount match {
@@ -435,8 +427,13 @@ class WorkspaceCreator(val userInfo: UserInfo,
       case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing or invalid for Billing Project: ${billingProject}"))
     }
 
+    val projectPoolType = billingProject.servicePerimeter match {
+      case Some(_) => ProjectPoolType.ExfiltrationControlled
+      case _ => ProjectPoolType.Regular
+    }
+
     for {
-      googleProjectId <- traceWithParent("getGoogleProjectFromRBS", span)(_ => getGoogleProjectFromRBS)
+      googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
       _ <- traceWithParent("updateBillingAccountForProject", span)(_ => gcsDAO.setBillingAccountForProject(googleProjectId, billingAccount))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
     } yield (googleProjectId, googleProjectNumber)
@@ -472,9 +469,9 @@ class WorkspaceCreator(val userInfo: UserInfo,
   private def persistNewWorkspace(workspaceRequest: WorkspaceRequest,
                                   googleProjectId: GoogleProjectId,
                                   googleProjectNumber: GoogleProjectNumber,
+                                  workspaceId: String,
                                   span: Span): Future[Workspace] = {
     val currentDate = DateTime.now
-    val workspaceId = UUID.randomUUID.toString
     val bucketName = constructBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
 
     val workspace = Workspace(
