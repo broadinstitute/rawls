@@ -156,13 +156,13 @@ class WorkspaceCreator(val userInfo: UserInfo,
   }
 
   private def firstSteps(workspaceRequest: WorkspaceRequest, span: Span = null): Future[(WorkbenchEmail, RawlsBillingProject)] = {
-    val checkUserCanCreateWorksapce = checkCreateWorkspacePermissions(workspaceRequest, span)
+    val checkUserCanCreateWorkspace = checkCreateWorkspacePermissions(workspaceRequest, span)
     val checkWorkspaceNameIsUnique = checkIfWorkspaceWithNameAlreadyExists(workspaceRequest.toWorkspaceName, span)
     val billingProjectOwnerPolicyEmailFuture = getBillingProjectOwnerPolicyEmail(workspaceRequest, span)
     val getBillingProjectFuture = getBillingProjectForNewWorkspace(workspaceRequest.namespace, span)
 
     for { // These things happen in parallel, but they all need to finish before moving on
-      _ <- checkUserCanCreateWorksapce
+      _ <- checkUserCanCreateWorkspace
       _ <- checkWorkspaceNameIsUnique
       billingProjectOwnerPolicyEmail <- billingProjectOwnerPolicyEmailFuture
       billingProject <- getBillingProjectFuture
@@ -437,14 +437,6 @@ class WorkspaceCreator(val userInfo: UserInfo,
       _ <- traceWithParent("updateBillingAccountForProject", span)(_ => gcsDAO.setBillingAccountForProject(googleProjectId, billingAccount))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
     } yield (googleProjectId, googleProjectNumber)
-  }
-
-  // TODO: https://broadworkbench.atlassian.net/browse/CA-946
-  // This method should talk to the Resource Buffering Service, get a Google Project, and then set the appropriate
-  // Billing Account on the project and any other things we need to set on the Project.
-  private def getGoogleProjectFromRBS: Future[GoogleProjectId] = {
-    // TODO: Implement for real
-    Future.successful(GoogleProjectId(UUID.randomUUID.toString.substring(0, 8) + "_fake_proj_name"))
   }
 
   private def getGoogleProjectNumber(googleProjectId: GoogleProjectId): Future[GoogleProjectNumber] = {
