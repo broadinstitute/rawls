@@ -124,7 +124,8 @@ class HttpGoogleServicesDAO(
                              cleanupDeploymentAfterCreating: Boolean,
                              terraBucketReaderRole: String,
                              terraBucketWriterRole: String,
-                             override val accessContextManagerDAO: AccessContextManagerDAO)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+                             override val accessContextManagerDAO: AccessContextManagerDAO,
+                             resourceBufferJsonFile: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
@@ -1047,6 +1048,12 @@ class HttpGoogleServicesDAO(
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(billingPemFile))
       .setServiceAccountUser(billingEmail)
       .build()
+  }
+
+  lazy val getResourceBufferServiceAccountCredential: Credential = {
+    val file = new java.io.File(resourceBufferJsonFile)
+    val inputStream: InputStream = new FileInputStream(file)
+    GoogleCredential.fromStream(inputStream).toBuilder.setServiceAccountScopes(workbenchLoginScopes.asJava).build()
   }
 
   def toGoogleGroupName(groupName: RawlsGroupName) = s"${proxyNamePrefix}GROUP_${groupName.value}@${appsDomain}"
