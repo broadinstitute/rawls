@@ -57,7 +57,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val pollInterval: FiniteDuration = 1 second,
     val maxActiveWorkflowsTotal: Int = 100,
     val maxActiveWorkflowsPerUser: Int = 100,
-    val runtimeOptions: Option[JsValue] = None,
+    val defaultRuntimeOptions: Option[JsValue] = None,
     val trackDetailedSubmissionMetrics: Boolean = true,
     override val workbenchMetricBaseName: String = "test",
     val requesterPaysRole: String = requesterPaysRole,
@@ -226,7 +226,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "submit a workflow with the right parameters and options" in withDefaultTestDatabase {
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, runtimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-someother"))))) {
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, defaultRuntimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-someother"))))) {
       override val executionServiceCluster = mockExecCluster
     }
 
@@ -260,6 +260,35 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
+    }
+  }
+
+  it should "submit a workflow with the right zones for a regional bucket" in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(
+      slickDataSource,
+      100,
+      defaultRuntimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-some-other"), "another-option" -> JsString("10GB"))))) {
+      override val executionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(testData.regionalWorkspace) { ctx =>
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.regionalSubmission, testData.regionalWorkspace)
+
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      val workflowOptions = mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+
+      val expectedRuntimeOptions = workflowOptions.get.default_runtime_attributes.get.asJsObject
+      val actualZones: JsValue = expectedRuntimeOptions.fields("zones")
+      val actualZonesList: List[String] = actualZones.convertTo[String].split(" ").toList
+
+      actualZonesList should not be (empty)
+      actualZonesList.foreach { z => z should startWith("europe-north1-") }
+
+      // check that other runtime option passed has not been overridden
+      val anotherRuntimeOption = expectedRuntimeOptions.fields("another-option")
+      anotherRuntimeOption should be (JsString("10GB"))
     }
   }
 

@@ -222,6 +222,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsNameConfigCopyDestination = WorkspaceName("myNamespace", "configCopyDestinationWS")
     val wsInterleaved = WorkspaceName("myNamespace", "myWSToTestInterleavedSubs")
     val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWSToTestWFFailureMode")
+    val wsRegionalName = WorkspaceName("myNamespace", "myRegionalWorkspace")
     val workspaceToTestGrantId = UUID.randomUUID()
 
     val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
@@ -248,6 +249,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs)
 
     val (workspace) = makeWorkspaceWithUsers(billingProject, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
+
+    val (regionalWorkspace) = makeWorkspaceWithUsers(billingProject, wsRegionalName.name, UUID.randomUUID().toString, "fc-regional-bucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser",
       wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)))
@@ -457,6 +460,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Seq.empty, Map.empty,
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
     val submission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
+      Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
+      Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
+    val regionalSubmission = createTestSubmission(regionalWorkspace, agoraMethodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
     val costedSubmission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
@@ -820,7 +826,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceInterleavedSubmissions,
       workspaceWorkflowFailureMode,
       workspaceToTestGrant,
-      workspaceConfigCopyDestination)
+      workspaceConfigCopyDestination,
+      regionalWorkspace)
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
 
     override def save() = {
@@ -860,6 +867,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 submissionQuery.create(context, submissionTerminateTest),
                 submissionQuery.create(context, submissionNoWorkflows),
                 submissionQuery.create(context, submission1),
+                submissionQuery.create(context, regionalSubmission),
                 submissionQuery.create(context, costedSubmission1),
                 submissionQuery.create(context, submission2),
                 submissionQuery.create(context, submissionUpdateEntity),

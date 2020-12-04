@@ -231,6 +231,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getFolderId(folderName: String): Future[Option[String]]
 
   def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean]
+
+  /**
+    * Returns location of a regional bucket. If the bucket's location type is `multi-region`, it returns None
+    */
+  def getRegionForRegionalBucket(bucketName: String): Future[Option[String]]
+
+  def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]]
 }
 
 object GoogleApiTypes {

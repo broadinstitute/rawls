@@ -145,6 +145,8 @@ class HttpGoogleServicesDAO(
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
   val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
+  val SingleRegionLocationType: String = "region"
+
   //we only have to do this once, because there's only one DM project
   lazy val getDeploymentManagerSAEmail: Future[String] = {
     getGoogleProject(GoogleProjectId(deploymentMgrProject))
@@ -398,9 +400,38 @@ class HttpGoogleServicesDAO(
 
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
     implicit val service = GoogleInstrumentedService.Storage
-    val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
-      case e: HttpResponseException => None
+    retryWithRecoverWhen500orGoogleError(() => {
+      val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
+      Option(executeGoogleRequest(getter))
+    }) {
+      case _: HttpResponseException => None
+    }
+  }
+
+  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
+    getBucket(bucketName) map {
+      case Some(bucket) => bucket.getLocationType match {
+        case SingleRegionLocationType => Option(bucket.getLocation)
+        case _ => None
+      }
+      case None => throw new RawlsException(s"Failed to retrieve bucket `$bucketName`")
+    }
+  }
+
+  override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+    retryWithRecoverWhen500orGoogleError(() => {
+      // convert the region to lowercase because the `.region().get()` API expects the region input to match
+      // the pattern: /[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?|[1-9][0-9]{0,19}/
+      val getter = getComputeManager(getBucketServiceAccountCredential).regions().get(googleProject.value, region.toLowerCase)
+      val zonesAsResourceUrls = executeGoogleRequest(getter).getZones.asScala.toList
+
+      // `getZones()` returns the zones as resource urls of form `https://www.googleapis.com/compute/v1/projects/project_id/zones/us-central1-b",
+      // Hence split it by `/` and get last element of array to get the zone
+      zonesAsResourceUrls.map(_.split("/").last)
+    }) {
+      case e => throw new RawlsException(s"Something went wrong while retrieving zones for region `$region` under Google " +
+        s"project `${googleProject.value}`.", e)
     }
   }
 

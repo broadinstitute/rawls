@@ -223,4 +223,21 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(billingAccount == accessibleBillingAccountName)
   }
 
+  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
+    Future.successful {
+      bucketName match {
+        case "fc-regional-bucket" => Option("EUROPE-NORTH1")
+        case _ => None
+      }
+    }
+  }
+
+  override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] = {
+    Future.successful {
+      region.toLowerCase match {
+        case "europe-north1" => List("europe-north1-a", "europe-north1-b", "europe-north1-c")
+        case _ => List("us-central1-b", "us-central1-c", "us-central1-f")
+      }
+    }
+  }
 }
