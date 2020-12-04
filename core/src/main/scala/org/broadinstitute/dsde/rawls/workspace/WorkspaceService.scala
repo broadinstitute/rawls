@@ -1916,6 +1916,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             // add the workspace id to the span so we can find and correlate it later with other services
             s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
 
+            // TODO: Before creating the bucket make sure the location passed is of form `europe-north1`
+            // We should validate that location passed like `EU` or `US` should not be allowed
+
             traceDBIOWithParent("getPolicySyncStatus", s1)(_ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { projectOwnerPolicyEmail =>
               traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
                 for {

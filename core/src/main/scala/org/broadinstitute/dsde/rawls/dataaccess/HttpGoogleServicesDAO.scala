@@ -68,7 +68,6 @@ import scala.io.Source
 import scala.util.matching.Regex
 
 import io.opencensus.scala.Tracing._
-import org.apache.commons.lang3.exception.ExceptionUtils
 
 case class Resources (
                        name: String,

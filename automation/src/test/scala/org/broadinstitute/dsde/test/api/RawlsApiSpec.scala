@@ -320,9 +320,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
 
               workerAssignedExecEvents should not be (empty)
-              workerAssignedExecEvents foreach { event =>
-                event should include (europeNorth1ZonesPrefix)
-              }
+              workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
             }
           }
         }
@@ -416,9 +414,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
 
               workerAssignedExecEvents should not be (empty)
-              workerAssignedExecEvents foreach { event =>
-                event should include (europeNorth1ZonesPrefix)
-              }
+              workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
             }
           }
         }
