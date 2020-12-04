@@ -46,13 +46,16 @@ class WorkspaceCreator(val userInfo: UserInfo,
     createWorkspaceInternal(workspaceRequest, span)
   }
 
-  // TODO: What's up with CloneWorkspace in Orch? Need to make sure this is doing same things as Orch
   /**
     * Public method for cloning an existing Workspace.  The creation of the new cloned Workspace will be performed by
     * `createWorkspaceInternal`, but this method will need to do some work before that to make sure the user has the
     * necessary permissions on the source Workspace and that any Auth Domain restrictions on the source Workspace are
     * still in place on the cloned Workspace.  After the cloned Workspace is created, this method will also do things
     * like copying Entities, Method Configs, and bucket data from the source Workspace into the cloned Workspace.
+    *
+    * If you have concerns with how Attributes are cloned from the existing Workspace, you may also want to review
+    * https://github.com/broadinstitute/firecloud-orchestration/blob/develop/src/main/scala/org/broadinstitute/dsde/firecloud/webservice/WorkspaceApiService.scala
+    * in POST /api/workspaces/{workspaceNamespace}/{workspaceName}/clone
     *
     * @param sourceWorkspaceName
     * @param destWorkspaceRequest
