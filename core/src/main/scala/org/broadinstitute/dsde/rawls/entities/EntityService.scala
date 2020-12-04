@@ -53,14 +53,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {
       for {
-        workspaceContext <- getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false)))
+        workspaceContext <- getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false)))
         entityManager <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, userInfo))
         result <- entityManager.createEntity(entity)
       } yield result
     }
 
   def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
-    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+    getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
       // we haven't done this yet because we don't know the business logic around which billing project to use for each user.
@@ -82,7 +82,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
-      getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+      getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
             val updateAction = Try {
@@ -101,7 +101,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
-    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+    getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
       // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
@@ -121,7 +121,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =
-    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+    getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
           dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
@@ -133,7 +133,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[PerRequestMessage] =
-    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+    getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
           ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
@@ -160,7 +160,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
-    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+    getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       // TODO: AS-321 insert the billing project, if present. May want to use EntityRequestArguments or other container class.
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
@@ -174,14 +174,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =
-    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+    getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
       }
     }
 
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
-    getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+    getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
 
@@ -201,8 +201,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean): Future[PerRequestMessage] =
 
-    getWorkspaceIfHasUserHasAction(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { destWorkspaceContext =>
-      getWorkspaceIfHasUserHasAction(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { sourceWorkspaceContext =>
+    getWorkspaceIfUserHasAction(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { destWorkspaceContext =>
+      getWorkspaceIfUserHasAction(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { sourceWorkspaceContext =>
         dataSource.inTransaction { dataAccess =>
           for {
             sourceAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo))
@@ -228,7 +228,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     } yield operation.name
 
     withAttributeNamespaceCheck(namesToCheck) {
-      getWorkspaceIfHasUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+      getWorkspaceIfUserHasAction(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
             val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap

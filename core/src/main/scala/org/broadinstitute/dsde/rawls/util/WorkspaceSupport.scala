@@ -76,7 +76,7 @@ trait WorkspaceSupport {
 
   //WorkspaceContext helpers
 
-  def getWorkspaceIfHasUserHasAction(workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
+  def getWorkspaceIfUserHasAction(workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
     for {
       workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
       _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission

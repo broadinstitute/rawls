@@ -69,7 +69,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
     validateLibraryAttributeNamespaces(libraryAttributeNames)
 
     for {
-      sourceWorkspace <- getWorkspaceIfHasUserHasAction(sourceWorkspaceName, SamWorkspaceActions.read)
+      sourceWorkspace <- getWorkspaceIfUserHasAction(sourceWorkspaceName, SamWorkspaceActions.read)
       destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
       newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
       cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
