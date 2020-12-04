@@ -61,6 +61,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
     * @return
     */
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
+    val destAuthDomains = destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)
     destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
 
@@ -69,7 +70,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
 
     for {
       sourceWorkspace <- getWorkspaceIfUserHasAction(sourceWorkspaceName, SamWorkspaceActions.read)
-      destAuthDomains <- validateAuthDomainsForDestWorkspace(sourceWorkspace.workspaceId, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty))
+      _ <- validateAuthDomainsForCloneWorkspace(sourceWorkspace.workspaceId, destAuthDomains)
       newAttrs = sourceWorkspace.attributes ++ destWorkspaceRequest.attributes
       cloneWorkspaceRequest = destWorkspaceRequest.copy(authorizationDomain = Option(destAuthDomains), attributes = newAttrs)
       destWorkspace <- createWorkspaceInternal(cloneWorkspaceRequest)
@@ -159,40 +160,21 @@ class WorkspaceCreator(val userInfo: UserInfo,
 
   /**
     * This method will query Sam to get the list of Auth Domains defined on the Source Workspace, i.e. the one that is
-    * being cloned.  It will then Union these with the Auth Domains being defined on the new cloned Workspace. An
+    * being cloned.  It will then diff these with the Auth Domains being defined on the new cloned Workspace. An
     * exception will be thrown if there are Auth Domains defined on the Source Workspace that are missing from the
-    * Destination Workspace.  If the Auth Domains on the Destination Workspace are valid, this method will finish
-    * processing normally and return the Union
+    * Destination Workspace.
     *
     * @param sourceWorkspaceId
     * @param destWorkspaceAuthDomains
     * @return
     */
-  private def validateAuthDomainsForDestWorkspace(sourceWorkspaceId: String, destWorkspaceAuthDomains: Set[ManagedGroupRef]): Future[Set[ManagedGroupRef]] = {
+  private def validateAuthDomainsForCloneWorkspace(sourceWorkspaceId: String, destWorkspaceAuthDomains: Set[ManagedGroupRef]): Future[Unit] = {
     samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceId, userInfo).map { sourceAuthDomainStrings =>
-      val sourceAuthDomains = sourceAuthDomainStrings.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet
-      unionAuthDomains(sourceAuthDomains, destWorkspaceAuthDomains)
-    }
-  }
-
-  /**
-    * Ever Auth Domain listed in sourceWorkspaceADs must be present in destWorkspaceADs or else an exception will be
-    * thrown.  If valid, then return the Union of sourceWorkspaceADs and destWorkspaceADs.
-    *
-    * TODO: If sourceWorkspaceADs is a subset of destWorkspaceADs, isn't the Union equivalent to destWorkspaceADs?
-    *
-    * @param sourceWorkspaceADs
-    * @param destWorkspaceADs
-    * @return
-    */
-  private def unionAuthDomains(sourceWorkspaceADs: Set[ManagedGroupRef], destWorkspaceADs: Set[ManagedGroupRef]): Set[ManagedGroupRef] = {
-    // if the source has an auth domain, the dest must also have that auth domain as a subset
-    // otherwise, the caller may choose to add to the auth domain
-    if (sourceWorkspaceADs.subsetOf(destWorkspaceADs)) sourceWorkspaceADs ++ destWorkspaceADs
-    else {
-      val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
-      val errorMsg = s"Source workspace has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg))
+      val sourceWorkspaceAuthDomains = sourceAuthDomainStrings.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet
+      if (!sourceWorkspaceAuthDomains.subsetOf(destWorkspaceAuthDomains)) {
+        val missingGroups = sourceWorkspaceAuthDomains -- destWorkspaceAuthDomains
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, s"Source workspace has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"))
+      }
     }
   }
 
