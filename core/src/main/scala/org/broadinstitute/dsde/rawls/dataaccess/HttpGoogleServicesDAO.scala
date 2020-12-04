@@ -412,7 +412,7 @@ class HttpGoogleServicesDAO(
   override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
     getBucket(bucketName) map {
       case Some(bucket) => bucket.getLocationType match {
-        case SingleRegionLocationType => Option(bucket.getLocation.toLowerCase)
+        case SingleRegionLocationType => Option(bucket.getLocation)
         case _ => None
       }
       case None => throw new RawlsException(s"Failed to retrieve bucket `$bucketName`")
@@ -422,7 +422,9 @@ class HttpGoogleServicesDAO(
   override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWithRecoverWhen500orGoogleError(() => {
-      val getter = getComputeManager(getBucketServiceAccountCredential).regions().get(googleProject.value, region)
+      // convert the region to lowercase because the `.region().get()` API expects the region input to match
+      // the pattern: /[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?|[1-9][0-9]{0,19}/
+      val getter = getComputeManager(getBucketServiceAccountCredential).regions().get(googleProject.value, region.toLowerCase)
       val zonesAsResourceUrls = executeGoogleRequest(getter).getZones.asScala.toList
 
       // `getZones()` returns the zones as resource urls of form `https://www.googleapis.com/compute/v1/projects/project_id/zones/us-central1-b",
@@ -430,7 +432,7 @@ class HttpGoogleServicesDAO(
       zonesAsResourceUrls.map(_.split("/").last)
     }) {
       case e => throw new RawlsException(s"Something went wrong while retrieving zones for region `$region` under Google " +
-        s"project `${googleProject.value}`. Error: ${ExceptionUtils.getMessage(e)}")
+        s"project `${googleProject.value}`.", e)
     }
   }
 

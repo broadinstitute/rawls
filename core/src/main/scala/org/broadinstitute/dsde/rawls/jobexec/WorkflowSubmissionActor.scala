@@ -187,13 +187,21 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   def getRuntimeOptions(googleProjectId: String, bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[JsValue]] = {
+
+    def updateRuntimeOptions(zones: List[String]): Option[JsValue] = {
+      defaultRuntimeOptions match {
+        case Some(defaultRuntimeAttrs) =>
+          val runtimeAttrsObj = defaultRuntimeAttrs.asJsObject
+          Option(JsObject(runtimeAttrsObj.fields + ("zones" -> JsString(zones.mkString(" ")))))
+        case None => Option(JsObject("zones" -> JsString(zones.mkString(" "))))
+      }
+    }
+
     for {
       regionOption <- googleServicesDAO.getRegionForRegionalBucket(bucketName)
       runtimeOptions <- {
         regionOption match {
-          case Some(region) => googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region) map { zones =>
-            Option(JsObject("zones" -> JsString(zones.mkString(" "))))
-          }
+          case Some(region) => googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region).map(updateRuntimeOptions)
           case None =>
             // if the location is `multi-region` we want the default zones from config
             Future.successful(defaultRuntimeOptions)
