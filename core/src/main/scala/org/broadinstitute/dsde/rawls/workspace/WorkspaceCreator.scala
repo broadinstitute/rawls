@@ -84,12 +84,6 @@ class WorkspaceCreator(val userInfo: UserInfo,
     }
   }
 
-  // Temporary method for easily switching between the parallel/sequential versions of createWorkspaceInternal while
-  // this is still in development/testing
-  private def createWorkspaceInternal(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
-    createWorkspaceInternal_parallel(workspaceRequest, span)
-  }
-
   /**
     * This method will take a WorkspaceRequest and attempt to create a fully functional Terra Workspace.  This method
     * will check that the User making the request has the required permissions on the Billing Project to create
@@ -112,7 +106,7 @@ class WorkspaceCreator(val userInfo: UserInfo,
     * @param span
     * @return
     */
-  private def createWorkspaceInternal_sequential(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
+  private def createWorkspaceInternal(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
     val authDomains = workspaceRequest.authorizationDomain.getOrElse(Set.empty)
     val noWorkspaceOwner = workspaceRequest.noWorkspaceOwner.getOrElse(false)
 
@@ -124,80 +118,38 @@ class WorkspaceCreator(val userInfo: UserInfo,
       workspaceId = UUID.randomUUID.toString
       (googleProjectId, googleProjectNumber) <- claimGoogleProject(billingProject, workspaceId, span)
       workspace <- persistNewWorkspace(workspaceRequest, googleProjectId, googleProjectNumber, workspaceId, span)
-      workspaceResourceResponse <- createWorkspaceResourceInSam(workspace.workspaceId, billingProjectOwnerPolicyEmail, noWorkspaceOwner, authDomains, span)
-      policyNameToEmailMap: Map[SamResourcePolicyName, WorkbenchEmail] = workspaceResourceResponse.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
-      _ <- createWorkflowCollectionForWorkspace(workspace.workspaceId, policyNameToEmailMap, span)
-      _ <- syncWorkspacePoliciesWithGoogle(workspace, policyNameToEmailMap, authDomains, span)
-      _ <- setupGoogleProjectForWorkspace(workspace, policyNameToEmailMap, billingProjectOwnerPolicyEmail, authDomains, span)
       _ <- maybeUpdateGoogleProjectsInPerimeter(billingProject)
+      _ <- configureNewWorkspace(workspace, billingProject, billingProjectOwnerPolicyEmail, noWorkspaceOwner, authDomains, span)
     } yield workspace
   }
 
   /**
-    * Creates a new Workspace doing everything the same as createWorkspaceInternal_sequential, but this version tries
-    * to run certain steps/futures in parallel instead of running them all sequentially.  It's not super pretty.  It
-    * breaks things down into 3 different steps, each of which is its own `for` comprehension.  Why 3?  It was chosen
-    * because there was a set of steps identified that could be run first and all in parallel.  After these finish,
-    * there is a set of steps that must be executed sequentially.  After those complete, there is another set of steps
-    * that can all be kicked off in parallel.  If you need to add a new step, depending on its placement and whether it
-    * needs to be run in parallel or sequentially with existing steps, you may be able to just add it to an existing
-    * `for` comp, or you may need to add a whole new `for` comp.
-    * @param workspaceRequest
+    * Once we have successfully created a Workspace record and claimed a Google Project for it, we can go about
+    * configuring all of the permissions and elements that need to be contained within a Workspace.  We need to ensure
+    * that Sam and Google are in sync in terms of who can do what in the Workspace in Terra services and who can do what
+    * on the corresponding Workspace elements on Google.
+    *
+    * @param workspace
+    * @param billingProject
+    * @param billingProjectOwnerPolicyEmail
+    * @param noWorkspaceOwner
+    * @param authDomains
     * @param span
     * @return
     */
-  private def createWorkspaceInternal_parallel(workspaceRequest: WorkspaceRequest, span: Span = null): Future[Workspace] = {
-    val authDomains = workspaceRequest.authorizationDomain.getOrElse(Set.empty)
-    val noWorkspaceOwner = workspaceRequest.noWorkspaceOwner.getOrElse(false)
-
-    for {
-      (billingProjectOwnerPolicyEmail, billingProject) <- firstSteps(workspaceRequest, span)
-      (workspace, workspaceResourceResponse) <- secondSteps(workspaceRequest, billingProject, billingProjectOwnerPolicyEmail, noWorkspaceOwner, authDomains, span)
-      _ <- thirdSteps(workspace, billingProject, workspaceResourceResponse, billingProjectOwnerPolicyEmail, authDomains, span)
-    } yield workspace
-  }
-
-  private def firstSteps(workspaceRequest: WorkspaceRequest, span: Span = null): Future[(WorkbenchEmail, RawlsBillingProject)] = {
-    val checkUserCanCreateWorkspace = checkCreateWorkspacePermissions(workspaceRequest, span)
-    val checkWorkspaceNameIsUnique = checkIfWorkspaceWithNameAlreadyExists(workspaceRequest.toWorkspaceName, span)
-    val billingProjectOwnerPolicyEmailFuture = getBillingProjectOwnerPolicyEmail(workspaceRequest, span)
-    val getBillingProjectFuture = getBillingProjectForNewWorkspace(workspaceRequest.namespace, span)
-
-    for { // These things happen in parallel, but they all need to finish before moving on
-      _ <- checkUserCanCreateWorkspace
-      _ <- checkWorkspaceNameIsUnique
-      billingProjectOwnerPolicyEmail <- billingProjectOwnerPolicyEmailFuture
-      billingProject <- getBillingProjectFuture
-    } yield (billingProjectOwnerPolicyEmail, billingProject)
-  }
-
-  private def secondSteps(workspaceRequest: WorkspaceRequest,
-                          billingProject: RawlsBillingProject,
-                          billingProjectOwnerPolicyEmail: WorkbenchEmail,
-                          noWorkspaceOwner: Boolean,
-                          authDomains: Set[ManagedGroupRef],
-                          span: Span = null): Future[(Workspace, SamCreateResourceResponse)] = {
-    val workspaceId = UUID.randomUUID.toString
-    for { // The following futures need to happen sequentially
-      (googleProjectId, googleProjectNumber) <- claimGoogleProject(billingProject, workspaceId, span)
-      workspace <- persistNewWorkspace(workspaceRequest, googleProjectId, googleProjectNumber, workspaceId, span)
-      workspaceResourceResponse <- createWorkspaceResourceInSam(workspace.workspaceId, billingProjectOwnerPolicyEmail, noWorkspaceOwner, authDomains, span)
-    } yield (workspace, workspaceResourceResponse)
-  }
-
-  private def thirdSteps(workspace: Workspace,
+  private def configureNewWorkspace(workspace: Workspace,
                          billingProject: RawlsBillingProject,
-                         samCreateResourceResponse: SamCreateResourceResponse,
                          billingProjectOwnerPolicyEmail: WorkbenchEmail,
+                         noWorkspaceOwner: Boolean,
                          authDomains: Set[ManagedGroupRef],
                          span: Span = null): Future[Unit] = {
-    val policyNameToEmailMap = samCreateResourceResponse.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
-    for { // Run all of these in parallel
+    for {
+      workspaceResourceResponse <- createWorkspaceResourceInSam(workspace.workspaceId, billingProjectOwnerPolicyEmail, noWorkspaceOwner, authDomains, span)
+      policyNameToEmailMap = workspaceResourceResponse.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
       _ <- Future.sequence(Seq(
         createWorkflowCollectionForWorkspace(workspace.workspaceId, policyNameToEmailMap, span),
         syncWorkspacePoliciesWithGoogle(workspace, policyNameToEmailMap, authDomains, span),
-        setupGoogleProjectForWorkspace(workspace, policyNameToEmailMap, billingProjectOwnerPolicyEmail, authDomains, span),
-        maybeUpdateGoogleProjectsInPerimeter(billingProject)))
+        setupGoogleProjectForWorkspace(workspace, policyNameToEmailMap, billingProjectOwnerPolicyEmail, authDomains, span)))
     } yield ()
   }
 
