@@ -265,7 +265,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "submit a workflow with the right zones for a regional bucket" in withDefaultTestDatabase {
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, defaultRuntimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-some-other"))))) {
+    val workflowSubmission = new TestWorkflowSubmission(
+      slickDataSource,
+      100,
+      defaultRuntimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-some-other"), "another-option" -> JsString("10GB"))))) {
       override val executionServiceCluster = mockExecCluster
     }
 
@@ -276,11 +279,16 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowOptions = mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
 
-      val actualZones: JsValue = workflowOptions.get.default_runtime_attributes.get.asJsObject.fields("zones")
+      val expectedRuntimeOptions = workflowOptions.get.default_runtime_attributes.get.asJsObject
+      val actualZones: JsValue = expectedRuntimeOptions.fields("zones")
       val actualZonesList: List[String] = actualZones.convertTo[String].split(" ").toList
 
       actualZonesList should not be (empty)
       actualZonesList.foreach { z => z should startWith("europe-north1-") }
+
+      // check that other runtime option passed has not been overridden
+      val anotherRuntimeOption = expectedRuntimeOptions.fields("another-option")
+      anotherRuntimeOption should be (JsString("10GB"))
     }
   }
 
