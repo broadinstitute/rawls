@@ -48,7 +48,7 @@ trait WorkspaceSupport {
 
   def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] = {
     for {
-      workspaceContext <- getWorkspaceContext(workspaceName)
+      workspaceContext <- getWorkspace(workspaceName)
       hasCompute <- {
         samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.compute, userInfo).flatMap { launchBatchCompute =>
           if (launchBatchCompute) Future.successful(())
@@ -78,15 +78,12 @@ trait WorkspaceSupport {
 
   def getWorkspaceIfUserHasAction(workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
     for {
-      workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
+      workspaceContext <- getWorkspace(workspaceName, attributeSpecs)
       _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
   }
 
-  // Not sure why this isn't just called `getWorkspace`.  Also, why doesn't this just call
-  //    `dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs)`
-  // directly since that's all that it does
-  def getWorkspaceContext(workspaceName: WorkspaceName, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
+  def getWorkspace(workspaceName: WorkspaceName, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[Workspace] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
         DBIO.successful(workspaceContext)

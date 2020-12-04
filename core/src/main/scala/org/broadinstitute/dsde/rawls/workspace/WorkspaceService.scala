@@ -425,10 +425,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
       for {
         isCurator <- tryIsCurator(userInfo.userEmail)
-        workspace <- getWorkspaceContext(workspaceName) flatMap { ctx =>
-          withLibraryPermissions(ctx, operations, userInfo, isCurator) {
+        workspace <- getWorkspace(workspaceName) flatMap { workspace =>
+          withLibraryPermissions(workspace, operations, userInfo, isCurator) {
             dataSource.inTransaction ({ dataAccess =>
-              updateWorkspace(operations, dataAccess)(ctx.toWorkspaceName)
+              updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName)
             }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
           }
         }
@@ -897,16 +897,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     //don't do the sam REST call inside the db transaction.
-    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
-      requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
+    getWorkspace(workspaceName) flatMap { workspace =>
+      requireAccessIgnoreLockF(workspace, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
-          dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
+          dataAccess.submissionQuery.list(workspace).flatMap { submissions =>
             if (!submissions.forall(_.status.isTerminated)) {
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace $workspaceName, so it cannot be locked.")))
             } else {
-              dataAccess.workspaceQuery.lock(workspaceContext.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
+              dataAccess.workspaceQuery.lock(workspace.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
             }
           }
         }
@@ -916,12 +916,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     //don't do the sam REST call inside the db transaction.
-    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
-      requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
+    getWorkspace(workspaceName) flatMap { workspace =>
+      requireAccessIgnoreLockF(workspace, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
+          dataAccess.workspaceQuery.unlock(workspace.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
     }
@@ -1654,11 +1654,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     //don't do the sam REST call inside the db transaction.
-    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
-      requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.write) {
+    getWorkspace(workspaceName) flatMap { workspace =>
+      requireAccessIgnoreLockF(workspace, SamWorkspaceActions.write) {
         //if we get here, we passed all the hoops, otherwise an exception would have been thrown
 
-        gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName).map { usage =>
+        gcsDAO.getBucketUsage(workspace.googleProjectId, workspace.bucketName).map { usage =>
           RequestComplete(BucketUsageResponse(usage))
         }
       }
