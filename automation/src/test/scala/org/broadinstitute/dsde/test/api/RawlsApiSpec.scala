@@ -245,7 +245,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
       val europeNorth1ZonesPrefix = "europe-north1-"
 
       withCleanBillingProject(studentB) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflows-in-regions", workspaceRegion = Option("europe-north1")) { workspaceName =>
+        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
               projectName, workspaceName,
@@ -337,8 +337,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
       withCleanBillingProject(studentB) { projectName =>
         // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
-        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", workspaceRegion = Option("europe-north1")) { workspaceName =>
+        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
+            // `withClonedWorkspace()` appends `_clone` to the original workspace. Check that workspace returned is actually a clone
             workspaceName should include ("_clone")
 
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
