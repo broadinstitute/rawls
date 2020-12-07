@@ -36,6 +36,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceACLUpdateResponseListFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -415,6 +416,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // Abort running workflows
       aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) }
 
+      // Delete Google Project
+      _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo)
+
       // Delete resource in sam outside of DB transaction
       _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo)
@@ -435,6 +439,38 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
       RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.bucketName} will be deleted within 24h.")
     }
+  }
+
+  // TODO once workspace migration is complete and there are no more v1 workspaces, we can remove this method (Add ticket #)
+  private def maybeDeleteGoogleProject(googleProjectId: GoogleProjectId, workspaceVersion: WorkspaceVersion, userInfoForSam: UserInfo): Future[Unit] = {
+    val isV1Workspace: Boolean = workspaceVersion == WorkspaceVersions.V1
+    if (!isV1Workspace)
+      deleteGoogleProject(googleProjectId, userInfoForSam)
+    else
+      Future.successful()
+  }
+
+  def deleteGoogleProject(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] = {
+        for {
+          _ <- deletePetsInProject(googleProjectId, userInfoForSam)
+          _ <- gcsDAO.deleteProject(googleProjectId)
+          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam)
+        } yield ()
+  }
+
+  private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] = {
+    for {
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+      _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
+    } yield ()
+  }
+
+  private def destroyPet(userIdInfo: UserIdInfo, projectName: GoogleProjectId): Future[Unit] = {
+    for {
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
+      petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName, petUserInfo)
+    } yield ()
   }
 
   def updateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
