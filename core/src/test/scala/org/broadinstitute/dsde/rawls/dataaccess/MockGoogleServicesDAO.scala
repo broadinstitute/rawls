@@ -114,8 +114,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] = Future.successful(new Project().setProjectNumber(Random.nextLong()))
 
-  override def setBillingAccountForProject(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, billingEnabled: Boolean = true ): Future[Unit] = Future.successful()
-
   override def deleteBucket(bucketName: String) = Future.successful(true)
 
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(Some(new Bucket))

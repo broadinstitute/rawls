@@ -1270,12 +1270,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
     // in the Billing Project
     val billingAccountNameCaptor = captor[RawlsBillingAccountName]
-    verify(services.gcsDAO).setBillingAccountForProject(any[GoogleProjectId], billingAccountNameCaptor.capture, anyBoolean())
+    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture))
     billingAccountNameCaptor.getValue shouldEqual billingProject.billingAccount.get
   }
 
   it should "throw an exception when calling GoogleServicesDAO to update the Billing Account on the Workspace's Google Project and the DAO call fails" in withTestDataServices { services =>
-    when(services.gcsDAO.setBillingAccountForProject(any[GoogleProjectId], any[RawlsBillingAccountName], anyBoolean()))
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(any[GoogleProjectId], any[Option[RawlsBillingAccountName]]))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
     val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
@@ -1451,12 +1451,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
     // in the Billing Project
     val billingAccountNameCaptor = captor[RawlsBillingAccountName]
-    verify(services.gcsDAO).setBillingAccountForProject(any[GoogleProjectId], billingAccountNameCaptor.capture, anyBoolean())
+    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture))
     billingAccountNameCaptor.getValue shouldEqual billingProject.billingAccount.get
   }
 
   it should "throw an exception when calling GoogleServicesDAO to update the Billing Account on the Workspace's Google Project and the DAO call fails" in withTestDataServices { services =>
-    when(services.gcsDAO.setBillingAccountForProject(any[GoogleProjectId], any[RawlsBillingAccountName], anyBoolean()))
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(any[GoogleProjectId], any[Option[RawlsBillingAccountName]]))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
     val baseWorkspace = testData.workspace
