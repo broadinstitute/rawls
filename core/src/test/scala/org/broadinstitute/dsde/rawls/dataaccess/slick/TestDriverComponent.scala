@@ -163,7 +163,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                     attributes: AttributeMap,
                     isLocked: Boolean) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount)
   }
   def makeWorkspaceWithUsers(project: RawlsBillingProject,
                              name: String,
@@ -177,9 +177,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              isLocked: Boolean,
                              workspaceVersion: WorkspaceVersion,
                              googleProjectId: GoogleProjectId,
-                             billingAccount: Option[RawlsBillingAccountName]) = {
+                             googleProjectNumber: Option[GoogleProjectNumber],
+                             currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName]) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, billingAccount)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace)
   }
 
   class EmptyWorkspace() extends TestData {
@@ -210,13 +211,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
     val workspaceVersion = WorkspaceVersions.V2
     val googleProjectId = project.googleProjectId
+    val googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
     val billingAccount = maybeBillingAccount
 
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, billingAccount)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount)
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace)
+        workspaceQuery.createOrUpdate(workspace)
       )
     }
   }
