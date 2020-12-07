@@ -145,7 +145,7 @@ case class Workspace(
 }
 
 object Workspace {
-  /** convenience constructor that defaults workspace version to v1 and google project to namespace */
+  /** convenience constructor that defaults workspace version to v2 and google project to namespace */
   def apply(namespace: String,
     name: String,
     workspaceId: String,
@@ -156,7 +156,7 @@ object Workspace {
     createdBy: String,
     attributes: AttributeMap,
     isLocked: Boolean = false): Workspace = {
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace), None)
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(namespace), None)
   }
 }
 
