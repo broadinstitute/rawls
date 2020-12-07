@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.buffer.client.{ApiClient, ApiException}
 import bio.terra.buffer.api.BufferApi
-import bio.terra.buffer.model.ResourceInfo
+import bio.terra.buffer.model.{HandoutRequestBody, ResourceInfo}
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.ResourceBufferConfig
@@ -38,7 +38,7 @@ class HttpResourceBufferDAO(config: ResourceBufferConfig, clientServiceAccountCr
   }
 
   private def handoutResourceGeneric(poolId: String, handoutRequestId: String, accessToken: OAuth2BearerToken): ResourceInfo =
-    getResourceBufferApi(accessToken).handoutResource(poolId, handoutRequestId)
+    getResourceBufferApi(accessToken).handoutResource(new HandoutRequestBody().handoutRequestId(handoutRequestId), poolId)
 
   private def getResourceBufferApi(accessToken: OAuth2BearerToken) = {
     new BufferApi(getApiClient(accessToken.token))
