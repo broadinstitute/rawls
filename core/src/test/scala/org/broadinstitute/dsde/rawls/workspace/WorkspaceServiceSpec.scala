@@ -1275,7 +1275,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   }
 
   it should "throw an exception when calling GoogleServicesDAO to update the Billing Account on the Workspace's Google Project and the DAO call fails" in withTestDataServices { services =>
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(any[GoogleProjectId], any[Option[RawlsBillingAccountName]]))
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
     val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
@@ -1456,7 +1456,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   }
 
   it should "throw an exception when calling GoogleServicesDAO to update the Billing Account on the Workspace's Google Project and the DAO call fails" in withTestDataServices { services =>
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(any[GoogleProjectId], any[Option[RawlsBillingAccountName]]))
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
     val baseWorkspace = testData.workspace
