@@ -771,6 +771,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  // TODO: add unit test for withWorkspaceBucketRegionCheck
+
   it should "concurrently update workspace attributes" in withTestDataApiServices { services =>
     def generator(i: Int): ReadAction[Option[Workspace]] = {
       Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString(s"bang$i")): AttributeUpdateOperation))) ~>

@@ -62,6 +62,17 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         }
       }
 
+      "to create a workspace with a workspace bucket in a specified invalid region" in {
+        implicit val token: AuthToken = ownerAuthToken
+
+        val p = claimGPAllocProject(owner)
+        val workspaceName = prependUUID("owner-invalid-region-workspace")
+        val exception = intercept[RestException](Orchestration.workspaces.create(p.projectName, workspaceName, Set.empty, Option("invalid-region1"))).message.parseJson.asJsObject
+
+        exception.fields("statusCode").convertTo[Int] should equal(400)
+        exception.fields("message").convertTo[String] should endWith(s" in Google project `${p.projectName}` in region `invalid-region1`.")
+      }
+
       "to add readers with can-share access" in {
         withCleanBillingProject(owner) { projectName =>
           withWorkspace(projectName, prependUUID("share-reader")) { workspaceName =>
