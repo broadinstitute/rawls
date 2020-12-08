@@ -150,6 +150,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  def withEmptyDatabaseAndApiServices[T](testCode: TestApiService =>  T): T = {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
   class TestWorkspaces() extends TestData {
     val userProjectOwner = RawlsUser(UserInfo(RawlsUserEmail("project-owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543210101")))
     val userOwner = RawlsUser(UserInfo(testData.userOwner.userEmail, OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
@@ -649,6 +655,46 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(googleProjectId.value),
       any[UserInfo]
     )
+  }
+
+  // todo: delete this test when v1 workspaces are all migrated to v2 (ADD TICKET #)
+  it should "delete a v1 workspace" in withEmptyDatabaseAndApiServices { services =>
+
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("v1-test-ns"), CreationStatuses.Ready, None, None)
+    val v1Workspace = new Workspace(
+      billingProject.projectName.value,
+      "myWorkspaceV1",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "test",
+      Map.empty,
+      false,
+      WorkspaceVersions.V1,
+      GoogleProjectId("googleprojectid"),
+      Option(GoogleProjectNumber("googleProjectNumber"))
+    )
+
+    runAndWait(
+      DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject),
+        workspaceQuery.createOrUpdate(v1Workspace),
+      )
+    )
+
+    Delete(v1Workspace.path) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, responseAs[String]) {
+          status
+        }
+      }
+
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(v1Workspace.toWorkspaceName))
+    }
   }
 
   // see also WorkspaceApiListOptionsSpec for tests against list-workspaces that use the ?fields query param
