@@ -143,6 +143,21 @@ trait WorkspaceSupport {
     }
   }
 
+  def withWorkspaceBucketRegionCheck[T](bucketRegion: Option[String])(op: => Future[T]): Future[T] = {
+    bucketRegion match {
+      case Some(region) =>
+        // we currently only support creating buckets in a single region or default it to US (which is multi-region)
+        val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
+        if (region.matches(singleRegionPattern)) op
+        else {
+          val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = s"Workspace Bucket Location should be " +
+            s"of format: $singleRegionPattern.")
+          throw new RawlsExceptionWithErrorReport(errorReport = err)
+        }
+      case None => op
+    }
+  }
+
   def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 }

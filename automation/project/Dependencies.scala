@@ -7,9 +7,9 @@ object Dependencies {
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.11.3"
 
-  val serviceTestV = "0.18-52697a02-SNAP" // TODO: Change it from SNAP to actual version
+  val serviceTestV = "0.18-c9edd8e"
   val workbenchGoogleV = "0.21-64a7b29"
-  val workbenchGoogle2V = "0.17-52697a02-SNAP" // TODO: Change it from SNAP to actual version
+  val workbenchGoogle2V = "0.18-c9edd8e"
   val workbenchModelV  = "0.14-65bba14"
   val workbenchMetricsV  = "0.5-64a7b29"
 

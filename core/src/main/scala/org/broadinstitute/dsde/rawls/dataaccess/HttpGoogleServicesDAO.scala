@@ -58,6 +58,7 @@ import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
+import com.google.cloud.storage.StorageException
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
@@ -257,7 +258,13 @@ class HttpGoogleServicesDAO(
         bucketPolicyOnlyEnabled = true,
         logBucket = Option(GcsBucketName(getStorageLogsBucketName(googleProject))),
         location = bucketLocation
-      ).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
+      ).compile.drain.unsafeToFuture().recoverWith{
+        case e: StorageException if e.getCode == 400 =>
+          val message = s"Workspace creation failed. Error trying to create bucket `$bucketName` in Google project " +
+            s"`${googleProject.value}` in region `${bucketLocation.getOrElse("US (default)")}`."
+          val errorReport = ErrorReport(statusCode = StatusCodes.BadRequest, message)
+          throw new RawlsExceptionWithErrorReport(errorReport)
+      }) //ACL = None because bucket IAM will be set separately in updateBucketIam
       updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
       insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
       _ <- updateBucketIamFuture
