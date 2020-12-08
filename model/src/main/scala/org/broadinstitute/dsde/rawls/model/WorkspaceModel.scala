@@ -158,7 +158,7 @@ object Workspace {
            createdBy: String,
            attributes: AttributeMap,
            isLocked: Boolean = false): Workspace = {
-    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace), None, None)
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace), None, None)
   }
 }
 

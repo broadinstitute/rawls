@@ -1274,7 +1274,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     billingAccountNameCaptor.getValue shouldEqual Option(billingProject.billingAccount.get)
   }
 
-  it should "throw an exception when calling GoogleServicesDAO to update the Billing Account on the Workspace's Google Project and the DAO call fails" in withTestDataServices { services =>
+  it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
     when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
@@ -1455,7 +1455,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     billingAccountNameCaptor.getValue shouldEqual Option(billingProject.billingAccount.get)
   }
 
-  it should "throw an exception when calling GoogleServicesDAO to update the Billing Account on the Workspace's Google Project and the DAO call fails" in withTestDataServices { services =>
+  it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
     when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
