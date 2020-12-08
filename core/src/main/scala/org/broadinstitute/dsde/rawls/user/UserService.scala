@@ -185,10 +185,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
       maybeBillingProject <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(billingProjectName) }
     } yield {
-      maybeBillingProject match {
-        case Some(billingProject) if projectRoles.nonEmpty => RequestComplete(StatusCodes.OK, constructBillingProjectResponseWithUserRoles(projectRoles, billingProject))
-        case _ => RequestComplete(StatusCodes.NotFound)
-      }
+      constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject, projectRoles)
     }
   }
 
@@ -572,14 +569,23 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def updateBillingAccountInternal(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): Future[PerRequestMessage] = {
     for {
-      billingProject <- dataSource.inTransaction { dataAccess =>
+      maybeBillingProject <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.updateBillingAccount(projectName, billingAccount)
           .flatMap(_ => dataAccess.rawlsBillingProjectQuery.load(projectName))
       }
+      projectRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+        .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
     } yield {
-      RequestComplete(StatusCodes.OK, billingProject)
+      constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject, projectRoles)
     }
 
+  }
+
+  private def constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject: Option[RawlsBillingProject], projectRoles: Set[ProjectRole]) = {
+    maybeBillingProject match {
+      case Some(billingProject) if projectRoles.nonEmpty => RequestComplete(StatusCodes.OK, constructBillingProjectResponseWithUserRoles(projectRoles, billingProject))
+      case _ => RequestComplete(StatusCodes.NotFound)
+    }
   }
 
   private def lookupFolderIdFromServicePerimeterName(perimeterName: ServicePerimeterName): Future[String] = {

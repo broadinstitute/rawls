@@ -521,4 +521,48 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         responseAs[Seq[RawlsBillingProjectResponse]] should contain theSameElementsAs expected
       }
   }
+
+  "PUT /billing/v2/{projectName}/billing-account" should "update the billing account" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
+    )))
+    Put(s"/billing/v2/${project.projectName.value}/billing-account", UpdateRawlsBillingAccountRequest(services.gcsDAO.accessibleBillingAccountName)) ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, Option(services.gcsDAO.accessibleBillingAccountName), project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
+      }
+  }
+
+  it should "fail to update if given inaccessible billing account" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
+    )))
+    Put(s"/billing/v2/${project.projectName.value}/billing-account", UpdateRawlsBillingAccountRequest(services.gcsDAO.inaccessibleBillingAccountName)) ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  "DELETE /billing/v2/{projectName}/billing-account" should "clear the billing account field" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
+    )))
+    Delete(s"/billing/v2/${project.projectName.value}/billing-account") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, None, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
+      }
+  }
 }
