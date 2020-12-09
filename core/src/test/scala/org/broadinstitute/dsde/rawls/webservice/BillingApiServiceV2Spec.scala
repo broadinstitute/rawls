@@ -32,7 +32,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   def withApiServices[T](dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test"))(testCode: TestApiService =>  T): T = {
-    val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
+    val apiService = TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {
@@ -182,7 +182,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         val projects: Seq[RawlsBillingProjectRecord] = runAndWait(query)
         projects match {
           case Seq() => fail("project does not exist in db")
-          case Seq(project) =>
+          case Seq(_) =>
           case _ => fail("too many projects")
         }
       }
@@ -334,7 +334,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User))
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
       }
   }
 
@@ -350,7 +350,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.User))
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.User), Set(), Set())
       }
   }
 
@@ -450,7 +450,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  "GET /billing/v2" should "list all my projects" in withEmptyDatabaseAndApiServices { services =>
+  "GET /billing/v2" should "list all my projects with workspaces" in withEmptyDatabaseAndApiServices { services =>
     val projects = List.fill(20) { createProject(UUID.randomUUID().toString) }
     val possibleRoles = List(Option(SamProjectRoles.workspaceCreator), Option(SamProjectRoles.owner), None)
     val samUserResources = projects.flatMap { p =>
@@ -468,8 +468,26 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           Set.empty))
       }
     }
+    val workspaces = projects.flatMap(project => {
+      val workspaceWithValidBillingAccount = new EmptyWorkspaceWithProjectAndBillingAccount(project, project.billingAccount)
+      val workspaceTwoWithValidBillingAccount = new EmptyWorkspaceWithProjectAndBillingAccount(project, project.billingAccount)
+      val workspaceWithInvalidBillingAccount = new EmptyWorkspaceWithProjectAndBillingAccount(project, Some(RawlsBillingAccountName("invalid-billing-account")))
+      val workspaceTwoWithInvalidBillingAccount = new EmptyWorkspaceWithProjectAndBillingAccount(project, Some(RawlsBillingAccountName("invalid-billing-account")))
+      List(workspaceWithValidBillingAccount, workspaceTwoWithValidBillingAccount, workspaceWithInvalidBillingAccount, workspaceTwoWithInvalidBillingAccount)
+    })
+    workspaces.foreach(workspace => runAndWait(workspace.save()))
+    val samWorkspaceUserResources = workspaces.flatMap { w =>
+      Option(SamUserResource(
+        w.wsName.toString,
+        SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+        SamRolesAndActions(Set.empty, Set.empty),
+        SamRolesAndActions(Set.empty, Set.empty),
+        Set.empty,
+        Set.empty))
+    }
 
     when(services.samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(samUserResources))
+    when(services.samDAO.listUserResources(SamResourceTypeNames.workspace, userInfo)).thenReturn(Future.successful(samWorkspaceUserResources))
 
     val expected = projects.flatMap { p =>
       samUserResources.find(_.resourceId == p.projectName.value).map { samResource =>
@@ -481,7 +499,15 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           samResource.direct.roles.collect {
             case SamProjectRoles.owner => ProjectRoles.Owner
             case SamProjectRoles.workspaceCreator => ProjectRoles.User
-          }
+          },
+          workspaces
+            .filter(workspace => workspace.wsName.namespace == p.projectName.value
+              && workspace.billingAccount == p.billingAccount)
+            .map(workspace => workspace.wsName).toSet,
+          workspaces
+            .filter(workspace => workspace.wsName.namespace == p.projectName.value
+              && workspace.billingAccount != p.billingAccount)
+            .map(workspace => WorkspaceBillingAccount(workspace.wsName, workspace.billingAccount)).toSet
         )
       }
     }
@@ -492,7 +518,51 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           status
         }
 
-        responseAs[Seq[RawlsBillingProjectResponse]] should contain theSameElementsAs(expected)
+        responseAs[Seq[RawlsBillingProjectResponse]] should contain theSameElementsAs expected
+      }
+  }
+
+  "PUT /billing/v2/{projectName}/billing-account" should "update the billing account" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
+    )))
+    Put(s"/billing/v2/${project.projectName.value}/billing-account", UpdateRawlsBillingAccountRequest(services.gcsDAO.accessibleBillingAccountName)) ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, Option(services.gcsDAO.accessibleBillingAccountName), project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
+      }
+  }
+
+  it should "fail to update if given inaccessible billing account" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
+    )))
+    Put(s"/billing/v2/${project.projectName.value}/billing-account", UpdateRawlsBillingAccountRequest(services.gcsDAO.inaccessibleBillingAccountName)) ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  "DELETE /billing/v2/{projectName}/billing-account" should "clear the billing account field" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+    when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
+    )))
+    Delete(s"/billing/v2/${project.projectName.value}/billing-account") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, None, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
       }
   }
 }

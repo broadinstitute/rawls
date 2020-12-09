@@ -71,6 +71,15 @@ trait RawlsBillingProjectComponent {
       DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.filter(_.projectName === project.projectName.value).update(marshalBillingProject(project))).toSeq)
     }
 
+    def updateBillingAccountValidity(billingAccount: RawlsBillingAccountName, isInvalid: Boolean): WriteAction[Int] = {
+      findBillingProjectsByBillingAccount(billingAccount).map(_.invalidBillingAccount).update(isInvalid)
+    }
+
+    def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] = {
+      findBillingProjectByName(projectName).map(_.billingAccount).update(billingAccount.map(_.value))
+    }
+
+
     def listAll(): ReadWriteAction[Seq[RawlsBillingProject]] = {
       for {
         projectRecords <- this.result
@@ -147,6 +156,10 @@ trait RawlsBillingProjectComponent {
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {
       filter(_.projectName === name.value)
+    }
+
+    private def findBillingProjectsByBillingAccount(billingAccount: RawlsBillingAccountName): RawlsBillingProjectQuery = {
+      filter(_.billingAccount === billingAccount.value)
     }
   }
 }

@@ -386,6 +386,94 @@ paths:
             - openid
             - email
             - profile
+  /api/billing/v2/{projectId}/billing-account:
+    put:
+      tags:
+        - billing_v2
+      summary: update billing account on billing project
+      description: update billing account on billing project
+      operationId: updateBillingProjectBillingAccount
+      parameters:
+        - name: projectId
+          in: path
+          description: Id of the billing project
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: update billing account request
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/UpdateRawlsBillingAccountRequest'
+        required: true
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RawlsBillingProjectResponse'
+        400:
+          description: Billing account not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Internal Server Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    delete:
+      tags:
+        - billing_v2
+      summary: deletes the billing account on billing project
+      description: deletes the billing account on billing project
+      operationId: deleteBillingProjectBillingAccount
+      parameters:
+        - name: projectId
+          in: path
+          description: Id of the billing project
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RawlsBillingProjectResponse'
+        404:
+          description: Project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Internal Server Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   /api/billing/v2/{projectId}/members:
     get:
       tags:
@@ -5629,6 +5717,9 @@ components:
         workspaceVersion:
           type: string
           description: internal use
+        currentBillingAccountOnGoogleProject:
+          type: string
+          description: The current billing account being charged for activity within this workspace. For desired billing account, look to the billing account specified on this workspace's billing project
       description: ""
     WorkspaceSubmissionStats:
       required:
@@ -6130,6 +6221,34 @@ components:
           items:
             type: string
           description: the roles the caller has on the project
+        workspacesWithCorrectBillingAccount:
+          type: array
+          items:
+            type: string
+          description: A list of workspace names with the correct billing account contained within this billing project
+        workspacesWithIncorrectBillingAccount:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceBillingAccount'
+    UpdateRawlsBillingAccountRequest:
+      required:
+        - billingAccount
+      type: object
+      properties:
+        billingAccount:
+          type: string
+          description: The name of the billing account to use
+    WorkspaceBillingAccount:
+      required:
+        - workspaceName
+      type: object
+      properties:
+        workspaceName:
+          type: string
+          description: the name of the workspace
+        currentBillingAccountOnGoogleProject:
+          type: string
+          description: the billing project associated with the workspace
     RawlsBillingProjectTransfer:
       required:
         - bucket
