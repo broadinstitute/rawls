@@ -771,7 +771,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO: add unit test for withWorkspaceBucketRegionCheck
+  it should "return 400 if the bucket location requested is in an invalid format" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      Map.empty,
+      None,
+      Option("US")
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
 
   it should "concurrently update workspace attributes" in withTestDataApiServices { services =>
     def generator(i: Int): ReadAction[Option[Workspace]] = {
