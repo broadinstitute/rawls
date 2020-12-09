@@ -195,7 +195,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               val workflowOptions = parseWorkflowOptionsFromMetadata(cromwellMetadata)
               val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
               withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstWorkflowId)) {
-                // check the computes zones belong to `us-central1`
                 workflowOptions should include ("us-central1-")
 
                 subIds should not be (empty)
@@ -239,7 +238,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     "should be able to create workspace and run sub-workflow tasks in non-US regions" in {
       implicit val token: AuthToken = studentBToken
 
-      // this will create a method with 2 levels and 3 scatter count i.e. it will create a workflow with 3 sub-workflows
+      // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
       val europeNorth1ZonesPrefix = "europe-north1-"
@@ -330,7 +329,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" in {
       implicit val token: AuthToken = studentBToken
 
-      // this will create a method with 2 levels and 3 scatter count i.e. it will create a workflow with 3 sub-workflows
+      // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
       val europeNorth1ZonesPrefix = "europe-north1-"

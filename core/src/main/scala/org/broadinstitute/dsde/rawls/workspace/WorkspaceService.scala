@@ -1936,7 +1936,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   }.flatten.toMap)
 
                   _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProject, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3, workspaceRequest.bucketLocation)))
-                  _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` is created in region `$location`."))
+                  _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))
                   response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
                 } yield response
               })

@@ -775,17 +775,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      Map.empty,
-      None,
-      Option("US")
+      attributes = Map.empty,
+      authorizationDomain = None,
+      bucketLocation = Option("US")
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest) {
-          status
-        }
+        val errorText = responseAs[ErrorReport].message
+        assert(status == StatusCodes.BadRequest)
+        assert(errorText.contains("Workspace Bucket Location should be of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
       }
   }
 

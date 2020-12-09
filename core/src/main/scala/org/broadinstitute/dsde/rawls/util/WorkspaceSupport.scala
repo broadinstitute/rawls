@@ -146,7 +146,7 @@ trait WorkspaceSupport {
   def withWorkspaceBucketRegionCheck[T](bucketRegion: Option[String])(op: => Future[T]): Future[T] = {
     bucketRegion match {
       case Some(region) =>
-        // we currently only support creating buckets in a single region or default it to US (which is multi-region)
+        // if the user specifies a region for the workspace bucket, it must be in the proper format for a single region
         val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
         if (region.matches(singleRegionPattern)) op
         else {
