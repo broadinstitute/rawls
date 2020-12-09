@@ -213,7 +213,10 @@ class HttpGoogleServicesDAO(
       for {
         // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
         // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
-        _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities,
+
+        // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
+        // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
+        _ <- googleStorageService.overrideIamPolicy(GcsBucketName(bucketName), roleToIdentities,
           retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardRetryPredicate, RetryPredicates.whenStatusCode(400)))
       } yield ()
     }
