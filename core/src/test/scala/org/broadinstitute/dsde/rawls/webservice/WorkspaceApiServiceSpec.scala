@@ -785,7 +785,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         val errorText = responseAs[ErrorReport].message
         assert(status == StatusCodes.BadRequest)
-        assert(errorText.contains("Workspace Bucket Location should be of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
+        assert(errorText.contains("Workspace bucket location must be a single (not multi-) region of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
       }
   }
 
