@@ -113,16 +113,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     metadataJson.get("submittedFiles").get("options").asText()
   }
 
-  def parseRuntimeAttributeKeyFromCallMetadata(metadata: List[JsonNode], attributeKey: String): List[String] = {
-    metadata.map(_.get("runtimeAttributes").get("zones").asText())
+  def parseRuntimeAttributeKeyFromCallMetadata(callMetadata: JsonNode, attributeKey: String): String = {
+    callMetadata.get("runtimeAttributes").get("zones").asText()
   }
 
-  def parseWorkerAssignedExecEventsFromCallMetadata(metadata: List[JsonNode]): List[String] = {
-    metadata.flatMap { call =>
-      val executionEvents = call.get("executionEvents").elements().asScala.toList
-      val descriptions = executionEvents.map(_.get("description").asText())
-      descriptions.filter(desc => desc.startsWith("Worker") && desc.contains("assigned"))
-    }
+  def parseWorkerAssignedExecEventsFromCallMetadata(callMetadata: JsonNode): List[String] = {
+    val executionEvents = callMetadata.get("executionEvents").elements().asScala.toList
+    val descriptions = executionEvents.map(_.get("description").asText())
+    descriptions.filter(desc => desc.startsWith("Worker") && desc.contains("assigned"))
   }
 
   // if these prove useful anywhere else, they should move into workbench-libs
@@ -311,8 +309,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             eventually {
               val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
               val subWorkflowCallMetadata = subWorkflowsMetadata flatMap parseCallsFromMetadata
-              val callZones = parseRuntimeAttributeKeyFromCallMetadata(subWorkflowCallMetadata, "zones")
-              val workerAssignedExecEvents = parseWorkerAssignedExecEventsFromCallMetadata(subWorkflowCallMetadata)
+              val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
+              val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
               subWorkflowsMetadata foreach { x => x should include (""""executionStatus":"Done"""") }
 
@@ -406,8 +404,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             eventually {
               val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
               val subWorkflowCallMetadata = subWorkflowsMetadata flatMap parseCallsFromMetadata
-              val callZones = parseRuntimeAttributeKeyFromCallMetadata(subWorkflowCallMetadata, "zones")
-              val workerAssignedExecEvents = parseWorkerAssignedExecEventsFromCallMetadata(subWorkflowCallMetadata)
+              val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
+              val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
               subWorkflowsMetadata foreach { x => x should include (""""executionStatus":"Done"""") }
 
