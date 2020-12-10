@@ -233,6 +233,12 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         projectName.value,
         Set.empty,
         policies.keySet.map(p => SamCreateResourcePolicyResponse(SamCreateResourceAccessPolicyIdResponse(p.value, SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.billingProject.value)), s"${p.value}@foo.com")))))
+
+    when(services.samDAO.syncPolicyToGoogle(
+      ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+      ArgumentMatchers.eq(projectName.value),
+      ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
+    )).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
   }
 
   it should "return 201 when creating a project with a highSecurityNetwork" in withEmptyDatabaseAndApiServices { services =>
