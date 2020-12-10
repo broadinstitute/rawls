@@ -54,12 +54,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     val mapper = new ObjectMapper()
     mapper.registerModule(DefaultScalaModule)
 
-    // "calls" is a top-level key of metadata, whose value is a JSON object.
+    // "calls" is a top-level key of metadata, whose value is a JSON object mapping call names to shard lists.
     // Get that object's values.
     val calls: List[JsonNode] = mapper.readTree(metadata).get("calls").elements().asScala.toList
 
     // Call values are arrays of scatter shards.
-    // Get the shards, which are JSON objects.
+    // Flatten this structure to get a single list containing all the shards.
     calls flatMap { c =>
       c.elements().asScala.toList
     }
@@ -302,23 +302,27 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
-            // once the sub-workflows have finished running, check
-            //    - the zones for each job that were determined by Cromwell and
-            //    - the worker assigned for the tasks
-            // belong to `europe-north1`
-            eventually {
+            // Get the sub-workflows call metadata once they finish running
+            val subWorkflowCallMetadata: List[JsonNode] = eventually {
               val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
               val subWorkflowCallMetadata = subWorkflowsMetadata flatMap parseCallsFromMetadata
-              val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
-              val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
               subWorkflowsMetadata foreach { x => x should include (""""executionStatus":"Done"""") }
 
-              callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
-
-              workerAssignedExecEvents should not be (empty)
-              workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
+              subWorkflowCallMetadata
             }
+
+            // For each call in the sub-workflows, check
+            //   - the zones for each job that were determined by Cromwell and
+            //   - the worker assigned for the tasks
+            // belong to `europe-north1`
+            val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
+            val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
+
+            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
+
+            workerAssignedExecEvents should not be (empty)
+            workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
           }
         }
       }
@@ -397,23 +401,27 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
-            // once the sub-workflows have finished running, check
-            //    - the zones for each job that were determined by Cromwell and
-            //    - the worker assigned for the tasks
-            // belong to `europe-north1`
-            eventually {
+            // Get the sub-workflows call metadata once they finish running
+            val subWorkflowCallMetadata = eventually {
               val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
               val subWorkflowCallMetadata = subWorkflowsMetadata flatMap parseCallsFromMetadata
-              val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
-              val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
               subWorkflowsMetadata foreach { x => x should include (""""executionStatus":"Done"""") }
 
-              callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
-
-              workerAssignedExecEvents should not be (empty)
-              workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
+              subWorkflowCallMetadata
             }
+
+            // For each call in the sub-workflows, check
+            //   - the zones for each job that were determined by Cromwell and
+            //   - the worker assigned for the tasks
+            // belong to `europe-north1`
+            val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
+            val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
+
+            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
+
+            workerAssignedExecEvents should not be (empty)
+            workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
           }
         }
       }
