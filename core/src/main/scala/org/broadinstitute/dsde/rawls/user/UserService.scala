@@ -36,7 +36,7 @@ object UserService {
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
-  def syncAndGetBillingProjectOwnerGroupEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
+  def syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
       .syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.owner)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
@@ -377,7 +377,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
-      ownerGroupEmail <- syncAndGetBillingProjectOwnerGroupEmail(samDAO, project.projectName)
+      ownerGroupEmail <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, project.projectName)
       computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project.projectName)
 
       policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole)
@@ -520,7 +520,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       }
 
       //NOTE: we're syncing this to Sam ahead of the resource actually existing. is this fine? (ps these are sam calls)
-      ownerGroupEmail <- syncAndGetBillingProjectOwnerGroupEmail(samDAO, createProjectRequest.projectName)
+      ownerGroupEmail <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
       computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, createProjectRequest.projectName)
 
       // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
@@ -563,7 +563,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, CreationStatuses.Ready, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
       }
 
-      _ <- syncAndGetBillingProjectOwnerGroupEmail(samDAO, createProjectRequest.projectName)
+      _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield {
       RequestComplete(StatusCodes.Created)
     }
