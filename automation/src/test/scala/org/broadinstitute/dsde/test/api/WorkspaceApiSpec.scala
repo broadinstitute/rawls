@@ -4,8 +4,8 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.auth.AuthToken
+import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
+import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.util.Retry
@@ -60,6 +60,30 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           Rawls.workspaces.delete(projectName, workspaceCloneName)
           assertNoAccessToWorkspace(projectName, workspaceCloneName)
         }
+      }
+
+      "to create, clone, and delete v2 workspaces (using the Resource Buffer), in a v2 billing project" in {
+        val owner: Credentials = UserPool.chooseProjectOwner
+        implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
+
+        val billingProjectName = uuidWithPrefix("WorkspaceApiSpec_createCloneDeleteUsingResourceBuffer")
+        Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
+
+        val workspaceName = prependUUID("rbs-test-workspace")
+        val workspaceCloneName = s"$workspaceName-clone"
+
+
+        Rawls.workspaces.create(billingProjectName, workspaceName)
+
+        Rawls.workspaces.clone(billingProjectName, workspaceName, billingProjectName, workspaceCloneName)
+
+        Rawls.workspaces.delete(billingProjectName, workspaceName)
+        assertNoAccessToWorkspace(billingProjectName, workspaceName)
+
+        Rawls.workspaces.delete(billingProjectName, workspaceCloneName)
+        assertNoAccessToWorkspace(billingProjectName, workspaceCloneName)
+
+        Rawls.billingV2.deleteBillingProject(billingProjectName)
       }
 
       "to add readers with can-share access" in {
