@@ -460,7 +460,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] = {
     for {
-      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, userInfo)
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
     } yield ()
   }
