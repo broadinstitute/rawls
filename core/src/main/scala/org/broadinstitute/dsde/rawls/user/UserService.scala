@@ -307,6 +307,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield RequestComplete(StatusCodes.NoContent)
   }
 
+  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     for {
       _ <- validateNoWorkspaces(projectName)

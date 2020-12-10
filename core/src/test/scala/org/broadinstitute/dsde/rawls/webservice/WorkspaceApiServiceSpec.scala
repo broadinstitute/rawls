@@ -657,7 +657,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
   }
 
-  // todo: delete this test when v1 workspaces are all migrated to v2 (ADD TICKET #)
+  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   it should "delete a v1 workspace" in withEmptyDatabaseAndApiServices { services =>
 
     val billingProject = RawlsBillingProject(RawlsBillingProjectName("v1-test-ns"), CreationStatuses.Ready, None, None)

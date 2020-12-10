@@ -441,7 +441,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // TODO once workspace migration is complete and there are no more v1 workspaces, we can remove this method (Add ticket #)
+  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   private def maybeDeleteGoogleProject(googleProjectId: GoogleProjectId, workspaceVersion: WorkspaceVersion, userInfoForSam: UserInfo): Future[Unit] = {
     val isV1Workspace: Boolean = workspaceVersion == WorkspaceVersions.V1
     if (!isV1Workspace)
