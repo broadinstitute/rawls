@@ -621,6 +621,45 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+    val billingSvcCred = getBillingServiceAccountCredential
+    implicit val service = GoogleInstrumentedService.Billing
+    val googleProjectName = s"projects/${googleProjectId.value}"
+    val cloudBillingProjectsApi = getCloudBillingManager(billingSvcCred).projects()
+
+    val fetcher = cloudBillingProjectsApi.getBillingInfo(googleProjectName)
+
+    val updater = newBillingAccount match {
+      case Some(RawlsBillingAccountName(billingAccountName)) =>
+        cloudBillingProjectsApi.updateBillingInfo(googleProjectName,
+          new ProjectBillingInfo().setBillingAccountName(billingAccountName).setBillingEnabled(true))
+      case None =>
+        cloudBillingProjectsApi.updateBillingInfo(googleProjectName,
+          new ProjectBillingInfo().setBillingEnabled(false))
+    }
+    retryWithRecoverWhen500orGoogleError(() => {
+      blocking {
+        val projectBillingInfo = executeGoogleRequest(fetcher)
+        val shouldUpdate = newBillingAccount match {
+          case Some(RawlsBillingAccountName(billingAccountName)) =>
+            projectBillingInfo.getBillingAccountName != billingAccountName || projectBillingInfo.getBillingEnabled == false
+          case None =>
+            projectBillingInfo.getBillingEnabled == true
+        }
+        if (shouldUpdate) {
+          executeGoogleRequest(updater)
+        } else {
+          projectBillingInfo
+        }
+      }
+    }) {
+      case gjre: GoogleJsonResponseException
+        if gjre.getStatusCode == StatusCodes.Forbidden.intValue =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
+          s"Rawls service account does not have access to billing account [${newBillingAccount.map(_.value)}]", gjre))
+    }
+  }
+
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
@@ -741,17 +780,6 @@ class HttpGoogleServicesDAO(
     val configContents = ConfigContents(Seq(Resources(googleProject.value, dmTemplatePath, properties)))
     val jsonVersion = io.circe.jawn.parse(configContents.toJson.toString).valueOr(throw _)
     jsonVersion.asYaml.spaces2
-  }
-
-  override def setBillingAccountForProject(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, billingEnabled: Boolean = true): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Billing
-    val billingServiceAccountCredential = getBillingServiceAccountCredential
-    val billingManager = getCloudBillingManager(billingServiceAccountCredential)
-    // value sent to google should have prefix "billingAccounts/" like: "billingAccounts/some-billing-acct-uuid"
-    val projectBillingInfo = new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(billingEnabled)
-    retryWhen500orGoogleError(() => {
-      executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo))
-    })
   }
 
   /*

@@ -390,7 +390,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     "should introspect WorkspaceDetails correctly" in {
       val expected = List("namespace", "name", "workspaceId", "bucketName", "workflowCollectionName", "createdDate",
         "lastModified", "createdBy", "attributes", "isLocked", "authorizationDomain", "googleProjectId",
-        "googleProjectNumber", "workspaceVersion")
+        "googleProjectNumber", "workspaceVersion", "billingAccount")
       WorkspaceFieldNames.workspaceDetailClassNames should contain theSameElementsAs expected
     }
     "should collate WorkspaceResponse and WorkspaceDetails correctly" in {
@@ -398,7 +398,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         "bucketOptions", "owners", "workspace.namespace", "workspace.name", "workspace.workspaceId",
         "workspace.bucketName", "workspace.workflowCollectionName", "workspace.createdDate", "workspace.lastModified",
         "workspace.createdBy", "workspace.attributes", "workspace.isLocked", "workspace.authorizationDomain",
-        "workspace.googleProjectId", "workspace.googleProjectNumber", "workspace.workspaceVersion"
+        "workspace.googleProjectId", "workspace.googleProjectNumber", "workspace.workspaceVersion",
+        "workspace.billingAccount"
       )
       WorkspaceFieldNames.workspaceResponseFieldNames should contain theSameElementsAs(expected)
     }
