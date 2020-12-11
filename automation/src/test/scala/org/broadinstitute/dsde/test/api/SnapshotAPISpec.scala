@@ -28,7 +28,12 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
 //  val dataRepoBaseUrl = conf.getString("fireCloud.dataRepoUrl")
 
   // tOdO: don't hardcode
-  val dataRepoBaseUrl = "https://jade.datarepo-dev.broadinstitute.org"
+  // dev -> "https://jade.datarepo-dev.broadinstitute.org"
+  // qa -> "https://jade-4.datarepo-integration.broadinstitute.org/"
+  // alpha -> "https://data.alpha.envs-terra.bio/"
+  // perf -> "https://jade-perf.datarepo-perf.broadinstitute.org/"
+  // staging -> "https://data.staging.envs-terra.bio/"
+  val dataRepoBaseUrl = "https://jade-4.datarepo-integration.broadinstitute.org/"
 
   "TDR Snapshot integration" - {
     "should allow snapshot references to be added to workspaces" in {
