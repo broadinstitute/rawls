@@ -38,9 +38,8 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
   "TDR Snapshot integration" - {
 
     "should allow snapshot references to be added to workspaces" in {
-      // only hermione.owner@quality.firecloud.org
-//      val owner: Credentials = UserPool.chooseProjectOwner
-
+      // only hermione.owner@quality.firecloud.org has access to snapshots in QA (integration4)
+      // val owner: Credentials = UserPool.chooseProjectOwner
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
@@ -69,6 +68,8 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
 
           val dataRepoSnapshotId = drSnapshots.getItems.get(0).getId
           val anotherDataRepoSnapshotId = drSnapshots.getItems.get(1).getId
+
+          logger.info(s"!!!!!!!!!!!! found 2 snapshots from $dataRepoBaseUrl as user ${owner.email}: $dataRepoSnapshotId, $anotherDataRepoSnapshotId")
 
           // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
           createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, "firstSnapshot")
@@ -111,9 +112,12 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
   }
 
   private def createSnapshotReference(projectName: String, workspaceName: String, snapshotId: String, snapshotName: String)(implicit authToken: AuthToken) = {
+    val targetRawlsUrl = s"${Rawls.url}api/workspaces/$projectName/$workspaceName/snapshots"
+    val payload = Map("snapshotId" -> snapshotId, "name" -> snapshotName)
+    logger.info(s"!!!!!!!!!!!! createSnapshotReference to $targetRawlsUrl with $payload")
     Rawls.postRequest(
-      uri = s"${Rawls.url}api/workspaces/$projectName/$workspaceName/snapshots",
-      content = Map("snapshotId" -> snapshotId, "name" -> snapshotName))
+      uri = targetRawlsUrl,
+      content = payload)
   }
 
   // a bastardized version of the HttpDataRepoDAO in the main rawls codebase
