@@ -41,7 +41,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
       // only hermione.owner@quality.firecloud.org
 //      val owner: Credentials = UserPool.chooseProjectOwner
 
-      val owner = UserPool.userConfig.Owners.getUserCredential("hermione.owner@quality.firecloud.org")
+      val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
@@ -64,11 +64,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
               logger.error(s"!!!!!!!!!!!! data repo call as user ${owner.email} failed: ${ex.getMessage}", ex)
               throw(ex)
           }
-          assume(drSnapshots.getItems.size() > 0,
-            s"TDR at $dataRepoBaseUrl did not have any snapshots for this test to use!")
+          assume(drSnapshots.getItems.size() == 2,
+            s"TDR at $dataRepoBaseUrl did not have 2 snapshots for this test to use!")
 
           val dataRepoSnapshotId = drSnapshots.getItems.get(0).getId
-//          val anotherDataRepoSnapshotId = drSnapshots.getItems.get(1).getId
+          val anotherDataRepoSnapshotId = drSnapshots.getItems.get(1).getId
 
           // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
           createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, "firstSnapshot")
@@ -82,22 +82,22 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
           firstResources.head.getReferenceType shouldBe ReferenceTypeEnum.DATA_REPO_SNAPSHOT
           firstResources.head.getReference.getSnapshot shouldBe dataRepoSnapshotId
 
-//          // add a second snapshot reference to the workspace. Under the covers, this recognizes the workspace
-//          // already exists in WSM, so it just adds the ref
-//          createSnapshotReference(projectName, workspaceName, anotherDataRepoSnapshotId, "secondSnapshot")
-//
-//          // validate the second snapshot was added correctly: list snapshots in Rawls, should return 2, which we just added
-//          val secondListResponse = listSnapshotReferences(projectName, workspaceName)
-//          // sort by reference name for easy predictability inside this test: "firstSnapshot" is before "secondSnapshot"
-//          val secondResources = Rawls.parseResponseAs[DataReferenceList](secondListResponse)
-//            .getResources.asScala.sortBy(_.getName)
-//          secondResources.size shouldBe 2
-//          secondResources.head.getName shouldBe "firstSnapshot"
-//          secondResources.head.getReference.getSnapshot shouldBe dataRepoSnapshotId
-//          secondResources.head.getReferenceType shouldBe ReferenceTypeEnum.DATA_REPO_SNAPSHOT
-//          secondResources(1).getName shouldBe "secondSnapshot"
-//          secondResources(1).getReference.getSnapshot shouldBe anotherDataRepoSnapshotId
-//          secondResources(1).getReferenceType shouldBe ReferenceTypeEnum.DATA_REPO_SNAPSHOT
+          // add a second snapshot reference to the workspace. Under the covers, this recognizes the workspace
+          // already exists in WSM, so it just adds the ref
+          createSnapshotReference(projectName, workspaceName, anotherDataRepoSnapshotId, "secondSnapshot")
+
+          // validate the second snapshot was added correctly: list snapshots in Rawls, should return 2, which we just added
+          val secondListResponse = listSnapshotReferences(projectName, workspaceName)
+          // sort by reference name for easy predictability inside this test: "firstSnapshot" is before "secondSnapshot"
+          val secondResources = Rawls.parseResponseAs[DataReferenceList](secondListResponse)
+            .getResources.asScala.sortBy(_.getName)
+          secondResources.size shouldBe 2
+          secondResources.head.getName shouldBe "firstSnapshot"
+          secondResources.head.getReference.getSnapshot shouldBe dataRepoSnapshotId
+          secondResources.head.getReferenceType shouldBe ReferenceTypeEnum.DATA_REPO_SNAPSHOT
+          secondResources(1).getName shouldBe "secondSnapshot"
+          secondResources(1).getReference.getSnapshot shouldBe anotherDataRepoSnapshotId
+          secondResources(1).getReferenceType shouldBe ReferenceTypeEnum.DATA_REPO_SNAPSHOT
 
         }
       }
