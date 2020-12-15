@@ -26,8 +26,6 @@ tags:
     description: User and Group API
   - name: billing
     description: Billing Project API
-  - name: groups
-    description: Group manipulation API
   - name: notifications
     description: Notifications API
   - name: snapshots
