@@ -145,8 +145,6 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("appName"),
         gcsConfig.getInt("deletedBucketCheckSeconds"),
         serviceProject,
-        gcsConfig.getString("tokenEncryptionKey"),
-        gcsConfig.getString("tokenSecretsJson"),
         gcsConfig.getString("billingPemEmail"),
         gcsConfig.getString("pathToBillingPem"),
         gcsConfig.getString("billingEmail"),
@@ -327,7 +325,7 @@ object Boot extends IOApp with LazyLogging {
             executionServiceServers.map(c => c.key -> c.dao).toMap,
             groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
             topicsToCheck = Seq(gcsConfig.getString("notifications.topicName")),
-            bucketsToCheck = Seq(gcsDAO.tokenBucketName)
+            bucketsToCheck = Seq.empty //todo: find a bucket that we can use here
           )
           .withDispatcher("health-monitor-dispatcher"),
         "health-monitor"

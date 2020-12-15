@@ -24,49 +24,37 @@ trait UserApiService extends UserInfoDirectives {
   // standard /api routes begin here
 
   val userRoutes: server.Route = requireUserInfo() { userInfo =>
-    path("user" / "refreshToken") {
-      put {
-        entity(as[UserRefreshToken]) { token =>
-          complete { userServiceConstructor(userInfo).SetRefreshToken(token) }
+    pathPrefix("user" / "billing") {
+      pathEnd {
+        get {
+          complete { userServiceConstructor(userInfo).ListBillingProjects }
+        }
+      } ~
+      path(Segment) { projectName =>
+        get {
+          complete { userServiceConstructor(userInfo).GetBillingProjectStatus(RawlsBillingProjectName(projectName)) }
+        }
+      } ~
+      path(Segment) { projectName =>
+        delete {
+          complete { userServiceConstructor(userInfo).DeleteBillingProject(RawlsBillingProjectName(projectName)) }
         }
       }
     } ~
-      path("user" / "refreshTokenDate") {
-        get {
-          complete { userServiceConstructor(userInfo).GetRefreshTokenDate }
-        }
-      } ~
-      pathPrefix("user" / "billing") {
-        pathEnd {
-          get {
-            complete { userServiceConstructor(userInfo).ListBillingProjects }
-          }
-        } ~
-        path(Segment) { projectName =>
-          get {
-            complete { userServiceConstructor(userInfo).GetBillingProjectStatus(RawlsBillingProjectName(projectName)) }
-          }
-        } ~
-        path(Segment) { projectName =>
-          delete {
-            complete { userServiceConstructor(userInfo).DeleteBillingProject(RawlsBillingProjectName(projectName)) }
-          }
-        }
-      } ~
-      path("user" / "role" / "admin") {
-        get {
-          complete { userServiceConstructor(userInfo).IsAdmin(userInfo.userEmail) }
-        }
-      } ~
-      path("user" / "role" / "curator") {
-        get {
-          complete { userServiceConstructor(userInfo).IsLibraryCurator(userInfo.userEmail) }
-        }
-      } ~
-      path("user" / "billingAccounts") {
-        get {
-          complete { userServiceConstructor(userInfo).ListBillingAccounts }
-        }
+    path("user" / "role" / "admin") {
+      get {
+        complete { userServiceConstructor(userInfo).IsAdmin(userInfo.userEmail) }
       }
+    } ~
+    path("user" / "role" / "curator") {
+      get {
+        complete { userServiceConstructor(userInfo).IsLibraryCurator(userInfo.userEmail) }
+      }
+    } ~
+    path("user" / "billingAccounts") {
+      get {
+        complete { userServiceConstructor(userInfo).ListBillingAccounts }
+      }
+    }
   }
 }
