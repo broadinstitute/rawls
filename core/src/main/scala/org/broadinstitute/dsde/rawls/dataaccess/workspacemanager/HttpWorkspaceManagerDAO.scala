@@ -1,20 +1,23 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.api.WorkspaceApi
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.DataReferenceName
 
 import scala.concurrent.ExecutionContext
 
-class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO {
+class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO with LazyLogging {
 
   private def getApiClient(accessToken: String): ApiClient = {
+
+    logger.warn(s"===============> getApiClient: $baseWorkspaceManagerUrl")
+
     val client: ApiClient = new ApiClient()
     client.setBasePath(baseWorkspaceManagerUrl)
     client.setAccessToken(accessToken)
@@ -31,6 +34,9 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
   }
 
   override def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace = {
+    logger.warn(s"===============> createWorkspace starting ... ")
+    val wapi = getWorkspaceApi(accessToken)
+    logger.warn(s"===============> createWorkspace using ${wapi.getApiClient.getBasePath} ... ")
     getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
   }
 
