@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.test.api
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.Uri.Path
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
@@ -113,7 +114,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
   }
 
   private def createSnapshotReference(projectName: String, workspaceName: String, snapshotId: String, snapshotName: String)(implicit authToken: AuthToken) = {
-    val targetRawlsUrl = Uri(s"${Rawls.url}api/workspaces/$projectName/$workspaceName/snapshots")
+    val targetRawlsUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/snapshots"))
     val payload = Map("snapshotId" -> snapshotId, "name" -> snapshotName)
     logger.info(s"!!!!!!!!!!!! createSnapshotReference to ${targetRawlsUrl.toString()} with $payload")
     Rawls.postRequest(
