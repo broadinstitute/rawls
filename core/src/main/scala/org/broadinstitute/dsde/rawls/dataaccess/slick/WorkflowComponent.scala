@@ -626,46 +626,6 @@ trait WorkflowComponent {
         findWorkflowMessagesById(id).delete andThen
           findInputResolutionsByWorkflowId(id).delete
     }
-
-    object WorkflowStatisticsQueries extends RawSqlQuery {
-      val driver: JdbcProfile = WorkflowComponent.this.driver
-
-      def countWorkflowsPerUserQuery(startDate: String, endDate: String) = {
-        sql"""select min(count), max(count), avg(count), stddev(count)
-                from (
-                  select count(1) as count from WORKFLOW w
-                    join SUBMISSION s on s.ID=w.SUBMISSION_ID
-                    where s.DATE_SUBMITTED between $startDate and $endDate
-                    group by s.SUBMITTER
-                ) as counts""".as[SummaryStatistics].head
-      }
-
-      def countWorkflowsPerSubmission(startDate: String, endDate: String) = {
-        sql"""select min(count), max(count), avg(count), stddev(count)
-                from (
-                  select count(1) as count from WORKFLOW w
-                    join SUBMISSION s on s.ID=w.SUBMISSION_ID
-                    where s.DATE_SUBMITTED between $startDate and $endDate
-                    group by w.SUBMISSION_ID
-                ) as counts""".as[SummaryStatistics].head
-      }
-
-      def workflowRunTimeQuery(startDate: String, endDate: String) = {
-        sql"""select min(seconds), max(seconds), avg(seconds), stddev(seconds)
-                from (
-                  select TIMESTAMPDIFF(SECOND, MIN(a.timestamp), MAX(a.timestamp)) as seconds
-                    from WORKFLOW w join AUDIT_WORKFLOW_STATUS a on w.ID=a.workflow_id
-                    where w.STATUS in ("Succeeded") and a.STATUS in ("Queued","Succeeded")
-                    and a.timestamp between $startDate and $endDate group by a.workflow_id
-                ) as runtimes""".as[SummaryStatistics].head
-      }
-
-      def countWorkflowsInWindow(startDate: String, endDate: String) = {
-        sql"""select count(1) from WORKFLOW w
-                join SUBMISSION s on s.ID=w.SUBMISSION_ID
-                where s.DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic].head
-      }
-    }
   }
 
   private object UpdateWorkflowStatusRawSql extends RawSqlQuery {

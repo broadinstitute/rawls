@@ -853,23 +853,5 @@ trait EntityComponent {
         entityRec.id -> unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
       }
     }
-
-    //noinspection SqlDialectInspection
-    object EntityStatisticsQueries extends RawSqlQuery {
-      val driver: JdbcProfile = EntityComponent.this.driver
-      def countEntitiesofTypeInNamespace(workspaceNamespace: Option[String], workspaceName: Option[String]): ReadAction[Seq[NamedStatistic]] = {
-        val baseSelect = sql"""select entity_type, count(1) as entityCount
-                from ENTITY e, WORKSPACE w
-                where e.workspace_id = w.id
-                  and e.deleted = 0"""
-        val namespaceClause = workspaceNamespace.map(ns => sql" and w.namespace = $ns").getOrElse(sql"")
-        val nameClause = workspaceName.map(n => sql" and w.name = $n").getOrElse(sql"")
-        val groupBy = sql" group by e.entity_type"
-
-        concatSqlActions(baseSelect, namespaceClause, nameClause, groupBy).as[NamedStatistic]
-      }
-    }
-
   }
-
 }

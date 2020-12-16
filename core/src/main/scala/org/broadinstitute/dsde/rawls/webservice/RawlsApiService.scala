@@ -8,7 +8,6 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
-import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -61,7 +60,7 @@ object RawlsApiService extends LazyLogging {
   }
 }
 
-trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val statisticsServiceConstructor: UserInfo => StatisticsService, val statusServiceConstructor: () => StatusService, val executionServiceCluster: ExecutionServiceCluster, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration, override val workbenchMetricBaseName: String, val samDAO: SamDAO, val swaggerConfig: SwaggerConfig)(implicit val executionContext: ExecutionContext, val materializer: Materializer)
+trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val statusServiceConstructor: () => StatusService, val executionServiceCluster: ExecutionServiceCluster, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration, override val workbenchMetricBaseName: String, val samDAO: SamDAO, val swaggerConfig: SwaggerConfig)(implicit val executionContext: ExecutionContext, val materializer: Materializer)
   extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService
   with AdminApiService with UserApiService with BillingApiService with BillingApiServiceV2 with NotificationsApiService with SnapshotApiService
   with StatusApiService with InstrumentationDirectives with SwaggerRoutes with VersionApiService with ServicePerimeterApiService {
@@ -70,7 +69,6 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   val entityServiceConstructor: UserInfo => EntityService
   val userServiceConstructor: UserInfo => UserService
   val genomicsServiceConstructor: UserInfo => GenomicsService
-  val statisticsServiceConstructor: UserInfo => StatisticsService
   val snapshotServiceConstructor: UserInfo => SnapshotService
   val statusServiceConstructor: () => StatusService
   val executionServiceCluster: ExecutionServiceCluster
@@ -155,4 +153,4 @@ trait VersionApiService {
   }
 }
 
-class RawlsApiServiceImpl(val workspaceServiceConstructor: UserInfo => WorkspaceService, val entityServiceConstructor: UserInfo => EntityService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val statisticsServiceConstructor: UserInfo => StatisticsService, val snapshotServiceConstructor: UserInfo => SnapshotService, val statusServiceConstructor: () => StatusService, val executionServiceCluster: ExecutionServiceCluster, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration, val batchUpsertMaxBytes: Long, override val workbenchMetricBaseName: String, val samDAO: SamDAO, val swaggerConfig: SwaggerConfig)(implicit val executionContext: ExecutionContext, val materializer: Materializer) extends RawlsApiService with StandardUserInfoDirectives
+class RawlsApiServiceImpl(val workspaceServiceConstructor: UserInfo => WorkspaceService, val entityServiceConstructor: UserInfo => EntityService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val snapshotServiceConstructor: UserInfo => SnapshotService, val statusServiceConstructor: () => StatusService, val executionServiceCluster: ExecutionServiceCluster, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration, val batchUpsertMaxBytes: Long, override val workbenchMetricBaseName: String, val samDAO: SamDAO, val swaggerConfig: SwaggerConfig)(implicit val executionContext: ExecutionContext, val materializer: Materializer) extends RawlsApiService with StandardUserInfoDirectives
