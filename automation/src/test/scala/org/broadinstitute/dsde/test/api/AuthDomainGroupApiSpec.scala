@@ -5,8 +5,10 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, Rawls, WorkspaceAccessLevel}
+import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+
 import scala.util.Try
 
 
@@ -150,6 +152,30 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
       }
 
     }
+
+    "bucket should not be accessible to project owners via projectViewer Google role" in {
+
+      val userA = UserPool.chooseProjectOwner //The project owner who can't see the workspace
+      val userB = UserPool.chooseAuthDomainUser //The user who owns the workspace
+
+      val userAToken: AuthToken = userA.makeAuthToken()
+      val userBToken: AuthToken = userB.makeAuthToken()
+
+      withGroup("AuthDomain", List(userB.email)) { authDomainName =>
+        withCleanBillingProject(userA) { projectName =>
+          withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
+
+            eventually {
+              true
+              //            Orchestration.storage.getBucket(bucketName)
+              //assert that userA receives 403 when trying to access bucket
+            }
+
+          }(userBToken)
+        }
+      }(userBToken)
+    }
+    
   }
 
 }
