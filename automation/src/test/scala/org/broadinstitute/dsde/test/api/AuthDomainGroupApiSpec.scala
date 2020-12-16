@@ -1,20 +1,18 @@
 package org.broadinstitute.dsde.test.api
 
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceResponse
 import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
-import org.broadinstitute.dsde.workbench.service.{AclEntry, Google, Orchestration, Rawls, WorkspaceAccessLevel}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.workbench.service._
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import spray.json._
 
 import scala.util.Try
-
-import spray.json._
-import DefaultJsonProtocol._
 
 class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures {
 
