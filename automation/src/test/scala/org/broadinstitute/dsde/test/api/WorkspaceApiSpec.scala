@@ -4,6 +4,7 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleProjectDAO}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.fixture._
@@ -18,9 +19,10 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
-
 import spray.json._
 import DefaultJsonProtocol._
+
+import scala.concurrent.ExecutionContext
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually
@@ -65,23 +67,39 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
       "to create, clone, and delete v2 workspaces (using the Resource Buffer), in a v2 billing project" in {
         val owner: Credentials = UserPool.chooseProjectOwner
         implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
-
         val billingProjectName = uuidWithPrefix("WorkspaceApiSpec_createCloneDeleteUsingResourceBuffer")
         Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
-
         val workspaceName = prependUUID("rbs-test-workspace")
         val workspaceCloneName = s"$workspaceName-clone"
 
+        implicit val ec: ExecutionContext = ExecutionContext.global
+        val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
+        val jsonCreds = try source.mkString finally source.close() // read in the json file and safely close it
+        val googleProjectDao = new HttpGoogleProjectDAO("appName", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
 
         Rawls.workspaces.create(billingProjectName, workspaceName)
+        val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+        createdWorkspaceResponse.workspace.name should be(workspaceName)
+        val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
 
         Rawls.workspaces.clone(billingProjectName, workspaceName, billingProjectName, workspaceCloneName)
+        val clonedWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceCloneName))
+        clonedWorkspaceResponse.workspace.name should be(workspaceCloneName)
+        val clonedWorkspaceGoogleProject = clonedWorkspaceResponse.workspace.googleProjectId
 
+        // verify that the google projects exist
+        googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe true)
+        googleProjectDao.isProjectActive(clonedWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe true)
+
+        // delete the workspaces
         Rawls.workspaces.delete(billingProjectName, workspaceName)
         assertNoAccessToWorkspace(billingProjectName, workspaceName)
-
         Rawls.workspaces.delete(billingProjectName, workspaceCloneName)
         assertNoAccessToWorkspace(billingProjectName, workspaceCloneName)
+
+        // verify that the google projects were deleted
+        googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe false)
+        googleProjectDao.isProjectActive(clonedWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe false)
 
         Rawls.billingV2.deleteBillingProject(billingProjectName)
       }
