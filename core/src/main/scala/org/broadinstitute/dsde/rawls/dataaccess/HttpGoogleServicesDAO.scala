@@ -947,9 +947,12 @@ class HttpGoogleServicesDAO(
 
   override def deleteProject(googleProject: GoogleProjectId): Future[Unit]= {
     implicit val service = GoogleInstrumentedService.Billing
+    val cloudResourceManagerServiceAccountCredential = getCloudResourceManagerServiceAccountCredential
     val billingServiceAccountCredential = getBillingServiceAccountCredential
-    val resMgr = getCloudResourceManager(billingServiceAccountCredential)
+
+    val resMgr = getCloudResourceManager(cloudResourceManagerServiceAccountCredential)
     val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+
     for {
       _ <- retryWhen500orGoogleError(() => {
         executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProject.value}", new ProjectBillingInfo().setBillingEnabled(false)))
@@ -1058,6 +1061,16 @@ class HttpGoogleServicesDAO(
   }
 
   def getDeploymentManagerAccountCredential: Credential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountId(clientEmail)
+      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJavaCollection)
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+  }
+
+  def getCloudResourceManagerServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
