@@ -172,6 +172,9 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
             eventually {
               //assert that userA receives 403 when trying to access bucket
               Google.storage.getBucket(bucketName)(userAToken).status.intValue() should be(403)
+              
+              //assert that userB receives 200 when trying to access bucket (to verify that bucket is set up correctly)
+              Google.storage.getBucket(bucketName)(userBToken).status.intValue() should be(200)
             }
 
           }(userBToken)
