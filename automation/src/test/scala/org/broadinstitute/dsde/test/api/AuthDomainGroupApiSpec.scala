@@ -8,8 +8,10 @@ import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service._
 import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Minutes, Span}
 import spray.json._
 
 import scala.util.Try
@@ -169,10 +171,17 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
 
             val bucketName = Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(userBToken).parseJson.convertTo[WorkspaceResponse].workspace.bucketName
 
-            eventually {
+            val bucketTimeout = Timeout(Span(2, Minutes))
+
+            //It can take some time to propagate the permissions through Google's systems, so set a new timeout
+            eventually(bucketTimeout) {
               //assert that userB receives 200 when trying to access bucket (to verify that bucket is set up correctly)
               Google.storage.getBucket(bucketName)(userBToken).status.intValue() should be(200)
-              
+            }
+
+            //If the above check has passed, it means that Google permissions have propagated so there is no need to wait here
+            //Waiting on a 403 also wouldn't do us much good because it would be the result in the non-propagated state anyway
+            eventually {
               //assert that userA receives 403 when trying to access bucket
               Google.storage.getBucket(bucketName)(userAToken).status.intValue() should be(403)
             }
