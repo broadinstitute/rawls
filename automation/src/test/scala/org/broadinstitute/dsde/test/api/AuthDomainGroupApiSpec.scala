@@ -1,16 +1,20 @@
 package org.broadinstitute.dsde.test.api
 
+import org.broadinstitute.dsde.rawls.model.WorkspaceResponse
 import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
-import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, Rawls, WorkspaceAccessLevel}
+import org.broadinstitute.dsde.workbench.service.{AclEntry, Google, Orchestration, Rawls, WorkspaceAccessLevel}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.util.Try
 
+import spray.json._
+import DefaultJsonProtocol._
 
 class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures {
 
@@ -165,17 +169,18 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
         withCleanBillingProject(userA) { projectName =>
           withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
+            val bucketName = Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(userBToken).parseJson.convertTo[WorkspaceResponse].workspace.bucketName
+
             eventually {
-              true
-              //            Orchestration.storage.getBucket(bucketName)
               //assert that userA receives 403 when trying to access bucket
+              Google.storage.getBucket(bucketName)(userAToken).status.intValue() should be(403)
             }
 
           }(userBToken)
         }
       }(userBToken)
     }
-    
+
   }
 
 }
