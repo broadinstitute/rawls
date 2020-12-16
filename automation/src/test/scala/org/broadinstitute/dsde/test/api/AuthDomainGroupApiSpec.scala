@@ -7,16 +7,18 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service._
+import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.concurrent.Waiters.scaled
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.time.{Minutes, Span}
+import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json._
 
 import scala.util.Try
 
-class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures {
+class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures with Eventually {
 
   /*
   * Unless otherwise declared, this auth token will be used for API calls.
@@ -159,6 +161,9 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
 
     "bucket should not be accessible to project owners via projectViewer Google role" in {
 
+      //It can take some time to propagate the permissions through Google's systems, so reconfigure the patience
+      implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Minutes)), interval = scaled(Span(10, Seconds)))
+
       val userA = UserPool.chooseProjectOwner //The project owner who can't see the workspace
       val userB = UserPool.chooseAuthDomainUser //The user who owns the workspace
 
@@ -171,16 +176,11 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
 
             val bucketName = Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(userBToken).parseJson.convertTo[WorkspaceResponse].workspace.bucketName
 
-            val bucketTimeout = Timeout(Span(2, Minutes))
-
-            //It can take some time to propagate the permissions through Google's systems, so set a new timeout
-            eventually(bucketTimeout) {
+            eventually {
               //assert that userB receives 200 when trying to access bucket (to verify that bucket is set up correctly)
               Google.storage.getBucket(bucketName)(userBToken).status.intValue() should be(200)
             }
 
-            //If the above check has passed, it means that Google permissions have propagated so there is no need to wait here
-            //Waiting on a 403 also wouldn't do us much good because it would be the result in the non-propagated state anyway
             eventually {
               //assert that userA receives 403 when trying to access bucket
               Google.storage.getBucket(bucketName)(userAToken).status.intValue() should be(403)
