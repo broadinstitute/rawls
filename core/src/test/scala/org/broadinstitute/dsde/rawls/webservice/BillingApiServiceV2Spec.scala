@@ -331,7 +331,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   "GET /billing/v2/{projectName}" should "return 200 with owner role" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
-      SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.owner
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
     )))
 
     Get(s"/billing/v2/${project.projectName.value}") ~>
@@ -347,7 +347,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   it should "return 200 with user role" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
-      SamBillingProjectRoles.workspaceCreator
+      SamProjectRoles.workspaceCreator
     )))
 
     Get(s"/billing/v2/${project.projectName.value}") ~>
@@ -458,7 +458,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   "GET /billing/v2" should "list all my projects with workspaces" in withEmptyDatabaseAndApiServices { services =>
     val projects = List.fill(20) { createProject(UUID.randomUUID().toString) }
-    val possibleRoles = List(Option(SamBillingProjectRoles.workspaceCreator), Option(SamBillingProjectRoles.owner), None)
+    val possibleRoles = List(Option(SamProjectRoles.workspaceCreator), Option(SamProjectRoles.owner), None)
     val samUserResources = projects.flatMap { p =>
       // randomly select a subset of possible roles
       val roles = Random.shuffle(possibleRoles).take(Random.nextInt(possibleRoles.size)).flatten.toSet
@@ -503,8 +503,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           p.servicePerimeter,
           p.invalidBillingAccount,
           samResource.direct.roles.collect {
-            case SamBillingProjectRoles.owner => ProjectRoles.Owner
-            case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User
+            case SamProjectRoles.owner => ProjectRoles.Owner
+            case SamProjectRoles.workspaceCreator => ProjectRoles.User
           },
           workspaces
             .filter(workspace => workspace.wsName.namespace == p.projectName.value
@@ -531,7 +531,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   "PUT /billing/v2/{projectName}/billing-account" should "update the billing account" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
-      SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.owner
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
     )))
     Put(s"/billing/v2/${project.projectName.value}/billing-account", UpdateRawlsBillingAccountRequest(services.gcsDAO.accessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutesV2) ~>
@@ -546,7 +546,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   it should "fail to update if given inaccessible billing account" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
-      SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.owner
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
     )))
     Put(s"/billing/v2/${project.projectName.value}/billing-account", UpdateRawlsBillingAccountRequest(services.gcsDAO.inaccessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutesV2) ~>
@@ -560,7 +560,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   "DELETE /billing/v2/{projectName}/billing-account" should "clear the billing account field" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
-      SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.owner
+      SamProjectRoles.workspaceCreator, SamProjectRoles.owner
     )))
     Delete(s"/billing/v2/${project.projectName.value}/billing-account") ~>
       sealRoute(services.billingRoutesV2) ~>

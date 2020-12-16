@@ -5,7 +5,7 @@ import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, SamBillingProjectActions, SamProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -86,10 +86,10 @@ trait WorkspaceSupport {
       case Some(true) =>
         for {
           billingProjectRoles <- traceDBIOWithParent("listUserRolesForResource", parentSpan)(_ => DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, userInfo)))
-          userIsBillingProjectOwner = billingProjectRoles.contains(SamBillingProjectRoles.owner)
+          userIsBillingProjectOwner = billingProjectRoles.contains(SamProjectRoles.owner)
           response <- userIsBillingProjectOwner match {
             case true => op
-            case false => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"Missing ${SamBillingProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'.")))
+            case false => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"Missing ${SamProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'.")))
           }
         } yield response
       case _ =>

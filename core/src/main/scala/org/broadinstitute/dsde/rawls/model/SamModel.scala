@@ -37,7 +37,7 @@ object SamWorkspaceRoles {
   val canCatalog = SamResourceRole("can-catalog")
 }
 
-object SamBillingProjectRoles {
+object SamProjectRoles {
   val workspaceCreator = SamResourceRole("workspace-creator")
   val batchComputeUser = SamResourceRole("batch-compute-user")
   val notebookUser = SamResourceRole("notebook-user")
