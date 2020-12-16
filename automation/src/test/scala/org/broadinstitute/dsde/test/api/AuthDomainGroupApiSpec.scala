@@ -164,7 +164,7 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
       val userBToken: AuthToken = userB.makeAuthToken()
 
       withGroup("AuthDomain", List(userB.email)) { authDomainName =>
-        withCleanBillingProject(userA) { projectName =>
+        withCleanBillingProject(userA, List(userA.email), List(userB.email)) { projectName =>
           withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
             val bucketName = Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(userBToken).parseJson.convertTo[WorkspaceResponse].workspace.bucketName
