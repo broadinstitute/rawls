@@ -354,7 +354,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       if (projectChildren.contains(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))) {
         for {
           _ <- deletePetsInProject(GoogleProjectId(projectName.value), userInfoForSam)
-          _ <- gcsDAO.deleteProject(GoogleProjectId(projectName.value))
+          _ <- gcsDAO.deleteV1Project(GoogleProjectId(projectName.value))
           _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, userInfoForSam)
         } yield ()
       } else {

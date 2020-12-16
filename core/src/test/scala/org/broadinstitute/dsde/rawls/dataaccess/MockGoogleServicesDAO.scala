@@ -225,6 +225,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def deleteProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
 
+  override def deleteV1Project(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
+
   override def addProjectToFolder(googleProject: GoogleProjectId, folderName: String): Future[Unit] = Future.successful(())
 
   override def getFolderId(folderName: String): Future[Option[String]] = Future.successful(Option("folders/1234567"))
