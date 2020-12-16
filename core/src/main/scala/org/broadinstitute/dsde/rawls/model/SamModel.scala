@@ -45,11 +45,6 @@ object SamProjectRoles {
   // if you're looking for a user role, check `def addUserToBillingProject` for the relevant project roles that make up a project user.
 }
 
-object SamGoogleProjectRoles {
-  val owner = SamResourceRole("owner")
-  val notebookUser = SamResourceRole("notebook-user")
-}
-
 object SamWorkflowCollectionRoles {
   val owner = SamResourceRole("owner")
   val writer = SamResourceRole("writer")
@@ -108,11 +103,6 @@ object SamBillingProjectPolicyNames {
   val owner = SamResourcePolicyName("owner")
   val workspaceCreator = SamResourcePolicyName("workspace-creator")
   val canComputeUser = SamResourcePolicyName("can-compute-user")
-}
-
-object SamGoogleProjectPolicyNames {
-  val owner = SamResourcePolicyName("owner")
-  val notebookUser = SamResourcePolicyName("notebook-user")
 }
 
 object SamWorkflowCollectionPolicyNames {
