@@ -2106,10 +2106,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, billingAccount, s1, workspaceId))).flatMap { case (googleProjectId, googleProjectNumber) =>
                 traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
                   // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
-                  val googleProjectOwnerPolicy = SamGoogleProjectPolicyNames.owner -> SamPolicy(Set.empty, Set.empty, Set(SamGoogleProjectRoles.owner))
-                  val googleProjectNotebookUserPolicy = SamGoogleProjectPolicyNames.notebookUser -> SamPolicy(Set.empty, Set.empty, Set(SamGoogleProjectRoles.notebookUser))
-                  val googleProjectPolicies = Map(googleProjectOwnerPolicy, googleProjectNotebookUserPolicy)
-                  traceDBIOWithParent("createResourceFull (google project)", s1)(_ => DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, googleProjectPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
+                  traceDBIOWithParent("createResourceFull (google project)", s1)(_ => DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
 
                   for {
                     //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have

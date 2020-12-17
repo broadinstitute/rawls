@@ -110,11 +110,6 @@ object SamBillingProjectPolicyNames {
   val canComputeUser = SamResourcePolicyName("can-compute-user")
 }
 
-object SamGoogleProjectPolicyNames {
-  val owner = SamResourcePolicyName("owner")
-  val notebookUser = SamResourcePolicyName("notebook-user")
-}
-
 object SamWorkflowCollectionPolicyNames {
   val workflowCollectionOwnerPolicyName = SamResourcePolicyName("workflow-collection-owner")
   val workflowCollectionWriterPolicyName = SamResourcePolicyName("workflow-collection-writer")
