@@ -91,7 +91,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   def withApiServicesMockitoSam[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
+    val apiService = new TestApiService(dataSource, user, spy(new MockGoogleServicesDAO("test")), new MockGooglePubSubDAO) {
       override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     }
     try {
@@ -655,6 +655,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(googleProjectId.value),
       any[UserInfo]
     )
+    verify(services.gcsDAO).deleteProject(ArgumentMatchers.eq(googleProjectId))
   }
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
