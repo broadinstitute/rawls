@@ -45,11 +45,6 @@ object SamBillingProjectRoles {
   // if you're looking for a user role, check `def addUserToBillingProject` for the relevant project roles that make up a project user.
 }
 
-object SamGoogleProjectRoles {
-  val owner = SamResourceRole("owner")
-  val notebookUser = SamResourceRole("notebook-user")
-}
-
 object SamWorkflowCollectionRoles {
   val owner = SamResourceRole("owner")
   val writer = SamResourceRole("writer")
