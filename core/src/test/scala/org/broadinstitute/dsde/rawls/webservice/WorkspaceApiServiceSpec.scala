@@ -372,7 +372,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       _ <- services.samDAO.registerUser(toUserInfo(testData.userProjectOwner))
 
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.billingProject, workspace.namespace, SamBillingProjectPolicyNames.owner,
-        SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamBillingProjectActions.createWorkspace), Set(SamProjectRoles.owner)), userInfo)
+        SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamBillingProjectActions.createWorkspace), Set(SamBillingProjectRoles.owner)), userInfo)
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.reader,
         SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamWorkspaceActions.read), Set(SamWorkspaceRoles.reader)), userInfo)
 
@@ -422,7 +422,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(testData.billingProject.projectName.value),
       any[UserInfo]
-    )).thenReturn(Future.successful(Set[SamResourceRole](SamProjectRoles.workspaceCreator, SamProjectRoles.batchComputeUser)))
+    )).thenReturn(Future.successful(Set[SamResourceRole](SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.batchComputeUser)))
 
     // User has BP user permissions and therefore can create workspaces
     when(services.samDAO.userHasAction(
@@ -1053,7 +1053,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(testData.billingProject.projectName.value),
       any[UserInfo]
-    )).thenReturn(Future.successful(Set[SamResourceRole](SamProjectRoles.workspaceCreator, SamProjectRoles.batchComputeUser)))
+    )).thenReturn(Future.successful(Set[SamResourceRole](SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.batchComputeUser)))
 
     // User has BP user permissions and therefore can create workspaces
     when(services.samDAO.userHasAction(
