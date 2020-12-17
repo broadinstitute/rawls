@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceResponse
 import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.serviceAccountScopes
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service._
@@ -167,10 +168,10 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
       val userA = UserPool.chooseProjectOwner //The project owner who can't see the workspace
       val userB = UserPool.chooseAuthDomainUser //The user who owns the workspace
 
-      val userAToken: AuthToken = userA.makeAuthToken()
-      val userBToken: AuthToken = userB.makeAuthToken()
+      val userAToken: AuthToken = userA.makeAuthToken(serviceAccountScopes)
+      val userBToken: AuthToken = userB.makeAuthToken(serviceAccountScopes)
 
-      withGroup("AuthDomain", List(userB.email)) { authDomainName =>
+      withGroup("AuthDomain") { authDomainName =>
         withCleanBillingProject(userA, List(userA.email), List(userB.email)) { projectName =>
           withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
