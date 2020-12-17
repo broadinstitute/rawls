@@ -969,7 +969,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def deleteProject(googleProject: GoogleProjectId): Future[Unit]= {
+  override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]= {
     implicit val service = GoogleInstrumentedService.Billing
     val cloudResourceManagerServiceAccountCredential = getCloudResourceManagerServiceAccountCredential
     val billingServiceAccountCredential = getBillingServiceAccountCredential

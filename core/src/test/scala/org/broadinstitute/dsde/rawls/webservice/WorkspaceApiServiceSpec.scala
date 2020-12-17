@@ -655,7 +655,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(googleProjectId.value),
       any[UserInfo]
     )
-    verify(services.gcsDAO).deleteProject(ArgumentMatchers.eq(googleProjectId))
+    verify(services.gcsDAO).deleteGoogleProject(ArgumentMatchers.eq(googleProjectId))
   }
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118

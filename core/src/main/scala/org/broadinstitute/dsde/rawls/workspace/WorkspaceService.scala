@@ -453,7 +453,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def deleteGoogleProject(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] = {
         for {
           _ <- deletePetsInProject(googleProjectId, userInfoForSam)
-          _ <- gcsDAO.deleteProject(googleProjectId)
+          _ <- gcsDAO.deleteGoogleProject(googleProjectId)
           _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam)
         } yield ()
   }
