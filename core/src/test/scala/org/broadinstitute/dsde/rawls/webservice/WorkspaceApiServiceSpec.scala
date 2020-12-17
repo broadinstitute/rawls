@@ -771,6 +771,24 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 400 if the bucket location requested is in an invalid format" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      attributes = Map.empty,
+      authorizationDomain = None,
+      bucketLocation = Option("US")
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        val errorText = responseAs[ErrorReport].message
+        assert(status == StatusCodes.BadRequest)
+        assert(errorText.contains("Workspace bucket location must be a single (not multi-) region of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
+      }
+  }
+
   it should "concurrently update workspace attributes" in withTestDataApiServices { services =>
     def generator(i: Int): ReadAction[Option[Workspace]] = {
       Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString(s"bang$i")): AttributeUpdateOperation))) ~>
