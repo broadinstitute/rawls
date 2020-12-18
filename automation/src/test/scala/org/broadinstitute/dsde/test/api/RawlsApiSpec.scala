@@ -50,6 +50,21 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     Await.result(find, 1.minute)
   }
 
+  def parseCallsFromMetadata(metadata: String): List[JsonNode] = {
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+
+    // "calls" is a top-level key of metadata, whose value is a JSON object mapping call names to shard lists.
+    // Get that object's values.
+    val calls: List[JsonNode] = mapper.readTree(metadata).get("calls").elements().asScala.toList
+
+    // Call values are arrays of scatter shards.
+    // Flatten this structure to get a single list containing all the shards.
+    calls flatMap { c =>
+      c.elements().asScala.toList
+    }
+  }
+
   def parseSubWorkflowIdsFromMetadata(metadata: String): List[String] = {
     /*
     Workflow metadata has this structure:
@@ -64,19 +79,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
       },  ...
     }
     */
-
-    val mapper = new ObjectMapper()
-    mapper.registerModule(DefaultScalaModule)
-
-    // "calls" is a top-level key of metadata, whose value is a JSON object.
-    // Get that object's values.
-    val calls: List[JsonNode] = mapper.readTree(metadata).get("calls").elements().asScala.toList
-
-    // Call values are arrays of scatter shards.
-    // Get the shards, which are JSON objects.
-    val scatterShards: List[JsonNode] = calls flatMap { c =>
-      c.elements().asScala.toList
-    }
+    val scatterShards: List[JsonNode] = parseCallsFromMetadata(metadata)
 
     // Return the values corresponding to each scatter shard's "subWorkflowId" key
     scatterShards map { s =>
@@ -100,6 +103,24 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     val outputFieldJson = Option(outputsJson.get(outputField))
       .getOrElse(fail(s"Unable to find metadata output $outputField"))
     outputFieldJson.asText()
+  }
+
+  def parseWorkflowOptionsFromMetadata(metadata: String): String = {
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+
+    val metadataJson = mapper.readTree(metadata)
+    metadataJson.get("submittedFiles").get("options").asText()
+  }
+
+  def parseRuntimeAttributeKeyFromCallMetadata(callMetadata: JsonNode, attributeKey: String): String = {
+    callMetadata.get("runtimeAttributes").get("zones").asText()
+  }
+
+  def parseWorkerAssignedExecEventsFromCallMetadata(callMetadata: JsonNode): List[String] = {
+    val executionEvents = callMetadata.get("executionEvents").elements().asScala.toList
+    val descriptions = executionEvents.map(_.get("description").asText())
+    descriptions.filter(desc => desc.startsWith("Worker") && desc.contains("assigned"))
   }
 
   // if these prove useful anywhere else, they should move into workbench-libs
@@ -169,8 +190,11 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
             val firstSubWorkflowId = eventually {
               val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
+              val workflowOptions = parseWorkflowOptionsFromMetadata(cromwellMetadata)
               val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
               withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstWorkflowId)) {
+                workflowOptions should include ("us-central1-")
+
                 subIds should not be (empty)
                 subIds.head
               }
@@ -207,6 +231,200 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
         }
       }
 
+    }
+
+    "should be able to create workspace and run sub-workflow tasks in non-US regions" in {
+      implicit val token: AuthToken = studentBToken
+
+      // this will create a method with a workflow containing 3 sub-workflows
+      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
+
+      val europeNorth1ZonesPrefix = "europe-north1-"
+
+      withCleanBillingProject(studentB) { projectName =>
+        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
+          withCleanUp {
+            Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+              projectName, workspaceName,
+              topLevelMethod,
+              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+              topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
+
+            Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+
+            // it currently takes ~ 5 min for google bucket read permissions to propagate.
+            // We can't launch a workflow until this happens.
+            // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+
+            Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+            val submissionId = Rawls.submissions.launchWorkflow(
+              projectName,
+              workspaceName,
+              topLevelMethodConfiguration.configNamespace,
+              topLevelMethodConfiguration.configName,
+              "participant",
+              SingleParticipant.entityId,
+              "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
+            // clean up: Abort submission
+            register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+
+            // may need to wait for Cromwell to start processing workflows
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
+            implicit val patienceConfig: PatienceConfig = submissionPatience
+
+            // Get workflow ID from submission details
+            val rootWorkflowId: String = eventually {
+              val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+              withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
+                status should (be("Submitted") or be("Done")) // very unlikely it's already done, but let's handle that case.
+                workflows should not be (empty)
+                workflows.head
+              }
+            }
+
+            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-north1` region
+            val subWorkflowIds: List[String] = eventually {
+              val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
+              val workflowOptions = parseWorkflowOptionsFromMetadata(rootWorkflowMetadata)
+              val subWorkflowIds = parseSubWorkflowIdsFromMetadata(rootWorkflowMetadata)
+
+              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, rootWorkflowId)) {
+                workflowOptions should include (europeNorth1ZonesPrefix)
+
+                subWorkflowIds should not be (empty)
+                subWorkflowIds.length shouldBe(3)
+
+                subWorkflowIds
+              }
+            }
+
+            // Get the sub-workflows call metadata once they finish running
+            val subWorkflowCallMetadata: List[JsonNode] = eventually {
+              val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
+              val subWorkflowCallMetadata = subWorkflowsMetadata flatMap parseCallsFromMetadata
+
+              subWorkflowsMetadata foreach { x => x should include (""""executionStatus":"Done"""") }
+
+              subWorkflowCallMetadata
+            }
+
+            // For each call in the sub-workflows, check
+            //   - the zones for each job that were determined by Cromwell and
+            //   - the worker assigned for the tasks
+            // belong to `europe-north1`
+            val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
+            val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
+
+            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
+
+            workerAssignedExecEvents should not be (empty)
+            workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
+          }
+        }
+      }
+    }
+
+    "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" in {
+      implicit val token: AuthToken = studentBToken
+
+      // this will create a method with a workflow containing 3 sub-workflows
+      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
+
+      val europeNorth1ZonesPrefix = "europe-north1-"
+
+      withCleanBillingProject(studentB) { projectName =>
+        // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
+        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
+          withCleanUp {
+            // `withClonedWorkspace()` appends `_clone` to the original workspace. Check that workspace returned is actually a clone
+            workspaceName should include ("_clone")
+
+            Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+              projectName, workspaceName,
+              topLevelMethod,
+              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+              topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
+
+            Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+
+            // it currently takes ~ 5 min for google bucket read permissions to propagate.
+            // We can't launch a workflow until this happens.
+            // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+
+            Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+            val submissionId = Rawls.submissions.launchWorkflow(
+              projectName,
+              workspaceName,
+              topLevelMethodConfiguration.configNamespace,
+              topLevelMethodConfiguration.configName,
+              "participant",
+              SingleParticipant.entityId,
+              "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
+            // clean up: Abort submission
+            register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+
+            // may need to wait for Cromwell to start processing workflows
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
+            implicit val patienceConfig: PatienceConfig = submissionPatience
+
+            // Get workflow ID from submission details
+            val rootWorkflowId: String = eventually {
+              val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+              withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
+                status should (be("Submitted") or be("Done")) // very unlikely it's already done, but let's handle that case.
+                workflows should not be (empty)
+                workflows.head
+              }
+            }
+
+            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-north1` region
+            val subWorkflowIds: List[String] = eventually {
+              val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
+              val workflowOptions = parseWorkflowOptionsFromMetadata(rootWorkflowMetadata)
+              val subWorkflowIds = parseSubWorkflowIdsFromMetadata(rootWorkflowMetadata)
+
+              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, rootWorkflowId)) {
+                workflowOptions should include (europeNorth1ZonesPrefix)
+
+                subWorkflowIds should not be (empty)
+                subWorkflowIds.length shouldBe(3)
+
+                subWorkflowIds
+              }
+            }
+
+            // Get the sub-workflows call metadata once they finish running
+            val subWorkflowCallMetadata = eventually {
+              val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
+              val subWorkflowCallMetadata = subWorkflowsMetadata flatMap parseCallsFromMetadata
+
+              subWorkflowsMetadata foreach { x => x should include (""""executionStatus":"Done"""") }
+
+              subWorkflowCallMetadata
+            }
+
+            // For each call in the sub-workflows, check
+            //   - the zones for each job that were determined by Cromwell and
+            //   - the worker assigned for the tasks
+            // belong to `europe-north1`
+            val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
+            val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
+
+            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
+
+            workerAssignedExecEvents should not be (empty)
+            workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
+          }
+        }
+      }
     }
 
 //    Disabling this test until we decide what to do with it. See AP-177

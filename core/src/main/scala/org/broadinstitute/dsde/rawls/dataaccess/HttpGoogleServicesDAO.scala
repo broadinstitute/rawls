@@ -58,6 +58,7 @@ import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
+import com.google.cloud.storage.StorageException
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
@@ -189,7 +190,13 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo,
+                              googleProject: GoogleProjectId,
+                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                              bucketName: String,
+                              labels: Map[String, String],
+                              parentSpan: Span = null,
+                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
     def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
@@ -242,7 +249,22 @@ class HttpGoogleServicesDAO(
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(googleProject.value), GcsBucketName(bucketName), None, labels, Option(traceId), true, Option(GcsBucketName(getStorageLogsBucketName(googleProject)))).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(
+        googleProject = GoogleProject(googleProject.value),
+        bucketName = GcsBucketName(bucketName),
+        acl = None,
+        labels = labels,
+        traceId = Option(traceId),
+        bucketPolicyOnlyEnabled = true,
+        logBucket = Option(GcsBucketName(getStorageLogsBucketName(googleProject))),
+        location = bucketLocation
+      ).compile.drain.unsafeToFuture().recoverWith{
+        case e: StorageException if e.getCode == 400 =>
+          val message = s"Workspace creation failed. Error trying to create bucket `$bucketName` in Google project " +
+            s"`${googleProject.value}` in region `${bucketLocation.getOrElse("US (default)")}`."
+          val errorReport = ErrorReport(statusCode = StatusCodes.BadRequest, message)
+          throw new RawlsExceptionWithErrorReport(errorReport)
+      }) //ACL = None because bucket IAM will be set separately in updateBucketIam
       updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
       insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
       _ <- updateBucketIamFuture
