@@ -13,12 +13,15 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.Rawls
+import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 
 import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
+
+object NotebookCanaryTest extends org.scalatest.Tag("NotebookCanaryTest")
 
 class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
   with WorkspaceFixtures with BillingFixtures
@@ -39,7 +42,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
 
   "TDR Snapshot integration" - {
 
-    "should allow snapshot references to be added to workspaces" in {
+    "should allow snapshot references to be added to workspaces" taggedAs(Tags.SmokeTest, NotebookCanaryTest) in {
       // only hermione.owner@quality.firecloud.org has access to snapshots in QA (integration4)
       // val owner: Credentials = UserPool.chooseProjectOwner
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
