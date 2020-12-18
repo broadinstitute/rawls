@@ -4,8 +4,9 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.auth.AuthToken
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleProjectDAO}
+import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
+import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.util.Retry
@@ -18,9 +19,10 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
-
 import spray.json._
 import DefaultJsonProtocol._
+
+import scala.concurrent.ExecutionContext
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually
@@ -60,6 +62,36 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           Rawls.workspaces.delete(projectName, workspaceCloneName)
           assertNoAccessToWorkspace(projectName, workspaceCloneName)
         }
+      }
+
+      "to delete the google project (from Resource Buffer) in a v2 workspaces (in a v2 billing project) when deleting the workspace" in {
+        val owner: Credentials = UserPool.chooseProjectOwner
+        implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
+        val billingProjectName = uuidWithPrefix("WorkspaceApiSpec_deleteWorkspaceUsingResourceBuffer")
+        Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
+        val workspaceName = prependUUID("rbs-delete-workspace")
+
+        implicit val ec: ExecutionContext = ExecutionContext.global
+        val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
+        val jsonCreds = try source.mkString finally source.close()
+        val googleProjectDao = new HttpGoogleProjectDAO("appName", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
+
+        Rawls.workspaces.create(billingProjectName, workspaceName)
+        val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+        createdWorkspaceResponse.workspace.name should be(workspaceName)
+        val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
+
+        // verify that the google project exists
+        googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe true)
+
+        // delete the workspace
+        Rawls.workspaces.delete(billingProjectName, workspaceName)
+        assertNoAccessToWorkspace(billingProjectName, workspaceName)
+
+        // verify that the google project was deleted
+        googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe false)
+
+        Rawls.billingV2.deleteBillingProject(billingProjectName)
       }
 
       "to add readers with can-share access" in {

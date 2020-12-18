@@ -222,7 +222,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def pollOperation(operationId: OperationId): Future[OperationStatus]
 
-  def deleteProject(googleProject: GoogleProjectId): Future[Unit]
+
+  def deleteV1Project(googleProject: GoogleProjectId): Future[Unit]
+
+  def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]
 
   def getAccessTokenUsingJson(saKey: String): Future[String]
 

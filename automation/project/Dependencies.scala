@@ -7,7 +7,7 @@ object Dependencies {
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.11.3"
 
-  val serviceTestV = "0.18-d7bebc7"
+  val serviceTestV = "0.18-ceda1a9c-SNAP"
   val workbenchGoogleV = "0.21-890a74f"
   val workbenchGoogle2V = "0.6-c91d96b"
   val workbenchModelV  = "0.13-58c913d"
@@ -49,7 +49,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.0"   % "test",
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % "test",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-18b1c01e0"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-19553a430-SNAP"
       exclude("com.typesafe.scala-logging", "scala-logging_2.11") exclude("com.typesafe.akka", "akka-stream_2.11"),
 
     workbenchModel,
