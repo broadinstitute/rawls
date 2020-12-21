@@ -535,6 +535,28 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
+  it should "delete a workspace with linked bond service account" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    // add a bond sa link
+    Await.result(services.requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, testData.workspaceNoSubmissions), Duration.Inf)
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+
+  }
+
   it should "delete a workspace with no submissions" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {

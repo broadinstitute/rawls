@@ -369,36 +369,43 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
-    val deletionFuture: Future[Seq[WorkflowRecord]] = dataSource.inTransaction { dataAccess =>
-      for {
-        // Gather any active workflows with external ids
-        workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
+    val deletionFuture: Future[Seq[WorkflowRecord]] =
+      requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext).flatMap { _ =>
+        dataSource.inTransaction { dataAccess =>
+          for {
+            // Gather any active workflows with external ids
+            workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
 
-        //If a workflow is not done, automatically change its status to Aborted
-        _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
-          case wf if !WorkflowStatuses.withName(wf.status).isDone =>
-            dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
-              if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
-              else None
+            //If a workflow is not done, automatically change its status to Aborted
+            _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs =>
+              recs.collect {
+                case wf if !WorkflowStatuses.withName(wf.status).isDone =>
+                  dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
+                    if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
+                    else None
+                  }
+              }
             }
-        }}
 
-        // Delete components of the workspace
-        _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+            // Delete components of the workspace
+            _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+            _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+            _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
 
-        // Delete the workspace
-        _ <- dataAccess.workspaceQuery.delete(workspaceName)
+            // Delete the workspace
+            _ <- dataAccess.workspaceQuery.delete(workspaceName)
 
-        // Schedule bucket for deletion
-        _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))
+            // Schedule bucket for deletion
+            _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))
 
-      } yield {
-        workflowsToAbort
+          } yield {
+            workflowsToAbort
+          }
+        }
       }
-    }
     for {
+      _ <- requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext)
+
       workflowsToAbort <- deletionFuture
 
       // Abort running workflows

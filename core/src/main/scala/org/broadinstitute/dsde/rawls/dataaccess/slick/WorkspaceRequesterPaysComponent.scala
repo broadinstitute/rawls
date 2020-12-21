@@ -5,6 +5,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.BondServiceAccountEmail
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, WorkspaceName}
+import org.broadinstitute.dsde.rawls.util.CollectionUtils
 
 case class WorkspaceRequesterPaysRecord(id: Long, workspaceId: UUID, userEmail: String, serviceAccountEmail: String)
 
@@ -45,13 +46,30 @@ trait WorkspaceRequesterPaysComponent {
       query.exists.result
     }
 
-    def listAllForUser(workspaceName: WorkspaceName, userEmail: RawlsUserEmail): ReadAction[Seq[String]] = {
-      existingRecordsForUserQuery(workspaceName, userEmail).map(_.serviceAccountEmail).result
+    def listAllForUser(workspaceName: WorkspaceName, userEmail: RawlsUserEmail): ReadAction[Seq[BondServiceAccountEmail]] = {
+      existingRecordsForUserQuery(workspaceName, userEmail).map(_.serviceAccountEmail).result.map(_.map(BondServiceAccountEmail))
+    }
+
+    def listAllForWorkspace(workspaceName: WorkspaceName): ReadAction[Map[RawlsUserEmail, Seq[BondServiceAccountEmail]]] = {
+      existingRecordsForWorkspaceQuery(workspaceName).map(rec => rec.userEmail -> rec.serviceAccountEmail).result
+        // convert to email strings to type safe objects
+        .map(_.map { case (userEmail, saEmail) => (RawlsUserEmail(userEmail), BondServiceAccountEmail(saEmail))})
+        // group results to the right return value shape
+        .map(x => CollectionUtils.groupByTuples(x))
     }
   }
 
   private def existingRecordsForUserQuery(workspaceName: WorkspaceName, userEmail: RawlsUserEmail): Query[WorkspaceRequesterPaysTable, WorkspaceRequesterPaysRecord, Seq] = {
     val workspaceSubquery = workspaceQuery.filter(ws => ws.namespace === workspaceName.namespace && ws.name === workspaceName.name).map(_.id)
     workspaceRequesterPaysQuery.filter(_.workspaceId in workspaceSubquery).filter(_.userEmail === userEmail.value)
+  }
+
+  private def existingRecordsForWorkspaceQuery(workspaceName: WorkspaceName): Query[WorkspaceRequesterPaysTable, WorkspaceRequesterPaysRecord, Seq] = {
+    for {
+      ws <- workspaceQuery if ws.namespace === workspaceName.namespace && ws.name === workspaceName.name
+      rp <- workspaceRequesterPaysQuery if rp.workspaceId === ws.id
+    } yield {
+      rp
+    }
   }
 }
