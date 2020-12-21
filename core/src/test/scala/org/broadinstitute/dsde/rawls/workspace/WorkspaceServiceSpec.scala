@@ -341,12 +341,13 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "keep requester pays appropriately when changing ACLs" in withTestDataServicesCustomSam { services =>
     populateWorkspacePolicies(services)
 
-    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail, Set(BondServiceAccountEmail("foo@bar.com"))))
+    val bondServiceAccountEmails = Set(BondServiceAccountEmail("foo@bar.com"))
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail, bondServiceAccountEmails))
 
     val aclUpdate = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None))
     Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdate, false), Duration.Inf)
 
-    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) should contain theSameElementsAs(Set("foo@bar.com"))
+    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) should contain theSameElementsAs(bondServiceAccountEmails)
   }
 
   it should "remove requester pays appropriately when changing ACLs" in withTestDataServicesCustomSam { services =>
