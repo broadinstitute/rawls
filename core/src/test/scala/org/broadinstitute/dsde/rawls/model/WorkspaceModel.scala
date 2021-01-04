@@ -15,9 +15,6 @@ object Workspace {
             createdBy: String,
             attributes: AttributeMap,
             isLocked: Boolean = false): Workspace = {
-    val randomString = java.util.UUID.randomUUID().toString
-    val googleProjectId = GoogleProjectId(randomString)
-    val googleProjectNumber = GoogleProjectNumber(randomString)
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber))
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId("blah-todo-change"), Option(GoogleProjectNumber("blah-todo-change")))
   }
 }
