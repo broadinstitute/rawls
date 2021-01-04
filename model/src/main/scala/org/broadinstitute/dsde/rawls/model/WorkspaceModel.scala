@@ -144,6 +144,22 @@ case class Workspace(
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
+object Workspace {
+  /** convenience constructor that defaults workspace version to v2 and google project to namespace */
+  def apply(namespace: String,
+    name: String,
+    workspaceId: String,
+    bucketName: String,
+    workflowCollectionName: Option[String],
+    createdDate: DateTime,
+    lastModified: DateTime,
+    createdBy: String,
+    attributes: AttributeMap,
+    isLocked: Boolean = false): Workspace = {
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(namespace), None)
+  }
+}
+
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     lastFailureDate: Option[DateTime],
                                     runningSubmissionsCount: Int)
