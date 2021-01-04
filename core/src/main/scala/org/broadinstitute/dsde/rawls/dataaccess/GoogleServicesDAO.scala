@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.typesafe.config.Config
@@ -31,8 +32,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(googleProject: GoogleProjectId): Future[Project]
-
-  def setBillingAccountForProject(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, billingEnabled: Boolean = true): Future[Unit]
 
   /** Mark all objects in the bucket for deletion, then attempts to delete the bucket from Google Cloud Storage.
     *
@@ -119,6 +118,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return sequence of RawlsBillingAccounts
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
+
+  def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
 
@@ -221,7 +222,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def pollOperation(operationId: OperationId): Future[OperationStatus]
 
-  def deleteProject(googleProject: GoogleProjectId): Future[Unit]
+
+  def deleteV1Project(googleProject: GoogleProjectId): Future[Unit]
+
+  def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]
 
   def getAccessTokenUsingJson(saKey: String): Future[String]
 

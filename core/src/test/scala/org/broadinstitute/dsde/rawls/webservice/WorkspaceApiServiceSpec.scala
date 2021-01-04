@@ -91,7 +91,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   def withApiServicesMockitoSam[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
+    val apiService = new TestApiService(dataSource, user, spy(new MockGoogleServicesDAO("test")), new MockGooglePubSubDAO) {
       override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     }
     try {
@@ -147,6 +147,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   def withTestDataApiServicesCustomizableMockSam[T](testCode: TestApiServiceCustomizableMockSam => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServicesCustomizableMockSam(dataSource)(testCode)
+    }
+  }
+
+  def withEmptyDatabaseAndApiServices[T](testCode: TestApiService =>  T): T = {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
     }
   }
 
@@ -372,7 +378,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       _ <- services.samDAO.registerUser(toUserInfo(testData.userProjectOwner))
 
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.billingProject, workspace.namespace, SamBillingProjectPolicyNames.owner,
-        SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamBillingProjectActions.createWorkspace), Set(SamProjectRoles.owner)), userInfo)
+        SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamBillingProjectActions.createWorkspace), Set(SamBillingProjectRoles.owner)), userInfo)
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.reader,
         SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamWorkspaceActions.read), Set(SamWorkspaceRoles.reader)), userInfo)
 
@@ -422,7 +428,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(testData.billingProject.projectName.value),
       any[UserInfo]
-    )).thenReturn(Future.successful(Set[SamResourceRole](SamProjectRoles.workspaceCreator, SamProjectRoles.batchComputeUser)))
+    )).thenReturn(Future.successful(Set[SamResourceRole](SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.batchComputeUser)))
 
     // User has BP user permissions and therefore can create workspaces
     when(services.samDAO.userHasAction(
@@ -577,6 +583,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       any[UserInfo]
     )).thenReturn(Future.successful(()))
 
+    // mocking for deleting a google project
+    val petSAJson = "petJson"
+    val googleProjectId = testData.workspace.googleProjectId
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
+    when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+    when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))))
+    when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(Future.successful()) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+    when(services.samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful())
+
     Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -596,6 +611,92 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
       any[UserInfo]
     )
+  }
+
+  it should "delete the google project in the workspace when deleting a workspace" in withTestDataApiServicesMockitoSam { services =>
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      ArgumentMatchers.eq(SamWorkspaceActions.delete),
+      any[UserInfo]
+    )).thenReturn(Future.successful(true))
+
+    when(services.samDAO.deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      any[UserInfo]
+    )).thenReturn(Future.successful(()))
+
+    when(services.samDAO.deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
+      ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
+      any[UserInfo]
+    )).thenReturn(Future.successful(()))
+
+    // mocking for deleting a google project
+    val petSAJson = "petJson"
+    val googleProjectId = testData.workspace.googleProjectId
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
+    when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+    when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))))
+    when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(Future.successful()) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+    when(services.samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful())
+
+    Delete(testData.workspace.path) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, responseAs[String]) {
+          status
+        }
+      }
+
+    verify(services.samDAO).deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+      ArgumentMatchers.eq(googleProjectId.value),
+      any[UserInfo]
+    )
+    verify(services.gcsDAO).deleteGoogleProject(ArgumentMatchers.eq(googleProjectId))
+  }
+
+  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
+  it should "delete a v1 workspace" in withEmptyDatabaseAndApiServices { services =>
+
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("v1-test-ns"), CreationStatuses.Ready, None, None)
+    val v1Workspace = new Workspace(
+      billingProject.projectName.value,
+      "myWorkspaceV1",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "test",
+      Map.empty,
+      false,
+      WorkspaceVersions.V1,
+      GoogleProjectId("googleprojectid"),
+      Option(GoogleProjectNumber("googleProjectNumber")),
+      Option(RawlsBillingAccountName("fakeBillingAcct"))
+    )
+
+    runAndWait(
+      DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject),
+        workspaceQuery.createOrUpdate(v1Workspace),
+      )
+    )
+
+    Delete(v1Workspace.path) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, responseAs[String]) {
+          status
+        }
+      }
+
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(v1Workspace.toWorkspaceName))
+    }
   }
 
   // see also WorkspaceApiListOptionsSpec for tests against list-workspaces that use the ?fields query param
@@ -1053,7 +1154,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(testData.billingProject.projectName.value),
       any[UserInfo]
-    )).thenReturn(Future.successful(Set[SamResourceRole](SamProjectRoles.workspaceCreator, SamProjectRoles.batchComputeUser)))
+    )).thenReturn(Future.successful(Set[SamResourceRole](SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.batchComputeUser)))
 
     // User has BP user permissions and therefore can create workspaces
     when(services.samDAO.userHasAction(

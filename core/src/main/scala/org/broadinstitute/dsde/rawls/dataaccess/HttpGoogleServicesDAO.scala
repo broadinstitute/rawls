@@ -621,6 +621,45 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+    val billingSvcCred = getBillingServiceAccountCredential
+    implicit val service = GoogleInstrumentedService.Billing
+    val googleProjectName = s"projects/${googleProjectId.value}"
+    val cloudBillingProjectsApi = getCloudBillingManager(billingSvcCred).projects()
+
+    val fetcher = cloudBillingProjectsApi.getBillingInfo(googleProjectName)
+
+    val updater = newBillingAccount match {
+      case Some(RawlsBillingAccountName(billingAccountName)) =>
+        cloudBillingProjectsApi.updateBillingInfo(googleProjectName,
+          new ProjectBillingInfo().setBillingAccountName(billingAccountName).setBillingEnabled(true))
+      case None =>
+        cloudBillingProjectsApi.updateBillingInfo(googleProjectName,
+          new ProjectBillingInfo().setBillingEnabled(false))
+    }
+    retryWithRecoverWhen500orGoogleError(() => {
+      blocking {
+        val projectBillingInfo = executeGoogleRequest(fetcher)
+        val shouldUpdate = newBillingAccount match {
+          case Some(RawlsBillingAccountName(billingAccountName)) =>
+            projectBillingInfo.getBillingAccountName != billingAccountName || projectBillingInfo.getBillingEnabled == false
+          case None =>
+            projectBillingInfo.getBillingEnabled == true
+        }
+        if (shouldUpdate) {
+          executeGoogleRequest(updater)
+        } else {
+          projectBillingInfo
+        }
+      }
+    }) {
+      case gjre: GoogleJsonResponseException
+        if gjre.getStatusCode == StatusCodes.Forbidden.intValue =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
+          s"Rawls service account does not have access to billing account [${newBillingAccount.map(_.value)}]", gjre))
+    }
+  }
+
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
@@ -741,17 +780,6 @@ class HttpGoogleServicesDAO(
     val configContents = ConfigContents(Seq(Resources(googleProject.value, dmTemplatePath, properties)))
     val jsonVersion = io.circe.jawn.parse(configContents.toJson.toString).valueOr(throw _)
     jsonVersion.asYaml.spaces2
-  }
-
-  override def setBillingAccountForProject(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, billingEnabled: Boolean = true): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Billing
-    val billingServiceAccountCredential = getBillingServiceAccountCredential
-    val billingManager = getCloudBillingManager(billingServiceAccountCredential)
-    // value sent to google should have prefix "billingAccounts/" like: "billingAccounts/some-billing-acct-uuid"
-    val projectBillingInfo = new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(billingEnabled)
-    retryWhen500orGoogleError(() => {
-      executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo))
-    })
   }
 
   /*
@@ -917,11 +945,38 @@ class HttpGoogleServicesDAO(
     } yield updated
   }
 
-  override def deleteProject(googleProject: GoogleProjectId): Future[Unit]= {
+  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
+  // V2 workspace projects are managed by rawls SA but the v1 billing google projects are managed by the billing SA.
+  override def deleteV1Project(googleProject: GoogleProjectId): Future[Unit]= {
     implicit val service = GoogleInstrumentedService.Billing
     val billingServiceAccountCredential = getBillingServiceAccountCredential
+
     val resMgr = getCloudResourceManager(billingServiceAccountCredential)
     val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+
+    for {
+      _ <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProject.value}", new ProjectBillingInfo().setBillingEnabled(false)))
+      })
+      _ <- retryWithRecoverWhen500orGoogleError(() => {
+        executeGoogleRequest(resMgr.projects().delete(googleProject.value))
+      }) {
+        case e: GoogleJsonResponseException if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) => new Empty()
+        // stop trying to delete an already deleted project
+      }
+    } yield {
+      // nothing
+    }
+  }
+
+  override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]= {
+    implicit val service = GoogleInstrumentedService.Billing
+    val cloudResourceManagerServiceAccountCredential = getCloudResourceManagerServiceAccountCredential
+    val billingServiceAccountCredential = getBillingServiceAccountCredential
+
+    val resMgr = getCloudResourceManager(cloudResourceManagerServiceAccountCredential)
+    val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+
     for {
       _ <- retryWhen500orGoogleError(() => {
         executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProject.value}", new ProjectBillingInfo().setBillingEnabled(false)))
@@ -1030,6 +1085,16 @@ class HttpGoogleServicesDAO(
   }
 
   def getDeploymentManagerAccountCredential: Credential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountId(clientEmail)
+      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJavaCollection)
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+  }
+
+  def getCloudResourceManagerServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)

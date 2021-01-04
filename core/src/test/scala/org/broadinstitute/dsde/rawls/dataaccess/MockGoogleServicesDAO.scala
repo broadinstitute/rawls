@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import io.opencensus.trace.Span
@@ -112,8 +113,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def getUserInfoUsingJson(saKey: String): Future[UserInfo] = Future.successful(UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000")))
 
   override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] = Future.successful(new Project().setProjectNumber(Random.nextLong()))
-
-  override def setBillingAccountForProject(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, billingEnabled: Boolean = true ): Future[Unit] = Future.successful()
 
   override def deleteBucket(bucketName: String) = Future.successful(true)
 
@@ -224,7 +223,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(OperationStatus(true, None))
   }
 
-  override def deleteProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
+  override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
+
+  override def deleteV1Project(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
 
   override def addProjectToFolder(googleProject: GoogleProjectId, folderName: String): Future[Unit] = Future.successful(())
 
@@ -232,6 +233,10 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] = {
     Future.successful(billingAccount == accessibleBillingAccountName)
+  }
+
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+    Future.successful(new ProjectBillingInfo().setBillingAccountName(newBillingAccount.map(_.value).getOrElse("")).setProjectId(googleProjectId.value))
   }
 
 }

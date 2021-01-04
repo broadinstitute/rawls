@@ -23,6 +23,7 @@ import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
@@ -162,7 +163,24 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                     attributes: AttributeMap,
                     isLocked: Boolean) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount)
+  }
+  def makeWorkspaceWithUsers(project: RawlsBillingProject,
+                             name: String,
+                             workspaceId: String,
+                             bucketName: String,
+                             workflowCollectionName: Option[String],
+                             createdDate: DateTime,
+                             lastModified: DateTime,
+                             createdBy: String,
+                             attributes: AttributeMap,
+                             isLocked: Boolean,
+                             workspaceVersion: WorkspaceVersion,
+                             googleProjectId: GoogleProjectId,
+                             googleProjectNumber: Option[GoogleProjectNumber],
+                             currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName]) = {
+
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace)
   }
 
   class EmptyWorkspace() extends TestData {
@@ -175,6 +193,28 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
+
+    override def save() = {
+      DBIO.seq(
+        workspaceQuery.createOrUpdate(workspace)
+      )
+    }
+  }
+
+  class EmptyWorkspaceWithProjectAndBillingAccount(project: RawlsBillingProject, maybeBillingAccount: Option[RawlsBillingAccountName]) extends TestData {
+    val userOwner = RawlsUser(userInfo)
+    val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
+    val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
+    val wsName = WorkspaceName(project.projectName.value, UUID.randomUUID().toString)
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
+    val workspaceVersion = WorkspaceVersions.V2
+    val googleProjectId = project.googleProjectId
+    val googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
+    val billingAccount = maybeBillingAccount
+
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount)
 
     override def save() = {
       DBIO.seq(

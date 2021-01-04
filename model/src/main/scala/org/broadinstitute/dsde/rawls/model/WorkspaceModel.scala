@@ -136,7 +136,8 @@ case class Workspace(
                       isLocked: Boolean,
                       workspaceVersion: WorkspaceVersion,
                       googleProjectId: GoogleProjectId,
-                      googleProjectNumber: Option[GoogleProjectNumber]
+                      googleProjectNumber: Option[GoogleProjectNumber],
+                      currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -162,7 +163,7 @@ object Workspace {
     val randomString = java.util.UUID.randomUUID().toString
     val googleProjectId = GoogleProjectId(randomString)
     val googleProjectNumber = GoogleProjectNumber(randomString)
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber))
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None)
   }
 }
 
@@ -510,8 +511,9 @@ case class WorkspaceDetails(namespace: String,
                             authorizationDomain: Option[Set[ManagedGroupRef]],
                             workspaceVersion: WorkspaceVersion,
                             googleProjectId: GoogleProjectId,
-                            googleProjectNumber: Option[GoogleProjectNumber]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProjectId, googleProjectNumber)
+                            googleProjectNumber: Option[GoogleProjectNumber],
+                            billingAccount: Option[RawlsBillingAccountName]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount)
 }
 
 
@@ -582,7 +584,8 @@ object WorkspaceDetails {
       optAuthorizationDomain,
       workspace.workspaceVersion,
       workspace.googleProjectId,
-      workspace.googleProjectNumber
+      workspace.googleProjectNumber,
+      workspace.currentBillingAccountOnGoogleProject
     )
   }
 }
@@ -682,6 +685,7 @@ case class WorkspaceTag(tag: String, count: Int)
 class WorkspaceJsonSupport extends JsonSupport {
   import DataReferenceModelJsonSupport.DataReferenceNameFormat
   import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
+  import UserModelJsonSupport.RawlsBillingAccountNameFormat
   import spray.json.DefaultJsonProtocol._
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
@@ -801,7 +805,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat14(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat15(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
