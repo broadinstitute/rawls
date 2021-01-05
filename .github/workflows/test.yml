@@ -45,11 +45,10 @@ jobs:
 
       - name: Git secrets setup
         run: |
-          git clone https://github.com/awslabs/git-secrets.git git-secrets &&
-          pushd git-secrets > /dev/null &&
-          git checkout ad82d68ee924906a0401dfd48de5057731a9bc84 &&
-          export PATH="${PATH}:${PWD}" &&
-          popd > /dev/null
+          git clone https://github.com/awslabs/git-secrets.git git-secrets
+          cd git-secrets
+          git checkout ad82d68ee924906a0401dfd48de5057731a9bc84
+          make install
 
       - name: Secrets check
         run: |
