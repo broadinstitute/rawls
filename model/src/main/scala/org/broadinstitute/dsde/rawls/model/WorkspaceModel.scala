@@ -145,20 +145,25 @@ case class Workspace(
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
+/** convenience constructor (for unit tests only!)
+  * defaults workspace version to v2 and google project id and google project number to random strings
+  * TODO: to be refactored/removed in https://broadworkbench.atlassian.net/browse/CA-1128
+   */
 object Workspace {
-  /** convenience constructor that defaults workspace version to v1 and google project to namespace */
   def apply(namespace: String,
-
-           name: String,
-           workspaceId: String,
-           bucketName: String,
-           workflowCollectionName: Option[String],
-           createdDate: DateTime,
-           lastModified: DateTime,
-           createdBy: String,
-           attributes: AttributeMap,
-           isLocked: Boolean = false): Workspace = {
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace), None, None)
+            name: String,
+            workspaceId: String,
+            bucketName: String,
+            workflowCollectionName: Option[String],
+            createdDate: DateTime,
+            lastModified: DateTime,
+            createdBy: String,
+            attributes: AttributeMap,
+            isLocked: Boolean = false): Workspace = {
+    val randomString = java.util.UUID.randomUUID().toString
+    val googleProjectId = GoogleProjectId(randomString)
+    val googleProjectNumber = GoogleProjectNumber(randomString)
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None)
   }
 }
 
