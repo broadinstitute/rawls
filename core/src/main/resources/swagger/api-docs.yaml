@@ -4304,9 +4304,8 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        204:
           description: Successfully delete billing project
-          content: {}
         400:
           description: Project cannot be deleted because it contains workspaces.
           content:
