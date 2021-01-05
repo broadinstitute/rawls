@@ -2,11 +2,9 @@ name: Scala tests with coverage
 
 on:
   pull_request:
-    paths-ignore:
-      - '**.md'
+    paths-ignore: ['**.md']
   push:
-    paths-ignore:
-      - '**.md'
+    paths-ignore: ['**.md']
 
 jobs:
   test:
