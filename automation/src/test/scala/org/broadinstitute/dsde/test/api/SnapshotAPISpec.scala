@@ -21,8 +21,6 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
-object NotebooksCanaryTest extends org.scalatest.Tag("NotebooksCanaryTest")
-
 class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
   with WorkspaceFixtures with BillingFixtures
   with SprayJsonSupport with LazyLogging {
@@ -42,7 +40,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
 
   "TDR Snapshot integration" - {
 
-    "should allow snapshot references to be added to workspaces" taggedAs(Tags.SmokeTest, NotebooksCanaryTest) in {
+    "should allow snapshot references to be added to workspaces" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       // only hermione.owner@quality.firecloud.org has access to snapshots in QA (integration4)
       // val owner: Credentials = UserPool.chooseProjectOwner
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
