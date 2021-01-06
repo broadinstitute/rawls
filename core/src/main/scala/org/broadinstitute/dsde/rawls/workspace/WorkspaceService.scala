@@ -404,7 +404,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     for {
-      _ <- requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext)
 
       workflowsToAbort <- deletionFuture
 
