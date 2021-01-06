@@ -436,13 +436,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   private def validateCreateProjectRequest(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
-    validateBillingProjectName(createProjectRequest.projectName.value)
-    if ((createProjectRequest.enableFlowLogs.getOrElse(false) || createProjectRequest.privateIpGoogleAccess.getOrElse(false)) && !createProjectRequest.highSecurityNetwork.getOrElse(false)) {
-      //flow logs and private google access both require HSN, so error if someone asks for either of the former without the latter
-      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "enableFlowLogs or privateIpGoogleAccess both require highSecurityNetwork = true")))
-    } else {
-      Future.successful(())
-    }
+    for {
+      _ <- validateBillingProjectName(createProjectRequest.projectName.value)
+      _ <- if ((createProjectRequest.enableFlowLogs.getOrElse(false) || createProjectRequest.privateIpGoogleAccess.getOrElse(false)) && !createProjectRequest.highSecurityNetwork.getOrElse(false)) {
+        //flow logs and private google access both require HSN, so error if someone asks for either of the former without the latter
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "enableFlowLogs or privateIpGoogleAccess both require highSecurityNetwork = true")))
+      } else {
+        Future.successful(())
+      }
+    } yield ()
   }
 
   private def checkBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[RawlsBillingAccount] = {

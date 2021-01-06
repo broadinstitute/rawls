@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls
 import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, ErrorReport, ErrorReportSource}
 import akka.http.scaladsl.model.StatusCodes
 
+import scala.concurrent.Future
+
 trait StringValidationUtils {
   implicit val errorReportSource: ErrorReportSource
 
@@ -31,10 +33,12 @@ trait StringValidationUtils {
   }
 
   private lazy val billingProjectNameRegex = "[A-z0-9_-]{6,30}".r
-  def validateBillingProjectName(s: String): Unit = {
+  def validateBillingProjectName(s: String): Future[Unit] = {
     if(! billingProjectNameRegex.pattern.matcher(s).matches) {
       val msg = s"Invalid name for billing project. Input must be between 6 and 30 characters in length and may only contain alphanumeric characters, underscores, and dashes."
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
+      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest)))
+    } else {
+      Future.successful(())
     }
   }
 
