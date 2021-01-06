@@ -30,6 +30,14 @@ trait StringValidationUtils {
     }
   }
 
+  private lazy val billingProjectNameRegex = "[A-z0-9_-]{6,30}".r
+  def validateBillingProjectName(s: String): Unit = {
+    if(! billingProjectNameRegex.pattern.matcher(s).matches) {
+      val msg = s"Invalid name for billing project. Input must be between 6 and 30 characters in length and may only contain alphanumeric characters, underscores, and dashes."
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
+    }
+  }
+
   def validateMaxStringLength(s: String, maxLength: Int): Unit = {
     if(s.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: $s. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
   }
