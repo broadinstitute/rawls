@@ -15,7 +15,6 @@ jobs:
       mysql:
         image: mysql/mysql-server:5.6
         env:
-          POSTGRES_PASSWORD: postgres
           MYSQL_ROOT_PASSWORD: rawls-test
           MYSQL_USER: rawls-test
           MYSQL_PASSWORD: rawls-test
