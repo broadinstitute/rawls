@@ -54,7 +54,7 @@ jobs:
 
       - name: Run tests
         run: >-
-          sbt coverage test
+          sbt clean coverage test coverageReport
           -J-Xmx3g
           -Denv.type=test
           -Dmysql.host=localhost
