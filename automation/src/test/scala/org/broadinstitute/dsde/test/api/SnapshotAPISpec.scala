@@ -39,8 +39,8 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
       val statusRequest = Rawls.getRequest(dataRepoBaseUrl + "status")
 
-      withClue(s"Data Repo status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}") {
-        statusRequest.status shouldBe StatusCodes.Success
+      withClue(s"Data Repo status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
+        statusRequest.status shouldBe StatusCodes.OK // compare
       }
     }
 
@@ -113,7 +113,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
 
   private def listSnapshotReferences(projectName: String, workspaceName: String)(implicit authToken: AuthToken) = {
     Rawls.getRequest(
-      uri = s"${Rawls.url}api/workspaces/$projectName/$workspaceName/snapshots")
+      uri = s"${Rawls.url}api/workspaces/$projectName/$workspaceName/snapshots?offset=0&limit=10")
   }
 
   private def createSnapshotReference(projectName: String, workspaceName: String, snapshotId: String, snapshotName: String)(implicit authToken: AuthToken) = {
