@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.test.api
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.{StatusCodes, Uri}
-import akka.http.scaladsl.model.Uri.Path
+import akka.http.scaladsl.model.Uri.{Path, Query}
 import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
 import bio.terra.workspace.model.{DataReferenceList, ReferenceTypeEnum}
@@ -26,11 +26,12 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
 
   private val dataRepoBaseUrl = FireCloud.dataRepoApiUrl
 
-  // assume we have a valid dataRepoBaseUrl. We've had bugs/problems in our config so this is a safeguard.
-  assume(Try(Uri(dataRepoBaseUrl)).isSuccess,
-    s"Canceling test because [$dataRepoBaseUrl] is not a valid url for data repo")
-
   "TDR Snapshot integration" - {
+
+    "should have proper test config" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+      assert(Try(Uri.parseAbsolute(dataRepoBaseUrl)).isSuccess,
+        s"Tests in this suite will fail because [$dataRepoBaseUrl] is not a valid url for data repo")
+    }
 
     "should be able to contact Data Repo" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       // status API is unauthenticated, but all our utility methods expect a token.
@@ -110,10 +111,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
 
   }
 
-
-  private def listSnapshotReferences(projectName: String, workspaceName: String)(implicit authToken: AuthToken) = {
-    Rawls.getRequest(
-      uri = s"${Rawls.url}api/workspaces/$projectName/$workspaceName/snapshots?offset=0&limit=10")
+  private def listSnapshotReferences(projectName: String, workspaceName: String, offset: Int = 0, limit: Int = 10)(implicit authToken: AuthToken) = {
+    val targetRawlsUrl  = Uri(Rawls.url)
+      .withPath(Path(s"/api/workspaces/$projectName/$workspaceName/snapshots"))
+      .withQuery(Query(Map("offset" -> offset.toString, "limit" ->  limit.toString)))
+    Rawls.getRequest(uri = targetRawlsUrl.toString)
   }
 
   private def createSnapshotReference(projectName: String, workspaceName: String, snapshotId: String, snapshotName: String)(implicit authToken: AuthToken) = {
