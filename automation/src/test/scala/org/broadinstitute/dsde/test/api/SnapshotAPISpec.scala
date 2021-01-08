@@ -1,16 +1,15 @@
 package org.broadinstitute.dsde.test.api
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.{StatusCodes, Uri}
 import akka.http.scaladsl.model.Uri.Path
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
 import bio.terra.workspace.model.{DataReferenceList, ReferenceTypeEnum}
-import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
+import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
+import org.broadinstitute.dsde.workbench.config.UserPool
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
@@ -25,31 +24,34 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
   with WorkspaceFixtures with BillingFixtures
   with SprayJsonSupport with LazyLogging {
 
-  // TODO: don't read conf directly
-//  val conf = ConfigFactory.load()
-//  assume(conf.hasPath("fireCloud.dataRepoUrl"), "fireCloud.dataRepoUrl does not exist in conf")
-//  val dataRepoBaseUrl = conf.getString("fireCloud.dataRepoUrl")
+  private val dataRepoBaseUrl = FireCloud.dataRepoApiUrl
 
-  // tOdO: don't hardcode
-  // dev -> "https://jade.datarepo-dev.broadinstitute.org"
-  // qa -> "https://jade-4.datarepo-integration.broadinstitute.org/"
-  // alpha -> "https://data.alpha.envs-terra.bio/"
-  // perf -> "https://jade-perf.datarepo-perf.broadinstitute.org/"
-  // staging -> "https://data.staging.envs-terra.bio/"
-  val dataRepoBaseUrl = "https://jade-4.datarepo-integration.broadinstitute.org/"
+  // assume we have a valid dataRepoBaseUrl. We've had bugs/problems in our config so this is a safeguard.
+  assume(Try(Uri(dataRepoBaseUrl)).isSuccess,
+    s"Canceling test because [$dataRepoBaseUrl] is not a valid url for data repo")
 
   "TDR Snapshot integration" - {
 
+    "should be able to contact Data Repo" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+      // status API is unauthenticated, but all our utility methods expect a token.
+      // so, we'll send a token to the unauthenticated API to make this code path easier.
+      val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
+      val statusRequest = Rawls.getRequest(dataRepoBaseUrl + "status")
+
+      withClue(s"Data Repo status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}") {
+        statusRequest.status shouldBe StatusCodes.Success
+      }
+    }
+
     "should allow snapshot references to be added to workspaces" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
-      // only hermione.owner@quality.firecloud.org has access to snapshots in QA (integration4)
-      // val owner: Credentials = UserPool.chooseProjectOwner
+      // as of this writing, hermione.owner is the user with access to snapshots
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
       withCleanBillingProject(owner) { projectName =>
         withWorkspace(projectName, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
-
 
           // call data repo to list snapshots
           // this gets the most recent snapshots in TDR (to which we have read access). This can cause tests to change
@@ -58,13 +60,13 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
           // created_date ASC - that should be more stable.
           val dataRepoDAO = new TestDataRepoDAO("terra", dataRepoBaseUrl).getRepositoryApi(ownerAuthToken)
 
-          logger.info(s"!!!!!!!!!!!! calling data repo at $dataRepoBaseUrl as user ${owner.email} ... ")
+          logger.info(s"calling data repo at $dataRepoBaseUrl as user ${owner.email} ... ")
           val drSnapshots = Try(dataRepoDAO.enumerateSnapshots(
             0, 2, "created_date", "desc", "")) match {
             case Success(s) => s
             case Failure(ex) =>
-              logger.error(s"!!!!!!!!!!!! data repo call as user ${owner.email} failed: ${ex.getMessage}", ex)
-              throw(ex)
+              logger.error(s"data repo call as user ${owner.email} failed: ${ex.getMessage}", ex)
+              throw ex
           }
           assume(drSnapshots.getItems.size() == 2,
             s"TDR at $dataRepoBaseUrl did not have 2 snapshots for this test to use!")
@@ -72,7 +74,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
           val dataRepoSnapshotId = drSnapshots.getItems.get(0).getId
           val anotherDataRepoSnapshotId = drSnapshots.getItems.get(1).getId
 
-          logger.info(s"!!!!!!!!!!!! found 2 snapshots from $dataRepoBaseUrl as user ${owner.email}: $dataRepoSnapshotId, $anotherDataRepoSnapshotId")
+          logger.info(s"found 2 snapshots from $dataRepoBaseUrl as user ${owner.email}: $dataRepoSnapshotId, $anotherDataRepoSnapshotId")
 
           // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
           createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, "firstSnapshot")
@@ -102,10 +104,10 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
           secondResources(1).getName shouldBe "secondSnapshot"
           secondResources(1).getReference.getSnapshot shouldBe anotherDataRepoSnapshotId
           secondResources(1).getReferenceType shouldBe ReferenceTypeEnum.DATA_REPO_SNAPSHOT
-
         }
       }
     }
+
   }
 
 
@@ -117,14 +119,13 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
   private def createSnapshotReference(projectName: String, workspaceName: String, snapshotId: String, snapshotName: String)(implicit authToken: AuthToken) = {
     val targetRawlsUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/snapshots"))
     val payload = Map("snapshotId" -> snapshotId, "name" -> snapshotName)
-    logger.info(s"!!!!!!!!!!!! createSnapshotReference to ${targetRawlsUrl.toString()} with $payload")
     Rawls.postRequest(
       uri = targetRawlsUrl.toString(),
       content = payload)
   }
 
   // a bastardized version of the HttpDataRepoDAO in the main rawls codebase
-  class TestDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) { // extends DataRepoDAO {
+  class TestDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) {
 
     private def getApiClient(accessToken: String): ApiClient = {
       val client: ApiClient = new ApiClient()
@@ -134,11 +135,9 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
       client
     }
 
-    def getRepositoryApi(accessToken: AuthToken) = {
+    def getRepositoryApi(accessToken: AuthToken): RepositoryApi = {
       new RepositoryApi(getApiClient(accessToken.value))
     }
   }
-
-
 
 }
