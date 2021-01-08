@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.workbench.config.UserPool
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 
@@ -20,18 +21,18 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
-class SnapshotAPISpec extends AnyFreeSpecLike with Matchers
+class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterAll
   with WorkspaceFixtures with BillingFixtures
   with SprayJsonSupport with LazyLogging {
 
   private val dataRepoBaseUrl = FireCloud.dataRepoApiUrl
 
-  "TDR Snapshot integration" - {
+  override protected def beforeAll(): Unit = {
+    assert(Try(Uri.parseAbsolute(dataRepoBaseUrl)).isSuccess,
+      s"---> Aborting! Tests in this suite would fail because [$dataRepoBaseUrl] is not a valid url for data repo <---")
+  }
 
-    "should have proper test config" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
-      assert(Try(Uri.parseAbsolute(dataRepoBaseUrl)).isSuccess,
-        s"Tests in this suite will fail because [$dataRepoBaseUrl] is not a valid url for data repo")
-    }
+  "TDR Snapshot integration" - {
 
     "should be able to contact Data Repo" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       // status API is unauthenticated, but all our utility methods expect a token.
