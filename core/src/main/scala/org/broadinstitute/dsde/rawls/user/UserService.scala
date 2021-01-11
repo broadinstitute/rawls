@@ -265,7 +265,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def unregisterBillingProjectWithOwnerInfo(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
     val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
     for {
-      _ <- deleteGoogleProjectIfChild(projectName, ownerUserInfo)
+      _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, ownerUserInfo)
       result <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
     } yield result
   }
@@ -379,6 +379,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           }
           _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(project.projectName) }.recover {
             case x => logger.debug(s"failure deleting billing project ${project.projectName.value} from rawls db during error recovery cleanup.", x)
+          }
+          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, project.projectName.value, ownerUserInfo).recover {
+            case x => logger.debug(s"failure deleting google project ${project.projectName.value} from sam during error recovery cleanup.", x)
           }
         } yield throw t
     }
