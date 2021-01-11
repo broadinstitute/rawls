@@ -116,7 +116,10 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           drSnapshots.getItems.asScala.foreach { snapSummary =>
             info(s"for snapshot ${snapSummary.getId}: ${snapSummary.getName}")
 
-            val referenceName = s"refname-${snapSummary.getId}".replaceAll("-", "_")
+            // workspace manager enforces validation on refernce names:
+            // "Name must be 1 to 63 alphanumeric characters or underscores, and cannot start with an underscore."
+            // so, we replace all dashes (in the uuid) with underscores
+            val referenceName = s"refname_${snapSummary.getId}".replaceAll("-", "_")
 
             // register the snapshot in Rawls
             createSnapshotReference(projectName, workspaceName, snapSummary.getId, referenceName)
@@ -204,7 +207,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     }
     assume(drSnapshots.getItems.size() == numSnapshots,
       s"---> TDR at $dataRepoBaseUrl did not have $numSnapshots snapshots for this test to use!" +
-        s" This is likely a problem in environment setup, but has a change of being a problem in runtime code. <---")
+        s" This is likely a problem in environment setup, but has a chance of being a problem in runtime code. <---")
 
     drSnapshots
   }
