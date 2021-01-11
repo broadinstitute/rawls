@@ -116,7 +116,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           drSnapshots.getItems.asScala.foreach { snapSummary =>
             info(s"for snapshot ${snapSummary.getId}: ${snapSummary.getName}")
 
-            // workspace manager enforces validation on refernce names:
+            // workspace manager enforces validation on reference names:
             // "Name must be 1 to 63 alphanumeric characters or underscores, and cannot start with an underscore."
             // so, we replace all dashes (in the uuid) with underscores
             val referenceName = s"refname_${snapSummary.getId}".replaceAll("-", "_")
