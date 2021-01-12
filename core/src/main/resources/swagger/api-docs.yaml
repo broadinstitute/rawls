@@ -6214,10 +6214,6 @@ components:
               ok: true
             GooglePubSub:
               ok: true
-            LDAP:
-              ok: false
-              messages:
-                - LDAP is down :(
       description: status of each system Rawls depends on
     SubsystemStatus:
       type: object

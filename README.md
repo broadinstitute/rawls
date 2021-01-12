@@ -40,7 +40,7 @@ Spin up mysql locally and validate that it is working:
 Run tests.
 
 ```sh
-export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest -Dcom.sun.jndi.ldap.connect.pool.maxsize=100"
+export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310"
 sbt clean compile test
 ```
 
