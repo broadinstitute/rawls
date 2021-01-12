@@ -53,6 +53,8 @@ jobs:
           git secrets --scan-history
 
       - name: Run tests
+        id: tests
+        continue-on-error: true
         run: >-
           sbt clean coverage test coverageReport
           -J-Xmx3g
@@ -68,3 +70,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: codecov/codecov-action@v1
+
+      - name: Fail if tests failed
+        if: ${{ steps.tests.outcome != 'success' }}
+        run: echo "::set-failed ::Tests failed!"
