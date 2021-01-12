@@ -57,7 +57,7 @@ jobs:
           sbt clean coverage test coverageReport
           -J-Xmx3g
           -Denv.type=test
-          -Dmysql.host=mysql
+          -Dmysql.host=localhost
           -Dmysql.port=3306
           it:compile
 
