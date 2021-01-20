@@ -1,10 +1,8 @@
 openapi: 3.0.1
 info:
-  title: Workspace API
-  description: Workspace
+  title: Rawls
+  description: Rawls API
   termsOfService: http://www.github.com/broadinstitute/rawls
-  contact:
-    email: workspace@broadinstitute.org
   license:
     name: BSD
     url: http://opensource.org/licenses/BSD-3-Clause
@@ -13,23 +11,20 @@ servers:
   - url: /
 tags:
   - name: admin
-    description: Administrative API
-  - name: submissions
-    description: Submissions API
-  - name: entities
-    description: Entity manipulation API
-  - name: methodconfigs
-    description: Method Configuration manipulation API
-  - name: workspaces
-    description: Workspace manipulation API
-  - name: users
-    description: User and Group API
   - name: billing
-    description: Billing Project API
+  - name: billing_v2
+  - name: entities
+  - name: methodconfigs
   - name: notifications
-    description: Notifications API
+  - name: servicePerimeters
   - name: snapshots
-    description: Data Repo snapshot API
+  - name: status
+  - name: submissions
+  - name: users
+  - name: version
+  - name: workflows
+  - name: workspaces
+
 paths:
   /version:
     get:
@@ -711,7 +706,6 @@ paths:
     put:
       tags:
         - admin
-        - users
       summary: Add a library curator
       description: adds a user to the list of curators
       operationId: adminAddCurator
@@ -740,7 +734,6 @@ paths:
     delete:
       tags:
         - admin
-        - users
       summary: Remove a library curator
       description: removes a user from the list of curators
       operationId: adminRemoveCurator
@@ -823,6 +816,7 @@ paths:
             - profile
   /api/admin/refreshToken/{userSubjectId}:
     delete:
+      deprecated: true
       tags:
         - admin
       summary: Admin revoke and remove a user's refresh token
@@ -852,6 +846,7 @@ paths:
             - profile
   /api/admin/statistics:
     get:
+      deprecated: true
       tags:
         - admin
       summary: retrieve statistics on FireCloud
@@ -4106,6 +4101,7 @@ paths:
             - profile
   /api/user/refreshToken:
     put:
+      deprecated: true
       tags:
         - users
       summary: Store refresh token
@@ -4136,6 +4132,7 @@ paths:
       x-codegen-request-body-name: refreshToken
   /api/user/refreshTokenDate:
     get:
+      deprecated: true
       tags:
         - users
       summary: Get refresh token date
