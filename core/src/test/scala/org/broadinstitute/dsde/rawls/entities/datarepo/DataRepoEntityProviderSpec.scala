@@ -73,7 +73,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     provider.entityTypeMetadata() map { metadata: Map[String, EntityTypeMetadata] =>
       // this is the default expected value, should it move to the support trait?
       val expected = Map(
-        ("table1", EntityTypeMetadata(0, "datarepo_row_id", Seq("datarepo_row_id", "integer-field", "boolean-field", "timestamp-field"))),
+        ("table1", EntityTypeMetadata(0, "datarepo_row_id", Seq("integer-field", "boolean-field", "timestamp-field"))),
         ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2a", "col2b"))),
         ("table3", EntityTypeMetadata(456, "datarepo_row_id", Seq("col3.1", "col3.2"))))
       assertResult(expected) { metadata }
@@ -302,7 +302,8 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val entityTable = EntityTable(snapshotModel, tableName, alias)
     val result = provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions, datarepoRowIdColumn)
     result should contain theSameElementsAs List(
-      SelectAndFrom(entityTable, None, columnNames.map((column: String) => EntityColumn(entityTable, column, false)))
+      // figureOutQueryStructureForExpressions explicitly adds the datarepoRowIdColumn, so we add it here too
+      SelectAndFrom(entityTable, None, (columnNames += datarepoRowIdColumn).sorted.map((column: String) => EntityColumn(entityTable, column, false)))
     )
   }
 
