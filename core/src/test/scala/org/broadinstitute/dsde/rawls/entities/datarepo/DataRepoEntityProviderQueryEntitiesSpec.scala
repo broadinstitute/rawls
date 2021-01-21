@@ -65,16 +65,20 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
-  it should "allow sorting by datarepo_row_id" in {
+  val magicSortFields = List("datarepo_row_id", "name")
 
-    val provider = createTestProvider() // default behavior returns three rows
+  magicSortFields foreach { magic =>
+    it should s"allow sorting by '$magic'" in {
 
-    val query = defaultEntityQuery.copy(sortField = "datarepo_row_id")
+      val provider = createTestProvider() // default behavior returns three rows
 
-    // as long as this doesn't throw an error, we're good.  This test case is covered by other test cases,
-    // but we make it explicit here in case those other test cases change.
-    provider.queryEntities("table1", query) map { _ =>
-      succeed
+      val query = defaultEntityQuery.copy(sortField = magic)
+
+      // as long as this doesn't throw an error, we're good.  This test case is covered by other test cases,
+      // but we make it explicit here in case those other test cases change.
+      provider.queryEntities("table1", query) map { _ =>
+        succeed
+      }
     }
   }
 
