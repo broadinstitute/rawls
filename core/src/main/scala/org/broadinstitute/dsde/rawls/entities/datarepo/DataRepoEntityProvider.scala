@@ -106,8 +106,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     // extract table definition, with PK, from snapshot schema
     val tableModel = getTableModel(snapshotModel, entityType)
 
-    // validate sort column exists in the snapshot's table description
-    if (!tableModel.getColumns.asScala.exists(_.getName == entityQuery.sortField))
+    // validate sort column exists in the snapshot's table description, or sort column is "datarepo_row_id"
+    // TODO: also allow sorting by magic "name" field
+    if (datarepoRowIdColumn != entityQuery.sortField && !tableModel.getColumns.asScala.exists(_.getName == entityQuery.sortField))
       throw new DataEntityException(code = StatusCodes.BadRequest, message = s"sortField not valid for this entity type")
 
     //  determine pk column
