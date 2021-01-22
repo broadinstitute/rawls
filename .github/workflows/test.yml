@@ -70,7 +70,7 @@ jobs:
       # https://github.com/ScaCap/action-surefire-report/issues/39
       # https://github.community/t/specify-check-suite-when-creating-a-checkrun/118380
       - name: Upload Test Report
-        uses: scacap/action-surefire-report@v1.0.5
+        uses: mikepenz/action-junit-report@v2.0.3
         with:
           report_paths: '**/target/test-reports/TEST-*.xml'
           check_name: Test Report ${{ github.event_name }}
