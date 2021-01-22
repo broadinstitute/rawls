@@ -63,6 +63,12 @@ jobs:
           -Dmysql.port=3306
           it:compile
 
+      # A known github bug results in 'annotations generated in a Github action during a step executed in
+      # the “pull request” event, end up in the “workflow” for the "push’ event.'
+      # Until they fix that problem, we must ensure this step creates a unique check_name, else
+      # the pull_request and push checks will overwrite each other.
+      # https://github.com/ScaCap/action-surefire-report/issues/39
+      # https://github.community/t/specify-check-suite-when-creating-a-checkrun/118380
       - name: Upload Test Report
         uses: mikepenz/action-junit-report@v2.0.3
         with:
