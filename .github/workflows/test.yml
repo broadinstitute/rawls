@@ -73,4 +73,6 @@ jobs:
 
       - name: Fail if tests failed
         if: ${{ steps.tests.outcome != 'success' }}
-        run: echo ::set-failed ::Failed
+        run: |
+          echo ::error ::Failed
+          exit 1
