@@ -67,7 +67,7 @@ jobs:
         uses: mikepenz/action-junit-report@v1
         with:
           report_paths: '**/target/test-reports/TEST-*.xml'
-          check_name: Test Report ($GITHUB_EVENT_NAME)
+          check_name: Test Report ${{ github.event_name }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: codecov/codecov-action@v1
