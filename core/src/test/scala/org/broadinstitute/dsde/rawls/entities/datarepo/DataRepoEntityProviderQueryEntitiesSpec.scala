@@ -65,6 +65,23 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
+  val magicSortFields = List("datarepo_row_id", "name")
+
+  magicSortFields foreach { magic =>
+    it should s"allow sorting by '$magic'" in {
+
+      val provider = createTestProvider() // default behavior returns three rows
+
+      val query = defaultEntityQuery.copy(sortField = magic)
+
+      // as long as this doesn't throw an error, we're good.  This test case is covered by other test cases,
+      // but we make it explicit here in case those other test cases change.
+      provider.queryEntities("table1", query) map { _ =>
+        succeed
+      }
+    }
+  }
+
   it should "return empty Seq and appropriate metadata if BigQuery returns zero rows" in {
     val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List.empty[FieldValueList].asJava)
     val tableResult: TableResult = new TableResult(Schema.of(List.empty[Field].asJava), 0, page)

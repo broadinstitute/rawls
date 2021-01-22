@@ -97,27 +97,38 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     resultIO.unsafeToFuture()
   }
 
-  override def queryEntities(entityType: String, entityQuery: EntityQuery): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String, incomingQuery: EntityQuery): Future[EntityQueryResponse] = {
     // throw immediate error if user supplied filterTerms
-    if (entityQuery.filterTerms.nonEmpty) {
+    if (incomingQuery.filterTerms.nonEmpty) {
       throw new UnsupportedEntityOperationException("term filtering not supported by this provider.")
     }
 
     // extract table definition, with PK, from snapshot schema
     val tableModel = getTableModel(snapshotModel, entityType)
 
-    // validate sort column exists in the snapshot's table description
-    if (!tableModel.getColumns.asScala.exists(_.getName == entityQuery.sortField))
+    // validate sort column exists in the snapshot's table description, or sort column is
+    // one of the magic fields "datarepo_row_id" or "name"
+    if (datarepoRowIdColumn != incomingQuery.sortField &&
+        "name" != incomingQuery.sortField &&
+        !tableModel.getColumns.asScala.exists(_.getName == incomingQuery.sortField))
       throw new DataEntityException(code = StatusCodes.BadRequest, message = s"sortField not valid for this entity type")
 
     //  determine pk column
     val pk = pkFromSnapshotTable(tableModel)
+
+    // allow sorting by magic "name" field, which is a derived field containing the pk
+    val finalQuery = if (incomingQuery.sortField == "name" && !tableModel.getColumns.asScala.exists(_.getName == "name")) {
+      incomingQuery.copy(sortField = pk)
+    } else {
+      incomingQuery
+    }
+
     // determine data project
     val dataProject = snapshotModel.getDataProject
     // determine view name
     val viewName = snapshotModel.getName
 
-    val queryConfigBuilder = queryConfigForQueryEntities(dataProject, viewName, entityType, entityQuery)
+    val queryConfigBuilder = queryConfigForQueryEntities(dataProject, viewName, entityType, finalQuery)
 
     val resultIO = for {
       // get pet service account key for this user
@@ -127,8 +138,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     } yield {
       // translate the BQ results into a Rawls query result
       val page = queryResultsToEntities(queryResults, entityType, pk)
-      val metadata = queryResultsMetadata(queryResults, entityQuery)
-      EntityQueryResponse(entityQuery, metadata, page)
+      val metadata = queryResultsMetadata(queryResults, finalQuery)
+      EntityQueryResponse(finalQuery, metadata, page)
     }
     resultIO.unsafeToFuture()
   }
