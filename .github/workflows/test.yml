@@ -56,7 +56,7 @@ jobs:
         id: tests
         continue-on-error: true
         run: >-
-          sbt clean coverage "testOnly **IntentionallyFailingSpec" coverageReport
+          sbt clean coverage test coverageReport
           -J-Xmx3g
           -Denv.type=test
           -Dmysql.host=localhost
