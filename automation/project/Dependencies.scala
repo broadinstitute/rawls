@@ -7,11 +7,11 @@ object Dependencies {
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.11.3"
 
-  val serviceTestV = "0.18-d7bebc7"
-  val workbenchGoogleV = "0.21-890a74f"
-  val workbenchGoogle2V = "0.6-c91d96b"
-  val workbenchModelV  = "0.13-58c913d"
-  val workbenchMetricsV  = "0.5-4c7acd5"
+  val serviceTestV = "0.18-23f5ae7"
+  val workbenchGoogleV = "0.21-64a7b29"
+  val workbenchGoogle2V = "0.18-4631ebf"
+  val workbenchModelV  = "0.14-65bba14"
+  val workbenchMetricsV  = "0.5-64a7b29"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model" % workbenchModelV
   val workbenchMetrics: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-metrics" % workbenchMetricsV
@@ -24,6 +24,8 @@ object Dependencies {
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(workbenchExclusions:_*)
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions:_*)
+
+  val dataRepo: ModuleID = "bio.terra" % "datarepo-client" % "1.0.44-SNAPSHOT"
 
   val rootDependencies = Seq(
     // proactively pull in latest versions of Jackson libs, instead of relying on the versions
@@ -46,7 +48,7 @@ object Dependencies {
     "com.typesafe.akka"   %%  "akka-testkit"        % akkaV     % "test",
     "com.typesafe.akka"   %%  "akka-slf4j"          % akkaV,
     "org.specs2"          %%  "specs2-core"   % "3.8.6"  % "test",
-    "org.scalatest"       %%  "scalatest"     % "3.2.0"   % "test",
+    "org.scalatest"       %%  "scalatest"     % "3.2.2"   % "test",
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % "test",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
     "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-18b1c01e0"
@@ -57,6 +59,8 @@ object Dependencies {
     workbenchGoogle,
     workbenchGoogle2,
     workbenchServiceTest,
+
+    dataRepo,
 
     // required by workbenchGoogle
     "com.typesafe.akka" %% "akka-http-spray-json" % "10.0.6" % "provided"
