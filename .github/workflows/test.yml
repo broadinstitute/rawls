@@ -67,7 +67,7 @@ jobs:
         uses: mikepenz/action-junit-report@v1
         with:
           report_paths: '**/target/test-reports/TEST-*.xml'
-          check_name: Test Report ${{ github.event_name }}
+          check_name: Test Report
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: codecov/codecov-action@v1
@@ -75,5 +75,5 @@ jobs:
       - name: Fail if tests failed
         if: ${{ steps.tests.outcome != 'success' }}
         run: |
-          echo ::error ::Tests failed! See previous output for details.
+          echo ::error ::Tests failed! See "Test Report" check or previous output for details.
           exit 1
