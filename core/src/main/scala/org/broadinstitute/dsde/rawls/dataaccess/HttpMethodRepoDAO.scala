@@ -23,6 +23,8 @@ import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 
 /**
  * @author tsharpe
@@ -53,6 +55,10 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
     getAgoraEntity(s"$agoraServiceURL/configurations/$namespace/$name/$version",userInfo)
   }
 
+  private def noneIfNotFound[T]: PartialFunction[Throwable, Option[T]] = {
+    case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
+  }
+
   override def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[WDL]] = {
     method match {
       case agoraMethod: AgoraMethod =>
@@ -68,21 +74,23 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
             tool: GA4GHTool <- maybeTool
           } yield WdlUrl(tool.url) // We submit the Github URL to Cromwell so that relative imports work.
         }
+      case DockstoreToolsMethod(methodPath, methodVersion) => {
+        val url = s"${dockstoreServiceURL}/ga4gh/v1/tools/${URLEncoder.encode(methodPath, UTF_8.name)}/versions/${URLEncoder.encode(methodVersion, UTF_8.name)}/WDL/descriptor"
+        for {
+          maybeTool <- pipeline[Option[GA4GHTool]] apply Get(url) recover noneIfNotFound
+        } yield maybeTool.map(tool => WdlUrl(tool.url))
+      }
     }
   }
 
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
     retry(when500) { () =>
-      pipeline[Option[AgoraEntity]](userInfo) apply Get(url) recover {
-        case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
-      }
+      pipeline[Option[AgoraEntity]](userInfo) apply Get(url) recover noneIfNotFound
     }
   }
 
   private def getDockstoreMethod(method: DockstoreMethod): Future[Option[GA4GHTool]] = {
-    pipeline[Option[GA4GHTool]] apply Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) recover {
-      case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
-    }
+    pipeline[Option[GA4GHTool]] apply Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) recover noneIfNotFound
   }
 
   override def postMethodConfig(namespace: String, name: String, methodConfiguration: MethodConfiguration, userInfo: UserInfo): Future[AgoraEntity] = {
