@@ -60,9 +60,11 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         // to having no references, so return the empty list.
         case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => new DataReferenceList()
         // but if we hit a different error, it's a valid error; rethrow it
+        case Failure(ex: bio.terra.workspace.client.ApiException) =>
+          throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
         case Failure(other) =>
           logger.warn(s"Unexpected error when enumerating snapshots: ${other.getMessage}")
-          throw other
+          throw new RawlsExceptionWithErrorReport(ErrorReport(other))
       }
     }
   }
