@@ -10,6 +10,12 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - name: useCache
+          in: query
+          description: true to use cache, false to read fully from DB
+          schema:
+            type: boolean
+            default: false
         - $ref: '#/components/parameters/dataReferenceQueryParam'
         - $ref: '#/components/parameters/billingProjectQueryParam'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete:

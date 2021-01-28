@@ -10,10 +10,12 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeName, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
 import org.broadinstitute.dsde.rawls.util.{CollectionUtils, EntitySupport}
 
+import java.sql.Timestamp
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -29,9 +31,34 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   private val workspaceContext = workspace
 
-  override def entityTypeMetadata(): Future[Map[String, EntityTypeMetadata]] = {
+  override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+      dataAccess.workspaceQuery.isEntityCacheDefined(workspaceContext.workspaceIdAsUUID).flatMap { cacheEntriesExistOpt =>
+        val cacheEntriesExist = cacheEntriesExistOpt.getOrElse(false)
+        if(useCache && cacheEntriesExist) {
+          val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+          val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+
+          typesAndCountsQ flatMap { typesAndCounts =>
+            typesAndAttrsQ map { typesAndAttrs =>
+              (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
+                (entityType, EntityTypeMetadata(
+                  typesAndCounts.getOrElse(entityType, 0),
+                  entityType + Attributable.entityIdAttributeSuffix,
+                  typesAndAttrs.getOrElse(entityType, Seq()).map (AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
+              } toMap
+            }
+          }
+        }
+        else if(useCache && !cacheEntriesExist) {
+          dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)).flatMap { _ =>
+            dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+          }
+        }
+        else {
+          dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+        }
+      }
     }
   }
 

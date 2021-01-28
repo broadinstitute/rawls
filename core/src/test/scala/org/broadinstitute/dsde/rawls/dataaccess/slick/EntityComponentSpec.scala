@@ -285,7 +285,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "list all entity types with their counts" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       assertResult(Map("PairSet" -> 1, "Individual" -> 2, "Sample" -> 8, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)) {
-        runAndWait(entityQuery.getEntityTypesWithCounts(context))
+        runAndWait(entityQuery.getEntityTypesWithCounts(context.workspaceIdAsUUID))
       }
     }
   }
@@ -299,7 +299,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       runAndWait(deleteSamples)
 
       assertResult(Map("PairSet" -> 1, "Individual" -> 2, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)) {
-        runAndWait(entityQuery.getEntityTypesWithCounts(context))
+        runAndWait(entityQuery.getEntityTypesWithCounts(context.workspaceIdAsUUID))
       }
     }
   }
@@ -319,7 +319,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
-      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context))
+      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID))
       assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
       desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
@@ -361,7 +361,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
     //so we test the existence of all keys correctly here...
-    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext))
+    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID))
     assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
     desiredTypesAndAttrNames foreach { case (eType, attrNames) =>

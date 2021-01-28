@@ -1760,6 +1760,12 @@ paths:
           required: true
           schema:
             type: string
+        - name: useCache
+          in: query
+          description: True to read entity statistics from cache (eventually consistent), false to force latest statistics (slower). Default is false.
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
           description: Successful Request

@@ -42,7 +42,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = deleteEntities(workspaceName, entities, dataReference, billingProject)
   def RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) = renameEntity(workspaceName, entityType, entityName, newName)
   def EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) = evaluateExpression(workspaceName, entityType, entityName, expression)
-  def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = entityTypeMetadata(workspaceName, dataReference, billingProject)
+  def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], useCache: Boolean) = entityTypeMetadata(workspaceName, dataReference, billingProject, useCache)
   def ListEntities(workspaceName: WorkspaceName, entityType: String) = listEntities(workspaceName, entityType)
   def QueryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId]) = queryEntities(workspaceName, dataReference, entityType, query, billingProject)
   def CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri, linkExistingEntities: Boolean) = copyEntities(entityCopyDefinition, uri, linkExistingEntities)
@@ -50,7 +50,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def BatchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) = batchUpdateEntities(workspaceName, entityUpdates, false)
 
 
-  def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
+  def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] = {
     withAttributeNamespaceCheck(entity) {
       for {
         workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false)))
@@ -58,6 +58,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         result <- entityManager.createEntity(entity)
       } yield result
     }
+  }
 
   def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
@@ -154,14 +155,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
+  def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], useCache: Boolean): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
       val metadataFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        metadata <- entityProvider.entityTypeMetadata()
+        metadata <- entityProvider.entityTypeMetadata(useCache)
       } yield {
         PerRequest.RequestComplete(StatusCodes.OK, metadata)
       }
