@@ -1,13 +1,15 @@
 package org.broadinstitute.dsde.test.api
 
+import java.util.UUID
+
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import akka.http.scaladsl.model.{StatusCodes, Uri}
 import akka.http.scaladsl.model.Uri.{Path, Query}
+import akka.http.scaladsl.model.{StatusCodes, Uri}
 import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
 import bio.terra.datarepo.model.{EnumerateSnapshotModel, SnapshotModel}
 import bio.terra.workspace.model.{DataReferenceList, ReferenceTypeEnum}
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.EntityTypeMetadata
@@ -18,18 +20,23 @@ import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixt
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 
-import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
+
 class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterAll
   with WorkspaceFixtures with BillingFixtures
-  with SprayJsonSupport with LazyLogging {
+  with SprayJsonSupport with LazyLogging
+  with Eventually {
 
   private val dataRepoBaseUrl = FireCloud.dataRepoApiUrl
+
+  val mapper = new ObjectMapper()
+  mapper.registerModule(DefaultScalaModule)
 
   override protected def beforeAll(): Unit = {
     assert(Try(Uri.parseAbsolute(dataRepoBaseUrl)).isSuccess,
@@ -151,6 +158,104 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
         }
       }
 
+    }
+
+    "should be able to run analysis on a snapshot" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+      //TODO: move this comment right below to test level?
+
+      // as of this writing, hermione.owner is the user with access to snapshots
+      val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
+
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
+
+      // TODO: remove unused imports
+      // TODO: remove SSL flag from README
+      // TODO: add more logging
+      // TODO: do we leave spaces in workspace names?
+      withCleanBillingProject(owner) { projectName =>
+        withWorkspace(projectName, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
+
+          val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
+
+          val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
+
+          logger.info(s"found 1 snapshot from $dataRepoBaseUrl as user ${owner.email}: $dataRepoSnapshotId")
+
+          // TODO: consolidate the code comments here with similar ones in other test(s)?
+          // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
+          createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, "testSnapshotForRunningAnalysis")
+
+          // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
+          // if we can successfully list snapshot references, it means WSM created its copy of the workspace
+          val listResponse = listSnapshotReferences(projectName, workspaceName)
+
+          val resources = Rawls.parseResponseAs[DataReferenceList](listResponse).getResources.asScala
+          resources.size shouldBe 1
+          // TODO: update snapshot name?
+          resources.head.getName shouldBe "testSnapshotForRunningAnalysis"
+          resources.head.getReferenceType shouldBe ReferenceTypeEnum.DATA_REPO_SNAPSHOT
+          resources.head.getReference.getSnapshot shouldBe dataRepoSnapshotId
+
+          // create method config in a workspace
+          val createMethodConfigUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/methodconfigs"))
+          // TODO: a function createMethodConfigInWorkspace exists in workbench-libs, but not flexible/updated to accept dataReferenceName and maybe other parameters
+          // TODO: other ways to clean up payload building process in this test? move to a private method within this test class?
+          val createMethodConfigPayload = Map("methodRepoMethod" -> Map("methodUri" -> "agora://gatk/echo_to_file/9","methodName" -> "echo_to_file","methodNamespace" -> "gatk","methodVersion" -> 9),
+            "name" -> "echo_to_file-configured",
+            "namespace" -> "gatk",
+            "rootEntityType" -> "vcf_file",
+            "prerequisites" -> Map(),
+            "inputs" -> Map("echo_strings.echo_to_file.input1" -> "this.VCF_File_Name"),
+            "outputs" -> Map("echo_strings.echo_to_file.out" -> "workspace.output"),
+            "methodConfigVersion" -> 1,
+            "deleted" -> false,
+            "dataReferenceName" -> "testSnapshotForRunningAnalysis"
+          )
+          Rawls.postRequest(
+            uri = createMethodConfigUrl.toString(),
+            content = createMethodConfigPayload)
+
+          // run analysis on the snapshot
+          val createSubmissionUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/submissions"))
+          val createSubmissionPayload = Map(
+            "useCallCache" -> true,
+            "deleteIntermediateOutputFiles" -> false,
+            "methodConfigurationNamespace" -> "gatk",
+            "methodConfigurationName" -> "echo_to_file-configured"
+          )
+          val response = Rawls.postRequest(
+            uri = createSubmissionUrl.toString(),
+            content = createSubmissionPayload)
+          // TODO: revisit the mapper usage here
+          val submissionId = mapper.readTree(response).get("submissionId").asText()
+
+          // wait for submission to complete
+          Submission.waitUntilSubmissionComplete(projectName, workspaceName, submissionId)
+
+          // verify submission status is done
+          val expectedSubmissionStatus = "Done"
+          val actualSubmissionStatus = Submission.getSubmissionStatus(projectName, workspaceName, submissionId)
+          withClue(s"Submission $projectName/$workspaceName/$submissionId status should be $expectedSubmissionStatus") {
+            actualSubmissionStatus shouldBe expectedSubmissionStatus
+          }
+
+          // verify workflows succeeded
+          //TODO: does this step make sense?
+          val getSubmissionUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/submissions/$submissionId"))
+          val submissionResponse = Rawls.parseResponse(Rawls.getRequest(uri = getSubmissionUrl.toString))
+          // TODO: revisit the mapper usage here
+          val workflows: List[JsonNode] = mapper.readTree(submissionResponse).get("workflows").elements().asScala.toList
+          workflows.foreach { workflow =>
+            val expectedWorkflowStatus = "Succeeded"
+            val actualWorkflowStatus = workflow.get("status").asText()
+            withClue(s"Unexpected status: '${actualWorkflowStatus}'") {
+              actualWorkflowStatus shouldBe expectedWorkflowStatus
+            }
+          }
+
+          }
+
+      }
     }
 
   }

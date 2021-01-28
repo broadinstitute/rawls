@@ -12,7 +12,7 @@ ENV=dev
 SERVICE=rawls
 LOCAL_UI=${LOCAL_UI:-false}  # local ui defaults to false unless set in the env
 
-FC_INSTANCE=fiab
+FC_INSTANCE=live
 if [ $LOCAL_UI = "true" ]; then
     FC_INSTANCE=local
 fi
