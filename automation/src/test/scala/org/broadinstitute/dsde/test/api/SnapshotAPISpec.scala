@@ -12,7 +12,7 @@ import bio.terra.workspace.model.{DataReferenceList, ReferenceTypeEnum}
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.EntityTypeMetadata
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
@@ -184,20 +184,15 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           // create method config in a workspace
           val createMethodConfigUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/methodconfigs"))
-
-//          val methodConfig: MethodConfiguration = MethodConfiguration(
-//            "gatk",
-//            "echo_to_file-configured",
-//            Some("vcf_file"),
-//            None,
-//            Map("echo_strings.echo_to_file.input1" -> AttributeString("this.VCF_File_Name")),
-//            Map("echo_strings.echo_to_file.out" -> AttributeString("workspace.output")),
-//            AgoraMethod("gatk", "echo_to_file", 9),
-//            dataReferenceName = Option(DataReferenceName(snapshotName))
-//          )
-
-          // TODO: consider using MethodConfiguration model class. It's commented out above because of a '404 bad request error' when sent in Rawls.postRequest
-          val createMethodConfigPayload = Map("methodRepoMethod" -> Map("methodUri" -> "agora://gatk/echo_to_file/9","methodName" -> "echo_to_file","methodNamespace" -> "gatk","methodVersion" -> 9),
+          // TODO: consider using MethodConfiguration case class when AS-623 is done.
+          val methodRepoMethod = Map(
+            "methodUri" -> "agora://gatk/echo_to_file/9",
+            "methodName" -> "echo_to_file",
+            "methodNamespace" -> "gatk",
+            "methodVersion" -> 9
+          )
+          val createMethodConfigPayload = Map(
+            "methodRepoMethod" -> methodRepoMethod,
             "name" -> "echo_to_file-configured",
             "namespace" -> "gatk",
             "rootEntityType" -> "vcf_file",
@@ -208,14 +203,13 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
             "deleted" -> false,
             "dataReferenceName" -> snapshotName
           )
-
           Rawls.postRequest(
             uri = createMethodConfigUrl.toString(),
             content = createMethodConfigPayload)
 
           // run analysis on the snapshot
           val createSubmissionUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/submissions"))
-          // TODO: consider using 'SubmissionRequest' model class, which is currently in rawls-core
+          // TODO: consider using 'SubmissionRequest' case class when AS-623 is done
           val createSubmissionPayload = Map(
             "useCallCache" -> true,
             "deleteIntermediateOutputFiles" -> false,
@@ -225,7 +219,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           val response = Rawls.postRequest(
             uri = createSubmissionUrl.toString(),
             content = createSubmissionPayload)
-          // TODO: revisit the mapper usage here. 'SubmissionReport' model class is in rawls-core.
+          // TODO: AS-622 parse into 'SubmissionReport' case class following its (i.e. the case class) move from rawls-core to rawls-model
           val submissionId = mapper.readTree(response).get("submissionId").asText()
 
           // wait for submission to complete
@@ -241,7 +235,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // verify workflows succeeded
           val getSubmissionUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/submissions/$submissionId"))
           val submissionResponse = Rawls.parseResponse(Rawls.getRequest(uri = getSubmissionUrl.toString))
-          // TODO: revisit the mapper usage here. 'Submission' model class is in rawls-core
+          // TODO: AS-622 parse into 'Submission' case class following its (i.e. the case class) move from rawls-core to rawls-model
           val workflows: List[JsonNode] = mapper.readTree(submissionResponse).get("workflows").elements().asScala.toList
           workflows.foreach { workflow =>
             val expectedWorkflowStatus = "Succeeded"
