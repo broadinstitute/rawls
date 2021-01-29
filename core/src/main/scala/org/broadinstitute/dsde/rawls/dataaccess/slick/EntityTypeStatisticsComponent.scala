@@ -38,7 +38,7 @@ trait EntityTypeStatisticsComponent {
         (res.entityType, res.entityCount)
       }.result map { result =>
         result.map { case (entityType, entityCount) =>
-          (entityType, entityCount.toInt) //todo: this is garbage, harmonize the types
+          (entityType, entityCount.toInt)
         }.toMap
       }
     }
