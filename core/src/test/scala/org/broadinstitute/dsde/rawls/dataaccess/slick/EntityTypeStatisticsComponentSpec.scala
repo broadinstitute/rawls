@@ -7,8 +7,6 @@ import java.util.UUID
 
 class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with EntityTypeStatisticsComponent with WorkspaceComponent with RawlsTestUtils {
 
-
-
   "EntityTypeStatisticsComponent" should "create and get cached entity type statistics" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
 
@@ -88,4 +86,3 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
   }
 
 }
-
