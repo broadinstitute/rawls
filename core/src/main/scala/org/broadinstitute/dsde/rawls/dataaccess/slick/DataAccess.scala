@@ -47,7 +47,7 @@ trait DataAccess
       TableQuery[EntityTable].delete andThen                      // FK to workspace
       TableQuery[WorkspaceRequesterPaysTable].delete andThen      // FK to workspace
       TableQuery[EntityTypeStatisticsTable].delete andThen        // FK to workspace
-      TableQuery[EntityAttributeStatisticsTable].delete andThen        // FK to workspace
+      TableQuery[EntityAttributeStatisticsTable].delete andThen   // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
