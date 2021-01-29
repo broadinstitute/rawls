@@ -19,10 +19,6 @@ trait EntityTypeStatisticsComponent {
 
   object entityTypeStatisticsQuery extends TableQuery(new EntityTypeStatisticsTable(_)) {
 
-    def insert(workspaceId: UUID, entityType: String, entityCount: Long): WriteAction[Int] = {
-      entityTypeStatisticsQuery += EntityTypeStatisticsRecord(workspaceId, entityType, entityCount)
-    }
-
     def batchInsert(workspaceId: UUID, counts: Map[String, Int]): WriteAction[Int] = {
       val records = counts.map {  case (entityType, entityCount) =>
         EntityTypeStatisticsRecord(workspaceId, entityType, entityCount)
