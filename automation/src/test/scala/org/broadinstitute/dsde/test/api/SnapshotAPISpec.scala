@@ -45,6 +45,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
   }
 
   "TDR Snapshot integration" - {
+    //as of this writing, hermione.owner is the user with access to snapshots
 
     "should be able to contact Data Repo" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       // status API is unauthenticated, but all our utility methods expect a token.
@@ -59,7 +60,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     }
 
     "should allow snapshot references to be added to workspaces" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
-      // as of this writing, hermione.owner is the user with access to snapshots
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
@@ -71,8 +71,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           val dataRepoSnapshotId = drSnapshots.getItems.get(0).getId
           val anotherDataRepoSnapshotId = drSnapshots.getItems.get(1).getId
-
-          logger.info(s"found 2 snapshots from $dataRepoBaseUrl as user ${owner.email}: $dataRepoSnapshotId, $anotherDataRepoSnapshotId")
 
           // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
           createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, "firstSnapshot")
@@ -109,7 +107,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     "should report the same tables/columns via metadata API as TDR reports" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val numSnapshotsToVerify = 2
 
-      // as of this writing, hermione.owner is the user with access to snapshots
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
@@ -161,29 +158,19 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     }
 
     "should be able to run analysis on a snapshot" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
-      //TODO: move this comment right below to test level?
-
-      // as of this writing, hermione.owner is the user with access to snapshots
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-      // TODO: remove unused imports
-      // TODO: remove SSL flag from README
-      // TODO: add more logging
-      // TODO: do we leave spaces in workspace names?
       withCleanBillingProject(owner) { projectName =>
         withWorkspace(projectName, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
 
           val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
-
           val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
 
-          logger.info(s"found 1 snapshot from $dataRepoBaseUrl as user ${owner.email}: $dataRepoSnapshotId")
-
-          // TODO: consolidate the code comments here with similar ones in other test(s)?
+          val snapshotName = "snapshotReferenceForAnalysis"
           // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
-          createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, "testSnapshotForRunningAnalysis")
+          createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)
 
           // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
           // if we can successfully list snapshot references, it means WSM created its copy of the workspace
@@ -191,15 +178,25 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           val resources = Rawls.parseResponseAs[DataReferenceList](listResponse).getResources.asScala
           resources.size shouldBe 1
-          // TODO: update snapshot name?
-          resources.head.getName shouldBe "testSnapshotForRunningAnalysis"
+          resources.head.getName shouldBe snapshotName
           resources.head.getReferenceType shouldBe ReferenceTypeEnum.DATA_REPO_SNAPSHOT
           resources.head.getReference.getSnapshot shouldBe dataRepoSnapshotId
 
           // create method config in a workspace
           val createMethodConfigUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/methodconfigs"))
-          // TODO: a function createMethodConfigInWorkspace exists in workbench-libs, but not flexible/updated to accept dataReferenceName and maybe other parameters
-          // TODO: other ways to clean up payload building process in this test? move to a private method within this test class?
+
+//          val methodConfig: MethodConfiguration = MethodConfiguration(
+//            "gatk",
+//            "echo_to_file-configured",
+//            Some("vcf_file"),
+//            None,
+//            Map("echo_strings.echo_to_file.input1" -> AttributeString("this.VCF_File_Name")),
+//            Map("echo_strings.echo_to_file.out" -> AttributeString("workspace.output")),
+//            AgoraMethod("gatk", "echo_to_file", 9),
+//            dataReferenceName = Option(DataReferenceName(snapshotName))
+//          )
+
+          // TODO: consider using MethodConfiguration model class. It's commented out above because of a '404 bad request error' when sent in Rawls.postRequest
           val createMethodConfigPayload = Map("methodRepoMethod" -> Map("methodUri" -> "agora://gatk/echo_to_file/9","methodName" -> "echo_to_file","methodNamespace" -> "gatk","methodVersion" -> 9),
             "name" -> "echo_to_file-configured",
             "namespace" -> "gatk",
@@ -209,14 +206,16 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
             "outputs" -> Map("echo_strings.echo_to_file.out" -> "workspace.output"),
             "methodConfigVersion" -> 1,
             "deleted" -> false,
-            "dataReferenceName" -> "testSnapshotForRunningAnalysis"
+            "dataReferenceName" -> snapshotName
           )
+
           Rawls.postRequest(
             uri = createMethodConfigUrl.toString(),
             content = createMethodConfigPayload)
 
           // run analysis on the snapshot
           val createSubmissionUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/submissions"))
+          // TODO: consider using 'SubmissionRequest' model class, which is currently in rawls-core
           val createSubmissionPayload = Map(
             "useCallCache" -> true,
             "deleteIntermediateOutputFiles" -> false,
@@ -226,7 +225,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           val response = Rawls.postRequest(
             uri = createSubmissionUrl.toString(),
             content = createSubmissionPayload)
-          // TODO: revisit the mapper usage here
+          // TODO: revisit the mapper usage here. 'SubmissionReport' model class is in rawls-core.
           val submissionId = mapper.readTree(response).get("submissionId").asText()
 
           // wait for submission to complete
@@ -240,10 +239,9 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           }
 
           // verify workflows succeeded
-          //TODO: does this step make sense?
           val getSubmissionUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/submissions/$submissionId"))
           val submissionResponse = Rawls.parseResponse(Rawls.getRequest(uri = getSubmissionUrl.toString))
-          // TODO: revisit the mapper usage here
+          // TODO: revisit the mapper usage here. 'Submission' model class is in rawls-core
           val workflows: List[JsonNode] = mapper.readTree(submissionResponse).get("workflows").elements().asScala.toList
           workflows.foreach { workflow =>
             val expectedWorkflowStatus = "Succeeded"
@@ -313,6 +311,10 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     assume(drSnapshots.getItems.size() == numSnapshots,
       s"---> TDR at $dataRepoBaseUrl did not have $numSnapshots snapshots for this test to use!" +
         s" This is likely a problem in environment setup, but has a chance of being a problem in runtime code. <---")
+
+    logger.info(s"found ${drSnapshots.getItems.size()} snapshot(s) from $dataRepoBaseUrl as user ${credentials.email}:")
+    drSnapshots.getItems.asScala.foreach { drSnapshot =>
+      logger.info(s"snapshot id: ${drSnapshot.getId}") }
 
     drSnapshots
   }

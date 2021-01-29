@@ -46,7 +46,7 @@ FIAB=true ./config/docker-rsync-local-ui.sh
 First, you need to set some default VM parameters for ScalaTest run configurations. In IntelliJ, go to `Run` > `Edit Configurations...`, select `ScalaTest` under `Defaults`, and add these VM parameters:
 
 ```
--Djsse.enableSNIExtension=false -Dheadless=false
+-Dheadless=false
 ```
 
 Also make sure that there is a `Build` task configured to run before launch.
@@ -58,20 +58,20 @@ Now, simply open the test spec, right-click on the class name or a specific test
 To run all tests:
 
 ```bash
-sbt test -Djsse.enableSNIExtension=false -Dheadless=false
+sbt test -Dheadless=false
 ```
 
 To run a single suite:
 
 ```bash
-sbt -Djsse.enableSNIExtension=false -Dheadless=false "testOnly *GoogleSpec"
+sbt -Dheadless=false "testOnly *GoogleSpec"
 ```
 
 To run a single test within a suite:
 
 ```bash
 # matches test via substring
-sbt -Djsse.enableSNIExtension=false -Dheadless=false "testOnly *GoogleSpec -- -z \"have a search field\""
+sbt -Dheadless=false "testOnly *GoogleSpec -- -z \"have a search field\""
 ```
 
 For more information see [SBT's documentation](http://www.scala-sbt.org/0.13/docs/Testing.html#Test+Framework+Arguments).
