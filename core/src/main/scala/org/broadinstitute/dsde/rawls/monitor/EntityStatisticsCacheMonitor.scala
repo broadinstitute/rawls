@@ -49,10 +49,15 @@ class EntityStatisticsCacheMonitor(datasource: SlickDataSource, initialDelay: Fi
   private def updateStatisticsCache(workspaceId: UUID, timestamp: Timestamp): Future[Unit] = {
     val deleteFuture = datasource.inTransaction { dataAccess =>
       for {
+        //update entity statistics
         entityTypesWithCounts <- dataAccess.entityQuery.getEntityTypesWithCounts(workspaceId)
+        _ <- dataAccess.entityTypeStatisticsQuery.deleteAllForWorkspace(workspaceId)
         _ <- dataAccess.entityTypeStatisticsQuery.batchInsert(workspaceId, entityTypesWithCounts)
+        //update entity attribute statistics
         entityTypesWithAttrNames <- dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceId)
+        _ <- dataAccess.entityAttributeStatisticsQuery.deleteAllForWorkspace(workspaceId)
         _ <- dataAccess.entityAttributeStatisticsQuery.batchInsert(workspaceId, entityTypesWithAttrNames)
+        //update cache update date
         _ <- dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceId, timestamp)
       } yield ()
     }

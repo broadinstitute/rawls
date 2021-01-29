@@ -15,10 +15,14 @@
         </createTable>
     </changeSet>
 
-    <!-- TODO: key of (WORKSPACE_ID, ENTITY_TYPE) -->
-
     <changeSet logicalFilePath="dummy" author="mbemis" id="create_WORKSPACE_ENTITY_TYPE_STATISTICS_FK">
         <addForeignKeyConstraint baseColumnNames="WORKSPACE_ID" baseTableName="WORKSPACE_ENTITY_TYPE_STATISTICS" constraintName="FK_WETS_WORKSPACE" deferrable="false" initiallyDeferred="false" onDelete="NO ACTION" onUpdate="NO ACTION" referencedColumnNames="id" referencedTableName="WORKSPACE"/>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="create_WORKSPACE_ENTITY_TYPE_STATISTICS_INDEX">
+        <createIndex indexName="IDX_WORKSPACE_ENTITY_TYPE_STATS" tableName="WORKSPACE_ENTITY_TYPE_STATISTICS" unique="false">
+            <column name="WORKSPACE_ID"/>
+        </createIndex>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="create_WORKSPACE_ENTITY_ATTRIBUTE_STATISTICS">
@@ -38,10 +42,14 @@
         </createTable>
     </changeSet>
 
-    <!-- TODO: key of (WORKSPACE_ID, ENTITY_TYPE, ATTRIBUTE_NAME) would be great for indexing -->
-
     <changeSet logicalFilePath="dummy" author="mbemis" id="create_WORKSPACE_ENTITY_ATTRIBUTE_STATISTICS_FK">
         <addForeignKeyConstraint baseColumnNames="WORKSPACE_ID" baseTableName="WORKSPACE_ENTITY_ATTRIBUTE_STATISTICS" constraintName="FK_WEAS_WORKSPACE" deferrable="false" initiallyDeferred="false" onDelete="NO ACTION" onUpdate="NO ACTION" referencedColumnNames="id" referencedTableName="WORKSPACE"/>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="create_WORKSPACE_ENTITY_ATTRIBUTE_STATISTICS_INDEX">
+        <createIndex indexName="IDX_WORKSPACE_ENTITY_ATTRIBUTE_STATS" tableName="WORKSPACE_ENTITY_ATTRIBUTE_STATISTICS" unique="false">
+            <column name="WORKSPACE_ID"/>
+        </createIndex>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="add-cache-updated-ws">
