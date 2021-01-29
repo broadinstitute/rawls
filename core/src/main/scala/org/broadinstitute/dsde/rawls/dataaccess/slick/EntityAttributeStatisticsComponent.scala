@@ -22,15 +22,15 @@ trait EntityAttributeStatisticsComponent {
 
   object entityAttributeStatisticsQuery extends TableQuery(new EntityAttributeStatisticsTable(_)) {
 
-    def batchInsert(workspaceId: UUID, counts: Map[String, Seq[AttributeName]]): WriteAction[Int] = {
-      val records = counts.flatMap {  case (entityType, attributeNames) =>
+    def batchInsert(workspaceId: UUID, typeWithNames: Map[String, Seq[AttributeName]]): WriteAction[Int] = {
+      val records = typeWithNames.flatMap {  case (entityType, attributeNames) =>
         attributeNames.map { name =>
           EntityAttributeStatisticsRecord(workspaceId, entityType, name.namespace, name.name)
         }
       }
 
       (entityAttributeStatisticsQuery ++= records).map { result =>
-        result.getOrElse(counts.size)
+        result.getOrElse(typeWithNames.size)
       }
     }
 
