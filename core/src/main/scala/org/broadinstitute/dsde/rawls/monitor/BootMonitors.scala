@@ -62,24 +62,29 @@ object BootMonitors extends LazyLogging {
     //Boot submission monitor supervisor
     val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
     val submissionMonitorConfig = SubmissionMonitorConfig(util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")), submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"))
-//    startSubmissionMonitorSupervisor(
-//      system,
-//      submissionMonitorConfig,
-//      dataSourceAccess,
-//      samDAO,
-//      gcsDAO,
-//      shardedExecutionServiceCluster,
-//      metricsPrefix
-//    )
+    startSubmissionMonitorSupervisor(
+      system,
+      submissionMonitorConfig,
+      dataSourceAccess,
+      samDAO,
+      gcsDAO,
+      shardedExecutionServiceCluster,
+      metricsPrefix
+    )
 
     //Boot workflow submission actors
-//    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, drsResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver)
+    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, drsResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver)
 
     //Boot bucket deletion monitor
-//    startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
+    startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
 
-    //Boot statistics cache monitor
-    startEntityStatisticsCacheMonitor(system, slickDataSource, 10) //todo: read limit from config
+    //Boot entity statistics cache monitor
+    startEntityStatisticsCacheMonitor(
+      system,
+      slickDataSource,
+      util.toScalaDuration(conf.getDuration("entityStatisticsCache.pollInterval")),
+      conf.getInt("entityStatisticsCache.workspacesPerSweep")
+    )
 
     val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
@@ -93,8 +98,8 @@ object BootMonitors extends LazyLogging {
     )
 
     //Boot the avro upsert monitor to read and process messages in the specified PubSub topic
-//    startAvroUpsertMonitor(system, entityService, gcsDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO,
-//      importServiceDAO, avroUpsertMonitorConfig, slickDataSource)
+    startAvroUpsertMonitor(system, entityService, gcsDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO,
+      importServiceDAO, avroUpsertMonitorConfig, slickDataSource)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -192,8 +197,8 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startEntityStatisticsCacheMonitor(system: ActorSystem, slickDataSource: SlickDataSource, limit: Int)(implicit cs: ContextShift[IO]) = {
-    system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, 10 seconds, 1 minute, 10))
+  private def startEntityStatisticsCacheMonitor(system: ActorSystem, slickDataSource: SlickDataSource, pollInterval: FiniteDuration, limit: Int)(implicit cs: ContextShift[IO]) = {
+    system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, 10 seconds, pollInterval, limit))
   }
 
   private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig, dataSource: SlickDataSource)(implicit cs: ContextShift[IO]) = {
