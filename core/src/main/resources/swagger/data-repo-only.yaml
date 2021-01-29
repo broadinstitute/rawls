@@ -12,7 +12,7 @@ paths:
         - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: useCache
           in: query
-          description: true to use cache, false to read fully from DB
+          description: True to read entity statistics from cache (eventually consistent), false to force latest statistics (slower). First time reading from the cache may force latest statistics. Default is false.
           schema:
             type: boolean
             default: false
