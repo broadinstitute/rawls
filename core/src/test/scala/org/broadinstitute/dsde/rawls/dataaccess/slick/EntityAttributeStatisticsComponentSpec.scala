@@ -35,7 +35,7 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
       "participant" -> Seq(AttributeName("namespace2", "value1"), AttributeName("namespace3", "value1"))
     )
 
-    assertResult(4) {
+    assertResult(2) {
       runAndWait(entityAttributeStatisticsQuery.batchInsert(workspaceId, testStats))
     }
 
