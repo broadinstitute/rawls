@@ -6,7 +6,7 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitorActor.{EntityStatisticsCacheMessage, HandleBacklog, Sweep}
+import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{EntityStatisticsCacheMessage, HandleBacklog, Sweep}
 import slick.dbio.DBIO
 
 import java.sql.Timestamp
@@ -14,9 +14,9 @@ import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
-object EntityStatisticsCacheMonitorActor {
+object EntityStatisticsCacheMonitor {
   def props(datasource: SlickDataSource, initialDelay: FiniteDuration, pollInterval: FiniteDuration, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
-    Props(new EntityStatisticsCacheMonitorActor(datasource, initialDelay, pollInterval, limit))
+    Props(new EntityStatisticsCacheMonitor(datasource, initialDelay, pollInterval, limit))
   }
 
   sealed trait EntityStatisticsCacheMessage
@@ -24,7 +24,7 @@ object EntityStatisticsCacheMonitorActor {
   case object HandleBacklog extends EntityStatisticsCacheMessage
 }
 
-class EntityStatisticsCacheMonitorActor(dataSource: SlickDataSource, initialDelay: FiniteDuration, pollInterval: FiniteDuration, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
+class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, initialDelay: FiniteDuration, pollInterval: FiniteDuration, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
 
   override def preStart(): Unit = {
     super.preStart()
