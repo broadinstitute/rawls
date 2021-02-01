@@ -382,6 +382,10 @@ trait WorkspaceComponent {
       filter(rec => (rec.entityCacheLastUpdated < rec.lastModified)).take(limit).sortBy(_.lastModified.asc).map { ws => (ws.id, ws.lastModified) }.result
     }
 
+    def listBackloggedEntityCaches(limit: Int): ReadAction[Seq[(UUID, Timestamp)]] = {
+      filter(rec => rec.entityCacheLastUpdated.isEmpty).take(limit).map { ws => (ws.id, ws.lastModified) }.result
+    }
+
     def isEntityCacheDefined(workspaceId: UUID): ReadAction[Option[Boolean]] = {
       uniqueResult(filter(rec => rec.id === workspaceId).map(ws => ws.entityCacheLastUpdated.isDefined))
     }
