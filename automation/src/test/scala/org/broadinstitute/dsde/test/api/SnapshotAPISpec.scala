@@ -306,9 +306,8 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       s"---> TDR at $dataRepoBaseUrl did not have $numSnapshots snapshots for this test to use!" +
         s" This is likely a problem in environment setup, but has a chance of being a problem in runtime code. <---")
 
-    logger.info(s"found ${drSnapshots.getItems.size()} snapshot(s) from $dataRepoBaseUrl as user ${credentials.email}:")
-    drSnapshots.getItems.asScala.foreach { drSnapshot =>
-      logger.info(s"snapshot id: ${drSnapshot.getId}") }
+    logger.info(s"found ${drSnapshots.getItems.size()} snapshot(s) from $dataRepoBaseUrl as user ${credentials.email}: " +
+      s"${drSnapshots.getItems.asScala.map(_.getId).mkString(", ")}")
 
     drSnapshots
   }
