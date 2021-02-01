@@ -42,11 +42,16 @@ class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, initialDelay: Fi
         dataAccess.workspaceQuery.listOutdatedEntityCaches(limit)
       }
 
-      _ <- recordsToUpdate.toList.traverse { case (workspaceId, lastModified) =>
-        IO.fromFuture(IO(updateStatisticsCache(workspaceId, lastModified)))
+      updateResults <- recordsToUpdate.toList.traverse { case (workspaceId, lastModified) =>
+        IO.fromFuture(IO(updateStatisticsCache(workspaceId, lastModified))).map { _ =>
+          (workspaceId, lastModified.getTime, System.currentTimeMillis())
+        }
       }.unsafeToFuture()
     } yield {
       logger.info(s"Updated entity cache for ${recordsToUpdate.length} workspace(s), with the limit set to $limit")
+      updateResults.foreach { case (workspaceId, lastModified, cacheUpdated) =>
+        logger.info(s"Updated workspace $workspaceId. Cache was ${cacheUpdated - lastModified} millis out of date")
+      }
       if(recordsToUpdate.length < limit) HandleBacklog
       else Sweep
     }
