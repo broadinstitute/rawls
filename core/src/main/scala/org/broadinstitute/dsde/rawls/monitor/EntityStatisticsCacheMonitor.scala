@@ -15,8 +15,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 object EntityStatisticsCacheMonitor {
-  def props(datasource: SlickDataSource, initialDelay: FiniteDuration, pollInterval: FiniteDuration, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
-    Props(new EntityStatisticsCacheMonitor(datasource, initialDelay, pollInterval, limit))
+  def props(datasource: SlickDataSource, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
+    Props(new EntityStatisticsCacheMonitor(datasource, limit))
   }
 
   sealed trait EntityStatisticsCacheMessage
@@ -24,7 +24,7 @@ object EntityStatisticsCacheMonitor {
   case object HandleBacklog extends EntityStatisticsCacheMessage
 }
 
-class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, initialDelay: FiniteDuration, pollInterval: FiniteDuration, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
+class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
 
   override def preStart(): Unit = {
     super.preStart()

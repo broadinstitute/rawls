@@ -82,7 +82,6 @@ object BootMonitors extends LazyLogging {
     startEntityStatisticsCacheMonitor(
       system,
       slickDataSource,
-      util.toScalaDuration(conf.getDuration("entityStatisticsCache.pollInterval")),
       conf.getInt("entityStatisticsCache.workspacesPerSweep")
     )
 
@@ -197,8 +196,8 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startEntityStatisticsCacheMonitor(system: ActorSystem, slickDataSource: SlickDataSource, pollInterval: FiniteDuration, limit: Int)(implicit cs: ContextShift[IO]) = {
-    system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, 10 seconds, pollInterval, limit))
+  private def startEntityStatisticsCacheMonitor(system: ActorSystem, slickDataSource: SlickDataSource, limit: Int)(implicit cs: ContextShift[IO]) = {
+    system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, limit))
   }
 
   private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig, dataSource: SlickDataSource)(implicit cs: ContextShift[IO]) = {
