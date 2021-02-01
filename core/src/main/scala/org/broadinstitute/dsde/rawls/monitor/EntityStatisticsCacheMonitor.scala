@@ -46,7 +46,7 @@ class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, initialDelay: Fi
         IO.fromFuture(IO(updateStatisticsCache(workspaceId, lastModified)))
       }.unsafeToFuture()
     } yield {
-      logger.info(s"Updated ${recordsToUpdate.length} records, with a limit of $limit")
+      logger.info(s"Updated entity cache for ${recordsToUpdate.length} workspace(s), with the limit set to $limit")
       if(recordsToUpdate.length < limit) HandleBacklog
       else Sweep
     }
@@ -68,7 +68,7 @@ class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, initialDelay: Fi
           dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceId, new Timestamp(lastModified.getTime - 1))
         })
       } yield {
-        logger.info(s"Marked ${numMarked.length} workspaces in the backlog to be picked up by cache monitor")
+        logger.info(s"Marked ${numMarked.length} workspaces in the backlog to be picked up by entity statistics cache monitor")
         Sweep
       }
     }
