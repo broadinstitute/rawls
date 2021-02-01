@@ -23,8 +23,6 @@ import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
 
 /**
  * @author tsharpe
@@ -74,10 +72,9 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
             tool: GA4GHTool <- maybeTool
           } yield WdlUrl(tool.url) // We submit the Github URL to Cromwell so that relative imports work.
         }
-      case DockstoreToolsMethod(methodPath, methodVersion) => {
-        val url = s"${dockstoreServiceURL}/ga4gh/v1/tools/${URLEncoder.encode(methodPath, UTF_8.name)}/versions/${URLEncoder.encode(methodVersion, UTF_8.name)}/WDL/descriptor"
+      case method: DockstoreToolsMethod => {
         for {
-          maybeTool <- pipeline[Option[GA4GHTool]] apply Get(url) recover noneIfNotFound
+          maybeTool <- pipeline[Option[GA4GHTool]] apply Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) recover noneIfNotFound
         } yield maybeTool.map(tool => WdlUrl(tool.url))
       }
     }

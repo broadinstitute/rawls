@@ -335,6 +335,21 @@ object AgoraMethod {
 
 }
 
+object DockstoreUtils {
+  def parseTwoPartUri(uri: String): Option[Tuple2[String, String]] = {
+    for {
+      parsedUri <- Url.parseOption(uri)
+      host <- parsedUri.hostOption // parser does not URL-decode host
+      parts <- parsedUri.path.toAbsolute.parts.toNev
+      result <- if (parts.size == 1) Some((URLDecoder.decode(host.value, UTF_8.name), parts.head)) else None
+    } yield result
+  }
+
+  def ga4ghDescriptorUrl(baseUrl: String, path: String, version: String): String = {
+    s"${baseUrl}/ga4gh/v1/tools/${URLEncoder.encode(path, UTF_8.name)}/versions/${URLEncoder.encode(version, UTF_8.name)}/WDL/descriptor"
+  }
+}
+
 case class DockstoreMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
 
   override def validate: Option[DockstoreMethod] = {
@@ -355,25 +370,15 @@ case class DockstoreMethod(methodPath: String, methodVersion: String) extends Me
 
   override def repo: MethodRepository = Dockstore
 
-  private def methodVersionEncoded: String = URLEncoder.encode(methodVersion, UTF_8.name)
-
-  private def toolId = s"#workflow/$methodPath"
-
-  private def toolIdEncoded = URLEncoder.encode(toolId, UTF_8.name)
-
-  def ga4ghDescriptorUrl(baseUrl: String): String =
-    s"$baseUrl/ga4gh/v1/tools/$toolIdEncoded/versions/$methodVersionEncoded/WDL/descriptor"
+  def ga4ghDescriptorUrl(baseUrl: String): String = DockstoreUtils.ga4ghDescriptorUrl(baseUrl, s"#workflow/${methodPath}", methodVersion)
 }
 
 object DockstoreMethod {
 
   def apply(uri: String): DockstoreMethod = {
-
     (for {
-      parsedUri <- Url.parseOption(uri)
-      host      <- parsedUri.hostOption // parser does not URL-decode host
-      parts     <- parsedUri.path.toAbsolute.parts.toNev
-      result    <- if (parts.size == 1) DockstoreMethod(URLDecoder.decode(host.value, UTF_8.name), parts.head).validate else None
+      (path, version) <- DockstoreUtils.parseTwoPartUri(uri)
+      result <- DockstoreMethod(path, version).validate
     } yield {
       result
     }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
@@ -395,15 +400,15 @@ case class DockstoreToolsMethod(methodPath: String, methodVersion: String) exten
   }
 
   override def repo: MethodRepository = DockstoreTools
+
+  def ga4ghDescriptorUrl(baseUrl: String): String = DockstoreUtils.ga4ghDescriptorUrl(baseUrl, methodPath, methodVersion)
 }
 
 object DockstoreToolsMethod {
   def apply(uri: String): DockstoreToolsMethod = {
     (for {
-      parsedUri <- Url.parseOption(uri)
-      host <- parsedUri.hostOption // parser does not URL-decode host
-      parts <- parsedUri.path.toAbsolute.parts.toNev
-      result <- if (parts.size == 1) DockstoreToolsMethod(URLDecoder.decode(host.value, UTF_8.name), parts.head).validate else None
+      (path, version) <- DockstoreUtils.parseTwoPartUri(uri)
+      result <- DockstoreToolsMethod(path, version).validate
     } yield {
       result
     }).getOrElse(throw new RawlsException(s"Could not create a DockstoreToolsMethod from URI \'$uri\'"))
