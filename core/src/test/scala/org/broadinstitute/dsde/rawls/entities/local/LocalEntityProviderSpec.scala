@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
-import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, MethodConfiguration, Workspace, SubmissionValidationValue, WDL}
+import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
 
 import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext
@@ -128,5 +128,57 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
 
       wdlInputs shouldBe """{"w1.aaint_array":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}"""
     }
+
+    "use cache for entityTypeMetadata when useCache=true and cache exists" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = localEntityProviderTestData.workspaceWithEntityCache
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource)
+
+      val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true)))
+
+      val typeCountCache = runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+      val attrNamesCache = runAndWait(dataSource.dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+
+      //assert that there is something in the cache for this workspace
+      typeCountCache should not be Map.empty
+      attrNamesCache should not be Map.empty
+
+      entityTypeMetadataResult shouldBe localEntityProviderTestData.workspaceWithCacheEntityTypeMetadataExpected
+    }
+
+    "not use cache for entityTypeMetadata when useCache=true and cache does not exist" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = localEntityProviderTestData.workspaceWithoutEntityCache
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource)
+
+      val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true)))
+
+      val typeCountCache = runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+      val attrNamesCache = runAndWait(dataSource.dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+
+      //assert that there is nothing in the cache for this workspace
+      typeCountCache shouldBe Map.empty
+      attrNamesCache shouldBe Map.empty
+
+      //if there's nothing in the cache, we can assert that the results we're getting below are _not_ from the cache
+      entityTypeMetadataResult shouldBe localEntityProviderTestData.workspaceWithoutCacheEntityTypeMetadataExpected
+    }
+
+    //This test is set up with incorrect entities for the workspace entity statistics cache
+    //We will verify that the cache is not used by ensuring that the _correct_ stats are returned
+    "not use cache for entityTypeMetadata when useCache=false even if cache exists" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = localEntityProviderTestData.workspaceWithIncorrectEntityCache
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource)
+
+      val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(false)))
+
+      val typeCountCache = runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+      val attrNamesCache = runAndWait(dataSource.dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+
+      //assert that there is something in the cache for this workspace
+      typeCountCache should not be Map.empty
+      attrNamesCache should not be Map.empty
+
+      entityTypeMetadataResult shouldBe localEntityProviderTestData.workspaceWithIncorrectCacheEntityTypeMetadataExpected
+    }
+
   }
 }
