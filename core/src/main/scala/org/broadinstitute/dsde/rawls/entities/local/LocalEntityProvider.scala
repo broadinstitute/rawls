@@ -33,9 +33,9 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.isEntityCacheDefined(workspaceContext.workspaceIdAsUUID).flatMap { cacheEntriesExistOpt =>
-        val cacheEntriesExist = cacheEntriesExistOpt.getOrElse(false)
-        if(useCache && cacheEntriesExist) {
+      dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isCacheCurrentOpt =>
+        val isCacheCurrent = isCacheCurrentOpt.getOrElse(false)
+        if(useCache && isCacheCurrent) {
           val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
           val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
 
@@ -50,7 +50,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
             }
           }
         }
-        else if(useCache && !cacheEntriesExist) {
+        else if(useCache && !isCacheCurrent) {
           dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)).flatMap { _ =>
             dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
           }
