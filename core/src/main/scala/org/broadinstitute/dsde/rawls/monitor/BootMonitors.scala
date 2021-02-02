@@ -79,11 +79,13 @@ object BootMonitors extends LazyLogging {
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
 
     //Boot entity statistics cache monitor
-    startEntityStatisticsCacheMonitor(
-      system,
-      slickDataSource,
-      conf.getInt("entityStatisticsCache.workspacesPerSweep")
-    )
+    if(conf.getBoolean("entityStatisticsCache.enabled")) {
+      startEntityStatisticsCacheMonitor(
+        system,
+        slickDataSource,
+        conf.getInt("entityStatisticsCache.workspacesPerSweep")
+      )
+    }
 
     val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
