@@ -33,32 +33,31 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isCacheCurrent =>
-        if(cacheEnabled && useCache) {
-          if (isCacheCurrent) {
-            val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
-            val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+      dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isCacheCurrentOpt =>
+        //If the cache doesn't exist; return full query results and mark the workspace for an update
+        if(isCacheCurrentOpt.isEmpty) {
+          dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)).flatMap { _ =>
+            dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+          }
+        }
+        //Else , if the user wants to use the cache and it's up to date and it's enabled; return cached results
+        else if(useCache && cacheEnabled && isCacheCurrentOpt.getOrElse(false)) {
+          val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+          val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
 
-            typesAndCountsQ flatMap { typesAndCounts =>
-              typesAndAttrsQ map { typesAndAttrs =>
-                (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
-                  (entityType, EntityTypeMetadata(
-                    typesAndCounts.getOrElse(entityType, 0),
-                    entityType + Attributable.entityIdAttributeSuffix,
-                    typesAndAttrs.getOrElse(entityType, Seq()).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
-                } toMap
-              }
-            }
-          }
-          else {
-            dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)).flatMap { _ =>
-              dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+          typesAndCountsQ flatMap { typesAndCounts =>
+            typesAndAttrsQ map { typesAndAttrs =>
+              (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
+                (entityType, EntityTypeMetadata(
+                  typesAndCounts.getOrElse(entityType, 0),
+                  entityType + Attributable.entityIdAttributeSuffix,
+                  typesAndAttrs.getOrElse(entityType, Seq()).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
+              } toMap
             }
           }
         }
-        else {
-          dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
-        }
+        //For all else: i.e. the cache is disabled, or the user doesn't want to use it, or it's out of date; return full query results
+        else dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
       }
     }
   }

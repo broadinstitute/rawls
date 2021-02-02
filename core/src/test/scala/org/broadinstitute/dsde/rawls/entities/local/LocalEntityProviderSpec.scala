@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
-import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext

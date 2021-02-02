@@ -386,13 +386,15 @@ trait WorkspaceComponent {
       filter(rec => rec.entityCacheLastUpdated.isEmpty).take(limit).map { ws => (ws.id, ws.lastModified) }.result
     }
 
-    def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
+    //Three modes:
+    // Some(true): cache exists and is up to date
+    // Some(false) :cache exists and is not up to date
+    // None: cache does not exist
+    def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Option[Boolean]] = {
       val queryResult = uniqueResult[(Timestamp, Option[Timestamp])](filter(rec => rec.id === workspaceId).map(ws => (ws.lastModified, ws.entityCacheLastUpdated)))
       queryResult.map {
-        case Some((lastModified, Some(entityCacheLastUpdated))) => {
-          lastModified.equals(entityCacheLastUpdated)
-        }
-        case _ => false
+        case Some((lastModified, Some(entityCacheLastUpdated))) => Option(lastModified.equals(entityCacheLastUpdated))
+        case _ => None
       }
     }
 
