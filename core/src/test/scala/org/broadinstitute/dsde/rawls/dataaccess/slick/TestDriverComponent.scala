@@ -31,6 +31,8 @@ import scala.language.{implicitConversions, postfixOps}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
+import java.sql.Timestamp
+
 // initialize database tables and connection pool only once
 object DbResource {
   // to override, e.g. to run against mysql:
@@ -993,66 +995,31 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   class LocalEntityProviderTestData() extends TestData {
-    val workspaceWithCacheName = WorkspaceName("namespace", "workspace-with-cache")
-    val workspaceWithoutCacheName = WorkspaceName("namespace", "workspace-without-cache")
-    val workspaceWithIncorrectCacheName = WorkspaceName("namespace", "workspace-with-incorrect-cache")
+    val workspaceName = WorkspaceName("namespace", "workspace-with-cache")
     val wsAttrs = Map(AttributeName.withDefaultNS("description") -> AttributeString("a description"))
-    val workspaceWithEntityCache = Workspace(workspaceWithCacheName.namespace, workspaceWithCacheName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs)
-    val workspaceWithoutEntityCache = Workspace(workspaceWithoutCacheName.namespace, workspaceWithoutCacheName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs)
-    val workspaceWithIncorrectEntityCache = Workspace(workspaceWithIncorrectCacheName.namespace, workspaceWithIncorrectCacheName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs)
+    val creationTime = currentTime()
+    val workspace = Workspace(workspaceName.namespace, workspaceName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), creationTime, creationTime, "testUser", wsAttrs)
 
     val participant1 = Entity("participant1", "participant", Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1"), AttributeName.withDefaultNS("attr2") -> AttributeString("value2")))
-    val participant2 = Entity("participant2", "participant", Map(AttributeName.withDefaultNS("attr3") -> AttributeString("value3"), AttributeName.withDefaultNS("attr4") -> AttributeString("value4")))
     val sample1 = Entity("sample1", "sample", Map(AttributeName.withDefaultNS("attr5") -> AttributeString("value5"), AttributeName.withDefaultNS("attr6") -> AttributeString("value6")))
-    val sample2 = Entity("sample2", "sample", Map(AttributeName.withDefaultNS("attr7") -> AttributeString("value7"), AttributeName.withDefaultNS("attr8") -> AttributeString("value8")))
 
-    val workspaceWithCacheEntities = Seq(participant1, sample1)
-    val workspaceWithoutCacheEntities = Seq(participant2, sample2)
-    val workspaceWithIncorrectCacheEntities = workspaceWithCacheEntities
+    val workspaceEntities = Seq(participant1, sample1)
 
-    val workspaceWithCacheAttrNameCacheEntries = workspaceWithCacheEntities.groupBy(_.entityType).map { case (entityType, entities) =>
+    val workspaceAttrNameCacheEntries = workspaceEntities.groupBy(_.entityType).map { case (entityType, entities) =>
       entityType -> entities.flatMap(_.attributes.keys)
     }
 
-    val workspaceWithCacheEntityTypeCacheEntries = workspaceWithCacheEntities.groupBy(_.entityType).mapValues(_.length)
-
-    val workspaceWithCacheEntityTypeMetadataExpected = workspaceWithCacheEntityTypeCacheEntries.map { case (entityType, entityTypeCount) =>
-      entityType -> EntityTypeMetadata(entityTypeCount, s"${entityType}_id", workspaceWithCacheAttrNameCacheEntries(entityType).map(attrName => toDelimitedName(attrName)))
-    }
-
-    val workspaceWithoutCacheEntityTypeMetadataExpected = workspaceWithoutCacheEntities.groupBy(_.entityType).mapValues(_.length).map { case (entityType, entityTypeCount) =>
-      entityType -> EntityTypeMetadata(entityTypeCount, s"${entityType}_id", workspaceWithoutCacheEntities.groupBy(_.entityType).map { case (entityType, entities) =>
-        entityType -> entities.flatMap(_.attributes.keys)
-      }.get(entityType).get.map(attrName => toDelimitedName(attrName)))
-    }
-
-    val workspaceWithIncorrectCacheEntityTypeMetadataExpected = workspaceWithCacheEntityTypeMetadataExpected
+    val workspaceEntityTypeCacheEntries = workspaceEntities.groupBy(_.entityType).mapValues(_.length)
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspaceWithEntityCache),
-        workspaceQuery.save(workspaceWithoutEntityCache),
-        workspaceQuery.save(workspaceWithIncorrectEntityCache),
-        //newly created workspaces have an entry here, we want to simulate it not being able to hit the cache
-        workspaceQuery.updateCacheLastUpdated(workspaceWithoutEntityCache.workspaceIdAsUUID, null),
-        withWorkspaceContext(workspaceWithEntityCache)({ context =>
+        workspaceQuery.save(workspace),
+        withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
-            entityQuery.save(context, workspaceWithCacheEntities),
-            entityAttributeStatisticsQuery.batchInsert(workspaceWithEntityCache.workspaceIdAsUUID, workspaceWithCacheAttrNameCacheEntries),
-            entityTypeStatisticsQuery.batchInsert(workspaceWithEntityCache.workspaceIdAsUUID, workspaceWithCacheEntityTypeCacheEntries)
-          )
-        }),
-        withWorkspaceContext(workspaceWithoutEntityCache)({ context =>
-          DBIO.seq(
-            entityQuery.save(context, workspaceWithoutCacheEntities)
-          )
-        }),
-        withWorkspaceContext(workspaceWithIncorrectEntityCache)({ context =>
-          DBIO.seq(
-            entityQuery.save(context, workspaceWithIncorrectCacheEntities),
-            //deliberately save the incorrect cache entries so we can test the cache isn't used for this workspace
-            entityAttributeStatisticsQuery.batchInsert(workspaceWithIncorrectEntityCache.workspaceIdAsUUID, Map("you-shouldnt-ever-see-this" -> Seq(AttributeName.withDefaultNS("error!")))),
-            entityTypeStatisticsQuery.batchInsert(workspaceWithIncorrectEntityCache.workspaceIdAsUUID, Map("you-shouldnt-ever-see-this" -> 1))
+            //note that we don't save sample1 here, it was only used to generate cache entries that will differ from what full queries return
+            entityQuery.save(context, participant1),
+            entityAttributeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceAttrNameCacheEntries),
+            entityTypeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceEntityTypeCacheEntries),
           )
         })
       )

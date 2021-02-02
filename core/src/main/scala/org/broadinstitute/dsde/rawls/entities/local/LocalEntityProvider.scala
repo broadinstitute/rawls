@@ -21,7 +21,7 @@ import scala.util.{Failure, Success, Try}
 /**
  * Terra default entity provider, powered by Rawls and Cloud SQL
  */
-class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource)
+class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource, cacheEnabled: Boolean)
                          (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with LazyLogging with EntitySupport with ExpressionEvaluationSupport {
 
@@ -34,24 +34,26 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isCacheCurrent =>
-        if(useCache && isCacheCurrent) {
-          val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
-          val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+        if(cacheEnabled && useCache) {
+          if (isCacheCurrent) {
+            val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+            val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
 
-          typesAndCountsQ flatMap { typesAndCounts =>
-            typesAndAttrsQ map { typesAndAttrs =>
-              (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
-                (entityType, EntityTypeMetadata(
-                  typesAndCounts.getOrElse(entityType, 0),
-                  entityType + Attributable.entityIdAttributeSuffix,
-                  typesAndAttrs.getOrElse(entityType, Seq()).map (AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
-              } toMap
+            typesAndCountsQ flatMap { typesAndCounts =>
+              typesAndAttrsQ map { typesAndAttrs =>
+                (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
+                  (entityType, EntityTypeMetadata(
+                    typesAndCounts.getOrElse(entityType, 0),
+                    entityType + Attributable.entityIdAttributeSuffix,
+                    typesAndAttrs.getOrElse(entityType, Seq()).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
+                } toMap
+              }
             }
           }
-        }
-        else if(useCache && !isCacheCurrent) {
-          dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)).flatMap { _ =>
-            dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+          else {
+            dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)).flatMap { _ =>
+              dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+            }
           }
         }
         else {
