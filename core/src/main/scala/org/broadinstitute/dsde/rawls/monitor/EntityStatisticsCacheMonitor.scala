@@ -57,10 +57,10 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
         }
       }.unsafeToFuture()
     } yield {
-      logger.info(s"Updated entity cache for ${recordsToUpdate.length} workspace(s), with the limit set to $limit")
       updateResults.foreach { case (workspaceId, lastModified, cacheUpdated) =>
         logger.info(s"Updated workspace $workspaceId. Cache was ${cacheUpdated - lastModified} millis out of date")
       }
+      logger.info(s"Sweep complete. Updated entity cache for ${recordsToUpdate.length} workspace(s), with the limit set to $limit")
       if(recordsToUpdate.length < limit) HandleBacklog
       else Sweep
     }
