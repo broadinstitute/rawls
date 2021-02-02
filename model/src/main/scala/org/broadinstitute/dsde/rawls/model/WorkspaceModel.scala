@@ -285,6 +285,7 @@ object MethodRepoMethod {
     }) match {
       case Some(Agora) => AgoraMethod(uri)
       case Some(Dockstore) => DockstoreMethod(uri)
+      case Some(DockstoreTools) => DockstoreToolsMethod(uri)
       case _ => throw new RawlsException(s"Illegal method repo specified in URI \'$uri\'")
     }
   }
@@ -334,6 +335,21 @@ object AgoraMethod {
 
 }
 
+object DockstoreUtils {
+  def parseTwoPartUri(uri: String): Option[Tuple2[String, String]] = {
+    for {
+      parsedUri <- Url.parseOption(uri)
+      host <- parsedUri.hostOption // parser does not URL-decode host
+      parts <- parsedUri.path.toAbsolute.parts.toNev
+      result <- if (parts.size == 1) Some((URLDecoder.decode(host.value, UTF_8.name), parts.head)) else None
+    } yield result
+  }
+
+  def ga4ghDescriptorUrl(baseUrl: String, path: String, version: String): String = {
+    s"${baseUrl}/ga4gh/v1/tools/${URLEncoder.encode(path, UTF_8.name)}/versions/${URLEncoder.encode(version, UTF_8.name)}/WDL/descriptor"
+  }
+}
+
 case class DockstoreMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
 
   override def validate: Option[DockstoreMethod] = {
@@ -354,30 +370,49 @@ case class DockstoreMethod(methodPath: String, methodVersion: String) extends Me
 
   override def repo: MethodRepository = Dockstore
 
-  private def methodVersionEncoded: String = URLEncoder.encode(methodVersion, UTF_8.name)
-
-  private def toolId = s"#workflow/$methodPath"
-
-  private def toolIdEncoded = URLEncoder.encode(toolId, UTF_8.name)
-
-  def ga4ghDescriptorUrl(baseUrl: String): String =
-    s"$baseUrl/ga4gh/v1/tools/$toolIdEncoded/versions/$methodVersionEncoded/WDL/descriptor"
+  def ga4ghDescriptorUrl(baseUrl: String): String = DockstoreUtils.ga4ghDescriptorUrl(baseUrl, s"#workflow/${methodPath}", methodVersion)
 }
 
 object DockstoreMethod {
 
   def apply(uri: String): DockstoreMethod = {
-
     (for {
-      parsedUri <- Url.parseOption(uri)
-      host      <- parsedUri.hostOption // parser does not URL-decode host
-      parts     <- parsedUri.path.toAbsolute.parts.toNev
-      result    <- if (parts.size == 1) DockstoreMethod(URLDecoder.decode(host.value, UTF_8.name), parts.head).validate else None
+      (path, version) <- DockstoreUtils.parseTwoPartUri(uri)
+      result <- DockstoreMethod(path, version).validate
     } yield {
       result
     }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
   }
 
+}
+
+case class DockstoreToolsMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
+  override def validate: Option[DockstoreToolsMethod] = {
+    if (methodPath.nonEmpty && methodVersion.nonEmpty) Some(this) else None
+  }
+
+  override def methodUri: String = {
+    if (validate.isDefined) {
+      s"${repo.scheme}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
+    } else {
+      throw new RawlsException(s"Could not generate a method URI from DockstoreToolsMethod with path \'$methodPath\', version \'$methodVersion\'")
+    }
+  }
+
+  override def repo: MethodRepository = DockstoreTools
+
+  def ga4ghDescriptorUrl(baseUrl: String): String = DockstoreUtils.ga4ghDescriptorUrl(baseUrl, methodPath, methodVersion)
+}
+
+object DockstoreToolsMethod {
+  def apply(uri: String): DockstoreToolsMethod = {
+    (for {
+      (path, version) <- DockstoreUtils.parseTwoPartUri(uri)
+      result <- DockstoreToolsMethod(path, version).validate
+    } yield {
+      result
+    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreToolsMethod from URI \'$uri\'"))
+  }
 }
 
 sealed trait MethodRepository {
@@ -392,15 +427,20 @@ case object Dockstore extends MethodRepository {
   override val scheme: String = "dockstore"
 }
 
+case object DockstoreTools extends MethodRepository {
+  override val scheme: String = "dockstoretools"
+}
+
 object MethodRepository {
 
   def withName(name: String): Option[MethodRepository] = name.toLowerCase match {
     case Agora.scheme => Some(Agora)
     case Dockstore.scheme => Some(Dockstore)
+    case DockstoreTools.scheme => Some(DockstoreTools)
     case _ => None
   }
 
-  val all: Set[MethodRepository] = Set(Agora, Dockstore)
+  val all: Set[MethodRepository] = Set(Agora, Dockstore, DockstoreTools)
 }
 
 case class GA4GHTool(`type`: String, descriptor: String, url: String)
@@ -739,6 +779,8 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
 
+  implicit val DockstoreToolsMethodFormat = jsonFormat2(DockstoreToolsMethod.apply)
+
   implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
 
     override def write(method: MethodRepoMethod): JsValue = {
@@ -747,6 +789,8 @@ class WorkspaceJsonSupport extends JsonSupport {
           JsObject(Map("methodUri" -> JsString(agora.methodUri), "sourceRepo" -> JsString(agora.repo.scheme)) ++ agora.toJson.asJsObject.fields)
         case dockstore: DockstoreMethod =>
           JsObject(Map("methodUri" -> JsString(dockstore.methodUri), "sourceRepo" -> JsString(dockstore.repo.scheme)) ++ dockstore.toJson.asJsObject.fields)
+        case dockstoreTools: DockstoreToolsMethod =>
+          JsObject(Map("methodUri" -> JsString(dockstoreTools.methodUri), "sourceRepo" -> JsString(dockstoreTools.repo.scheme)) ++ dockstoreTools.toJson.asJsObject.fields)
       }
     }
 
@@ -761,6 +805,7 @@ class WorkspaceJsonSupport extends JsonSupport {
         case _ =>
           json.asJsObject.fields.get("sourceRepo") match {
             case Some(JsString(Dockstore.scheme)) => DockstoreMethodFormat.read(json)
+            case Some(JsString(DockstoreTools.scheme)) => DockstoreToolsMethodFormat.read(json)
             case Some(JsString(Agora.scheme)) => AgoraMethodFormat.read(json)
             case None => AgoraMethodFormat.read(json) // If omitted, default to Agora for backwards compatibility
             case Some(JsString(other)) => throw DeserializationException(s"Illegal method repo \'$other\'")
