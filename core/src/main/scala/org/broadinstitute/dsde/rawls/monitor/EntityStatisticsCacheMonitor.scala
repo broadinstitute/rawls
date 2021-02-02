@@ -16,7 +16,7 @@ import scala.concurrent.duration._
 
 object EntityStatisticsCacheMonitor {
   def props(datasource: SlickDataSource, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
-    Props(new EntityStatisticsCacheMonitor(datasource, limit))
+    Props(new EntityStatisticsCacheMonitorActor(datasource, limit))
   }
 
   sealed trait EntityStatisticsCacheMessage
@@ -24,11 +24,11 @@ object EntityStatisticsCacheMonitor {
   case object HandleBacklog extends EntityStatisticsCacheMessage
 }
 
-class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
+class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val limit: Int)(implicit val executionContext: ExecutionContext, val cs: ContextShift[IO]) extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
 
   override def preStart(): Unit = {
     super.preStart()
-    sweep() pipeTo self
+    self ! Sweep
   }
 
   override def receive = {
@@ -36,7 +36,16 @@ class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, limit: Int)(impl
     case HandleBacklog => handleBacklog() pipeTo self
   }
 
-  private def sweep() = {
+}
+
+trait EntityStatisticsCacheMonitor extends LazyLogging {
+
+  implicit val executionContext: ExecutionContext
+  implicit val cs: ContextShift[IO]
+  val dataSource: SlickDataSource
+  val limit: Int
+
+  def sweep() = {
     val checkFuture = for {
       recordsToUpdate <- dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.listOutdatedEntityCaches(limit)
@@ -65,7 +74,7 @@ class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, limit: Int)(impl
     }
   }
 
-  private def handleBacklog(): Future[EntityStatisticsCacheMessage] = {
+  def handleBacklog(): Future[EntityStatisticsCacheMessage] = {
     dataSource.inTransaction { dataAccess =>
       for {
         backloggedWorkspaces <- dataAccess.workspaceQuery.listBackloggedEntityCaches(limit)
@@ -79,13 +88,7 @@ class EntityStatisticsCacheMonitor(dataSource: SlickDataSource, limit: Int)(impl
     }
   }
 
-  private def markBackloggedWorkspace(workspaceId: UUID, timestamp: Timestamp): Future[Int] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceId, new Timestamp(timestamp.getTime - 1))
-    }
-  }
-
-  private def updateStatisticsCache(workspaceId: UUID, timestamp: Timestamp): Future[Unit] = {
+  def updateStatisticsCache(workspaceId: UUID, timestamp: Timestamp): Future[Unit] = {
     val deleteFuture = dataSource.inTransaction { dataAccess =>
       for {
         //update entity statistics
