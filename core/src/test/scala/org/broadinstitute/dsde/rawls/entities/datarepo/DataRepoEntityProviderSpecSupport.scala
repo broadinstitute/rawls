@@ -88,7 +88,7 @@ trait DataRepoEntityProviderSpecSupport {
   }
 
   val defaultTables: List[TableModel] = List(
-    new TableModel().name("table1").primaryKey(null).rowCount(0)
+    new TableModel().name("table1").primaryKey(null).rowCount(10)
       .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
     new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
       .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava),
