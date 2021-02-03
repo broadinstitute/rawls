@@ -277,7 +277,8 @@ trait DataRepoBigQuerySupport extends LazyLogging {
    */
   def queryResultsMetadata(queryResults:TableResult, totalRowCount: Int, entityQuery: EntityQuery): EntityQueryResultMetadata = {
     val pageCount = Math.ceil(totalRowCount.toFloat / entityQuery.pageSize).toInt
-    EntityQueryResultMetadata(totalRowCount, queryResults.getTotalRows.toInt, pageCount)
+    // we don't support filtering in BQ, so unfilteredCount and filteredCount are the same
+    EntityQueryResultMetadata(totalRowCount, totalRowCount, pageCount)
   }
 
   /**

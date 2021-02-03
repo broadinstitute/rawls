@@ -332,7 +332,7 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
 
           val actual = queryResultsMetadata(queryResults, resultSetSize, entityQuery)
 
-          assertResult(EntityQueryResultMetadata(resultSetSize, inputPageSize, expectedPages)) { actual }
+          assertResult(EntityQueryResultMetadata(resultSetSize, resultSetSize, expectedPages)) { actual }
         }
     }
 
