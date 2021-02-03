@@ -22,6 +22,7 @@ import akka.http.scaladsl.server.RouteResult.Complete
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, LoggingMagnet}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
+import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -40,6 +41,9 @@ object RawlsApiService extends LazyLogging {
     ExceptionHandler {
       case withErrorReport: RawlsExceptionWithErrorReport =>
         complete(withErrorReport.errorReport.statusCode.getOrElse(StatusCodes.InternalServerError) -> withErrorReport.errorReport)
+      case rollback:MySQLTransactionRollbackException =>
+        logger.error(s"ROLLBACK EXCEPTION, PROBABLE DEADLOCK: ${rollback.getMessage} [${rollback.getErrorCode} ${rollback.getSQLState}] ${rollback.getNextException}", rollback)
+        complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
       case e: Throwable =>
         // so we don't log the error twice when debug is enabled
         if (logger.underlying.isDebugEnabled) {
