@@ -399,16 +399,7 @@ trait EntityComponent {
       val typesAndCountsQ = getEntityTypesWithCounts(workspaceContext.workspaceIdAsUUID)
       val typesAndAttrsQ = getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID)
 
-      typesAndCountsQ flatMap { typesAndCounts =>
-        typesAndAttrsQ map { typesAndAttrs =>
-          (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
-            (entityType, EntityTypeMetadata(
-              typesAndCounts.getOrElse(entityType, 0),
-              entityType + Attributable.entityIdAttributeSuffix,
-              typesAndAttrs.getOrElse(entityType, Seq()).map (AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
-          } toMap
-        }
-      }
+      generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
     }
 
     def getEntityTypesWithCounts(workspaceId: UUID): ReadAction[Map[String, Int]] = {
@@ -826,6 +817,19 @@ trait EntityComponent {
       entity.attributes.keys.foreach { attrName =>
         validateUserDefinedString(attrName.name)
         validateAttributeName(attrName, entity.entityType)
+      }
+    }
+
+    def generateEntityMetadataMap(typesAndCountsQ: ReadAction[Map[String, Int]], typesAndAttrsQ: ReadAction[Map[String, Seq[AttributeName]]]) = {
+      typesAndCountsQ flatMap { typesAndCounts =>
+        typesAndAttrsQ map { typesAndAttrs =>
+          (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
+            (entityType, EntityTypeMetadata(
+              typesAndCounts.getOrElse(entityType, 0),
+              entityType + Attributable.entityIdAttributeSuffix,
+              typesAndAttrs.getOrElse(entityType, Seq()).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
+          } toMap
+        }
       }
     }
 

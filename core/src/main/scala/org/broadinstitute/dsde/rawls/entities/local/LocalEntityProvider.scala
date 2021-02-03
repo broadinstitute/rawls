@@ -45,16 +45,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
           val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
           val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
 
-          typesAndCountsQ flatMap { typesAndCounts =>
-            typesAndAttrsQ map { typesAndAttrs =>
-              (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
-                (entityType, EntityTypeMetadata(
-                  typesAndCounts.getOrElse(entityType, 0),
-                  entityType + Attributable.entityIdAttributeSuffix,
-                  typesAndAttrs.getOrElse(entityType, Seq()).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
-              } toMap
-            }
-          }
+          dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
         }
         //For all else: i.e. the cache is disabled, or the user doesn't want to use it, or it's out of date; return full query results
         else dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
