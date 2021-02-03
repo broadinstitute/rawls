@@ -324,13 +324,7 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
       case ((inputPageSize, resultSetSize), expectedPages) =>
         s"compute correct pagination metadata from BQ results for pageSize $inputPageSize and result set size $resultSetSize (expect $expectedPages)" in {
           val entityQuery = EntityQuery(page = 4, pageSize = inputPageSize, sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None)
-
-          val schema: Schema = Schema.of(F_INTEGER)
-          val row: FieldValueList = FieldValueList.of(List(FV_INTEGER).asJava, F_INTEGER)
-          val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List.fill(inputPageSize)(row).asJava)
-          val queryResults: TableResult = new TableResult(schema, inputPageSize, page)
-
-          val actual = queryResultsMetadata(queryResults, resultSetSize, entityQuery)
+          val actual = queryResultsMetadata(resultSetSize, entityQuery)
 
           assertResult(EntityQueryResultMetadata(resultSetSize, resultSetSize, expectedPages)) { actual }
         }

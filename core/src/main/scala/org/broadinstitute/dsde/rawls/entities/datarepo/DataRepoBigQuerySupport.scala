@@ -271,11 +271,10 @@ trait DataRepoBigQuerySupport extends LazyLogging {
 
   /**
    * Translates a BigQuery result set into the pagination metadata that Rawls expects.
-   * @param queryResults the BigQuery result set
    * @param entityQuery the query criteria supplied by the user, which includes page size
    * @return the Rawls-flavor pagination metadata
    */
-  def queryResultsMetadata(queryResults:TableResult, totalRowCount: Int, entityQuery: EntityQuery): EntityQueryResultMetadata = {
+  def queryResultsMetadata(totalRowCount: Int, entityQuery: EntityQuery): EntityQueryResultMetadata = {
     val pageCount = Math.ceil(totalRowCount.toFloat / entityQuery.pageSize).toInt
     // we don't support filtering in BQ, so unfilteredCount and filteredCount are the same
     EntityQueryResultMetadata(totalRowCount, totalRowCount, pageCount)
