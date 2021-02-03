@@ -138,7 +138,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     } yield {
       // translate the BQ results into a Rawls query result
       val page = queryResultsToEntities(queryResults, entityType, pk)
-      val metadata = queryResultsMetadata(queryResults, finalQuery)
+      val metadata = queryResultsMetadata(queryResults, tableModel.getRowCount, finalQuery)
       EntityQueryResponse(finalQuery, metadata, page)
     }
     resultIO.unsafeToFuture()

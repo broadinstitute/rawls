@@ -328,11 +328,11 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
           val schema: Schema = Schema.of(F_INTEGER)
           val row: FieldValueList = FieldValueList.of(List(FV_INTEGER).asJava, F_INTEGER)
           val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List.fill(inputPageSize)(row).asJava)
-          val queryResults: TableResult = new TableResult(schema, resultSetSize, page)
+          val queryResults: TableResult = new TableResult(schema, inputPageSize, page)
 
-          val actual = queryResultsMetadata(queryResults, entityQuery)
+          val actual = queryResultsMetadata(queryResults, resultSetSize, entityQuery)
 
-          assertResult(EntityQueryResultMetadata(resultSetSize, resultSetSize, expectedPages)) { actual }
+          assertResult(EntityQueryResultMetadata(resultSetSize, inputPageSize, expectedPages)) { actual }
         }
     }
 
