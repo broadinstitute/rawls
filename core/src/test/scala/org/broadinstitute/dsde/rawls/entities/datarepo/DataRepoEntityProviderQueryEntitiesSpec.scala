@@ -40,7 +40,7 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
         AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
       )))
       assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
-      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 1, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
+      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
       assertResult(expected) { entityQueryResponse.results }
     }
   }
@@ -60,7 +60,7 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
         ))
       }
       assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
-      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 3, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
+      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
       assertResult(expected) { entityQueryResponse.results }
     }
   }
@@ -92,7 +92,7 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
       // this is the default expected value, should it move to the support trait?
       val expected = Seq.empty[Entity]
       assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
-      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 0, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
+      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
       assertResult(expected) { entityQueryResponse.results }
     }
   }
