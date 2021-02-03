@@ -9,10 +9,12 @@ import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
 import bio.terra.datarepo.model.{EnumerateSnapshotModel, SnapshotModel}
 import bio.terra.workspace.model.{DataReferenceList, ReferenceTypeEnum}
-import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
+import spray.json._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
@@ -34,9 +36,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
   with Eventually {
 
   private val dataRepoBaseUrl = FireCloud.dataRepoApiUrl
-
-  val mapper = new ObjectMapper()
-  mapper.registerModule(DefaultScalaModule)
 
   override protected def beforeAll(): Unit = {
     assert(Try(Uri.parseAbsolute(dataRepoBaseUrl)).isSuccess,
@@ -219,8 +218,10 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           val response = Rawls.postRequest(
             uri = createSubmissionUrl.toString(),
             content = createSubmissionPayload)
-          // TODO: AS-622 parse into 'SubmissionReport' case class following its (i.e. the case class) move from rawls-core to rawls-model
-          val submissionId = mapper.readTree(response).get("submissionId").asText()
+
+          // use spray-json here to parse into SubmissionReport. Jackson has trouble parsing the 'status' field
+          // into SubmissionStatus (which is contained in SubmissionReport) object.
+          val submissionId = response.parseJson.convertTo[SubmissionReport].submissionId
 
           // wait for submission to complete
           Submission.waitUntilSubmissionComplete(projectName, workspaceName, submissionId)
@@ -235,11 +236,13 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // verify workflows succeeded
           val getSubmissionUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/submissions/$submissionId"))
           val submissionResponse = Rawls.parseResponse(Rawls.getRequest(uri = getSubmissionUrl.toString))
-          // TODO: AS-622 parse into 'Submission' case class following its (i.e. the case class) move from rawls-core to rawls-model
-          val workflows: List[JsonNode] = mapper.readTree(submissionResponse).get("workflows").elements().asScala.toList
+
+          // use spray-json here to parse into Submission. Jackson has trouble parsing the 'status' field
+          // into SubmissionStatus (which is contained in Submission) object.
+          val workflows: Seq[Workflow] = submissionResponse.parseJson.convertTo[Submission].workflows
           workflows.foreach { workflow =>
             val expectedWorkflowStatus = "Succeeded"
-            val actualWorkflowStatus = workflow.get("status").asText()
+            val actualWorkflowStatus = workflow.status.toString
             withClue(s"Unexpected status: '${actualWorkflowStatus}'") {
               actualWorkflowStatus shouldBe expectedWorkflowStatus
             }
