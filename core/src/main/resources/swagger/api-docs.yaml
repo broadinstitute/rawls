@@ -1762,7 +1762,7 @@ paths:
             type: string
         - name: useCache
           in: query
-          description: True to read entity statistics from cache (eventually consistent), false to force latest statistics (slower). First time reading from the cache may force latest statistics. Default is false.
+          description: True to read entity statistics from cache if cache is up to date, false to bypass cache (slower). First time reading from the cache may force latest statistics. Default is false.
           schema:
             type: boolean
             default: false
