@@ -94,15 +94,15 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param executionContext the execution context to use for aysnc operations
     * @return optional Google bucket
     */
-  def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]]
+  def getBucket(bucketName: String, userProject: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[Option[Bucket]]
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
 
-  def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]]
+  def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: GoogleProjectId): Future[List[StorageObject]]
 
-  def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]]
+  def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String, userProject: GoogleProjectId): Future[Option[StorageObject]]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
 

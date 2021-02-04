@@ -423,10 +423,10 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
+  override def getBucket(bucketName: String, userProject: GoogleProjectId = GoogleProjectId(""))(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWithRecoverWhen500orGoogleError(() => {
-      val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
+      val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName).setUserProject(userProject.value)
       Option(executeGoogleRequest(getter))
     }) {
       case _: HttpResponseException => None
@@ -486,10 +486,10 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]] = {
+  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String, userProject: GoogleProjectId = GoogleProjectId("")): Future[Option[StorageObject]] = {
     implicit val service = GoogleInstrumentedService.Storage
 
-    val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket, sourceObject, destinationBucket, destinationObject, new StorageObject())
+    val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket, sourceObject, destinationBucket, destinationObject, new StorageObject()).setUserProject(userProject.value)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(copier)) }) {
       case e: HttpResponseException => {
         logger.warn(s"encountered error [${e.getStatusMessage}] with status code [${e.getStatusCode}] when copying [$sourceBucket/$sourceObject] to [$destinationBucket]")
@@ -498,9 +498,9 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {
+  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: GoogleProjectId = GoogleProjectId("")): Future[List[StorageObject]] = {
     implicit val service = GoogleInstrumentedService.Storage
-    val getter = getStorage(getBucketServiceAccountCredential).objects().list(bucketName).setPrefix(objectNamePrefix).setMaxResults(maxPageSize.toLong)
+    val getter = getStorage(getBucketServiceAccountCredential).objects().list(bucketName).setUserProject(userProject.value).setPrefix(objectNamePrefix).setMaxResults(maxPageSize.toLong)
 
     listObjectsRecursive(getter) map { pagesOption =>
       pagesOption.map { pages =>

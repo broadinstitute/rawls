@@ -606,6 +606,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             dataSource.inTransaction({ dataAccess =>
               // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
               withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
+                sourceWorkspaceContext
                 DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
                   withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
                     // add to or replace current attributes, on an individual basis
