@@ -228,7 +228,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(billingAccount == accessibleBillingAccountName)
   }
 
-  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
+  override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] = {
     Future.successful {
       bucketName match {
         case "fc-regional-bucket" => Option("EUROPE-NORTH1")
