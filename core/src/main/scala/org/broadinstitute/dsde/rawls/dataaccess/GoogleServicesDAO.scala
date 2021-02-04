@@ -94,15 +94,15 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param executionContext the execution context to use for aysnc operations
     * @return optional Google bucket
     */
-  def getBucket(bucketName: String, userProject: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[Option[Bucket]]
+  def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]]
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
 
-  def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: GoogleProjectId): Future[List[StorageObject]]
+  def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: Option[GoogleProjectId]): Future[List[StorageObject]]
 
-  def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String, userProject: GoogleProjectId): Future[Option[StorageObject]]
+  def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String, userProject: Option[GoogleProjectId]): Future[Option[StorageObject]]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
 
@@ -241,7 +241,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   /**
     * Returns location of a regional bucket. If the bucket's location type is `multi-region`, it returns None
     */
-  def getRegionForRegionalBucket(bucketName: String): Future[Option[String]]
+  def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]]
 
   def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]]
 }

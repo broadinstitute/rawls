@@ -423,18 +423,18 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getBucket(bucketName: String, userProject: GoogleProjectId = GoogleProjectId(""))(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
+  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWithRecoverWhen500orGoogleError(() => {
-      val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName).setUserProject(userProject.value)
+      val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName).setUserProject(userProject.map(_.value).getOrElse(""))
       Option(executeGoogleRequest(getter))
     }) {
       case _: HttpResponseException => None
     }
   }
 
-  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
-    getBucket(bucketName) map {
+  override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] = {
+    getBucket(bucketName, userProject) map {
       case Some(bucket) => bucket.getLocationType match {
         case SingleRegionLocationType => Option(bucket.getLocation)
         case _ => None
@@ -486,10 +486,10 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String, userProject: GoogleProjectId = GoogleProjectId("")): Future[Option[StorageObject]] = {
+  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String, userProject: Option[GoogleProjectId]): Future[Option[StorageObject]] = {
     implicit val service = GoogleInstrumentedService.Storage
 
-    val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket, sourceObject, destinationBucket, destinationObject, new StorageObject()).setUserProject(userProject.value)
+    val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket, sourceObject, destinationBucket, destinationObject, new StorageObject()).setUserProject(userProject.map(_.value).getOrElse(""))
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(copier)) }) {
       case e: HttpResponseException => {
         logger.warn(s"encountered error [${e.getStatusMessage}] with status code [${e.getStatusCode}] when copying [$sourceBucket/$sourceObject] to [$destinationBucket]")
@@ -498,9 +498,9 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: GoogleProjectId = GoogleProjectId("")): Future[List[StorageObject]] = {
+  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: Option[GoogleProjectId]): Future[List[StorageObject]] = {
     implicit val service = GoogleInstrumentedService.Storage
-    val getter = getStorage(getBucketServiceAccountCredential).objects().list(bucketName).setUserProject(userProject.value).setPrefix(objectNamePrefix).setMaxResults(maxPageSize.toLong)
+    val getter = getStorage(getBucketServiceAccountCredential).objects().list(bucketName).setUserProject(userProject.map(_.value).getOrElse("")).setPrefix(objectNamePrefix).setMaxResults(maxPageSize.toLong)
 
     listObjectsRecursive(getter) map { pagesOption =>
       pagesOption.map { pages =>

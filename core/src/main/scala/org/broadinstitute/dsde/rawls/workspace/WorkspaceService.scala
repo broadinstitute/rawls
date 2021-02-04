@@ -599,14 +599,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           // if the source bucket is a regional bucket, retrieve the region as the destination bucket also needs to be created in the same region
           val bucketLocationFuture: Future[Option[String]] = for {
             sourceWorkspaceContext <- getWorkspaceContext(permCtx.toWorkspaceName)
-            bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName)
+            bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName, Some(GoogleProjectId(destWorkspaceRequest.namespace)))
           } yield bucketLocation
 
           bucketLocationFuture flatMap { bucketLocationOption =>
             dataSource.inTransaction({ dataAccess =>
               // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
               withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
-                sourceWorkspaceContext
                 DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
                   withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
                     // add to or replace current attributes, on an individual basis
@@ -650,8 +649,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def copyBucketFiles(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, copyFilesWithPrefix: String): Future[List[Option[StorageObject]]] = {
-    gcsDAO.listObjectsWithPrefix(sourceWorkspaceContext.bucketName, copyFilesWithPrefix).flatMap { objectsToCopy =>
-      Future.traverse(objectsToCopy) { objectToCopy =>  gcsDAO.copyFile(sourceWorkspaceContext.bucketName, objectToCopy.getName, destWorkspaceContext.bucketName, objectToCopy.getName) }
+    gcsDAO.listObjectsWithPrefix(sourceWorkspaceContext.bucketName, copyFilesWithPrefix, Some(destWorkspaceContext.googleProject)).flatMap { objectsToCopy =>
+      Future.traverse(objectsToCopy) { objectToCopy =>  gcsDAO.copyFile(sourceWorkspaceContext.bucketName, objectToCopy.getName, destWorkspaceContext.bucketName, objectToCopy.getName, Some(destWorkspaceContext.googleProject)) }
     }
   }
 
