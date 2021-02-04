@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDat
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.Subsystems._
-import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -24,7 +24,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 
 class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
-  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(None)
+  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(None)
 }
 
 class MockGoogleServicesCriticalErrorDAO extends MockGoogleServicesDAO("test") {
