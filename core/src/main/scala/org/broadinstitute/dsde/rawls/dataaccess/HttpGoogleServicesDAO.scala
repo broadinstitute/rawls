@@ -427,13 +427,9 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Storage
     retryWithRecoverWhen500orGoogleError(() => {
       val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
+      userProject.map( p => getter.setUserProject(p.value) )
 
-      val getterWithProject = userProject match {
-        case Some(project) => getter.setUserProject(project.value)
-        case None => getter
-      }
-
-      Option(executeGoogleRequest(getterWithProject))
+      Option(executeGoogleRequest(getter))
     }) {
       case _: HttpResponseException => None
     }
@@ -494,14 +490,11 @@ class HttpGoogleServicesDAO(
 
   override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String, userProject: Option[GoogleProjectId]): Future[Option[StorageObject]] = {
     implicit val service = GoogleInstrumentedService.Storage
+
     val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket, sourceObject, destinationBucket, destinationObject, new StorageObject())
+    userProject.map( p => copier.setUserProject(p.value) )
 
-    val copierWithProject = userProject match {
-      case Some(project) => copier.setUserProject(project.value)
-      case None => copier
-    }
-
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(copierWithProject)) }) {
+    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(copier)) }) {
       case e: HttpResponseException => {
         logger.warn(s"encountered error [${e.getStatusMessage}] with status code [${e.getStatusCode}] when copying [$sourceBucket/$sourceObject] to [$destinationBucket]")
         None
@@ -512,13 +505,9 @@ class HttpGoogleServicesDAO(
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: Option[GoogleProjectId]): Future[List[StorageObject]] = {
     implicit val service = GoogleInstrumentedService.Storage
     val getter = getStorage(getBucketServiceAccountCredential).objects().list(bucketName).setPrefix(objectNamePrefix).setMaxResults(maxPageSize.toLong)
+    userProject.map( p => getter.setUserProject(p.value) )
 
-    val getterWithProject = userProject match {
-      case Some(project) => getter.setUserProject(project.value)
-      case None => getter
-    }
-
-    listObjectsRecursive(getterWithProject) map { pagesOption =>
+    listObjectsRecursive(getter) map { pagesOption =>
       pagesOption.map { pages =>
         pages.flatMap { page =>
           Option(page.getItems) match {

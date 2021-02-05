@@ -92,6 +92,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     *
     * @param bucketName       the bucket name
     * @param executionContext the execution context to use for aysnc operations
+    * @param userProject the project to be billed - optional. If None, defaults to the bucket's project
     * @return optional Google bucket
     */
   def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]]
@@ -240,6 +241,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   /**
     * Returns location of a regional bucket. If the bucket's location type is `multi-region`, it returns None
+
+    * @param bucketName       the bucket name
+    * @param userProject - the project to be billed - optional. If None, defaults to the bucket's project
+    * @return optional Google bucket region
     */
   def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]]
 

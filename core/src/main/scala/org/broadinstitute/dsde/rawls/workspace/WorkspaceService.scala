@@ -599,7 +599,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           // if the source bucket is a regional bucket, retrieve the region as the destination bucket also needs to be created in the same region
           val bucketLocationFuture: Future[Option[String]] = for {
             sourceWorkspaceContext <- getWorkspaceContext(permCtx.toWorkspaceName)
-            bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName, Some(GoogleProjectId(destWorkspaceRequest.namespace)))
+            bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName, Option(GoogleProjectId(destWorkspaceRequest.namespace)))
           } yield bucketLocation
 
           bucketLocationFuture flatMap { bucketLocationOption =>
@@ -649,8 +649,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def copyBucketFiles(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, copyFilesWithPrefix: String): Future[List[Option[StorageObject]]] = {
-    gcsDAO.listObjectsWithPrefix(sourceWorkspaceContext.bucketName, copyFilesWithPrefix, Some(destWorkspaceContext.googleProject)).flatMap { objectsToCopy =>
-      Future.traverse(objectsToCopy) { objectToCopy =>  gcsDAO.copyFile(sourceWorkspaceContext.bucketName, objectToCopy.getName, destWorkspaceContext.bucketName, objectToCopy.getName, Some(destWorkspaceContext.googleProject)) }
+    gcsDAO.listObjectsWithPrefix(sourceWorkspaceContext.bucketName, copyFilesWithPrefix, Option(destWorkspaceContext.googleProject)).flatMap { objectsToCopy =>
+      Future.traverse(objectsToCopy) { objectToCopy =>  gcsDAO.copyFile(sourceWorkspaceContext.bucketName, objectToCopy.getName, destWorkspaceContext.bucketName, objectToCopy.getName, Option(destWorkspaceContext.googleProject)) }
     }
   }
 
