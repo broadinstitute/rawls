@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model.Subsystems._
-import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -260,7 +260,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   def mockGoogleServicesDAO_noBuckets: GoogleServicesDAO = {
     val dao = spy(mockGoogleServicesDAO)
     when {
-      dao.getBucket(anyString, None)(any[ExecutionContext])
+      dao.getBucket(anyString, any[Option[GoogleProjectId]])(any[ExecutionContext])
     } thenReturn Future.successful(None)
     dao
   }
