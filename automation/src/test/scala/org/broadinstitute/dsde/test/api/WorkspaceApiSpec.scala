@@ -275,7 +275,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
         withCleanBillingProject(owner) { sourceProjectName =>
           withCleanBillingProject(reader) { destProjectName =>
-            withWorkspace(sourceProjectName, workspaceName, aclEntries = Set(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
+            withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
               Rawls.workspaces.enableRequesterPays(sourceProjectName, workspaceName)(ownerToken)
               Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(readerToken)
               workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(readerToken)).workspace.name should be(workspaceCloneName)
