@@ -64,8 +64,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
       "to clone a workspace that is requester pays and read-only for the user" in {
         implicit val ownerToken: AuthToken = ownerAuthToken
-        implicit val reader: AuthToken = UserPool.chooseStudent
-        implicit val readerToken: AuthToken = readerToken.makeAuthToken()
+        implicit val reader: Credentials = UserPool.chooseStudent
+        implicit val readerToken: AuthToken = reader.makeAuthToken()
 
         val workspaceName = prependUUID("requester-pays")
         val workspaceCloneName = s"$workspaceName-copy"
@@ -73,7 +73,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         withCleanBillingProject(owner) { sourceProjectName =>
           withCleanBillingProject(reader) { destProjectName =>
             withWorkspace(sourceProjectName, workspaceName) { workspaceName =>
-              Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)
+              Rawls.workspaces.enableRequesterPays(sourceProjectName, workspaceName)(ownerToken)
+              Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(readerToken)
               workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)).workspace.name should be(workspaceCloneName)
             }(ownerToken)
           }
