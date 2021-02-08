@@ -3,27 +3,29 @@ package org.broadinstitute.dsde.rawls.snapshot
 import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, ReferenceTypeEnum}
+import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, NamedDataRepoSnapshot, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, RawlsUserEmail, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object SnapshotService {
 
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoUrl: String)(userInfo: UserInfo)
-                 (implicit executionContext: ExecutionContext): SnapshotService = {
-    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, terraDataRepoUrl)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoUrl: String)(userInfo: UserInfo)
+                 (implicit executionContext: ExecutionContext, contextShift: ContextShift[IO]): SnapshotService = {
+    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, bqServiceFactory, terraDataRepoUrl)
   }
 
 }
 
-class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoInstanceName: String)
-                     (implicit protected val executionContext: ExecutionContext)
+class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoInstanceName: String)
+                     (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO])
   extends FutureSupport with WorkspaceSupport with LazyLogging {
 
   def CreateSnapshot(workspaceName: WorkspaceName, namedDataRepoSnapshot: NamedDataRepoSnapshot): Future[DataReferenceDescription] = createSnapshot(workspaceName, namedDataRepoSnapshot)
@@ -43,8 +45,29 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       //create uncontrolled dataset resource in WSM here
       //create BQ dataset here
 
+      for {
+        petSAKey <- getPetSAKey(userInfo.userEmail, GoogleProjectId(workspaceName.namespace))
+        createdDataset <- bqServiceFactory.getServiceForPet(petSAKey, GoogleProject(workspaceName.namespace)).use(_.createDataset("foo"))
+      } yield {
+        createdDataset
+      }
+
       Future.successful(ref)
     }
+  }
+
+  private def getPetSAKey(userEmail: RawlsUserEmail, googleProject: GoogleProjectId): IO[String] = {
+    logger.debug(s"getPetSAKey attempting against project ${googleProject.value}")
+    IO.fromFuture(IO(
+      samDAO.getPetServiceAccountKeyForUser(googleProject, userEmail)
+        .recover {
+          case report:RawlsExceptionWithErrorReport =>
+            val errMessage = s"Error attempting to use project ${googleProject.value}. " +
+              s"The project does not exist or you do not have permission to use it: ${report.errorReport.message}"
+            throw new RawlsExceptionWithErrorReport(report.errorReport.copy(message = errMessage))
+          case err:Exception => throw new RawlsException(s"Error attempting to use project ${googleProject.value}. " +
+            s"The project does not exist or you do not have permission to use it: ${err.getMessage}")
+        }))
   }
 
   def getSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataReferenceDescription] = {
