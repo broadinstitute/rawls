@@ -67,7 +67,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
         logger.info(s"Updated workspace $workspaceId. Cache was ${cacheUpdated - lastModified} millis out of date")
       }
       logger.info(s"Sweep complete. Updated entity cache for ${recordsToUpdate.length} workspace(s), with the limit set to $limit")
-      if(recordsToUpdate == 0) ScheduleDelayedSweep
+      if(recordsToUpdate.isEmpty) ScheduleDelayedSweep
       else if(recordsToUpdate.length < limit) HandleBacklog
       else Sweep
     }
