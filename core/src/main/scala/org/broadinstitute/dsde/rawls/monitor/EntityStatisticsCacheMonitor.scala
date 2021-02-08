@@ -6,7 +6,7 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{EntityStatisticsCacheMessage, HandleBacklog, Sweep}
+import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor._
 import slick.dbio.DBIO
 
 import java.sql.Timestamp
@@ -16,16 +16,17 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 object EntityStatisticsCacheMonitor {
-  def props(datasource: SlickDataSource, limit: Int, timeoutPerWorkspace: Duration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
-    Props(new EntityStatisticsCacheMonitorActor(datasource, limit, timeoutPerWorkspace))
+  def props(datasource: SlickDataSource, limit: Int, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
+    Props(new EntityStatisticsCacheMonitorActor(datasource, limit, timeoutPerWorkspace, standardPollInterval))
   }
 
   sealed trait EntityStatisticsCacheMessage
   case object Sweep extends EntityStatisticsCacheMessage
   case object HandleBacklog extends EntityStatisticsCacheMessage
+  case object ScheduleDelayedSweep extends EntityStatisticsCacheMessage
 }
 
-class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val limit: Int, val timeoutPerWorkspace: Duration)(implicit val executionContext: ExecutionContext, val cs: ContextShift[IO]) extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
+class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val limit: Int, val timeoutPerWorkspace: Duration, val standardPollInterval: FiniteDuration)(implicit val executionContext: ExecutionContext, val cs: ContextShift[IO]) extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
   import context._
 
   setReceiveTimeout(limit * timeoutPerWorkspace)
@@ -38,6 +39,7 @@ class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val lim
   override def receive = {
     case Sweep => sweep() pipeTo self
     case HandleBacklog => handleBacklog() pipeTo self
+    case ScheduleDelayedSweep => context.system.scheduler.scheduleOnce(standardPollInterval, self, Sweep)
   }
 
 }
@@ -65,7 +67,8 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
         logger.info(s"Updated workspace $workspaceId. Cache was ${cacheUpdated - lastModified} millis out of date")
       }
       logger.info(s"Sweep complete. Updated entity cache for ${recordsToUpdate.length} workspace(s), with the limit set to $limit")
-      if(recordsToUpdate.length < limit) HandleBacklog
+      if(recordsToUpdate == 0) ScheduleDelayedSweep
+      else if(recordsToUpdate.length < limit) HandleBacklog
       else Sweep
     }
 
@@ -87,7 +90,8 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
         })
       } yield {
         logger.info(s"Marked ${numMarked.length} workspaces in the backlog to be picked up by entity statistics cache monitor")
-        Sweep
+        if(numMarked.isEmpty) ScheduleDelayedSweep
+        else Sweep
       }
     }
   }

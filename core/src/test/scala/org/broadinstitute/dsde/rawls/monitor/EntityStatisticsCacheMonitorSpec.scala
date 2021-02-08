@@ -5,7 +5,7 @@ import akka.testkit.TestKit
 import cats.effect.{ContextShift, IO}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{HandleBacklog, Sweep}
+import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{HandleBacklog, ScheduleDelayedSweep, Sweep}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -33,7 +33,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
   }
 
 
-  "EntityStatisticsCacheMonitor" should "return to do a sweep after handling the backlog" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
+  "EntityStatisticsCacheMonitor" should "schedule a delayed sweep after handling the backlog" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
     val monitor = new EntityStatisticsCacheMonitor {
       override val dataSource: SlickDataSource = slickDataSource
       override val limit: Int = 1
@@ -41,7 +41,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
       override implicit val cs: ContextShift[IO] = globalCs
     }
 
-    assertResult(Sweep) {
+    assertResult(ScheduleDelayedSweep) {
       Await.result(monitor.handleBacklog(), Duration.Inf)
     }
   }
