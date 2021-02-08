@@ -383,7 +383,7 @@ trait WorkspaceComponent {
     }
 
     def listBackloggedEntityCaches(limit: Int): ReadAction[Seq[(UUID, Timestamp)]] = {
-      filter(rec => rec.entityCacheLastUpdated.isEmpty).take(limit).map { ws => (ws.id, ws.lastModified) }.result
+      filter(rec => rec.entityCacheLastUpdated.isEmpty).sortBy(_.lastModified.desc).take(limit).map { ws => (ws.id, ws.lastModified) }.result
     }
 
     //Three modes:
