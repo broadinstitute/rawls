@@ -75,7 +75,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             withWorkspace(sourceProjectName, workspaceName) { workspaceName =>
               Rawls.workspaces.enableRequesterPays(sourceProjectName, workspaceName)(ownerToken)
               Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(readerToken)
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)).workspace.name should be(workspaceCloneName)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(readerToken)).workspace.name should be(workspaceCloneName)
             }(ownerToken)
           }
         }
@@ -246,7 +246,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
             eventually {
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (Option(attributeMap))
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be(Option(attributeMap))
             }
           }
         }
@@ -261,7 +261,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
             eventually {
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (Option(attributeMap.filter(attribute => attribute._1.name != attributeNameToRemove)))
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be(Option(attributeMap.filter(attribute => attribute._1.name != attributeNameToRemove)))
             }
           }
         }
@@ -419,7 +419,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
               // make sure the submission has not errored out
               eventually {
                 val submissionStatus = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)(studentAToken)._1
-                List("Accepted", "Evaluating", "Submitting", "Submitted") should contain (submissionStatus)
+                List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(submissionStatus)
               }
             }(ownerAuthToken)
           }(ownerAuthToken)
@@ -482,5 +482,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
     exception.message.parseJson.asJsObject.fields("statusCode").convertTo[Int] should be(statusCode)
   }
 
-  private def prependUUID(suffix: String): String = { s"${UUID.randomUUID().toString()}-$suffix" }
+  private def prependUUID(suffix: String): String = {
+    s"${UUID.randomUUID().toString()}-$suffix"
+  }
 }
