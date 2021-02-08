@@ -62,7 +62,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
   it should "continue to sweep if the last sweep reached the limit" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
     val monitor = new EntityStatisticsCacheMonitor {
       override val dataSource: SlickDataSource = slickDataSource
-      override val limit: Int = 0 //choose a number that will force sweep to do another sweep
+      override val limit: Int = 1 //choose a number that will force sweep to do another sweep
       override implicit val executionContext: ExecutionContext = defaultExecutionContext
       override implicit val cs: ContextShift[IO] = globalCs
     }
