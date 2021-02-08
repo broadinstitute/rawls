@@ -33,15 +33,18 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isCacheCurrentOpt =>
+      dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { cacheStatus =>
+        //cacheStatus has three modes:
+        // Some(foo), implying the cache exists but foo may either be up to date OR out of date
+        // None, implying the cache does not exist
         //If the cache doesn't exist; return full query results and mark the workspace for an update
-        if(isCacheCurrentOpt.isEmpty) {
+        if(cacheStatus.isEmpty) {
           dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)).flatMap { _ =>
             dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
           }
         }
         //Else , if the user wants to use the cache and it's up to date and it's enabled; return cached results
-        else if(useCache && cacheEnabled && isCacheCurrentOpt.getOrElse(false)) {
+        else if(useCache && cacheEnabled && cacheStatus.getOrElse(false)) {
           val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
           val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
 

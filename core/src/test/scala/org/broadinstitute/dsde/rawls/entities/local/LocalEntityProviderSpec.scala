@@ -257,7 +257,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true)))
 
       val updatedWorkspaceRecord = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result)
-      
+
       assert(updatedWorkspaceRecord.head.entityCacheLastUpdated.isDefined)
     }
 
