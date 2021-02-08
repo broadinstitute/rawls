@@ -248,7 +248,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
 
     "update the entity cache last updated field if we ask for the cache but the last updated field is null" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, false)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, true)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
       runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, null))
@@ -259,6 +259,23 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val updatedWorkspaceRecord = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result)
 
       assert(updatedWorkspaceRecord.head.entityCacheLastUpdated.isDefined)
+    }
+
+    "not update the last updated field if the cache exists but is out of date" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, true)
+
+      val outdatedTimestmap = new Timestamp(workspaceContext.lastModified.getMillis - 1)
+
+      //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
+      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, outdatedTimestmap))
+
+      //Ask for the cache which will be out of date
+      runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true)))
+
+      val latestWorkspaceRecordTimestamp = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated
+
+      Option(outdatedTimestmap) shouldBe latestWorkspaceRecordTimestamp
     }
 
   }
