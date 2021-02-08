@@ -13,10 +13,11 @@ import java.sql.Timestamp
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 object EntityStatisticsCacheMonitor {
-  def props(datasource: SlickDataSource, limit: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
-    Props(new EntityStatisticsCacheMonitorActor(datasource, limit))
+  def props(datasource: SlickDataSource, limit: Int, timeoutPerWorkspace: Duration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
+    Props(new EntityStatisticsCacheMonitorActor(datasource, limit, timeoutPerWorkspace))
   }
 
   sealed trait EntityStatisticsCacheMessage
@@ -24,7 +25,10 @@ object EntityStatisticsCacheMonitor {
   case object HandleBacklog extends EntityStatisticsCacheMessage
 }
 
-class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val limit: Int)(implicit val executionContext: ExecutionContext, val cs: ContextShift[IO]) extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
+class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val limit: Int, val timeoutPerWorkspace: Duration)(implicit val executionContext: ExecutionContext, val cs: ContextShift[IO]) extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
+  import context._
+
+  setReceiveTimeout(limit * timeoutPerWorkspace)
 
   override def preStart(): Unit = {
     super.preStart()
