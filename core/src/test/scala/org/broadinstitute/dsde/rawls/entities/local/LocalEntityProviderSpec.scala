@@ -246,5 +246,20 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
 
+    "update the entity cache last updated field if we ask for the cache but the last updated field is null" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, false)
+
+      //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
+      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, null))
+
+      //Ask for the cache which won't exist yet, forcing the cacheLastUpdated timestamp to update
+      runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true)))
+
+      val updatedWorkspaceRecord = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result)
+      
+      assert(updatedWorkspaceRecord.head.entityCacheLastUpdated.isDefined)
+    }
+
   }
 }
