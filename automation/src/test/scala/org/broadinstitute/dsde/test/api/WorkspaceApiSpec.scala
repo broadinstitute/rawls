@@ -62,6 +62,24 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         }
       }
 
+      "to clone a workspace that is requester pays and read-only for the user" in {
+        implicit val ownerToken: AuthToken = ownerAuthToken
+        implicit val reader: AuthToken = UserPool.chooseStudent
+        implicit val readerToken: AuthToken = readerToken.makeAuthToken()
+
+        val workspaceName = prependUUID("requester-pays")
+        val workspaceCloneName = s"$workspaceName-copy"
+
+        withCleanBillingProject(owner) { sourceProjectName =>
+          withCleanBillingProject(reader) { destProjectName =>
+            withWorkspace(sourceProjectName, workspaceName) { workspaceName =>
+              Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)).workspace.name should be(workspaceCloneName)
+            }(ownerToken)
+          }
+        }
+      }
+
       "to get an error message when they try to create a workspace with a bucket region that is invalid" in {
         implicit val token: AuthToken = ownerAuthToken
         val invalidRegion = "invalid-region1"
