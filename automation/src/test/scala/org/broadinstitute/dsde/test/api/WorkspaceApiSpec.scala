@@ -264,8 +264,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
     }
 
     "should allow readers" - {
-
-      "to clone a workspace from a different project into their own project" in {
+      "to clone a requester-pays workspace from a different project into their own project" in {
         implicit val ownerToken: AuthToken = ownerAuthToken
         implicit val user: Credentials = UserPool.chooseStudent
         implicit val userToken: AuthToken = user.makeAuthToken()
@@ -273,20 +272,16 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         val workspaceName = prependUUID("requester-pays")
         val workspaceCloneName = s"$workspaceName-copy"
 
+        // user does not belong to the source project
         withCleanBillingProject(owner) { sourceProjectName =>
-          logger.info(s"Claimed source project $sourceProjectName")
-          withCleanBillingProject(owner, List(user.email), List()) { destProjectName =>
-            logger.info(s"Claimed destination project $destProjectName")
-            // The original workspace is in the source project. The user is a Reader on this workspace and does not belong to the source project.
+          withCleanBillingProject(user) { destProjectName =>
+            // The original workspace is in the source project. The user is a Reader on this workspace
             withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
               withCleanUp {
-                logger.info(s"Created workspace $workspaceName")
                 Rawls.workspaces.enableRequesterPays(sourceProjectName, workspaceName)(ownerToken)
-                logger.info(s"Enabled requester pays on $workspaceName")
                 Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(userToken)
-                logger.info(s"Cloned $workspaceName")
                 workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken)).workspace.name should be(workspaceCloneName)
-                logger.info("Clone created")
+                register cleanUp Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
               }
             }(ownerToken)
           }
