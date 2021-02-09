@@ -379,7 +379,10 @@ trait WorkspaceComponent {
     def listOutdatedEntityCaches(limit: Int): ReadAction[Seq[(UUID, Timestamp)]] = {
       //We don't necessarily want all of the workspaces back, just the ones that we can handle in one pass
       //We also order by lastModified so we can handle the ones that are the longest out of date
-      filter(rec => (rec.entityCacheLastUpdated < rec.lastModified)).take(limit).sortBy(_.lastModified.asc).map { ws => (ws.id, ws.lastModified) }.result
+      //0 is a "magic" timestamp that means that the cache should not be updated because it produces
+      //an error that breaks the statistics cache monitor. These are unexpected cases that would
+      //need manual intervention.
+      filter(rec => (rec.entityCacheLastUpdated < rec.lastModified && rec.entityCacheLastUpdated > new Timestamp(0))).take(limit).sortBy(_.lastModified.asc).map { ws => (ws.id, ws.lastModified) }.result
     }
 
     def listBackloggedEntityCaches(limit: Int): ReadAction[Seq[(UUID, Timestamp)]] = {
