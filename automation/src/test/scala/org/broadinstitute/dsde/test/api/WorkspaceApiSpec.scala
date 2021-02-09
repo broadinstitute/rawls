@@ -274,11 +274,17 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         val workspaceCloneName = s"$workspaceName-copy"
 
         withCleanBillingProject(owner) { sourceProjectName =>
+          logger.info(s"Claimed source project $sourceProjectName")
           withCleanBillingProject(reader) { destProjectName =>
+            logger.info(s"Claimed destination project $destProjectName")
             withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
+              logger.info(s"Created workspace $workspaceName")
               Rawls.workspaces.enableRequesterPays(sourceProjectName, workspaceName)(ownerToken)
+              logger.info(s"Enabled requester pays on $workspaceName")
               Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(readerToken)
+              logger.info(s"Cloned $workspaceName" )
               workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(readerToken)).workspace.name should be(workspaceCloneName)
+              logger.info("Clone created")
             }(ownerToken)
           }
         }
