@@ -393,7 +393,8 @@ object Boot extends IOApp with LazyLogging {
         samDAO,
         workspaceManagerDAO,
         appDependencies.bigQueryServiceFactory,
-        conf.getString("dataRepo.terraInstanceName")
+        conf.getString("dataRepo.terraInstanceName"),
+        gcsConfig.getString("pathToCredentialJson")
       )
 
       val service = new RawlsApiServiceImpl(

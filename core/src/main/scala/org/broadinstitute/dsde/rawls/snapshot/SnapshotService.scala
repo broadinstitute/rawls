@@ -17,14 +17,14 @@ import scala.util.{Failure, Success, Try}
 
 object SnapshotService {
 
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoUrl: String)(userInfo: UserInfo)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoUrl: String, pathToCredentialJson: String)(userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext, contextShift: ContextShift[IO]): SnapshotService = {
-    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, bqServiceFactory, terraDataRepoUrl)
+    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, bqServiceFactory, terraDataRepoUrl, pathToCredentialJson)
   }
 
 }
 
-class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoInstanceName: String)
+class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoInstanceName: String, pathToCredentialJson: String)
                      (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO])
   extends FutureSupport with WorkspaceSupport with LazyLogging {
 
@@ -45,29 +45,14 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       //create uncontrolled dataset resource in WSM here
       //create BQ dataset here
 
-      for {
-        petSAKey <- getPetSAKey(userInfo.userEmail, GoogleProjectId(workspaceName.namespace))
-        createdDataset <- bqServiceFactory.getServiceForPet(petSAKey, GoogleProject(workspaceName.namespace)).use(_.createDataset("foo"))
+      val IOresult = for {
+        createdDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(snapshot.name.value))
       } yield {
         createdDataset
       }
 
-      Future.successful(ref)
+      IOresult.unsafeToFuture().map(_ => ref)
     }
-  }
-
-  private def getPetSAKey(userEmail: RawlsUserEmail, googleProject: GoogleProjectId): IO[String] = {
-    logger.debug(s"getPetSAKey attempting against project ${googleProject.value}")
-    IO.fromFuture(IO(
-      samDAO.getPetServiceAccountKeyForUser(googleProject, userEmail)
-        .recover {
-          case report:RawlsExceptionWithErrorReport =>
-            val errMessage = s"Error attempting to use project ${googleProject.value}. " +
-              s"The project does not exist or you do not have permission to use it: ${report.errorReport.message}"
-            throw new RawlsExceptionWithErrorReport(report.errorReport.copy(message = errMessage))
-          case err:Exception => throw new RawlsException(s"Error attempting to use project ${googleProject.value}. " +
-            s"The project does not exist or you do not have permission to use it: ${err.getMessage}")
-        }))
   }
 
   def getSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataReferenceDescription] = {
