@@ -8,7 +8,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, RawlsUserEmail, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, RawlsUserEmail, SamResourceTypeNames, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
@@ -43,11 +43,13 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
       //create uncontrolled dataset resource in WSM here
-      //create BQ dataset here
 
+      //create BQ dataset, get workspace policies from Sam, and (eventually) add those Sam policies to the dataset IAM
       val IOresult = for {
+        samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)))
         createdDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(snapshot.name.value))
       } yield {
+//        samPolicies
         createdDataset
       }
 
