@@ -275,7 +275,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
         withCleanBillingProject(owner) { sourceProjectName =>
           logger.info(s"Claimed source project $sourceProjectName")
-          withCleanBillingProject(user) { destProjectName =>
+          withCleanBillingProject(owner, List(user.email), List()) { destProjectName =>
             logger.info(s"Claimed destination project $destProjectName")
             // The original workspace is in the source project. The user is a Reader on this workspace and does not belong to the source project.
             withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
