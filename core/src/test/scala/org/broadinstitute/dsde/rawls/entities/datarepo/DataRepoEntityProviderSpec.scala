@@ -8,13 +8,14 @@ import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.ExpressionAndResult
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, Entity, EntityTypeMetadata, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, DataReferenceName, Entity, EntityTypeMetadata, GoogleProjectId, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 
 import scala.collection.JavaConverters._
@@ -28,6 +29,34 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
+  behavior of "DataRepoEntityProvider.googleProject"
+
+  it should "use an explicit project if one was provided" in {
+    val randStr = java.util.UUID.randomUUID().toString
+    val gProject = GoogleProjectId(randStr)
+    // arguments include an explicit billingProject
+    val args = EntityRequestArguments(
+      workspace = workspace,
+      userInfo = userInfo,
+      dataReference = scala.Option(DataReferenceName("referenceName")),
+      billingProject = scala.Option(gProject))
+    val provider = createTestProvider(entityRequestArguments = args)
+    provider.googleProject should be (gProject)
+  }
+
+  it should "use the workspace's project if no explicit project was provided" in {
+    val randStr = java.util.UUID.randomUUID().toString
+    val gProject = GoogleProjectId(randStr)
+    val testWorkspace = workspace.copy(googleProject = gProject)
+    // arguments specify None for billingProject, but pass our random string inside the workspace
+    val args = EntityRequestArguments(
+      workspace = testWorkspace,
+      userInfo = userInfo,
+      dataReference = scala.Option(DataReferenceName("referenceName")),
+      billingProject = None)
+    val provider = createTestProvider(entityRequestArguments = args)
+    provider.googleProject should be (gProject)
+  }
 
   behavior of "DataEntityProvider.entityTypeMetadata()"
 
@@ -44,7 +73,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     provider.entityTypeMetadata() map { metadata: Map[String, EntityTypeMetadata] =>
       // this is the default expected value, should it move to the support trait?
       val expected = Map(
-        ("table1", EntityTypeMetadata(0, "datarepo_row_id", Seq("datarepo_row_id", "integer-field", "boolean-field", "timestamp-field"))),
+        ("table1", EntityTypeMetadata(10, "datarepo_row_id", Seq("integer-field", "boolean-field", "timestamp-field"))),
         ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2a", "col2b"))),
         ("table3", EntityTypeMetadata(456, "datarepo_row_id", Seq("col3.1", "col3.2"))))
       assertResult(expected) { metadata }
@@ -115,7 +144,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
-      assertResult("sam error") { ex.getMessage }
+      assertResult("Error attempting to use project namespace. The project does not exist or you do not have permission to use it: sam error") { ex.getMessage }
     }
   }
 
@@ -273,7 +302,8 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val entityTable = EntityTable(snapshotModel, tableName, alias)
     val result = provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions, datarepoRowIdColumn)
     result should contain theSameElementsAs List(
-      SelectAndFrom(entityTable, None, columnNames.map((column: String) => EntityColumn(entityTable, column, false)))
+      // figureOutQueryStructureForExpressions explicitly adds the datarepoRowIdColumn, so we add it here too
+      SelectAndFrom(entityTable, None, (columnNames += datarepoRowIdColumn).sorted.map((column: String) => EntityColumn(entityTable, column, false)))
     )
   }
 
@@ -629,7 +659,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(SelectAndFrom(table, None, Seq(EntityColumn(table, "zoe", false), EntityColumn(table, "bob", true))))
 
     val provider = new DataRepoBigQuerySupport {}
-    provider.generateExpressionSQL(selectAndFroms) shouldBe "SELECT root.zoe, root.bob FROM `proj.view.table` root;"
+    provider.generateExpressionSQL(selectAndFroms) shouldBe "SELECT `root`.`zoe`, `root`.`bob` FROM `proj.view.table` `root`;"
   }
 
   it should "create query with regular joins" in {
@@ -648,11 +678,11 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         |  SELECT ARRAY_AGG(t)
         |  FROM (SELECT DISTINCT * FROM UNNEST(val) v) t
         |));
-        |SELECT root.zoe, root.bob,
-        |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob))) foo
-        |FROM `proj.view.rootTable` root
-        |LEFT JOIN `proj.view.debTable` dep ON root.fk = dep.fk
-        |GROUP BY root.zoe, root.bob;""".stripMargin
+        |SELECT `root`.`zoe`, `root`.`bob`,
+        |dedup_1(ARRAY_AGG(STRUCT(`dep`.`zoe`, `dep`.`bob`))) `foo`
+        |FROM `proj.view.rootTable` `root`
+        |LEFT JOIN `proj.view.debTable` `dep` ON `root`.`fk` = `dep`.`fk`
+        |GROUP BY `root`.`zoe`, `root`.`bob`;""".stripMargin
   }
 
   it should "create query with unnest array joins" in {
@@ -671,12 +701,12 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         |  SELECT ARRAY_AGG(t)
         |  FROM (SELECT DISTINCT * FROM UNNEST(val) v) t
         |));
-        |SELECT root.zoe, root.bob,
-        |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob))) foo
-        |FROM `proj.view.rootTable` root
-        |LEFT JOIN UNNEST(root.fk) unnest_2
-        |LEFT JOIN `proj.view.debTable` dep ON unnest_2 = dep.fk
-        |GROUP BY root.zoe, root.bob;""".stripMargin
+        |SELECT `root`.`zoe`, `root`.`bob`,
+        |dedup_1(ARRAY_AGG(STRUCT(`dep`.`zoe`, `dep`.`bob`))) `foo`
+        |FROM `proj.view.rootTable` `root`
+        |LEFT JOIN UNNEST(`root`.`fk`) `unnest_2`
+        |LEFT JOIN `proj.view.debTable` `dep` ON `unnest_2` = `dep`.`fk`
+        |GROUP BY `root`.`zoe`, `root`.`bob`;""".stripMargin
   }
 
   it should "create query with regular joins and array columns" in {
@@ -692,17 +722,17 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = new DataRepoBigQuerySupport {}
     provider.generateExpressionSQL(selectAndFroms) shouldBe
       """CREATE TEMP FUNCTION dedup_1(val ANY TYPE) AS ((
-        |  SELECT ARRAY_AGG(STRUCT(datarepo_row_id, another, zoe, bob)) FROM (
-        |    SELECT datarepo_row_id, another, ARRAY_AGG(DISTINCT ac_2) zoe, ARRAY_AGG(DISTINCT ac_3) bob
-        |    FROM (SELECT DISTINCT datarepo_row_id, another, ac_2, ac_3 FROM UNNEST(val) v, UNNEST(v.zoe) ac_2, UNNEST(v.bob) ac_3)
-        |    GROUP BY datarepo_row_id, another
+        |  SELECT ARRAY_AGG(STRUCT(`datarepo_row_id`, `another`, `zoe`, `bob`)) FROM (
+        |    SELECT `datarepo_row_id`, `another`, ARRAY_AGG(DISTINCT `ac_2`) `zoe`, ARRAY_AGG(DISTINCT `ac_3`) `bob`
+        |    FROM (SELECT DISTINCT `datarepo_row_id`, `another`, `ac_2`, `ac_3` FROM UNNEST(val) v, UNNEST(v.`zoe`) `ac_2`, UNNEST(v.`bob`) `ac_3`)
+        |    GROUP BY `datarepo_row_id`, `another`
         |  )
         |));
-        |SELECT root.zoe, root.bob,
-        |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob, dep.datarepo_row_id, dep.another))) foo
-        |FROM `proj.view.rootTable` root
-        |LEFT JOIN `proj.view.debTable` dep ON root.fk = dep.fk
-        |GROUP BY root.zoe, root.bob;""".stripMargin
+        |SELECT `root`.`zoe`, `root`.`bob`,
+        |dedup_1(ARRAY_AGG(STRUCT(`dep`.`zoe`, `dep`.`bob`, `dep`.`datarepo_row_id`, `dep`.`another`))) `foo`
+        |FROM `proj.view.rootTable` `root`
+        |LEFT JOIN `proj.view.debTable` `dep` ON `root`.`fk` = `dep`.`fk`
+        |GROUP BY `root`.`zoe`, `root`.`bob`;""".stripMargin
   }
 
   it should "create query with unnest array joins and array columns" in {
@@ -718,18 +748,18 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = new DataRepoBigQuerySupport {}
     provider.generateExpressionSQL(selectAndFroms) shouldBe
       """CREATE TEMP FUNCTION dedup_1(val ANY TYPE) AS ((
-        |  SELECT ARRAY_AGG(STRUCT(datarepo_row_id, another, zoe, bob)) FROM (
-        |    SELECT datarepo_row_id, another, ARRAY_AGG(DISTINCT ac_2) zoe, ARRAY_AGG(DISTINCT ac_3) bob
-        |    FROM (SELECT DISTINCT datarepo_row_id, another, ac_2, ac_3 FROM UNNEST(val) v, UNNEST(v.zoe) ac_2, UNNEST(v.bob) ac_3)
-        |    GROUP BY datarepo_row_id, another
+        |  SELECT ARRAY_AGG(STRUCT(`datarepo_row_id`, `another`, `zoe`, `bob`)) FROM (
+        |    SELECT `datarepo_row_id`, `another`, ARRAY_AGG(DISTINCT `ac_2`) `zoe`, ARRAY_AGG(DISTINCT `ac_3`) `bob`
+        |    FROM (SELECT DISTINCT `datarepo_row_id`, `another`, `ac_2`, `ac_3` FROM UNNEST(val) v, UNNEST(v.`zoe`) `ac_2`, UNNEST(v.`bob`) `ac_3`)
+        |    GROUP BY `datarepo_row_id`, `another`
         |  )
         |));
-        |SELECT root.zoe, root.bob,
-        |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob, dep.datarepo_row_id, dep.another))) foo
-        |FROM `proj.view.rootTable` root
-        |LEFT JOIN UNNEST(root.fk) unnest_4
-        |LEFT JOIN `proj.view.debTable` dep ON unnest_4 = dep.fk
-        |GROUP BY root.zoe, root.bob;""".stripMargin
+        |SELECT `root`.`zoe`, `root`.`bob`,
+        |dedup_1(ARRAY_AGG(STRUCT(`dep`.`zoe`, `dep`.`bob`, `dep`.`datarepo_row_id`, `dep`.`another`))) `foo`
+        |FROM `proj.view.rootTable` `root`
+        |LEFT JOIN UNNEST(`root`.`fk`) `unnest_4`
+        |LEFT JOIN `proj.view.debTable` `dep` ON `unnest_4` = `dep`.`fk`
+        |GROUP BY `root`.`zoe`, `root`.`bob`;""".stripMargin
   }
 
   it should "create query with regular join missing select columns" in {
@@ -749,18 +779,18 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val provider = new DataRepoBigQuerySupport {}
     provider.generateExpressionSQL(selectAndFroms) shouldBe
       """CREATE TEMP FUNCTION dedup_1(val ANY TYPE) AS ((
-        |  SELECT ARRAY_AGG(STRUCT(bob, zoe)) FROM (
-        |    SELECT bob, ARRAY_AGG(DISTINCT ac_2) zoe
-        |    FROM (SELECT DISTINCT bob, ac_2 FROM UNNEST(val) v, UNNEST(v.zoe) ac_2)
-        |    GROUP BY bob
+        |  SELECT ARRAY_AGG(STRUCT(`bob`, `zoe`)) FROM (
+        |    SELECT `bob`, ARRAY_AGG(DISTINCT `ac_2`) `zoe`
+        |    FROM (SELECT DISTINCT `bob`, `ac_2` FROM UNNEST(val) v, UNNEST(v.`zoe`) `ac_2`)
+        |    GROUP BY `bob`
         |  )
         |));
-        |SELECT root.zoe, root.bob,
-        |dedup_1(ARRAY_AGG(STRUCT(dep.zoe, dep.bob))) bar
-        |FROM `proj.view.rootTable` root
-        |LEFT JOIN `proj.view.debTable` dep ON root.fk = dep.fk
-        |LEFT JOIN `proj.view.debTable2` dep2 ON dep.fk2 = dep2.fk2
-        |GROUP BY root.zoe, root.bob;""".stripMargin
+        |SELECT `root`.`zoe`, `root`.`bob`,
+        |dedup_1(ARRAY_AGG(STRUCT(`dep`.`zoe`, `dep`.`bob`))) `bar`
+        |FROM `proj.view.rootTable` `root`
+        |LEFT JOIN `proj.view.debTable` `dep` ON `root`.`fk` = `dep`.`fk`
+        |LEFT JOIN `proj.view.debTable2` `dep2` ON `dep`.`fk2` = `dep2`.`fk2`
+        |GROUP BY `root`.`zoe`, `root`.`bob`;""".stripMargin
   }
 
 }

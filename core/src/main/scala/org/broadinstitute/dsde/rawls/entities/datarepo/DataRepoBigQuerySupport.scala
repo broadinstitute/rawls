@@ -21,7 +21,7 @@ object DataRepoBigQuerySupport {
   val datarepoRowIdColumn = "datarepo_row_id"
 
   def tableNameInQuery(dataProject: String, viewName: String, tableName: String, alias: scala.Option[String] = None): String = {
-    val aliasString = alias.map(a => " " + validateSql(a)).getOrElse("")
+    val aliasString = alias.map(a => s" `${validateSql(a)}`").getOrElse("")
     s"`${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(tableName)}`$aliasString"
   }
 
@@ -96,7 +96,7 @@ object DataRepoBigQuerySupport {
     }
   }
   case class EntityColumn(table: EntityTable, column: String, isArray: Boolean) {
-    lazy val qualifiedName = s"${validateSql(table.alias)}.${validateSql(column)}"
+    lazy val qualifiedName = s"`${validateSql(table.alias)}`.`${validateSql(column)}`"
   }
 
   /**
@@ -271,17 +271,13 @@ trait DataRepoBigQuerySupport extends LazyLogging {
 
   /**
    * Translates a BigQuery result set into the pagination metadata that Rawls expects.
-   * @param queryResults the BigQuery result set
    * @param entityQuery the query criteria supplied by the user, which includes page size
    * @return the Rawls-flavor pagination metadata
    */
-  def queryResultsMetadata(queryResults:TableResult, entityQuery: EntityQuery): EntityQueryResultMetadata = {
-    val totalRowCount = queryResults.getTotalRows
-
+  def queryResultsMetadata(totalRowCount: Int, entityQuery: EntityQuery): EntityQueryResultMetadata = {
     val pageCount = Math.ceil(totalRowCount.toFloat / entityQuery.pageSize).toInt
-
     // we don't support filtering in BQ, so unfilteredCount and filteredCount are the same
-    EntityQueryResultMetadata(totalRowCount.toInt, totalRowCount.toInt, pageCount)
+    EntityQueryResultMetadata(totalRowCount, totalRowCount, pageCount)
   }
 
   /**
@@ -306,7 +302,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
   def queryConfigForQueryEntities(dataProject: String, viewName: String, entityType: String, entityQuery: EntityQuery): QueryJobConfiguration.Builder = {
     // generate BQ SQL for this entity
     val query = s"SELECT * FROM ${tableNameInQuery(dataProject, viewName, entityType)} " +
-      s"ORDER BY ${validateSql(entityQuery.sortField)} ${SortDirections.toSql(entityQuery.sortDirection)} " +
+      s"ORDER BY `${validateSql(entityQuery.sortField)}` ${SortDirections.toSql(entityQuery.sortDirection)} " +
       s"LIMIT ${entityQuery.pageSize} " +
       s"OFFSET ${translatePaginationOffset(entityQuery).toLong};"
 
@@ -410,7 +406,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         val dedupFunctionDef = dedupFunction(dedupFunctionName, selectAndFrom)
         (
           // important that selectAndFrom.selectColumns added in order so that the indexes in the result set are as expected
-          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(_.qualifiedName).mkString(", ")}))) ${relationship.alias}"),
+          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(_.qualifiedName).mkString(", ")}))) `${relationship.alias}`"),
           scala.Option(dedupFunctionDef)
         )
       }
@@ -445,9 +441,9 @@ trait DataRepoBigQuerySupport extends LazyLogging {
   private[datarepo] def dedupFunction(dedupFunctionName: String, selectAndFrom: SelectAndFrom): String = {
     val (arrayColumns, scalarColumns) = selectAndFrom.selectColumns.partition(_.isArray)
     val dedupFunctionDef = if (arrayColumns.nonEmpty) {
-      val arrayColumnNames = arrayColumns.map(c => validateSql(c.column))
-      val arrayColumnNameWithAliases = arrayColumnNames.zip(Seq.fill(arrayColumnNames.size)(nextAlias("ac")))
-      val scalarColumnNames = scalarColumns.map(c => validateSql(c.column))
+      val arrayColumnNames = arrayColumns.map(c => s"`${validateSql(c.column)}`")
+      val arrayColumnNameWithAliases = arrayColumnNames.zip(Seq.fill(arrayColumnNames.size)(s"`${nextAlias("ac")}`"))
+      val scalarColumnNames = scalarColumns.map(c => s"`${validateSql(c.column)}`")
 
       val scalarColumnList = scalarColumnNames.mkString(", ")
       val arrayAliasList = arrayColumnNameWithAliases.map(_._2).mkString(", ")
@@ -569,8 +565,8 @@ trait DataRepoBigQuerySupport extends LazyLogging {
       // in this case the "from" column is an array so the join needs more fancy
       // note alias must not start with a number
       val unnestJoinAlias = nextAlias("unnest")
-      s"""LEFT JOIN UNNEST(${relationship.from.qualifiedName}) $unnestJoinAlias
-         |LEFT JOIN ${relationship.to.table.nameInQuery} ON $unnestJoinAlias = ${relationship.to.qualifiedName}""".stripMargin
+      s"""LEFT JOIN UNNEST(${relationship.from.qualifiedName}) `$unnestJoinAlias`
+         |LEFT JOIN ${relationship.to.table.nameInQuery} ON `$unnestJoinAlias` = ${relationship.to.qualifiedName}""".stripMargin
     } else {
       s"LEFT JOIN ${relationship.to.table.nameInQuery} ON ${relationship.from.qualifiedName} = ${relationship.to.qualifiedName}"
     }

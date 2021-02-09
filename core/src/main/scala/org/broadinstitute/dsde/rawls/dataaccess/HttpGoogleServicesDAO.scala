@@ -58,6 +58,7 @@ import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
+import com.google.cloud.storage.StorageException
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
@@ -146,6 +147,8 @@ class HttpGoogleServicesDAO(
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
   val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
+  val SingleRegionLocationType: String = "region"
+
   //we only have to do this once, because there's only one DM project
   lazy val getDeploymentManagerSAEmail: Future[String] = {
     getGoogleProject(GoogleProjectId(deploymentMgrProject))
@@ -188,7 +191,13 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo,
+                              googleProject: GoogleProjectId,
+                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                              bucketName: String,
+                              labels: Map[String, String],
+                              parentSpan: Span = null,
+                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
     def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
@@ -212,7 +221,10 @@ class HttpGoogleServicesDAO(
       for {
         // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
         // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
-        _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities,
+
+        // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
+        // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
+        _ <- googleStorageService.overrideIamPolicy(GcsBucketName(bucketName), roleToIdentities,
           retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardRetryPredicate, RetryPredicates.whenStatusCode(400)))
       } yield ()
     }
@@ -238,7 +250,22 @@ class HttpGoogleServicesDAO(
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(googleProject.value), GcsBucketName(bucketName), None, labels, Option(traceId), true, Option(GcsBucketName(getStorageLogsBucketName(googleProject)))).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(
+        googleProject = GoogleProject(googleProject.value),
+        bucketName = GcsBucketName(bucketName),
+        acl = None,
+        labels = labels,
+        traceId = Option(traceId),
+        bucketPolicyOnlyEnabled = true,
+        logBucket = Option(GcsBucketName(getStorageLogsBucketName(googleProject))),
+        location = bucketLocation
+      ).compile.drain.unsafeToFuture().recoverWith{
+        case e: StorageException if e.getCode == 400 =>
+          val message = s"Workspace creation failed. Error trying to create bucket `$bucketName` in Google project " +
+            s"`${googleProject.value}` in region `${bucketLocation.getOrElse("US (default)")}`."
+          val errorReport = ErrorReport(statusCode = StatusCodes.BadRequest, message)
+          throw new RawlsExceptionWithErrorReport(errorReport)
+      }) //ACL = None because bucket IAM will be set separately in updateBucketIam
       updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
       insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
       _ <- updateBucketIamFuture
@@ -399,9 +426,38 @@ class HttpGoogleServicesDAO(
 
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
     implicit val service = GoogleInstrumentedService.Storage
-    val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
-      case e: HttpResponseException => None
+    retryWithRecoverWhen500orGoogleError(() => {
+      val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
+      Option(executeGoogleRequest(getter))
+    }) {
+      case _: HttpResponseException => None
+    }
+  }
+
+  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
+    getBucket(bucketName) map {
+      case Some(bucket) => bucket.getLocationType match {
+        case SingleRegionLocationType => Option(bucket.getLocation)
+        case _ => None
+      }
+      case None => throw new RawlsException(s"Failed to retrieve bucket `$bucketName`")
+    }
+  }
+
+  override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+    retryWithRecoverWhen500orGoogleError(() => {
+      // convert the region to lowercase because the `.region().get()` API expects the region input to match
+      // the pattern: /[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?|[1-9][0-9]{0,19}/
+      val getter = getComputeManager(getBucketServiceAccountCredential).regions().get(googleProject.value, region.toLowerCase)
+      val zonesAsResourceUrls = executeGoogleRequest(getter).getZones.asScala.toList
+
+      // `getZones()` returns the zones as resource urls of form `https://www.googleapis.com/compute/v1/projects/project_id/zones/us-central1-b",
+      // Hence split it by `/` and get last element of array to get the zone
+      zonesAsResourceUrls.map(_.split("/").last)
+    }) {
+      case e => throw new RawlsException(s"Something went wrong while retrieving zones for region `$region` under Google " +
+        s"project `${googleProject.value}`.", e)
     }
   }
 

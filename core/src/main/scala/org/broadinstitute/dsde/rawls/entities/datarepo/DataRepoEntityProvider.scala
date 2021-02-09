@@ -15,9 +15,10 @@ import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
 
 import scala.collection.JavaConverters._
@@ -34,8 +35,11 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
   override val entityStoreId: Option[String] = Option(snapshotModel.getId)
 
-  private lazy val googleProject = {
-    // determine project to be billed for the BQ job TODO: need business logic from PO!
+  private[datarepo] lazy val googleProject: GoogleProjectId = {
+    /* Determine project to be billed for the BQ job:
+        If a project was explicitly specified in the constructor arguments, use that.
+        Else, use the workspace's project. This requires canCompute permissions on the workspace.
+     */
     requestArguments.billingProject match {
       case Some(billing) => billing.googleProjectId
       case None => requestArguments.workspace.googleProjectId
@@ -85,7 +89,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       // get pet service account key for this user
       petKey <- getPetSAKey
       // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey)
+      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
     } yield {
       // translate the BQ results into a single Rawls Entity
       queryResultsToEntity(queryResults, entityType, pk)
@@ -93,38 +97,49 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     resultIO.unsafeToFuture()
   }
 
-  override def queryEntities(entityType: String, entityQuery: EntityQuery): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String, incomingQuery: EntityQuery): Future[EntityQueryResponse] = {
     // throw immediate error if user supplied filterTerms
-    if (entityQuery.filterTerms.nonEmpty) {
+    if (incomingQuery.filterTerms.nonEmpty) {
       throw new UnsupportedEntityOperationException("term filtering not supported by this provider.")
     }
 
     // extract table definition, with PK, from snapshot schema
     val tableModel = getTableModel(snapshotModel, entityType)
 
-    // validate sort column exists in the snapshot's table description
-    if (!tableModel.getColumns.asScala.exists(_.getName == entityQuery.sortField))
+    // validate sort column exists in the snapshot's table description, or sort column is
+    // one of the magic fields "datarepo_row_id" or "name"
+    if (datarepoRowIdColumn != incomingQuery.sortField &&
+        "name" != incomingQuery.sortField &&
+        !tableModel.getColumns.asScala.exists(_.getName == incomingQuery.sortField))
       throw new DataEntityException(code = StatusCodes.BadRequest, message = s"sortField not valid for this entity type")
 
     //  determine pk column
     val pk = pkFromSnapshotTable(tableModel)
+
+    // allow sorting by magic "name" field, which is a derived field containing the pk
+    val finalQuery = if (incomingQuery.sortField == "name" && !tableModel.getColumns.asScala.exists(_.getName == "name")) {
+      incomingQuery.copy(sortField = pk)
+    } else {
+      incomingQuery
+    }
+
     // determine data project
     val dataProject = snapshotModel.getDataProject
     // determine view name
     val viewName = snapshotModel.getName
 
-    val queryConfigBuilder = queryConfigForQueryEntities(dataProject, viewName, entityType, entityQuery)
+    val queryConfigBuilder = queryConfigForQueryEntities(dataProject, viewName, entityType, finalQuery)
 
     val resultIO = for {
       // get pet service account key for this user
       petKey <- getPetSAKey
       // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey)
+      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
     } yield {
       // translate the BQ results into a Rawls query result
       val page = queryResultsToEntities(queryResults, entityType, pk)
-      val metadata = queryResultsMetadata(queryResults, entityQuery)
-      EntityQueryResponse(entityQuery, metadata, page)
+      val metadata = queryResultsMetadata(tableModel.getRowCount, finalQuery)
+      EntityQueryResponse(finalQuery, metadata, page)
     }
     resultIO.unsafeToFuture()
   }
@@ -206,7 +221,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
           (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel, parsedExpressions, tableModel, entityNameColumn)
           _ = logger.debug(s"expressions [${parsedExpressions.map(_.expression).mkString(", ")}] for snapshot id [${snapshotModel.getId} produced sql query ${bqQueryJobConfig.build().getQuery}")
           petKey <- getPetSAKey
-          queryResults <- runBigQuery(bqQueryJobConfig, petKey)
+          queryResults <- runBigQuery(bqQueryJobConfig, petKey, GoogleProject(googleProject.value))
         } yield {
           val expressionResultsStream = transformQueryResultToExpressionAndResult(entityNameColumn, parsedExpressions, selectAndFroms, queryResults)
           val expressionResults = convertToListAndCheckSize(expressionResultsStream, tableModel.getRowCount)
@@ -225,7 +240,17 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   }
 
   private def getPetSAKey: IO[String] = {
-    IO.fromFuture(IO(samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)))
+    logger.debug(s"getPetSAKey attempting against project ${googleProject.value}")
+    IO.fromFuture(IO(
+      samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)
+        .recover {
+          case report:RawlsExceptionWithErrorReport =>
+            val errMessage = s"Error attempting to use project ${googleProject.value}. " +
+              s"The project does not exist or you do not have permission to use it: ${report.errorReport.message}"
+            throw new RawlsExceptionWithErrorReport(report.errorReport.copy(message = errMessage))
+          case err:Exception => throw new RawlsException(s"Error attempting to use project ${googleProject.value}. " +
+            s"The project does not exist or you do not have permission to use it: ${err.getMessage}")
+        }))
   }
 
   private def getEntityNames(bqExpressionResults: Seq[ExpressionAndResult]): Seq[EntityName] = {
@@ -274,8 +299,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
   }
 
-  private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String): IO[TableResult] = {
-    bqServiceFactory.getServiceForPet(petKey).use(_.query(
+  private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String, projectToBill: GoogleProject): IO[TableResult] = {
+    logger.debug(s"runBigQuery attempting against project  ${projectToBill.value}")
+    bqServiceFactory.getServiceForPet(petKey, projectToBill).use(_.query(
       bqQueryJobConfigBuilder
         .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
         .build()))

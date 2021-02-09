@@ -1,4 +1,5 @@
 .idea/
+.vscode/
 /project/boot/
 /project/plugins/project
 target/
@@ -20,7 +21,9 @@ rawlsdb/
 automation/src/test/resources/
 automation/.bsp/
 automation/test-reports/
+/.bsp/
 
 .bloop/
 .metals/
 project/.bloop/
+metals.sbt

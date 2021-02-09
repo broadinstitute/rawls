@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.entities
 
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, RawlsBillingProject, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, GoogleProjectId, UserInfo, Workspace}
 
 case class EntityRequestArguments(workspace: Workspace,
                                   userInfo: UserInfo,
                                   dataReference: Option[DataReferenceName] = None,
-                                  billingProject: Option[RawlsBillingProject] = None)
+                                  billingProject: Option[GoogleProjectId] = None)

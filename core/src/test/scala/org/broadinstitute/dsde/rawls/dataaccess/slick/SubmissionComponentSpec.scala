@@ -203,9 +203,9 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       runAndWait(submissionQuery.get(workspaceContext, testData.submission2.submissionId))
     }
 
-    // should return {"Submitted" : 4, "Done" : 1, "Aborted" : 1}
+    // should return {"Submitted" : 6, "Done" : 1, "Aborted" : 1}
     assert(3 == runAndWait(submissionQuery.countByStatus(workspaceContext)).size)
-    assert(Option(5) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Submitted.toString))
+    assert(Option(6) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Submitted.toString))
     assert(Option(1) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Done.toString))
     assert(Option(1) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Aborted.toString))
   }

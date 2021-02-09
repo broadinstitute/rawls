@@ -1,10 +1,13 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import cats.effect.{ContextShift, IO}
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace}
+import cats.implicits._
 
 import scala.concurrent.{ExecutionContext, Future}
 
 class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesDAO: GoogleServicesDAO, val bondApiDAO: BondApiDAO, val requesterPaysRole: String)(implicit executionContext: ExecutionContext) {
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
 
   def getBondProviderServiceAccountEmails(userInfo: UserInfo): Future[List[BondServiceAccountEmail]] = {
     for {
@@ -33,10 +36,21 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
     for {
       emails <- dataSource.inTransaction { dataAccess => dataAccess.workspaceRequesterPaysQuery.listAllForUser(workspace.toWorkspaceName, userEmail) }
       _ <- revokeEmails(emails.toSet, userEmail, workspace)
-    } yield emails.map(BondServiceAccountEmail)
+    } yield emails
   }
 
-  private def revokeEmails(emails: Set[String], userEmail: RawlsUserEmail, workspace: Workspace): Future[Unit] = {
+  def revokeAllUsersFromWorkspace(workspace: Workspace): Future[Seq[BondServiceAccountEmail]] = {
+    for {
+      userEmailsToSAEmail <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceRequesterPaysQuery.listAllForWorkspace(workspace.toWorkspaceName)
+      }
+      _ <- userEmailsToSAEmail.toList.traverse { case (userEmail, saEmails) =>
+        IO.fromFuture(IO(revokeEmails(saEmails.toSet, userEmail, workspace)))
+      }.unsafeToFuture()
+    } yield userEmailsToSAEmail.flatMap(_._2).toSeq
+  }
+
+  private def revokeEmails(emails: Set[BondServiceAccountEmail], userEmail: RawlsUserEmail, workspace: Workspace): Future[Unit] = {
     for {
       keepBindings <- dataSource.inTransaction { dataAccess =>
         for {
@@ -49,7 +63,7 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
       _ <- if (keepBindings) {
         Future.successful(())
       } else {
-        googleServicesDAO.removePolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.map("serviceAccount:" + _)))
+        googleServicesDAO.removePolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email)))
       }
     } yield ()
   }

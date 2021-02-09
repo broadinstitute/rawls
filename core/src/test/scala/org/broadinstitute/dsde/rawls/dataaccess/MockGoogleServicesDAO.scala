@@ -102,8 +102,13 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
-  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span =  null
-                             ): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo,
+                              googleProject: GoogleProjectId,
+                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                              bucketName: String,
+                              labels: Map[String, String],
+                              parentSpan: Span =  null,
+                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
 
     val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
     Future.successful(googleWorkspaceInfo)
@@ -239,4 +244,21 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(new ProjectBillingInfo().setBillingAccountName(newBillingAccount.map(_.value).getOrElse("")).setProjectId(googleProjectId.value))
   }
 
+  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
+    Future.successful {
+      bucketName match {
+        case "fc-regional-bucket" => Option("EUROPE-NORTH1")
+        case _ => None
+      }
+    }
+  }
+
+  override def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]] = {
+    Future.successful {
+      region.toLowerCase match {
+        case "europe-north1" => List("europe-north1-a", "europe-north1-b", "europe-north1-c")
+        case _ => List("us-central1-b", "us-central1-c", "us-central1-f")
+      }
+    }
+  }
 }

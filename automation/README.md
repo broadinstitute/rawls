@@ -43,13 +43,7 @@ FIAB=true ./config/docker-rsync-local-ui.sh
 
 #### From IntelliJ
 
-First, you need to set some default VM parameters for ScalaTest run configurations. In IntelliJ, go to `Run` > `Edit Configurations...`, select `ScalaTest` under `Defaults`, and add these VM parameters:
-
-```
--Djsse.enableSNIExtension=false -Dheadless=false
-```
-
-Also make sure that there is a `Build` task configured to run before launch.
+In IntelliJ, go to `Run` > `Edit Configurations...`, select `ScalaTest` under `Defaults`, and make sure there is a `Build` task configured to run before launch.
 
 Now, simply open the test spec, right-click on the class name or a specific test string, and select `Run` or `Debug` as needed. A good one to start with is `GoogleSpec` to make sure your base configuration is correct. All test code lives in `automation/src/test/scala`. FireCloud test suites can be found in `automation/src/test/scala/org/broadinstitute/dsde/firecloud/test`.
 
@@ -58,20 +52,20 @@ Now, simply open the test spec, right-click on the class name or a specific test
 To run all tests:
 
 ```bash
-sbt test -Djsse.enableSNIExtension=false -Dheadless=false
+sbt test
 ```
 
 To run a single suite:
 
 ```bash
-sbt -Djsse.enableSNIExtension=false -Dheadless=false "testOnly *GoogleSpec"
+sbt "testOnly *GoogleSpec"
 ```
 
 To run a single test within a suite:
 
 ```bash
 # matches test via substring
-sbt -Djsse.enableSNIExtension=false -Dheadless=false "testOnly *GoogleSpec -- -z \"have a search field\""
+sbt "testOnly *GoogleSpec -- -z \"have a search field\""
 ```
 
 For more information see [SBT's documentation](http://www.scala-sbt.org/0.13/docs/Testing.html#Test+Framework+Arguments).

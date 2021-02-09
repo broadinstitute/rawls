@@ -94,6 +94,19 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         Rawls.billingV2.deleteBillingProject(billingProjectName)
       }
 
+      "to get an error message when they try to create a workspace with a bucket region that is invalid" in {
+        implicit val token: AuthToken = ownerAuthToken
+        val invalidRegion = "invalid-region1"
+
+        val p = claimGPAllocProject(owner)
+        val workspaceName = prependUUID("owner-invalid-region-workspace")
+        val exception = intercept[RestException](Orchestration.workspaces.create(p.projectName, workspaceName, Set.empty, Option(invalidRegion))).message.parseJson.asJsObject
+
+        exception.fields("statusCode").convertTo[Int] should equal(400)
+        exception.fields("message").convertTo[String] should startWith("Workspace creation failed. Error trying to create bucket ")
+        exception.fields("message").convertTo[String] should endWith(s" in Google project `${p.projectName}` in region `${invalidRegion}`.")
+      }
+
       "to add readers with can-share access" in {
         withCleanBillingProject(owner) { projectName =>
           withWorkspace(projectName, prependUUID("share-reader")) { workspaceName =>

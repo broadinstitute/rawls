@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls.entities
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
@@ -21,12 +23,10 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object EntityService {
-  // TODO: constructor should accept userInfo, dataReferenceName, billingProject, anything else needed to resolve provider
   def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, entityManager: EntityManager)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): EntityService = {
 
-    // TODO: resolve the provider here, pass to EntityService so implementations never have to resolve
     new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName)
   }
 }
@@ -37,14 +37,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   import dataSource.dataAccess.driver.api._
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
-  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName]) = getEntity(workspaceName, entityType, entityName, dataReference)
+  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = getEntity(workspaceName, entityType, entityName, dataReference, billingProject)
   def UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) = updateEntity(workspaceName, entityType, entityName, operations)
-  def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName]) = deleteEntities(workspaceName, entities, dataReference)
+  def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = deleteEntities(workspaceName, entities, dataReference, billingProject)
   def RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) = renameEntity(workspaceName, entityType, entityName, newName)
   def EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) = evaluateExpression(workspaceName, entityType, entityName, expression)
-  def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName]) = entityTypeMetadata(workspaceName, dataReference)
+  def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = entityTypeMetadata(workspaceName, dataReference, billingProject)
   def ListEntities(workspaceName: WorkspaceName, entityType: String) = listEntities(workspaceName, entityType)
-  def QueryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery) = queryEntities(workspaceName, dataReference, entityType, query)
+  def QueryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId]) = queryEntities(workspaceName, dataReference, entityType, query, billingProject)
   def CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri, linkExistingEntities: Boolean) = copyEntities(entityCopyDefinition, uri, linkExistingEntities)
   def BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) = batchUpdateEntities(workspaceName, entityUpdates, true)
   def BatchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) = batchUpdateEntities(workspaceName, entityUpdates, false)
@@ -59,14 +59,10 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       } yield result
     }
 
-  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
+  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
-      // we haven't done this yet because we don't know the business logic around which billing project to use for each user.
-      // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
-      // EntityService constructor, or other higher-level method
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
       val entityFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
@@ -76,8 +72,10 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
 
       entityFuture.recover {
-        case _: EntityNotFoundException => RequestComplete(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName")
-      }
+        case _: EntityNotFoundException =>
+          // could move this error message into EntityNotFoundException and allow it to bubble up
+          RequestComplete(ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName"))
+      }.recover(bigQueryRecover)
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
@@ -100,13 +98,10 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
+  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      // TODO: insert the billing project, if present. May want to use EntityRequestArguments or other container class.
-      // TODO: now with two methods building EntityRequestArguments, we probably want to factor that out into the
-      // EntityService constructor, or other higher-level method
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
       val deleteFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
@@ -117,7 +112,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
       deleteFuture.recover {
         case delEx: DeleteEntitiesConflictException => RequestComplete(StatusCodes.Conflict, delEx.referringEntities)
-      }
+      }.recover(bigQueryRecover)
     }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =
@@ -159,18 +154,19 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName]): Future[PerRequestMessage] =
+  def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      // TODO: AS-321 insert the billing project, if present. May want to use EntityRequestArguments or other container class.
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
-      for {
+      val metadataFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         metadata <- entityProvider.entityTypeMetadata()
       } yield {
         PerRequest.RequestComplete(StatusCodes.OK, metadata)
       }
+
+      metadataFuture.recover(bigQueryRecover)
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =
@@ -180,10 +176,10 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
+  def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
       val queryFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
@@ -192,10 +188,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         PerRequest.RequestComplete(StatusCodes.OK, entities)
       }
 
-      queryFuture.recover {
-        case dee:DataEntityException => RequestComplete(ErrorReport(dee.code, dee.getMessage))
-        case ex => RequestComplete(ErrorReport(StatusCodes.InternalServerError, ex))
-      }
+      queryFuture.recover(bigQueryRecover)
     }
   }
 
@@ -281,6 +274,20 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     */
   def applyOperationsToEntity(entity: Entity, operations: Seq[AttributeUpdateOperation]): Entity = {
     entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
+  }
+
+  private def bigQueryRecover: PartialFunction[Throwable, PerRequestMessage] = {
+    case dee:DataEntityException =>
+      RequestComplete(ErrorReport(dee.code, dee.getMessage))
+    case bqe:BigQueryException =>
+      RequestComplete(ErrorReport(StatusCodes.getForKey(bqe.getCode).getOrElse(StatusCodes.InternalServerError), bqe.getMessage))
+    case gjre:GoogleJsonResponseException =>
+      // unlikely to hit this case; we should see BigQueryExceptions instead of GoogleJsonResponseExceptions
+      RequestComplete(ErrorReport(StatusCodes.getForKey(gjre.getStatusCode).getOrElse(StatusCodes.InternalServerError), gjre.getMessage))
+    case report:RawlsExceptionWithErrorReport =>
+      throw report // don't rewrap these, just rethrow
+    case ex:Exception =>
+      RequestComplete(ErrorReport(StatusCodes.InternalServerError, s"Unexpected error: ${ex.getMessage}", ex))
   }
 
 }
