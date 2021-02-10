@@ -4,12 +4,14 @@ import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, ReferenceTypeEnum}
 import cats.effect.{ContextShift, IO}
+import com.google.cloud.bigquery.Acl
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, RawlsUserEmail, SamResourceTypeNames, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, RawlsUserEmail, SamResourceTypeNames, SamWorkspaceActions, SamWorkspacePolicyNames, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -17,14 +19,14 @@ import scala.util.{Failure, Success, Try}
 
 object SnapshotService {
 
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoUrl: String, pathToCredentialJson: String)(userInfo: UserInfo)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoUrl: String, pathToCredentialJson: String, clientEmail: WorkbenchEmail)(userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext, contextShift: ContextShift[IO]): SnapshotService = {
-    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, bqServiceFactory, terraDataRepoUrl, pathToCredentialJson)
+    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, bqServiceFactory, terraDataRepoUrl, pathToCredentialJson, clientEmail)
   }
 
 }
 
-class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoInstanceName: String, pathToCredentialJson: String)
+class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoInstanceName: String, pathToCredentialJson: String, clientEmail: WorkbenchEmail)
                      (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO])
   extends FutureSupport with WorkspaceSupport with LazyLogging {
 
@@ -43,11 +45,21 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
       //create uncontrolled dataset resource in WSM here
+      import com.google.cloud.bigquery.Acl._
+
+      val defaultIam = (clientEmail, "user") -> Acl.Role.OWNER
+
+      val accessPolicies = Seq(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader)
 
       //create BQ dataset, get workspace policies from Sam, and (eventually) add those Sam policies to the dataset IAM
       val IOresult = for {
-        samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)))
+        samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo))).map { x =>
+          println(x)
+          x
+        }
+        aclBindings = samPolicies.filter(x => accessPolicies.contains(x.policyName)).map{x => (x.email, "group") -> Acl.Role.READER}.toMap + defaultIam
         createdDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(snapshot.name.value))
+        updatedDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.setDatasetIam(snapshot.name.value, aclBindings))
       } yield {
 //        samPolicies
         createdDataset

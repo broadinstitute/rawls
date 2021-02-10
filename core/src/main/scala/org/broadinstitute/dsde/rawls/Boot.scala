@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls
 import java.io.StringReader
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
@@ -43,6 +42,7 @@ import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServi
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.google2._
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.util.ExecutionContexts
 import org.http4s.Uri
@@ -394,7 +394,8 @@ object Boot extends IOApp with LazyLogging {
         workspaceManagerDAO,
         appDependencies.bigQueryServiceFactory,
         conf.getString("dataRepo.terraInstanceName"),
-        gcsConfig.getString("pathToCredentialJson")
+        gcsConfig.getString("pathToCredentialJson"),
+        WorkbenchEmail(clientEmail)
       )
 
       val service = new RawlsApiServiceImpl(
