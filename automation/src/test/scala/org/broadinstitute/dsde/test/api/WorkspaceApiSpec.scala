@@ -279,6 +279,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
               withCleanUp {
                 Rawls.workspaces.enableRequesterPays(sourceProjectName, workspaceName)(ownerToken)
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)).bucketOptions should contain (WorkspaceBucketOptions(true))
                 Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(userToken)
                 workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken)).workspace.name should be(workspaceCloneName)
                 register cleanUp Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
