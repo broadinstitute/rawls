@@ -41,7 +41,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
         Else, use the workspace's project. This requires canCompute permissions on the workspace.
      */
     requestArguments.billingProject match {
-      case Some(billing) => billing.googleProjectId
+      case Some(billing) => billing
       case None => requestArguments.workspace.googleProjectId
     }
   }

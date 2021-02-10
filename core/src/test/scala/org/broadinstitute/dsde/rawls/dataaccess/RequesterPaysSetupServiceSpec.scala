@@ -104,18 +104,18 @@ class RequesterPaysSetupServiceSpec extends AnyFlatSpec with Matchers with Mocki
 
     // add 2 users to mock google bindings
     val initialBindings = Map(service.requesterPaysRole -> expectedEmails.map(expectedEmail => "serviceAccount:" + expectedEmail.client_email))
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.workspace.googleProject, initialBindings)
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.workspace.googleProjectId, initialBindings)
 
     // remove users from 1 workspace and check that it did not get removed from google bindings
     service.revokeAllUsersFromWorkspace(minimalTestData.workspace).futureValue should contain theSameElementsAs expectedEmails
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, minimalTestData.userReader.userEmail)) shouldBe true
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProject) shouldBe Some(initialBindings)
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProjectId) shouldBe Some(initialBindings)
 
     // remove users from other workspace and check that it did get removed from google bindings
     service.revokeAllUsersFromWorkspace(minimalTestData.workspace2).futureValue should contain theSameElementsAs expectedEmails
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe false
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, minimalTestData.userReader.userEmail)) shouldBe false
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProject) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
   }
 }
