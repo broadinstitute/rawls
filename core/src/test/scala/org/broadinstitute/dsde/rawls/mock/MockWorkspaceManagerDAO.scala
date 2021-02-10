@@ -28,6 +28,8 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace = mockCreateWorkspaceResponse(workspaceId)
 
+  override def updateDataReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = ()
+
   override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = ()
 
   override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
