@@ -19,6 +19,10 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     case Some(notStr) => JsString(notStr.toString)
   }
 
+  def getOptionalField(jsObject: JsObject, fieldName: String): String = {
+    jsObject.getFields(fieldName).headOption.map(_.convertTo[String]).orNull
+  }
+
   implicit object DataRepoSnapshotFormat extends RootJsonFormat[DataRepoSnapshot] {
     val INSTANCE_NAME = "instanceName"
     val SNAPSHOT = "snapshot"
@@ -41,6 +45,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
   implicit object DataReferenceDescriptionFormat extends RootJsonFormat[DataReferenceDescription] {
     val REFERENCE_ID = "referenceId"
     val NAME = "name"
+    val REFERENCE_DESCRIPTION = "referenceDescription"
     val WORKSPACE_ID = "workspaceId"
     val REFERENCE_TYPE = "referenceType"
     val REFERENCE = "reference"
@@ -49,6 +54,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     override def write(description: DataReferenceDescription) = JsObject(
       REFERENCE_ID -> stringOrNull(description.getReferenceId),
       NAME -> stringOrNull(description.getName),
+      REFERENCE_DESCRIPTION -> stringOrNull(description.getReferenceDescription),
       WORKSPACE_ID -> stringOrNull(description.getWorkspaceId),
       REFERENCE_TYPE -> stringOrNull(description.getReferenceType),
       REFERENCE -> description.getReference.toJson,
@@ -56,16 +62,41 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     )
 
     override def read(json: JsValue): DataReferenceDescription = {
-      json.asJsObject.getFields(REFERENCE_ID, NAME, WORKSPACE_ID, REFERENCE_TYPE, REFERENCE, CLONING_INSTRUCTIONS) match {
+      val jsObject = json.asJsObject
+
+      jsObject.getFields(REFERENCE_ID, NAME, WORKSPACE_ID, REFERENCE_TYPE, REFERENCE, CLONING_INSTRUCTIONS) match {
         case Seq(referenceId, JsString(name), workspaceId, JsString(referenceType), reference, JsString(cloningInstructions)) =>
           new DataReferenceDescription()
             .referenceId(referenceId.convertTo[UUID])
             .name(name)
+            .referenceDescription(getOptionalField(jsObject, REFERENCE_DESCRIPTION)) // referenceDescription is optional
             .workspaceId(workspaceId.convertTo[UUID])
             .referenceType(ReferenceTypeEnum.fromValue(referenceType))
             .reference(reference.convertTo[DataRepoSnapshot])
             .cloningInstructions(CloningInstructionsEnum.fromValue(cloningInstructions))
         case _ => throw DeserializationException("DataReferenceDescription expected")
+      }
+    }
+  }
+
+  implicit object UpdateDataReferenceRequestFormat extends RootJsonFormat[UpdateDataReferenceRequestBody] {
+    val NAME = "name"
+    val REFERENCE_DESCRIPTION = "referenceDescription"
+
+    override def write(request: UpdateDataReferenceRequestBody) = JsObject(
+      NAME -> stringOrNull(request.getName),
+      REFERENCE_DESCRIPTION -> stringOrNull(request.getReferenceDescription),
+    )
+
+    override def read(json: JsValue): UpdateDataReferenceRequestBody = {
+      val jsObject = json.asJsObject
+
+      jsObject.getFields(NAME, REFERENCE_DESCRIPTION) match {
+        case Seq() => throw DeserializationException("UpdateDataReferenceRequestBody expected")
+        case _ => // both fields are optional, as long as one is present we can proceed
+          new UpdateDataReferenceRequestBody()
+            .name(getOptionalField(jsObject, NAME))
+            .referenceDescription(getOptionalField(jsObject, REFERENCE_DESCRIPTION))
       }
     }
   }
