@@ -26,7 +26,7 @@ case class WorkspaceRecord(
   workflowCollection: Option[String],
   createdDate: Timestamp,
   lastModified: Timestamp,
-  entityCacheLastUpdated: Option[Timestamp],
+  entityCacheLastUpdated: Timestamp,
   createdBy: String,
   isLocked: Boolean,
   recordVersion: Long,
@@ -53,7 +53,7 @@ trait WorkspaceComponent {
     def workflowCollection = column[Option[String]]("workflow_collection", O.Length(255))
     def createdDate = column[Timestamp]("created_date", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def lastModified = column[Timestamp]("last_modified", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
-    def entityCacheLastUpdated = column[Option[Timestamp]]("entity_cache_last_updated", O.SqlType("TIMESTAMP(6)"))
+    def entityCacheLastUpdated = column[Timestamp]("entity_cache_last_updated", O.SqlType("TIMESTAMP(6)"))
     def createdBy = column[String]("created_by", O.Length(254))
     def isLocked = column[Boolean]("is_locked")
     def recordVersion = column[Long]("record_version")
@@ -238,7 +238,7 @@ trait WorkspaceComponent {
     }
 
     def updateCacheLastUpdated(workspaceId: UUID, timestamp: Timestamp) = {
-      findByIdQuery(workspaceId).map(_.entityCacheLastUpdated).update(Option(timestamp))
+      findByIdQuery(workspaceId).map(_.entityCacheLastUpdated).update(timestamp)
     }
 
     def lock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
@@ -376,28 +376,20 @@ trait WorkspaceComponent {
       filter(rec => (rec.namespace === namespaceName.value))
     }
 
-    def listOutdatedEntityCaches(limit: Int): ReadAction[Seq[(UUID, Timestamp)]] = {
-      //We don't necessarily want all of the workspaces back, just the ones that we can handle in one pass
-      //We also order by lastModified so we can handle the ones that are the longest out of date
-      //0 is a "magic" timestamp that means that the cache should not be updated because it produces
-      //an error that breaks the statistics cache monitor. These are unexpected cases that would
-      //need manual intervention.
-      filter(rec => (rec.entityCacheLastUpdated < rec.lastModified && rec.entityCacheLastUpdated > new Timestamp(0))).take(limit).sortBy(_.lastModified.asc).map { ws => (ws.id, ws.lastModified) }.result
+    def findMostOutdatedEntityCache(): ReadAction[Option[(UUID, Timestamp)]] = {
+      // Find the workspace that has the entity cache that is the most out of date:
+      // A. Workspace has a cacheLastUpdated date that is not current (current means equal to lastModified)
+      // B. cacheLastUpdated date is not 0 (0 is a "magic" timestamp used in unexpected cases where the cache monitor needs to
+      //    ignore a workspace that is causing errors and loops)
+      // C. Ordered by lastModified from oldest to newest. Meaning, return the workspace that was modified the longest ago
+      uniqueResult[(UUID, Timestamp)](filter(rec => rec.entityCacheLastUpdated < rec.lastModified && rec.entityCacheLastUpdated > new Timestamp(0)).take(1).sortBy(_.lastModified.asc).map { ws => (ws.id, ws.lastModified) })
     }
 
-    def listBackloggedEntityCaches(limit: Int): ReadAction[Seq[(UUID, Timestamp)]] = {
-      filter(rec => rec.entityCacheLastUpdated.isEmpty).sortBy(_.lastModified.desc).take(limit).map { ws => (ws.id, ws.lastModified) }.result
-    }
-
-    //Three modes:
-    // Some(true): cache exists and is up to date
-    // Some(false) :cache exists and is not up to date
-    // None: cache does not exist
-    def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Option[Boolean]] = {
-      val queryResult = uniqueResult[(Timestamp, Option[Timestamp])](filter(rec => rec.id === workspaceId).map(ws => (ws.lastModified, ws.entityCacheLastUpdated)))
+    def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
+      val queryResult = uniqueResult[(Timestamp, Timestamp)](filter(rec => rec.id === workspaceId).map(ws => (ws.lastModified, ws.entityCacheLastUpdated)))
       queryResult.map {
-        case Some((lastModified, Some(entityCacheLastUpdated))) => Option(lastModified.equals(entityCacheLastUpdated))
-        case _ => None
+        case Some((lastModified, entityCacheLastUpdated)) => lastModified.equals(entityCacheLastUpdated)
+        case _ => false
       }
     }
 
@@ -421,7 +413,7 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), Option(new Timestamp(workspace.lastModified.getMillis)), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProject.value)
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProject.value)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
