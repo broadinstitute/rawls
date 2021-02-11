@@ -71,33 +71,4 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
     }
   }
 
-
-  val expectedResultWhenUsingCache = localEntityProviderTestData.workspaceEntityTypeCacheEntries.map { case (entityType, entityTypeCount) =>
-    entityType -> EntityTypeMetadata(entityTypeCount, s"${entityType}_id", localEntityProviderTestData.workspaceAttrNameCacheEntries(entityType).map(attrName => toDelimitedName(attrName)))
-  }
-
-  val expectedResultWhenUsingFullQueries = expectedResultWhenUsingCache - localEntityProviderTestData.sample1.entityType
-
-
-  it should "update the cache after sweeping an outdated workspace cache" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
-    val monitor = new EntityStatisticsCacheMonitor {
-      override val dataSource: SlickDataSource = slickDataSource
-      override implicit val executionContext: ExecutionContext = defaultExecutionContext
-      override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
-    }
-
-    val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, false)
-
-
-    localEntityProviderTestData.
-
-    //Scenario: there is one workspace in the test data set used for this test. The first time we sweep,
-    // the monitor will update that workspace and return Sweep
-    assertResult(Sweep) {
-      Await.result(monitor.sweep(), Duration.Inf)
-    }
-
-  }
-
 }
