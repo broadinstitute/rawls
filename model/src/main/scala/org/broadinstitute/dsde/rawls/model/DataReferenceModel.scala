@@ -10,7 +10,7 @@ import spray.json.{DeserializationException, JsArray, JsNull, JsObject, JsString
 import scala.collection.JavaConverters._
 
 case class DataReferenceName(value: String) extends ValueObject
-case class NamedDataRepoSnapshot(name: DataReferenceName, snapshotId: String)
+case class NamedDataRepoSnapshot(name: DataReferenceName, referenceDescription: Option[String], snapshotId: String)
 
 object DataReferenceModelJsonSupport extends JsonSupport {
   def stringOrNull(in: Any): JsValue = Option(in) match {
@@ -118,5 +118,5 @@ object DataReferenceModelJsonSupport extends JsonSupport {
   }
 
   implicit val DataReferenceNameFormat = ValueObjectFormat(DataReferenceName)
-  implicit val NamedDataRepoSnapshotFormat = jsonFormat2(NamedDataRepoSnapshot)
+  implicit val NamedDataRepoSnapshotFormat = jsonFormat3(NamedDataRepoSnapshot)
 }

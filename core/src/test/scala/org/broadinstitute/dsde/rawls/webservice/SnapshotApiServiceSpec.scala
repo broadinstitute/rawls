@@ -18,6 +18,12 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class SnapshotApiServiceSpec extends ApiServiceSpec {
 
+  val defaultNamedSnapshot = NamedDataRepoSnapshot(
+    name = DataReferenceName("foo"),
+    referenceDescription = Option("bar"),
+    snapshotId = "realsnapshot"
+  )
+
   // base MockWorkspaceManagerDAO always returns a value for enumerateDataReferences.
   // this version, used inside this spec, throws errors on specific workspaces,
   // but otherwise returns a value.
@@ -89,10 +95,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   "SnapshotApiService" should "return 201 when creating a reference to a snapshot" in withTestDataApiServices { services =>
     Post(s"${testData.wsName.path}/snapshots", httpJson(
-      NamedDataRepoSnapshot(
-        name = DataReferenceName("foo"),
-        snapshotId = "realsnapshot"
-      )
+      defaultNamedSnapshot
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
@@ -106,6 +109,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.wsName.path}/snapshots", httpJson(
       NamedDataRepoSnapshot(
         name = DataReferenceName("foo"),
+        referenceDescription = Option("bar"),
         snapshotId = "fakesnapshot"
       )
     )) ~>
@@ -119,10 +123,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when creating a reference to a snapshot in a workspace that doesn't exist" in withTestDataApiServices { services =>
     Post(s"/workspaces/foo/bar/snapshots", httpJson(
-      NamedDataRepoSnapshot(
-        name = DataReferenceName("foo"),
-        snapshotId = "bar"
-      )
+      defaultNamedSnapshot
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
@@ -134,10 +135,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when getting a reference to a snapshot" in withTestDataApiServices { services =>
     Post(s"${testData.wsName.path}/snapshots", httpJson(
-      NamedDataRepoSnapshot(
-        name = DataReferenceName("foo"),
-        snapshotId = "realsnapshot"
-      )
+      defaultNamedSnapshot
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
@@ -188,10 +186,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 403 when a user can only read a workspace and tries to add a snapshot" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
     Post(s"${testData.wsName.path}/snapshots", httpJson(
-      NamedDataRepoSnapshot(
-        name = DataReferenceName("foo"),
-        snapshotId = "realsnapshot"
-      )
+      defaultNamedSnapshot
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
@@ -203,10 +198,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when a user tries to add a snapshot to a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
     Post(s"${testData.wsName.path}/snapshots", httpJson(
-      NamedDataRepoSnapshot(
-        name = DataReferenceName("foo"),
-        snapshotId = "realsnapshot"
-      )
+      defaultNamedSnapshot
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
@@ -229,10 +221,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 200 when a user lists all snapshots in a workspace" in withTestDataApiServices { services =>
     // First, create two data references
     Post(s"${testData.wsName.path}/snapshots", httpJson(
-      NamedDataRepoSnapshot(
-        name = DataReferenceName("foo"),
-        snapshotId = "realsnapshot"
-      )
+      defaultNamedSnapshot
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
@@ -241,6 +230,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         Post(s"${testData.wsName.path}/snapshots", httpJson(
           NamedDataRepoSnapshot(
             name = DataReferenceName("bar"),
+            referenceDescription = Option("bar"),
             snapshotId = "realsnapshot2"
           )
         )) ~>
@@ -308,10 +298,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when a user deletes a snapshot" in withTestDataApiServices { services =>
     Post(s"${testData.wsName.path}/snapshots", httpJson(
-      NamedDataRepoSnapshot(
-        name = DataReferenceName("foo"),
-        snapshotId = "realsnapshot"
-      )
+      defaultNamedSnapshot
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
@@ -346,7 +333,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when a user tries to delete a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
     val dataReference = new DataRepoSnapshot().instanceName("foo").snapshot("bar")
-    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
+    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), Option("description"), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
     Delete(s"${testData.wsName.path}/snapshots/${id.toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
