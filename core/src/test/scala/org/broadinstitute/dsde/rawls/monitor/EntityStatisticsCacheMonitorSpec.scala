@@ -3,9 +3,11 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.{ContextShift, IO}
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{ScheduleDelayedSweep, Sweep}
+import org.broadinstitute.dsde.rawls.util
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -19,6 +21,8 @@ import scala.language.postfixOps
 
 class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with ScalaFutures {
   val defaultExecutionContext: ExecutionContext = executionContext
+
+  val testConf = ConfigFactory.load()
 
   def this() = this(ActorSystem("EntityStatisticsCacheMonitorSpec"))
 
@@ -36,6 +40,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
     val monitor = new EntityStatisticsCacheMonitor {
       override val dataSource: SlickDataSource = slickDataSource
       override implicit val executionContext: ExecutionContext = defaultExecutionContext
+      override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
     }
 
     assertResult(ScheduleDelayedSweep) {
@@ -47,6 +52,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
     val monitor = new EntityStatisticsCacheMonitor {
       override val dataSource: SlickDataSource = slickDataSource
       override implicit val executionContext: ExecutionContext = defaultExecutionContext
+      override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
     }
 
     assertResult(Sweep) {
