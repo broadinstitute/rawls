@@ -55,7 +55,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val IOresult = for {
         samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)))
         aclBindings = samPolicies.filter(samPolicy => accessPolicies.contains(samPolicy.policyName)).map{ filteredSamPolicy => (filteredSamPolicy.email, Acl.Entity.Type.GROUP) -> Acl.Role.READER }.toMap + defaultIam
-        _ <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(snapshot.name.value))
+        _ <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(snapshot.name.value, Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_name" -> snapshot.name.value, "snapshot_id" -> snapshot.snapshotId)))
         _ <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.setDatasetIam(snapshot.name.value, aclBindings))
       } yield {}
       IOresult.unsafeToFuture().map(_ => ref)
