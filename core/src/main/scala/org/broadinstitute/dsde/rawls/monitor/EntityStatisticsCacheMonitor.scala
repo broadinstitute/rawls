@@ -4,6 +4,7 @@ import akka.actor._
 import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor._
 import slick.dbio.DBIO
@@ -15,7 +16,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 object EntityStatisticsCacheMonitor {
-  def props(datasource: SlickDataSource, limit: Int, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
+  def props(datasource: SlickDataSource, limit: Int, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
     Props(new EntityStatisticsCacheMonitorActor(datasource, timeoutPerWorkspace, standardPollInterval))
   }
 
@@ -24,7 +25,7 @@ object EntityStatisticsCacheMonitor {
   case object ScheduleDelayedSweep extends EntityStatisticsCacheMessage
 }
 
-class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val timeoutPerWorkspace: Duration, val standardPollInterval: FiniteDuration)(implicit val executionContext: ExecutionContext, val cs: ContextShift[IO]) extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
+class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val timeoutPerWorkspace: Duration, val standardPollInterval: FiniteDuration)(implicit val executionContext: ExecutionContext) extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
   import context._
 
   setReceiveTimeout(timeoutPerWorkspace)
@@ -44,14 +45,19 @@ class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val tim
 trait EntityStatisticsCacheMonitor extends LazyLogging {
 
   implicit val executionContext: ExecutionContext
-  implicit val cs: ContextShift[IO]
   val dataSource: SlickDataSource
+  val standardPollInterval: FiniteDuration
 
   def sweep() = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.findMostOutdatedEntityCache().flatMap {
-        case Some((workspaceId, lastModified)) => DBIO.from(updateStatisticsCache(workspaceId, lastModified).map(_ => Sweep))
-        case None => DBIO.successful(ScheduleDelayedSweep)
+        case Some((workspaceId, lastModified)) => DBIO.from(updateStatisticsCache(workspaceId, lastModified).map { _ =>
+          logger.info(s"Updated entity cache for workspace $workspaceId. Cache was ${System.currentTimeMillis() - lastModified.getTime}ms out of date.")
+          Sweep
+        })
+        case None =>
+          logger.info(s"All workspace entity caches are up to date. Sleeping for ${standardPollInterval}")
+          DBIO.successful(ScheduleDelayedSweep)
       }
     }
   }
@@ -76,10 +82,11 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
       case t: Throwable =>
         logger.error(s"Error updating statistics cache for workspaceId ${workspaceId}", t)
         dataSource.inTransaction { dataAccess =>
-          //We will set the cacheLastUpdated timestamp to 0. This is a "magic" value that
-          //allows the monitor to skip this problematic workspace so it does not get caught
-          //in a loop. These workspaces will require manual intervention.
-          dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceId, new Timestamp(0))
+          logger.error(s"Workspace ${workspaceId} will be ignored by the entity cache monitor.")
+          //We will set the cacheLastUpdated timestamp to the lowest possible value in MySQL.
+          // This is a "magic" value that allows the monitor to skip this problematic workspace
+          // so it does not get caught in a loop. These workspaces will require manual intervention.
+          dataAccess.workspaceQuery.updateCacheLastUpdated(workspaceId, new Timestamp(1000))
         }
     }
   }
