@@ -1,15 +1,18 @@
 package org.broadinstitute.dsde.test.api
 
-import java.util.UUID
+import java.io.{File, FileInputStream}
+import java.time.Instant
+import java.util.{Date, UUID}
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
+import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
+import org.broadinstitute.dsde.workbench.dao.Google
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -18,9 +21,13 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
-
 import spray.json._
 import DefaultJsonProtocol._
+import com.google.api.services.compute.ComputeScopes
+import com.google.api.services.plus.PlusScopes
+import com.google.api.services.storage.StorageScopes
+import com.google.auth.oauth2.{AccessToken, GoogleCredentials, ServiceAccountCredentials}
+import com.google.cloud.storage.StorageOptions
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually
@@ -38,6 +45,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
   val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
+
+  val googleCredentials = GoogleCredentials.fromStream(new FileInputStream(new File(RawlsConfig.pathToQAJson)))
+
 
   "Rawls" - {
     "should allow project owners" - {
@@ -278,8 +288,11 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             // The original workspace is in the source project. The user is a Reader on this workspace
             withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
               withCleanUp {
-                Rawls.workspaces.enableRequesterPays(sourceProjectName, workspaceName)(ownerToken)
+                // Enable requester pays on the original workspace and verify
+                val bucketName = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(ownerToken)).workspace.bucketName
+                Google.storageOptions(sourceProjectName, googleCredentials).get(bucketName).toBuilder.setRequesterPays(true).build.update()
                 workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)).bucketOptions should contain (WorkspaceBucketOptions(true))
+                // The user clones the workspace into their project
                 Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(userToken)
                 workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken)).workspace.name should be(workspaceCloneName)
                 register cleanUp Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
