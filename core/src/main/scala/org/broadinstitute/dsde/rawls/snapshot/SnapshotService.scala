@@ -44,27 +44,20 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val dataRepoReference = new DataRepoSnapshot().instanceName(terraDataRepoInstanceName).snapshot(snapshot.snapshotId)
       val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
-      //create uncontrolled dataset resource in WSM here
-      import com.google.cloud.bigquery.Acl._
+      // TODO: create uncontrolled dataset resource in WSM here
 
-      val defaultIam = (clientEmail, "user") -> Acl.Role.OWNER
+      val defaultIam = (clientEmail, Acl.Entity.Type.USER) -> Acl.Role.OWNER
 
+      // TODO: eventually figure out how to include 'project-owner' in this list
       val accessPolicies = Seq(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader)
 
-      //create BQ dataset, get workspace policies from Sam, and (eventually) add those Sam policies to the dataset IAM
+      // create BQ dataset, get workspace policies from Sam, and add those Sam policies to the dataset IAM
       val IOresult = for {
-        samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo))).map { x =>
-          println(x)
-          x
-        }
-        aclBindings = samPolicies.filter(x => accessPolicies.contains(x.policyName)).map{x => (x.email, "group") -> Acl.Role.READER}.toMap + defaultIam
-        createdDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(snapshot.name.value))
-        updatedDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.setDatasetIam(snapshot.name.value, aclBindings))
-      } yield {
-//        samPolicies
-        createdDataset
-      }
-
+        samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)))
+        aclBindings = samPolicies.filter(samPolicy => accessPolicies.contains(samPolicy.policyName)).map{ filteredSamPolicy => (filteredSamPolicy.email, Acl.Entity.Type.GROUP) -> Acl.Role.READER }.toMap + defaultIam
+        _ <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(snapshot.name.value))
+        _ <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.setDatasetIam(snapshot.name.value, aclBindings))
+      } yield {}
       IOresult.unsafeToFuture().map(_ => ref)
     }
   }
