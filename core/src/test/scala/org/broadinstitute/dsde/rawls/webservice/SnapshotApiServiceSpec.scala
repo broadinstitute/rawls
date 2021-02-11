@@ -123,7 +123,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when creating a reference to a snapshot in a workspace that doesn't exist" in withTestDataApiServices { services =>
-    Post(s"/workspaces/foo/bar/snapshots", defaultNamedSnapshotJson) ~>
+    Post("/workspaces/foo/bar/snapshots", defaultNamedSnapshotJson) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -256,7 +256,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when a user lists references in a workspace that doesn't exist" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
-    Get(s"/workspaces/test/value/snapshots?offset=0&limit=10") ~>
+    Get("/workspaces/test/value/snapshots?offset=0&limit=10") ~>
     sealRoute(services.snapshotRoutes) ~>
     check {
       assertResult(StatusCodes.NotFound) {
