@@ -28,8 +28,6 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace = mockCreateWorkspaceResponse(workspaceId)
 
-  override def updateDataReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = ()
-
   override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = ()
 
   override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceDescription: Option[String], referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
@@ -55,6 +53,15 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList = {
     mockEnumerateReferenceResponse(workspaceId)
+  }
+
+  override def updateDataReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
+    val existingRef = references.getOrElse((workspaceId, referenceId), throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
+    references.update((workspaceId, referenceId), existingRef.name(
+      if (updateInfo.getName != null) updateInfo.getName else existingRef.getName
+    ).referenceDescription(
+      if (updateInfo.getReferenceDescription != null) updateInfo.getReferenceDescription else existingRef.getReferenceDescription
+    ))
   }
 
   override def deleteDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {
