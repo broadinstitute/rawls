@@ -15,13 +15,13 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
+
 import spray.json._
 import DefaultJsonProtocol._
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import scala.language.postfixOps
 
 import scala.concurrent.duration._
 
@@ -234,7 +234,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
             eventually {
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be(Option(attributeMap))
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (Option(attributeMap))
             }
           }
         }
@@ -249,7 +249,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
             eventually {
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be(Option(attributeMap.filter(attribute => attribute._1.name != attributeNameToRemove)))
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (Option(attributeMap.filter(attribute => attribute._1.name != attributeNameToRemove)))
             }
           }
         }
@@ -293,7 +293,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
                 workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)).bucketOptions should contain (WorkspaceBucketOptions(true))
                 // The user clones the workspace into their project
                 Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(userToken)
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken)).workspace.name should be(workspaceCloneName)
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken)).workspace.name should be (workspaceCloneName)
                 register cleanUp Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
               }
             }(ownerToken)
@@ -439,7 +439,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
               // make sure the submission has not errored out
               eventually {
                 val submissionStatus = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)(studentAToken)._1
-                List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(submissionStatus)
+                List("Accepted", "Evaluating", "Submitting", "Submitted") should contain (submissionStatus)
               }
             }(ownerAuthToken)
           }(ownerAuthToken)
@@ -502,7 +502,5 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
     exception.message.parseJson.asJsObject.fields("statusCode").convertTo[Int] should be(statusCode)
   }
 
-  private def prependUUID(suffix: String): String = {
-    s"${UUID.randomUUID().toString()}-$suffix"
-  }
+  private def prependUUID(suffix: String): String = { s"${UUID.randomUUID().toString()}-$suffix" }
 }
