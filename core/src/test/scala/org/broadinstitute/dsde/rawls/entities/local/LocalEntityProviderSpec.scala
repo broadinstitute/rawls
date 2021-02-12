@@ -146,7 +146,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
 
     val expectedResultWhenUsingFullQueries = expectedResultWhenUsingCache - localEntityProviderTestData.sample1.entityType
 
-    "use cache for entityTypeMetadata when useCache=true, cache exists, and cache is up to date" in withLocalEntityProviderTestDatabase { dataSource =>
+    "use cache for entityTypeMetadata when useCache=true, cache is up to date, and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
@@ -165,7 +165,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingCache
     }
 
-    "not use cache for entityTypeMetadata when useCache=true, cache exists, and cache is not up to date" in withLocalEntityProviderTestDatabase { dataSource =>
+    "not use cache for entityTypeMetadata when useCache=true, cache is not up to date, and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
@@ -203,7 +203,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
 
-    "not use the cache when it's disabled even if cache is up to date and useCache=true" in withLocalEntityProviderTestDatabase { dataSource =>
+    "not use cache for entityTypeMetadata when it's disabled at the application level, even if cache is up to date and useCache=true" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, false)
 
@@ -220,23 +220,6 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       attrNamesCache should not be Map.empty
 
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
-    }
-
-    "not update the last updated field if the cache exists but is out of date" in withLocalEntityProviderTestDatabase { dataSource =>
-      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, true)
-
-      val outdatedTimestmap = new Timestamp(workspaceContext.lastModified.getMillis - 1)
-
-      //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, outdatedTimestmap))
-
-      //Ask for the cache which will be out of date
-      runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true)))
-
-      val latestWorkspaceRecordTimestamp = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated
-
-      outdatedTimestmap shouldBe latestWorkspaceRecordTimestamp
     }
 
   }

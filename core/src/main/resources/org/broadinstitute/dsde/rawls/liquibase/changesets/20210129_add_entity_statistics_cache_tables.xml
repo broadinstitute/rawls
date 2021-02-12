@@ -54,8 +54,7 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="add-cache-updated-ws">
         <addColumn tableName="WORKSPACE">
-            <!-- CHANGE BELOW TIMESTAMP TO 1970-01-01 00:00:02 ACTUALLY-->
-            <column name="entity_cache_last_updated" type="TIMESTAMP(6)" defaultValueDate="1970-01-01 00:00:01"/>
+            <column name="entity_cache_last_updated" type="TIMESTAMP(6)" defaultValueDate="1970-01-01 00:00:02"/>
         </addColumn>
     </changeSet>
 
