@@ -16,7 +16,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 object EntityStatisticsCacheMonitor {
-  def props(datasource: SlickDataSource, limit: Int, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
+  def props(datasource: SlickDataSource, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
     Props(new EntityStatisticsCacheMonitorActor(datasource, timeoutPerWorkspace, standardPollInterval))
   }
 
