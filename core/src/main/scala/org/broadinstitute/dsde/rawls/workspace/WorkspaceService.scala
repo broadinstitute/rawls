@@ -39,6 +39,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 import org.broadinstitute.dsde.rawls.util._
@@ -49,7 +50,6 @@ import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
@@ -67,7 +67,8 @@ object WorkspaceService {
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
-                  entityManager: EntityManager, resourceBufferService: ResourceBufferService)
+                  entityManager: EntityManager, resourceBufferService: ResourceBufferService,
+                  servicePerimeterService: ServicePerimeterService)
                  (userInfo: UserInfo)
                  (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
@@ -77,7 +78,7 @@ object WorkspaceService {
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
-      config, requesterPaysSetupService, resourceBufferService)
+      config, requesterPaysSetupService, resourceBufferService, servicePerimeterService)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -115,7 +116,7 @@ object WorkspaceService {
 }
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, resourceBufferService: ResourceBufferService)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, resourceBufferService: ResourceBufferService, servicePerimeterService: ServicePerimeterService)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport with Retry {
 
   import dataSource.dataAccess.driver.api._
@@ -1935,70 +1936,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     */
   private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject, span: Span = null): Future[Unit] = {
     billingProject.servicePerimeter match {
-      case Some(servicePerimeterName) => overwriteGoogleProjectsInPerimeter(servicePerimeterName)
+      case Some(servicePerimeterName) => servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName)
       case None => Future.successful()
-    }
-  }
-
-  /**
-    * Some Service Perimeters may required that they have some additional non-Terra Google Projects that need to be in
-    * the perimeter for some other reason.  These are provided to us by the Service Perimeter stakeholders and we add
-    * them to the Rawls Config so that whenever we update the list of projects for a perimeter, these projects are
-    * always included.
-    *
-    * @param servicePerimeterName
-    * @return
-    */
-  private def loadStaticProjectsForPerimeter(servicePerimeterName: ServicePerimeterName): Seq[GoogleProjectNumber] = {
-    config.staticProjectsInPerimeters.getOrElse(servicePerimeterName, Seq.empty)
-  }
-
-  /**
-    * Takes the the name of a Service Perimeter as the only parameter.  Since multiple Billing Projects can specify the
-    * same Service Perimeter, we will:
-    * 1. Load all the Billing Projects that also use this servicePerimeterName
-    * 2. Load all the Workspaces in all of those Billing Projects
-    * 3. Collect all of the GoogleProjectNumbers from those Workspaces
-    * 4. Post that list to Google to overwrite the Service Perimeter's list of included Google Projects
-    * 5. Poll until Google Operation to update the Service Perimeter gets to some terminal state
-    * Throw exceptions if any of this goes awry
-    *
-    * @param servicePerimeterName
-    * @return Future[Unit] indicating whether we succeeded to update the Service Perimeter
-    */
-  private def overwriteGoogleProjectsInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Unit] = {
-    collectWorkspacesInPerimeter(servicePerimeterName).map { workspacesInPerimeter =>
-      val projectNumbers = workspacesInPerimeter.flatMap(_.googleProjectNumber) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
-      val projectNumberStrings = projectNumbers.map(_.value).toSet
-
-      // Make the call to Google to overwrite the project.  Poll and wait for the Google Operation to complete
-      gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, projectNumberStrings).map { operation =>
-        // Keep retrying the pollOperation until the OperationStatus that gets returned is some terminal status
-        retryUntilSuccessOrTimeout(failureLogMessage = s"Google Operation to update Service Perimeter: ${servicePerimeterName} was not successful")(5 seconds, 50 seconds) { () =>
-          gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operation.getName)).map {
-            case OperationStatus(false, _) => Future.failed(new RawlsException(s"Google Operation to update Service Perimeter ${servicePerimeterName} is still in progress..."))
-            // TODO: If the operation to update the Service Perimeter failed, we need to consider the possibility that
-            // the list of Projects in the Perimeter may have been wiped or somehow modified in an undesirable way.  If
-            // this happened, it would be possible for Projects intended to be in the Perimeter are NOT in that
-            // Perimeter anymore, which is a problem.
-            case OperationStatus(true, errorMessage) if !errorMessage.isEmpty => Future.successful(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Google Operation to update Service Perimeter ${servicePerimeterName} failed with message: ${errorMessage}")))
-            case _ => Future.successful()
-          }
-        }
-      }
-    }
-  }
-
-  /**
-    * In its own transaction, look up all of the Workspaces contained in Billing Projects that use the specified
-    * ServicePerimeterName
-    *
-    * @param servicePerimeterName
-    * @return
-    */
-  private def collectWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): Future[Seq[Workspace]] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.getWorkspacesInPerimeter(servicePerimeterName)
     }
   }
 

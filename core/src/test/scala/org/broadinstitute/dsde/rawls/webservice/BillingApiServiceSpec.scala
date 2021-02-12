@@ -392,7 +392,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 202 when adding a billing project to a service perimeter with all the right permissions" in withTestDataApiServices { services =>
+  it should "return 204 when adding a billing project to a service perimeter with all the right permissions" in withTestDataApiServices { services =>
     val projectName = testData.billingProject.projectName
     val servicePerimeterName = ServicePerimeterName("accessPolicies/123/servicePerimeters/service_perimeter")
     val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
@@ -402,10 +402,42 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
       sealRoute(services.servicePerimeterRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted) {
+        assertResult(StatusCodes.NoContent) {
           status
         }
       }
   }
 
+  it should "return 403 when adding a billing project to a service perimeter without the right permission on the billing project" in withTestDataApiServices { services =>
+    val projectName = testData.billingProject.projectName
+    val servicePerimeterName = ServicePerimeterName("accessPolicies/123/servicePerimeters/service_perimeter")
+    val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
+
+    when(services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, encodedServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
+    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(false))
+
+    Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
+      sealRoute(services.servicePerimeterRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when adding a billing project to a service perimeter without the right permission on the service perimeter" in withTestDataApiServices { services =>
+    val projectName = testData.billingProject.projectName
+    val servicePerimeterName = ServicePerimeterName("accessPolicies/123/servicePerimeters/service_perimeter")
+    val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
+
+    when(services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, encodedServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(false))
+
+    Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
+      sealRoute(services.servicePerimeterRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
 }

@@ -9,19 +9,20 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatestplus.mockito.MockitoSugar
-import org.mockito.Mockito._
-
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration._
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
+
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 
 class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalaFutures {
   val defaultServicePerimeterName: ServicePerimeterName = ServicePerimeterName("accessPolicies/policyName/servicePerimeters/servicePerimeterName")
@@ -31,6 +32,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   val defaultBillingProject: RawlsBillingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, None, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
   val defaultMockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
+  val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
   val testConf: Config = ConfigFactory.load()
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second)
@@ -40,7 +42,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     when(defaultMockSamDAO.userHasAction(SamResourceTypeNames.billingProject, defaultBillingProjectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(true))
   }
 
-  def getUserService(dataSource: SlickDataSource, samDAO: SamDAO = defaultMockSamDAO, gcsDAO: GoogleServicesDAO = defaultMockGcsDAO): UserService = {
+  def getUserService(dataSource: SlickDataSource, samDAO: SamDAO = defaultMockSamDAO, gcsDAO: GoogleServicesDAO = defaultMockGcsDAO, servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService): UserService = {
     new UserService(
       userInfo,
       dataSource,
@@ -49,25 +51,36 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       samDAO,
       "",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
-      null
+      null,
+      servicePerimeterService
     )
   }
 
-  // 202 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter
-  "UserService" should "add a service perimeter field and update the status for an existing project when user has correct permissions" in {
+  // 204 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter
+  "UserService" should "add a service perimeter field for an existing project when user has correct permissions" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val userService = getUserService(dataSource)
+      val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+      when(mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)).thenReturn(Future.successful(()))
+
+      val userService = getUserService(dataSource, servicePerimeterService = mockServicePerimeterService)
 
       val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
-      val expected = RequestComplete(StatusCodes.Accepted)
+      val expected = RequestComplete(StatusCodes.NoContent)
       actual shouldEqual expected
+      verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)
+
+      val updatedProject = dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.load(project.projectName)
+      }.futureValue.getOrElse(fail(s"Project ${project.projectName} not found"))
+
+      updatedProject.servicePerimeter shouldBe Option(defaultServicePerimeterName)
     }
   }
 
-  // 202 when all of the above even if project doesn't have a google project number
+  // 204 when all of the above even if project doesn't have a google project number
   it should "add a service perimeter field and update the status for an existing project when user has correct permissions even if there isn't a project number already" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject.copy(googleProjectNumber = None)
@@ -75,16 +88,28 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       runAndWait(rawlsBillingProjectQuery.create(project))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.successful(new Project().setProjectNumber(42L)))
+      val googleProjectNumber = 42L
+      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.successful(new Project().setProjectNumber(googleProjectNumber)))
       val folderId = "folders/1234567"
       when(mockGcsDAO.getFolderId(defaultServicePerimeterName.value.split("/").last)).thenReturn(Future.successful(Option(folderId)))
       when(mockGcsDAO.addProjectToFolder(project.googleProjectId, folderId)).thenReturn(Future.successful(()))
 
-      val userService = getUserService(dataSource, gcsDAO = mockGcsDAO)
+      val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+      when(mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)).thenReturn(Future.successful(()))
+
+      val userService = getUserService(dataSource, gcsDAO = mockGcsDAO, servicePerimeterService = mockServicePerimeterService)
 
       val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
-      val expected = RequestComplete(StatusCodes.Accepted)
+      val expected = RequestComplete(StatusCodes.NoContent)
       actual shouldEqual expected
+      verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)
+
+      val updatedProject = dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.load(project.projectName)
+      }.futureValue.getOrElse(fail(s"Project ${project.projectName} not found"))
+
+      updatedProject.servicePerimeter shouldBe Option(defaultServicePerimeterName)
+      updatedProject.googleProjectNumber shouldBe Option(GoogleProjectNumber(googleProjectNumber.toString))
     }
   }
 

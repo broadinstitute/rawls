@@ -20,11 +20,6 @@ class WorkspaceServiceConfigSpec extends AnyFunSpec with Matchers {
       it("workspaceBucketNamePrefix") {
         workspaceServiceConfig.workspaceBucketNamePrefix should fullyMatch regex """\S+"""
       }
-
-      it("staticProjectsInPerimeters") {
-        val expectedMap = Map(ServicePerimeterName("accessPolicies/123456789/servicePerimeters/nameOfPerimeter") -> Seq(GoogleProjectNumber("987654321")))
-        workspaceServiceConfig.staticProjectsInPerimeters should contain theSameElementsAs expectedMap
-      }
     }
   }
 }
