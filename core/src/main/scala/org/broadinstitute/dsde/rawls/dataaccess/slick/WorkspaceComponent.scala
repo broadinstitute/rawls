@@ -376,13 +376,12 @@ trait WorkspaceComponent {
       filter(rec => (rec.namespace === namespaceName.value))
     }
 
-    def findMostOutdatedEntityCache(): ReadAction[Option[(UUID, Timestamp)]] = {
+    def findMostOutdatedEntityCacheAfter(timestamp: Timestamp): ReadAction[Option[(UUID, Timestamp)]] = {
       // Find the workspace that has the entity cache that is the most out of date:
       // A. Workspace has a cacheLastUpdated date that is not current ("current" means equal to lastModified)
-      // B. cacheLastUpdated date is not 1000 millis after epoch (1000 is a "magic" timestamp used in unexpected
-      //    cases where the cache monitor needs to ignore a workspace that is causing errors and loops)
+      // B. cacheLastUpdated is after @param timestamp
       // C. Ordered by lastModified from oldest to newest. Meaning, return the workspace that was modified the longest ago
-      uniqueResult[(UUID, Timestamp)](filter(rec => rec.entityCacheLastUpdated < rec.lastModified && rec.entityCacheLastUpdated > new Timestamp(1000)).sortBy(_.lastModified.asc).take(1).map { ws => (ws.id, ws.lastModified) })
+      uniqueResult[(UUID, Timestamp)](filter(rec => rec.entityCacheLastUpdated < rec.lastModified && rec.entityCacheLastUpdated > timestamp).sortBy(_.lastModified.asc).take(1).map { ws => (ws.id, ws.lastModified) })
     }
 
     def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
