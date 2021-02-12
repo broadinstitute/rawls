@@ -24,6 +24,8 @@ import scala.concurrent.{Await, ExecutionContext}
 import scala.language.postfixOps
 
 class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with ScalaFutures {
+  import driver.api._
+
   val defaultExecutionContext: ExecutionContext = executionContext
 
   val testConf = ConfigFactory.load()
@@ -81,7 +83,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
 
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
     val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
-    
+
     //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
     runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
 
@@ -104,6 +106,47 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
     //Assert that the new cache is different than the old one and contains the new entity type that we added earlier
     originalCache should not be newCache
     assert(newCache.contains(newEntity.entityType))
+  }
+
+  it should "entityMetadata should return the same results before and after the monitor Sweeps to update the cache" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
+    val monitor = new EntityStatisticsCacheMonitor {
+      override val dataSource: SlickDataSource = slickDataSource
+      override implicit val executionContext: ExecutionContext = defaultExecutionContext
+      override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
+    }
+
+    val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+    //Update the entityCacheLastUpdated field to be olader than lastModified, so we can test our scenario of having a stale cache
+    runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
+
+    //Load the current entityMetadata (which should not use the cache)
+    val originalResult = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
+
+    //Make sure that the timestamps do not match
+    val lastModifiedOriginal = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.lastModified
+    val entityCacheLastUpdatedOriginal = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated
+
+    assert(lastModifiedOriginal.after(entityCacheLastUpdatedOriginal))
+
+    //Force the monitor to sweep and update the oldest stale cache
+    //In this scenario, it's the only workspace so we know it will be picked up
+    assertResult(Sweep) {
+      Await.result(monitor.sweep(), Duration.Inf)
+    }
+
+    //Load the latest entityMetadata, which should use the cache
+    val latestResult = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
+
+    //Assert that the new cache is different than the old one and contains the new entity type that we added earlier
+    originalResult shouldBe latestResult
+
+    //Make sure that the timestamps now match
+    val lastModified = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.lastModified
+    val entityCacheLastUpdated = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated
+
+    lastModified shouldBe entityCacheLastUpdated
   }
 
 }
