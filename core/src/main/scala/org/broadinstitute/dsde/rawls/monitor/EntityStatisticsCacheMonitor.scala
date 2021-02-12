@@ -50,6 +50,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
 
   def sweep() = {
     dataSource.inTransaction { dataAccess =>
+      //Note: Ignored workspaces have a cacheLastUpdated timestamp of 1000ms after epoch
       dataAccess.workspaceQuery.findMostOutdatedEntityCacheAfter(new Timestamp(1000)).flatMap {
         case Some((workspaceId, lastModified)) => DBIO.from(updateStatisticsCache(workspaceId, lastModified).map { _ =>
           logger.info(s"Updated entity cache for workspace $workspaceId. Cache was ${System.currentTimeMillis() - lastModified.getTime}ms out of date.")
