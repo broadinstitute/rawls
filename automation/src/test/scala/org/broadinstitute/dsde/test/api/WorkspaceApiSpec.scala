@@ -7,6 +7,7 @@ import akka.testkit.TestKit
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.fixture._
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
@@ -287,10 +288,13 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             // The original workspace is in the source project. The user is a Reader on this workspace
             withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
               withCleanUp {
-                // Enable requester pays on the original workspace and verify
+                // Enable requester pays on the original workspace and wait for the change to propagate
                 val bucketName = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(ownerToken)).workspace.bucketName
-                googleStorageDAO.enableRequesterPays(sourceProjectName, bucketName).futureValue
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)).bucketOptions should contain (WorkspaceBucketOptions(true))
+                googleStorageDAO.setRequesterPays(GcsBucketName(bucketName), true).futureValue
+                eventually {
+                  workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)).bucketOptions should contain(WorkspaceBucketOptions(true))
+                }
+
                 // The user clones the workspace into their project
                 Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(userToken)
                 workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken)).workspace.name should be (workspaceCloneName)
