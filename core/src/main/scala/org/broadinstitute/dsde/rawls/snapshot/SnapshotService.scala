@@ -46,22 +46,23 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
       // TODO: create uncontrolled dataset resource in WSM here
 
-      val defaultIam = (clientEmail, Acl.Entity.Type.USER) -> Acl.Role.OWNER
-//      val defaultIamRoles = Acl.Role.OWNER -> Seq((clientEmail, Acl.Entity.Type.USER))
+      val defaultIamRoles = Acl.Role.OWNER -> Seq((clientEmail, Acl.Entity.Type.USER))
 
-      // TODO: eventually figure out how to include 'project-owner' in this list
       val accessPolicies = Seq(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader)
 
       val datasetLabels = Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_name" -> snapshot.name.value, "snapshot_id" -> snapshot.snapshotId)
 
-      val datasetUuid = UUID.randomUUID().toString
+      val datasetUuid = UUID.randomUUID().toString.replace('-', '_')
 
       // create BQ dataset, get workspace policies from Sam, and add those Sam policies to the dataset IAM
       val IOresult = for {
         samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)))
-        aclBindings = samPolicies.filter(samPolicy => accessPolicies.contains(samPolicy.policyName)).map{ filteredSamPolicy => (filteredSamPolicy.email, Acl.Entity.Type.GROUP) -> Acl.Role.READER }.toMap + defaultIam
-        _ <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(datasetUuid, datasetLabels))
-        _ <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.setDatasetIam(datasetUuid, aclBindings))
+        projectOwnerPolicy = samPolicies.filter(_.policyName == SamWorkspacePolicyNames.projectOwner).head.policy.memberEmails
+        filteredSamPolicies = samPolicies.filter(samPolicy => accessPolicies.contains(samPolicy.policyName)).map(_.email) ++ projectOwnerPolicy
+        samAclBindings = Acl.Role.READER -> filteredSamPolicies.map{ filteredSamPolicyEmail =>(filteredSamPolicyEmail, Acl.Entity.Type.GROUP) }.toSeq
+        aclBindings = Map(samAclBindings, defaultIamRoles)
+        createdDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(datasetUuid, datasetLabels))
+        updatedDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.setDatasetIam(datasetUuid, aclBindings))
       } yield {}
       IOresult.unsafeToFuture().map(_ => ref)
     }
