@@ -45,8 +45,6 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
-
-
   "Rawls" - {
     "should allow project owners" - {
       "to create, clone, and delete workspaces" in {
