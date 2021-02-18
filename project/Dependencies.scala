@@ -7,7 +7,7 @@ object Dependencies {
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
-  val workbenchGoogle2V = "0.19-3b6ec8ad-SNAP"
+  val workbenchGoogle2V = "0.19-70f1fbcb-SNAP"
 
   val cromwellVersion = "40-2754783"
 

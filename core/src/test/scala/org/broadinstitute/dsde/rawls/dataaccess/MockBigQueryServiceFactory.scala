@@ -1,12 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.UUID
-
 import cats.effect._
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery.{BigQuery, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, TableResult}
+import com.google.cloud.bigquery.Acl.Entity
+import com.google.cloud.bigquery.Dataset.Builder
+import com.google.cloud.bigquery.{Acl, BigQuery, Dataset, DatasetId, DatasetInfo, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, TableResult}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
 import scala.collection.JavaConverters._
@@ -109,5 +111,15 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
       case Left(t) => throw t
       case Right(results) => IO.pure(results)
     }
+  }
+
+  override def createDataset(datasetName: String, labels: Map[String, String]): IO[DatasetId] = {
+    val dataset = DatasetInfo.newBuilder(datasetName).build().getDatasetId
+    IO.pure(dataset)
+  }
+
+  override def setDatasetIam(datasetName: String, bindings: Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]): IO[DatasetId] = {
+    val dataset = DatasetInfo.newBuilder(datasetName).build().getDatasetId
+    IO.pure(dataset)
   }
 }
