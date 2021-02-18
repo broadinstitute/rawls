@@ -202,7 +202,6 @@ paths:
       responses:
         204:
           description: Successful Request
-          content: { }
         404:
           description: Workspace or snapshot not found
           content:
@@ -225,7 +224,6 @@ paths:
       responses:
         204:
           description: Successful Request
-          content: {}
         404:
           description: Workspace or snapshot not found
           content:
@@ -253,6 +251,7 @@ components:
           type: string
     NamedDataRepoSnapshot:
       type: object
+      required: [snapshotId, name]
       properties:
         snapshotId:
           type: string
@@ -263,9 +262,11 @@ components:
         description:
           type: string
           description: A description for the snapshot
+          default: ""
       description: A Data Repo snapshot
     DataRepoSnapshotReference:
       type: object
+      required: [referenceId, name, description, workspaceId, referenceType, reference, cloningInstructions]
       properties:
         referenceId:
           type: string
@@ -291,6 +292,7 @@ components:
           type: string
     DataRepoSnapshotReferenceList:
       type: object
+      required: [resources]
       properties:
         resources:
           type: array
