@@ -9,7 +9,6 @@ import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
@@ -25,7 +24,6 @@ trait AdminApiService extends UserInfoDirectives {
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val userServiceConstructor: UserInfo => UserService
-  val statisticsServiceConstructor: UserInfo => StatisticsService
 
   val adminRoutes: server.Route = requireUserInfo() { userInfo =>
     path("admin" / "billing" / Segment) { (projectId) =>
@@ -95,13 +93,6 @@ trait AdminApiService extends UserInfoDirectives {
     path("admin" / "refreshToken" / Segment ) { userSubjectId =>
       delete {
         complete { userServiceConstructor(userInfo).AdminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))) }
-      }
-    } ~
-    path("admin" / "statistics") {
-      get {
-        parameters('startDate, 'endDate, 'workspaceNamespace.?, 'workspaceName.?) { (startDate, endDate, workspaceNamespace, workspaceName) =>
-          complete { statisticsServiceConstructor(userInfo).GetStatistics(startDate, endDate, workspaceNamespace, workspaceName) }
-        }
       }
     }
   }
