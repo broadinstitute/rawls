@@ -33,7 +33,6 @@ import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCa
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
-import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
@@ -278,8 +277,6 @@ object Boot extends IOApp with LazyLogging {
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
-      val statisticsServiceConstructor: (UserInfo) => StatisticsService =
-        StatisticsService.constructor(slickDataSource, gcsDAO)
       val submissionCostService: SubmissionCostService =
         SubmissionCostService.constructor(
           gcsConfig.getString("billingExportTableName"),
@@ -400,7 +397,6 @@ object Boot extends IOApp with LazyLogging {
         entityServiceConstructor,
         userServiceConstructor,
         genomicsServiceConstructor,
-        statisticsServiceConstructor,
         snapshotServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,

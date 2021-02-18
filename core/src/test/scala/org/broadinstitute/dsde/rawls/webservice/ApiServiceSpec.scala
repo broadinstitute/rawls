@@ -16,7 +16,6 @@ import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsIn
 import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
-import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -167,11 +166,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     )
 
     override val genomicsServiceConstructor = GenomicsService.constructor(
-      slickDataSource,
-      gcsDAO
-    )_
-
-    override val statisticsServiceConstructor = StatisticsService.constructor(
       slickDataSource,
       gcsDAO
     )_
