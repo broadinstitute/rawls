@@ -72,7 +72,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
-      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO(), samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0))
+      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO(), samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
     )_
   }
 

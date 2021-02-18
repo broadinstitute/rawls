@@ -10,6 +10,12 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - name: useCache
+          in: query
+          description: True to read entity statistics from cache if cache is up to date, false to bypass cache (slower). Default is false.
+          schema:
+            type: boolean
+            default: false
         - $ref: '#/components/parameters/dataReferenceQueryParam'
         - $ref: '#/components/parameters/billingProjectQueryParam'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete:

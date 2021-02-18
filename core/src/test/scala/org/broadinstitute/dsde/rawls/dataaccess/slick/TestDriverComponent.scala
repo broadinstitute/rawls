@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
-
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
@@ -23,6 +22,7 @@ import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
@@ -30,6 +30,8 @@ import scala.concurrent.{Await, Future}
 import scala.language.{implicitConversions, postfixOps}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import java.sql.Timestamp
 
 // initialize database tables and connection pool only once
 object DbResource {
@@ -992,6 +994,39 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     }
   }
 
+  class LocalEntityProviderTestData() extends TestData {
+    val workspaceName = WorkspaceName("namespace", "workspace-with-cache")
+    val wsAttrs = Map(AttributeName.withDefaultNS("description") -> AttributeString("a description"))
+    val creationTime = currentTime()
+    val workspace = Workspace(workspaceName.namespace, workspaceName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), creationTime, creationTime, "testUser", wsAttrs)
+
+    val participant1 = Entity("participant1", "participant", Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1"), AttributeName.withDefaultNS("attr2") -> AttributeString("value2")))
+    val sample1 = Entity("sample1", "sample", Map(AttributeName.withDefaultNS("attr5") -> AttributeString("value5"), AttributeName.withDefaultNS("attr6") -> AttributeString("value6")))
+
+    val workspaceEntities = Seq(participant1, sample1)
+
+    val workspaceAttrNameCacheEntries = workspaceEntities.groupBy(_.entityType).map { case (entityType, entities) =>
+      entityType -> entities.flatMap(_.attributes.keys)
+    }
+
+    val workspaceEntityTypeCacheEntries = workspaceEntities.groupBy(_.entityType).mapValues(_.length)
+
+    override def save() = {
+      DBIO.seq(
+        workspaceQuery.save(workspace),
+        withWorkspaceContext(workspace)({ context =>
+          DBIO.seq(
+            //note that we don't save sample1 here, it was only used to generate cache entries that will differ from what full queries return
+            entityQuery.save(context, participant1),
+            entityAttributeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceAttrNameCacheEntries),
+            entityTypeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceEntityTypeCacheEntries),
+          )
+        })
+      )
+    }
+
+  }
+
   /* This test data should remain constant! Changing this data set will likely break
    * many of the tests that rely on it. */
   class ConstantTestData() extends TestData {
@@ -1153,6 +1188,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val testData = new DefaultTestData()
   val constantData = new ConstantTestData()
   val minimalTestData = new MinimalTestData()
+  val localEntityProviderTestData = new LocalEntityProviderTestData()
 
   def withDefaultTestDatabase[T](testCode: => T): T = {
     withCustomTestDatabaseInternal(testData)(testCode)
@@ -1164,6 +1200,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T ={
     withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))
+  }
+
+  def withLocalEntityProviderTestDatabase[T](testCode: SlickDataSource => T): T ={
+    withCustomTestDatabaseInternal(localEntityProviderTestData)(testCode(slickDataSource))
   }
 
   def withConstantTestDatabase[T](testCode: => T): T = {

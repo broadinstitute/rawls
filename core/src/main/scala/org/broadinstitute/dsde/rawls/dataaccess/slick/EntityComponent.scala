@@ -79,7 +79,9 @@ class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRe
 trait EntityComponent {
   this: DriverComponent
     with WorkspaceComponent
-    with AttributeComponent =>
+    with AttributeComponent
+    with EntityTypeStatisticsComponent
+    with EntityAttributeStatisticsComponent =>
 
   object entityQueryWithInlineAttributes extends TableQuery(new EntityTableWithInlineAttributes(_)) {
     type EntityQueryWithInlineAttributes = Query[EntityTableWithInlineAttributes, EntityRecordWithInlineAttributes, Seq]
@@ -394,32 +396,23 @@ trait EntityComponent {
     // get entity types, counts, and attribute names to populate UI tables.  Active entities and attributes only.
 
     def getEntityTypeMetadata(workspaceContext: Workspace): ReadAction[Map[String, EntityTypeMetadata]] = {
-      val typesAndCountsQ = getEntityTypesWithCounts(workspaceContext)
-      val typesAndAttrsQ = getAttrNamesAndEntityTypes(workspaceContext)
+      val typesAndCountsQ = getEntityTypesWithCounts(workspaceContext.workspaceIdAsUUID)
+      val typesAndAttrsQ = getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID)
 
-      typesAndCountsQ flatMap { typesAndCounts =>
-        typesAndAttrsQ map { typesAndAttrs =>
-          (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
-            (entityType, EntityTypeMetadata(
-              typesAndCounts.getOrElse(entityType, 0),
-              entityType + Attributable.entityIdAttributeSuffix,
-              typesAndAttrs.getOrElse(entityType, Seq()).map (AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
-          } toMap
-        }
-      }
+      generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
     }
 
-    private[slick] def getEntityTypesWithCounts(workspaceContext: Workspace): ReadAction[Map[String, Int]] = {
-      findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID).groupBy(e => e.entityType).map { case (entityType, entities) =>
+    def getEntityTypesWithCounts(workspaceId: UUID): ReadAction[Map[String, Int]] = {
+      findActiveEntityByWorkspace(workspaceId).groupBy(e => e.entityType).map { case (entityType, entities) =>
         (entityType, entities.length)
       }.result map { result =>
         result.toMap
       }
     }
 
-    private[slick] def getAttrNamesAndEntityTypes(workspaceContext: Workspace): ReadAction[Map[String, Seq[AttributeName]]] = {
+    def getAttrNamesAndEntityTypes(workspaceId: UUID): ReadAction[Map[String, Seq[AttributeName]]] = {
       val typesAndAttrNames = for {
-        entityRec <- findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID)
+        entityRec <- findActiveEntityByWorkspace(workspaceId)
         attrib <- findActiveAttributesByEntityId(entityRec.id)
       } yield {
         (entityRec.entityType, (attrib.namespace, attrib.name))
@@ -824,6 +817,19 @@ trait EntityComponent {
       entity.attributes.keys.foreach { attrName =>
         validateUserDefinedString(attrName.name)
         validateAttributeName(attrName, entity.entityType)
+      }
+    }
+
+    def generateEntityMetadataMap(typesAndCountsQ: ReadAction[Map[String, Int]], typesAndAttrsQ: ReadAction[Map[String, Seq[AttributeName]]]) = {
+      typesAndCountsQ flatMap { typesAndCounts =>
+        typesAndAttrsQ map { typesAndAttrs =>
+          (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
+            (entityType, EntityTypeMetadata(
+              typesAndCounts.getOrElse(entityType, 0),
+              entityType + Attributable.entityIdAttributeSuffix,
+              typesAndAttrs.getOrElse(entityType, Seq()).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
+          } toMap
+        }
       }
     }
 

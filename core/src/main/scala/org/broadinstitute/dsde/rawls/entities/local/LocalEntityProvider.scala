@@ -10,16 +10,18 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeName, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
 import org.broadinstitute.dsde.rawls.util.{CollectionUtils, EntitySupport}
 
+import java.sql.Timestamp
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 /**
  * Terra default entity provider, powered by Rawls and Cloud SQL
  */
-class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource)
+class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource, cacheEnabled: Boolean)
                          (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with LazyLogging with EntitySupport with ExpressionEvaluationSupport {
 
@@ -29,9 +31,19 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   private val workspaceContext = workspace
 
-  override def entityTypeMetadata(): Future[Map[String, EntityTypeMetadata]] = {
+  override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+      dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
+        //If the cache is current, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
+        if(isEntityCacheCurrent && useCache && cacheEnabled) {
+          val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+          val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+
+          dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
+        }
+        //Else return the full query results
+        else dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+      }
     }
   }
 

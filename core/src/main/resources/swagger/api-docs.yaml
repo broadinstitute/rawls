@@ -1710,6 +1710,12 @@ paths:
           required: true
           schema:
             type: string
+        - name: useCache
+          in: query
+          description: True to read entity statistics from cache if cache is up to date, false to bypass cache (slower). Default is false.
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
           description: Successful Request
