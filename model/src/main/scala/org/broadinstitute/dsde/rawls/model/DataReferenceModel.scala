@@ -59,9 +59,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     )
 
     override def read(json: JsValue): DataReferenceDescription = {
-      val jsObject = json.asJsObject
-
-      jsObject.getFields(REFERENCE_ID, NAME, DESCRIPTION, WORKSPACE_ID, REFERENCE_TYPE, REFERENCE, CLONING_INSTRUCTIONS) match {
+      json.asJsObject.getFields(REFERENCE_ID, NAME, DESCRIPTION, WORKSPACE_ID, REFERENCE_TYPE, REFERENCE, CLONING_INSTRUCTIONS) match {
         case Seq(referenceId, JsString(name), JsString(description), workspaceId, JsString(referenceType), reference, JsString(cloningInstructions)) =>
           new DataReferenceDescription()
             .referenceId(referenceId.convertTo[UUID])
@@ -88,16 +86,22 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     override def read(json: JsValue): UpdateDataReferenceRequestBody = {
       val jsObject = json.asJsObject
 
-      def getOptionalStringFieldOrNull(fieldName: String): String = {
-        jsObject.getFields(fieldName).headOption.map(_.convertTo[String]).orNull
+      def getOptionalStringField(fieldName: String): Option[String] = {
+        jsObject.fields.get(fieldName) match {
+          case Some(s:JsString) => Option(s.value)
+          case _ => None
+        }
       }
 
       jsObject.getFields(NAME, DESCRIPTION) match {
         case Seq() => throw DeserializationException("UpdateDataReferenceRequestBody expected")
         case _ => // both fields are optional, as long as one is present we can proceed
-          new UpdateDataReferenceRequestBody()
-            .name(getOptionalStringFieldOrNull(NAME))
-            .description(getOptionalStringFieldOrNull(DESCRIPTION))
+          val updateRequest = new UpdateDataReferenceRequestBody()
+
+          getOptionalStringField(NAME).map(updateRequest.name)
+          getOptionalStringField(DESCRIPTION).map(updateRequest.description)
+
+          updateRequest
       }
     }
   }
