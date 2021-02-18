@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.snapshot
 
 import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, ReferenceTypeEnum}
+import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataReferenceRequestMetadata, DataRepoSnapshot, GoogleBigQueryDatasetUid, ReferenceTypeEnum}
 import cats.effect.{ContextShift, IO}
 import com.google.cloud.bigquery.Acl
 import com.typesafe.scalalogging.LazyLogging
@@ -44,15 +44,16 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val dataRepoReference = new DataRepoSnapshot().instanceName(terraDataRepoInstanceName).snapshot(snapshot.snapshotId)
       val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
+      val datasetUuid = UUID.randomUUID().toString.replace('-', '_')
+
       // TODO: create uncontrolled dataset resource in WSM here
+      workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetUuid).cloningInstructions(CloningInstructionsEnum.NOTHING).referenceDescription(workspaceContext.workspaceId), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetUuid), userInfo.accessToken)
 
       val defaultIamRoles = Acl.Role.OWNER -> Seq((clientEmail, Acl.Entity.Type.USER))
 
       val accessPolicies = Seq(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader)
 
       val datasetLabels = Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_name" -> snapshot.name.value, "snapshot_id" -> snapshot.snapshotId)
-
-      val datasetUuid = UUID.randomUUID().toString.replace('-', '_')
 
       // create BQ dataset, get workspace policies from Sam, and add those Sam policies to the dataset IAM
       val IOresult = for {
