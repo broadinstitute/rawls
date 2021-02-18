@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDat
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport, NamedDataRepoSnapshot, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 
 import scala.collection.JavaConverters._
@@ -22,7 +22,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   val defaultNamedSnapshotJson = httpJson(NamedDataRepoSnapshot(
     name = DataReferenceName("foo"),
-    description = Option("bar"),
+    description = DataReferenceDescriptionField("bar"),
     snapshotId = "realsnapshot"
   ))
   val defaultSnapshotUpdateBodyJson = httpJson(new UpdateDataReferenceRequestBody().name("foo2").description("bar2"))
@@ -110,7 +110,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     Post(baseSnapshotsPath, httpJson(
       NamedDataRepoSnapshot(
         name = DataReferenceName("foo"),
-        description = Option("bar"),
+        description = DataReferenceDescriptionField("bar"),
         snapshotId = "fakesnapshot"
       )
     )) ~>
@@ -221,7 +221,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         Post(baseSnapshotsPath, httpJson(
           NamedDataRepoSnapshot(
             name = DataReferenceName("bar"),
-            description = Option("bar"),
+            description = DataReferenceDescriptionField("bar"),
             snapshotId = "realsnapshot2"
           )
         )) ~>
@@ -292,19 +292,19 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.snapshotRoutes) ~>
       check {
         val response = responseAs[DataReferenceDescription]
-        assertResult(StatusCodes.Created) {status}
+        assertResult(StatusCodes.Created, "Unexpected snapshot creation status") {status}
         Patch(s"${baseSnapshotsPath}/${response.getReferenceId}", defaultSnapshotUpdateBodyJson) ~>
           sealRoute(services.snapshotRoutes) ~>
-          check { assertResult(StatusCodes.NoContent) {status} }
+          check { assertResult(StatusCodes.NoContent, "Unexpected snapshot update response") {status} }
 
         //verify that it was updated
         Get(s"${baseSnapshotsPath}/${response.getReferenceId}") ~>
           sealRoute(services.snapshotRoutes) ~>
           check {
             val response = responseAs[DataReferenceDescription]
-            assertResult(StatusCodes.OK) {status}
-            assert(response.getName == "foo2")
-            assert(response.getDescription == "bar2")
+            assertResult(StatusCodes.OK, "Unexpected return code getting updated snapshot") {status}
+            assert(response.getName == "foo2", "Unexpected result of updating snapshot name")
+            assert(response.getDescription == "bar2", "Unexpected result of updating snapshot description")
           }
       }
   }
@@ -327,7 +327,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when a user tries to update a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
     val dataReference = new DataRepoSnapshot().instanceName("foo").snapshot("bar")
-    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), Option("description"), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
+    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), DataReferenceDescriptionField("description"), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
     Patch(s"${baseSnapshotsPath}/${id.toString}", defaultSnapshotUpdateBodyJson) ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
@@ -374,7 +374,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when a user tries to delete a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
     val dataReference = new DataRepoSnapshot().instanceName("foo").snapshot("bar")
-    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), Option("description"), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
+    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), DataReferenceDescriptionField("description"), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
     Delete(s"${baseSnapshotsPath}/${id.toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }

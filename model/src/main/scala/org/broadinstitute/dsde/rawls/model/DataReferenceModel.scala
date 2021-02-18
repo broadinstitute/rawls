@@ -10,7 +10,8 @@ import spray.json.{DeserializationException, JsArray, JsNull, JsObject, JsString
 import scala.collection.JavaConverters._
 
 case class DataReferenceName(value: String) extends ValueObject
-case class NamedDataRepoSnapshot(name: DataReferenceName, description: Option[String], snapshotId: String)
+case class DataReferenceDescriptionField(value: String = "") extends ValueObject
+case class NamedDataRepoSnapshot(name: DataReferenceName, description: DataReferenceDescriptionField, snapshotId: String)
 
 object DataReferenceModelJsonSupport extends JsonSupport {
   def stringOrNull(in: Any): JsValue = Option(in) match {
@@ -79,10 +80,6 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     val NAME = "name"
     val DESCRIPTION = "description"
 
-    private def getOptionalString(jsObject: JsObject, fieldName: String): String = {
-      jsObject.getFields(fieldName).headOption.map(_.convertTo[String]).orNull
-    }
-
     override def write(request: UpdateDataReferenceRequestBody) = JsObject(
       NAME -> stringOrNull(request.getName),
       DESCRIPTION -> stringOrNull(request.getDescription),
@@ -91,12 +88,16 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     override def read(json: JsValue): UpdateDataReferenceRequestBody = {
       val jsObject = json.asJsObject
 
+      def getOptionalStringFieldOrNull(fieldName: String): String = {
+        jsObject.getFields(fieldName).headOption.map(_.convertTo[String]).orNull
+      }
+
       jsObject.getFields(NAME, DESCRIPTION) match {
         case Seq() => throw DeserializationException("UpdateDataReferenceRequestBody expected")
         case _ => // both fields are optional, as long as one is present we can proceed
           new UpdateDataReferenceRequestBody()
-            .name(getOptionalString(jsObject, NAME))
-            .description(getOptionalString(jsObject, DESCRIPTION))
+            .name(getOptionalStringFieldOrNull(NAME))
+            .description(getOptionalStringFieldOrNull(DESCRIPTION))
       }
     }
   }
@@ -118,5 +119,6 @@ object DataReferenceModelJsonSupport extends JsonSupport {
   }
 
   implicit val DataReferenceNameFormat = ValueObjectFormat(DataReferenceName)
+  implicit val dataReferenceDescriptionFieldFormat = ValueObjectFormat(DataReferenceDescriptionField)
   implicit val NamedDataRepoSnapshotFormat = jsonFormat3(NamedDataRepoSnapshot)
 }
