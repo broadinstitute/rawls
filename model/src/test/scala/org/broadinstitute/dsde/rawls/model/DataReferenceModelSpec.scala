@@ -28,25 +28,13 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
       }
     }
 
-    "getOptionalField() does the right thing" in {
-      val jsObject = JsObject("foo" -> JsString("bar"))
-
-      assertResult("bar") {
-        getOptionalField(jsObject, "foo")
-      }
-
-      assertResult(null) {
-        getOptionalField(jsObject, "bar")
-      }
-    }
-
     "JSON logic" - {
 
       "DataReferenceDescriptionList, which contains DataReferenceDescription, which contains DataRepoSnapshot" in {
         val referenceId = UUID.randomUUID()
         val workspaceId = UUID.randomUUID()
         assertResult {
-          s"""{"resources":[{"referenceId": "$referenceId","name":"test-ref","workspaceId":"$workspaceId","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"referenceDescription":null,"cloningInstructions":"$NOTHING"}]}""".parseJson
+          s"""{"resources":[{"referenceId": "$referenceId","name":"test-ref","workspaceId":"$workspaceId","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"description":null,"cloningInstructions":"$NOTHING"}]}""".parseJson
         } {
           new DataReferenceList().resources(ArrayBuffer(
             new DataReferenceDescription()
@@ -67,8 +55,8 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
       }
 
       "UpdateDataReferenceRequestBody should work with only one parameter" in {
-        assertResult { s"""{"name":null,"referenceDescription":"foo"}""".parseJson } {
-          new UpdateDataReferenceRequestBody().referenceDescription("foo").toJson
+        assertResult { s"""{"name":null,"description":"foo"}""".parseJson } {
+          new UpdateDataReferenceRequestBody().description("foo").toJson
         }
       }
 

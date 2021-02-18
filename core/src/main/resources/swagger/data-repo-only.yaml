@@ -260,7 +260,7 @@ components:
         name:
           type: string
           description: The name of the snapshot
-        referenceDescription:
+        description:
           type: string
           description: A description for the snapshot
       description: A Data Repo snapshot
@@ -271,7 +271,7 @@ components:
           type: string
         name:
           type: string
-        referenceDescription:
+        description:
           type: string
         workspaceId:
           type: string
@@ -287,7 +287,7 @@ components:
       properties:
         name:
           type: string
-        referenceDescription:
+        description:
           type: string
     DataRepoSnapshotReferenceList:
       type: object

@@ -30,12 +30,12 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = ()
 
-  override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceDescription: Option[String], referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+  override def createDataReference(workspaceId: UUID, name: DataReferenceName, description: Option[String], referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
     if(reference.toString.contains("fakesnapshot"))
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found"))
     else {
       val newId = UUID.randomUUID()
-      val ref = new DataReferenceDescription().referenceId(newId).name(name.value).referenceDescription(referenceDescription.orNull).workspaceId(workspaceId).referenceType(referenceType).reference(reference).cloningInstructions(CloningInstructionsEnum.NOTHING)
+      val ref = new DataReferenceDescription().referenceId(newId).name(name.value).description(description.orNull).workspaceId(workspaceId).referenceType(referenceType).reference(reference).cloningInstructions(CloningInstructionsEnum.NOTHING)
       references.put((workspaceId, newId), ref)
       mockReferenceResponse(workspaceId, newId)
     }
@@ -59,8 +59,8 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
     val existingRef = references.getOrElse((workspaceId, referenceId), throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
     references.update((workspaceId, referenceId), existingRef.name(
       if (updateInfo.getName != null) updateInfo.getName else existingRef.getName
-    ).referenceDescription(
-      if (updateInfo.getReferenceDescription != null) updateInfo.getReferenceDescription else existingRef.getReferenceDescription
+    ).description(
+      if (updateInfo.getDescription != null) updateInfo.getDescription else existingRef.getDescription
     ))
   }
 

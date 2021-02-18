@@ -22,10 +22,10 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   val defaultNamedSnapshotJson = httpJson(NamedDataRepoSnapshot(
     name = DataReferenceName("foo"),
-    referenceDescription = Option("bar"),
+    description = Option("bar"),
     snapshotId = "realsnapshot"
   ))
-  val defaultSnapshotUpdateBodyJson = httpJson(new UpdateDataReferenceRequestBody().name("foo2").referenceDescription("bar2"))
+  val defaultSnapshotUpdateBodyJson = httpJson(new UpdateDataReferenceRequestBody().name("foo2").description("bar2"))
 
   // base MockWorkspaceManagerDAO always returns a value for enumerateDataReferences.
   // this version, used inside this spec, throws errors on specific workspaces,
@@ -110,7 +110,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     Post(baseSnapshotsPath, httpJson(
       NamedDataRepoSnapshot(
         name = DataReferenceName("foo"),
-        referenceDescription = Option("bar"),
+        description = Option("bar"),
         snapshotId = "fakesnapshot"
       )
     )) ~>
@@ -221,7 +221,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         Post(baseSnapshotsPath, httpJson(
           NamedDataRepoSnapshot(
             name = DataReferenceName("bar"),
-            referenceDescription = Option("bar"),
+            description = Option("bar"),
             snapshotId = "realsnapshot2"
           )
         )) ~>
@@ -304,7 +304,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
             val response = responseAs[DataReferenceDescription]
             assertResult(StatusCodes.OK) {status}
             assert(response.getName == "foo2")
-            assert(response.getReferenceDescription == "bar2")
+            assert(response.getDescription == "bar2")
           }
       }
   }
