@@ -63,7 +63,6 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         updatedDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.setDatasetIam(datasetUuid, aclBindings))
       } yield {}
       IOresult.unsafeToFuture().map { _ =>
-        Thread.sleep(5000)
         workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetUuid).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetUuid), userInfo.accessToken)
         ref
       }

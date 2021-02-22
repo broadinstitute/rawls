@@ -170,6 +170,7 @@ paths:
             - openid
             - email
             - profile
+            - https://www.googleapis.com/auth/bigquery.readonly
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
     get:
       tags:
