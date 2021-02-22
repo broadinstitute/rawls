@@ -10,10 +10,10 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeName, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent}
 import org.broadinstitute.dsde.rawls.util.{CollectionUtils, EntitySupport}
 
-import java.sql.Timestamp
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -33,16 +33,25 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
-        //If the cache is current, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
-        if(isEntityCacheCurrent && useCache && cacheEnabled) {
-          val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
-          val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+      traceDBIO("LocalEntityProvider.entityTypeMetadata") { outerSpan =>
+        outerSpan.addAnnotation(workspace.toWorkspaceName.toString)
+        dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
+          //If the cache is current, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
+          if(isEntityCacheCurrent && useCache && cacheEnabled) {
+            traceDBIOWithParent("retrieve-cached-results", outerSpan) { _ =>
+              val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+              val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
 
-          dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
+              dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
+            }
+          }
+          //Else return the full query results
+          else {
+            traceDBIOWithParent("retrieve-uncached-results", outerSpan) { _ =>
+              dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+            }
+          }
         }
-        //Else return the full query results
-        else dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
       }
     }
   }
