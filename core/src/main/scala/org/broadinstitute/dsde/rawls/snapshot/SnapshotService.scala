@@ -46,9 +46,6 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
       val datasetUuid = UUID.randomUUID().toString.replace('-', '_')
 
-      // TODO: create uncontrolled dataset resource in WSM here
-      workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetUuid).cloningInstructions(CloningInstructionsEnum.NOTHING).referenceDescription(workspaceContext.workspaceId), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetUuid), userInfo.accessToken)
-
       val defaultIamRoles = Acl.Role.OWNER -> Seq((clientEmail, Acl.Entity.Type.USER))
 
       val accessPolicies = Seq(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader)
@@ -65,7 +62,11 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         createdDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(datasetUuid, datasetLabels))
         updatedDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.setDatasetIam(datasetUuid, aclBindings))
       } yield {}
-      IOresult.unsafeToFuture().map(_ => ref)
+      IOresult.unsafeToFuture().map { _ =>
+        Thread.sleep(5000)
+        workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetUuid).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetUuid), userInfo.accessToken)
+        ref
+      }
     }
   }
 
