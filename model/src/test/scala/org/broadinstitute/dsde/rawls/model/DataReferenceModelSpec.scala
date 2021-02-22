@@ -4,7 +4,7 @@ import java.util.UUID
 
 import bio.terra.workspace.model.CloningInstructionsEnum.NOTHING
 import bio.terra.workspace.model.ReferenceTypeEnum.DATA_REPO_SNAPSHOT
-import bio.terra.workspace.model.{DataReferenceDescription, DataReferenceList, DataRepoSnapshot}
+import bio.terra.workspace.model.{DataReferenceDescription, DataReferenceList, DataRepoSnapshot, UpdateDataReferenceRequestBody}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import spray.json._
 
@@ -34,12 +34,13 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
         val referenceId = UUID.randomUUID()
         val workspaceId = UUID.randomUUID()
         assertResult {
-          s"""{"resources":[{"referenceId": "$referenceId","name":"test-ref","workspaceId":"$workspaceId","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"cloningInstructions":"$NOTHING"}]}""".parseJson
+          s"""{"resources":[{"referenceId": "$referenceId","name":"test-ref","workspaceId":"$workspaceId","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"description":"test description","cloningInstructions":"$NOTHING"}]}""".parseJson
         } {
           new DataReferenceList().resources(ArrayBuffer(
             new DataReferenceDescription()
               .referenceId(referenceId)
               .name("test-ref")
+              .description("test description")
               .workspaceId(workspaceId)
               .referenceType(DATA_REPO_SNAPSHOT)
               .reference(new DataRepoSnapshot().instanceName("test-instance").snapshot("test-snapshot"))
@@ -51,6 +52,24 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
       "DataReferenceDescription with bad UUID's should fail" in {
         assertThrows[DeserializationException] {
           s"""{"referenceId": "abcd","name":"test-ref","workspaceId":"abcd","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"cloningInstructions":"$NOTHING"}""".parseJson.convertTo[DataReferenceDescription]
+        }
+      }
+
+      "UpdateDataReferenceRequestBody should work when updating name and description" in {
+        assertResult { s"""{"name":"foo","description":"bar"}""".parseJson } {
+          new UpdateDataReferenceRequestBody().name("foo").description("bar").toJson
+        }
+      }
+
+      "UpdateDataReferenceRequestBody should work with only one parameter" in {
+        assertResult { s"""{"name":null,"description":"foo"}""".parseJson } {
+          new UpdateDataReferenceRequestBody().description("foo").toJson
+        }
+      }
+
+      "UpdateDataReferenceRequestBody with no parameters should fail" in {
+        assertThrows[DeserializationException] {
+          s"""{}""".parseJson.convertTo[UpdateDataReferenceRequestBody]
         }
       }
     }

@@ -42,6 +42,7 @@ paths:
                 $ref: '#/components/schemas/ApplicationVersion'
   /status:
     get:
+      security: []
       tags:
         - status
       summary: status check for underlying systems
@@ -59,6 +60,7 @@ paths:
                 $ref: '#/components/schemas/SystemStatus'
   /version/executionEngine:
     get:
+      security: []
       tags:
         - version
       summary: get version information of the execution engine
@@ -153,11 +155,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/billing/{projectId}/{workbenchRole}/{email}:
     put:
       tags:
@@ -209,11 +206,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     delete:
       tags:
         - billing
@@ -264,11 +256,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/billing/v2:
     post:
       tags:
@@ -341,11 +328,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     delete:
       tags:
         - billing_v2
@@ -374,11 +356,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/billing/v2/{projectId}/members:
     get:
       tags:
@@ -414,11 +391,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/billing/v2/{projectId}/members/{workbenchRole}/{email}:
     put:
       tags:
@@ -469,11 +441,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     delete:
       tags:
         - billing_v2
@@ -523,11 +490,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/admin/project/registration:
     post:
       tags:
@@ -554,11 +516,6 @@ paths:
         500:
           description: Internal Server Error
           content: {}
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: createProjectRequest
   /api/admin/project/registration/{projectName}:
     delete:
@@ -602,11 +559,6 @@ paths:
         500:
           description: Internal Server Error
           content: {}
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: ownerInfo
   /api/admin/submissions:
     get:
@@ -643,11 +595,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}:
     delete:
       tags:
@@ -697,11 +644,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/admin/user/role/curator/{userEmail}:
     put:
       tags:
@@ -726,11 +668,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     delete:
       tags:
         - admin
@@ -754,11 +691,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/admin/workspaces:
     get:
       tags:
@@ -809,11 +741,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/admin/refreshToken/{userSubjectId}:
     delete:
       deprecated: true
@@ -839,11 +766,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
@@ -871,11 +793,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/servicePerimeters/{servicePerimeterName}/projects/{projectName}:
     put:
       tags:
@@ -927,11 +844,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions:
     get:
       tags:
@@ -973,11 +885,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     post:
       tags:
         - submissions
@@ -1036,11 +943,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: submission
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissionsCount:
     get:
@@ -1083,11 +985,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate:
     post:
       tags:
@@ -1147,11 +1044,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: submission
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}:
     get:
@@ -1198,11 +1090,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     delete:
       tags:
         - submissions
@@ -1250,11 +1137,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/cost:
     get:
       tags:
@@ -1306,11 +1188,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs:
     get:
       tags:
@@ -1368,11 +1245,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}:
     get:
       tags:
@@ -1448,11 +1320,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/submissions/queueStatus:
     get:
       tags:
@@ -1473,11 +1340,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entityQuery/{entityType}:
     get:
       tags:
@@ -1550,11 +1412,6 @@ paths:
         500:
           description: Internal Server Error
           content: {}
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename:
     post:
       tags:
@@ -1616,11 +1473,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: newEntityNameJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate:
     post:
@@ -1683,11 +1535,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: expression
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities:
     get:
@@ -1736,11 +1583,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     post:
       tags:
         - entities
@@ -1803,11 +1645,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: entityJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}:
     get:
@@ -1856,11 +1693,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}:
     get:
       tags:
@@ -1912,11 +1744,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     patch:
       tags:
         - entities
@@ -1986,11 +1813,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: attributeUpdateJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete:
     post:
@@ -2046,11 +1868,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: entities
   /api/workspaces/entities/copy:
     post:
@@ -2108,11 +1925,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: entityCopyDefinition
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert:
     post:
@@ -2172,11 +1984,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: batchUpsertJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate:
     post:
@@ -2234,11 +2041,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: batchUpdateJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs:
     get:
@@ -2311,11 +2113,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     post:
       tags:
         - methodconfigs
@@ -2410,11 +2207,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: methodConfigJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate:
     get:
@@ -2467,11 +2259,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}:
     get:
       tags:
@@ -2523,11 +2310,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     put:
       tags:
         - methodconfigs
@@ -2594,11 +2376,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: newMethodConfigJson
     post:
       tags:
@@ -2674,11 +2451,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: newMethodConfigJson
     delete:
       tags:
@@ -2727,11 +2499,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename:
     post:
       tags:
@@ -2802,11 +2569,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: newMethodConfigurationName
   /api/methodconfigs/copy:
     post:
@@ -2858,11 +2620,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: methodConfigurationNamePair
   /api/methodconfigs/copyFromMethodRepo:
     post:
@@ -2920,11 +2677,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: methodRepoImport
   /api/methodconfigs/copyToMethodRepo:
     post:
@@ -2959,11 +2711,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: methodRepoExport
   /api/methodconfigs/template:
     post:
@@ -3000,11 +2747,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: methodName
   /api/methodconfigs/inputsOutputs:
     post:
@@ -3039,11 +2781,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: methodName
   /api/workspaces/{workspaceNamespace}/{workspaceName}/checkBucketReadAccess:
     get:
@@ -3087,11 +2824,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/checkIamActionWithLock/{samActionName}:
     get:
       tags:
@@ -3133,11 +2865,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/lock:
     put:
       tags:
@@ -3186,11 +2913,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/unlock:
     put:
       tags:
@@ -3233,11 +2955,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/acl:
     get:
       tags:
@@ -3283,11 +3000,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     patch:
       tags:
         - workspaces
@@ -3355,11 +3067,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: aclUpdates
   /api/workspaces/{workspaceNamespace}/{workspaceName}/bucketOptions:
     get:
@@ -3400,11 +3107,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/catalog:
     get:
       tags:
@@ -3447,11 +3149,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     patch:
       tags:
         - workspaces
@@ -3499,11 +3196,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: catalogUpdates
   /api/workspaces:
     get:
@@ -3545,11 +3237,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     post:
       tags:
         - workspaces
@@ -3600,11 +3287,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: workspaceJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}:
     get:
@@ -3662,11 +3344,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     delete:
       tags:
         - workspaces
@@ -3709,11 +3386,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     patch:
       tags:
         - workspaces
@@ -3771,11 +3443,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: entityUpdateJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/clone:
     post:
@@ -3854,11 +3521,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: workspaceRequest
   /api/workspaces/{workspaceNamespace}/{workspaceName}/bucketUsage:
     get:
@@ -3887,11 +3549,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/BucketUsageResponse'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/tags:
     get:
       tags:
@@ -3922,11 +3579,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/enableRequesterPaysForLinkedServiceAccounts:
     put:
       tags:
@@ -3971,11 +3623,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/disableRequesterPaysForLinkedServiceAccounts:
     put:
       tags:
@@ -4008,11 +3655,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workflows/{workflowId}/genomics/{operationId}:
     get:
       tags:
@@ -4050,11 +3692,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/user/refreshToken:
     put:
       deprecated: true
@@ -4080,11 +3717,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
       x-codegen-request-body-name: refreshToken
   /api/user/refreshTokenDate:
     get:
@@ -4119,11 +3751,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/user/role/admin:
     get:
       tags:
@@ -4144,11 +3771,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/user/role/curator:
     get:
       tags:
@@ -4169,11 +3791,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/user/billing:
     get:
       tags:
@@ -4204,11 +3821,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/user/billing/{projectName}:
     get:
       tags:
@@ -4237,11 +3849,6 @@ paths:
         500:
           description: Internal Server Error
           content: {}
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     delete:
       tags:
         - billing
@@ -4277,11 +3884,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/user/billingAccounts:
     get:
       tags:
@@ -4347,11 +3949,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NotificationType'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/accessInstructions:
     get:
       tags:
@@ -4380,11 +3977,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ManagedGroupAccessInstructions'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/sendChangeNotification:
     post:
       tags:
@@ -4408,11 +4000,6 @@ paths:
         200:
           description: Success
           content: {}
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/notifications/general:
     get:
       tags:
@@ -4428,11 +4015,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NotificationType'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
 components:
   schemas:
     BillingAccount:
@@ -6190,3 +5772,6 @@ components:
             email: email authorization
             profile: profile authorization
             https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
+
+security:
+  - authorization: [openid, email, profile]

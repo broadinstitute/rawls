@@ -18,7 +18,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
-import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
@@ -1121,11 +1120,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
 
     val dataReferenceName = DataReferenceName("dataref")
+    val dataReferenceDescription = DataReferenceDescriptionField("description")
 
     val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
 
     withDataAndService({ workspaceService =>
-      workspaceService.workspaceManagerDAO.createDataReference(minimalTestData.workspace.workspaceIdAsUUID, dataReferenceName, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, new DataRepoSnapshot().instanceName(dataRepoDAO.getInstanceName).snapshot(snapshotUUID.toString), CloningInstructionsEnum.NOTHING, userInfo.accessToken)
+      workspaceService.workspaceManagerDAO.createDataReference(minimalTestData.workspace.workspaceIdAsUUID, dataReferenceName, dataReferenceDescription, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, new DataRepoSnapshot().instanceName(dataRepoDAO.getInstanceName).snapshot(snapshotUUID.toString), CloningInstructionsEnum.NOTHING, userInfo.accessToken)
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
       test(workspaceService, methodConfig, snapshotUUID)
     }, withMinimalTestDatabase[Any], bigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)), dataRepoDAO = dataRepoDAO)
