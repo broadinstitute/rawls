@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.scala.Tracing.trace
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
@@ -11,7 +13,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, D
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.{CollectionUtils, EntitySupport}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -32,23 +34,25 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   private val workspaceContext = workspace
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
-    dataSource.inTransaction { dataAccess =>
-      traceDBIO("LocalEntityProvider.entityTypeMetadata") { outerSpan =>
-        outerSpan.addAnnotation(workspace.toWorkspaceName.toString)
-        dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
-          //If the cache is current, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
-          if(isEntityCacheCurrent && useCache && cacheEnabled) {
-            traceDBIOWithParent("retrieve-cached-results", outerSpan) { _ =>
-              val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
-              val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+    trace("LocalEntityProvider.entityTypeMetadata") { rootSpan =>
+      rootSpan.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspace.toWorkspaceName.toString))
+      dataSource.inTransaction { dataAccess =>
+        traceDBIOWithParent("isEntityCacheCurrent", rootSpan) { outerSpan =>
+          dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
+            //If the cache is current, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
+            if(isEntityCacheCurrent && useCache && cacheEnabled) {
+              traceDBIOWithParent("retrieve-cached-results", outerSpan) { _ =>
+                val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+                val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
 
-              dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
+                dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
+              }
             }
-          }
-          //Else return the full query results
-          else {
-            traceDBIOWithParent("retrieve-uncached-results", outerSpan) { _ =>
-              dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+            //Else return the full query results
+            else {
+              traceDBIOWithParent("retrieve-uncached-results", outerSpan) { _ =>
+                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+              }
             }
           }
         }
