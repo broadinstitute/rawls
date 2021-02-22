@@ -4,9 +4,12 @@ import akka.actor._
 import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.scala.Tracing.trace
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor._
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import slick.dbio.DBIO
 
 import java.sql.Timestamp
@@ -49,16 +52,24 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
   val standardPollInterval: FiniteDuration
 
   def sweep() = {
-    dataSource.inTransaction { dataAccess =>
-      //Note: Ignored workspaces have a cacheLastUpdated timestamp of 1000ms after epoch
-      dataAccess.workspaceQuery.findMostOutdatedEntityCacheAfter(new Timestamp(1000)).flatMap {
-        case Some((workspaceId, lastModified)) => DBIO.from(updateStatisticsCache(workspaceId, lastModified).map { _ =>
-          logger.info(s"Updated entity cache for workspace $workspaceId. Cache was ${System.currentTimeMillis() - lastModified.getTime}ms out of date.")
-          Sweep
-        })
-        case None =>
-          logger.info(s"All workspace entity caches are up to date. Sleeping for ${standardPollInterval}")
-          DBIO.successful(ScheduleDelayedSweep)
+    trace("EntityStatisticsCacheMonitor.sweep") { rootSpan =>
+      dataSource.inTransaction { dataAccess =>
+        //Note: Ignored workspaces have a cacheLastUpdated timestamp of 1000ms after epoch
+        dataAccess.workspaceQuery.findMostOutdatedEntityCacheAfter(new Timestamp(1000)).flatMap {
+          case Some((workspaceId, lastModified)) =>
+            rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId.toString))
+            traceDBIOWithParent("updateStatisticsCache", rootSpan) { _ =>
+              DBIO.from(updateStatisticsCache(workspaceId, lastModified).map { _ =>
+                logger.info(s"Updated entity cache for workspace $workspaceId. Cache was ${System.currentTimeMillis() - lastModified.getTime}ms out of date.")
+                Sweep
+              })
+            }
+          case None =>
+            traceDBIOWithParent("nothing-to-update", rootSpan) { _ =>
+              logger.info(s"All workspace entity caches are up to date. Sleeping for ${standardPollInterval}")
+              DBIO.successful(ScheduleDelayedSweep)
+            }
+        }
       }
     }
   }
