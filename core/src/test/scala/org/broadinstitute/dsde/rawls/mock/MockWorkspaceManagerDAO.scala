@@ -59,4 +59,6 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
     references.getOrElse((workspaceId, referenceId), throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
     references -= ((workspaceId, referenceId))
   }
+
+  override def createBigQueryDataset(workspaceId: UUID, metadata: DataReferenceRequestMetadata, dataset: GoogleBigQueryDatasetUid, accessToken: OAuth2BearerToken): BigQueryDatasetReference = new BigQueryDatasetReference
 }
