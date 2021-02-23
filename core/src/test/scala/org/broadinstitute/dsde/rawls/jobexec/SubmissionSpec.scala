@@ -343,6 +343,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+      val resourceBufferSaEmail = resourceBufferConfig.saEmail
+
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
@@ -368,7 +370,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         workspaceServiceConfig,
         requesterPaysSetupService,
         entityManager,
-        resourceBufferService
+        resourceBufferService,
+        resourceBufferSaEmail
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {

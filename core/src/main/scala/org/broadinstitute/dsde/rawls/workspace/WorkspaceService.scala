@@ -67,7 +67,7 @@ object WorkspaceService {
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
-                  entityManager: EntityManager, resourceBufferService: ResourceBufferService)
+                  entityManager: EntityManager, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String)
                  (userInfo: UserInfo)
                  (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
@@ -77,7 +77,7 @@ object WorkspaceService {
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
-      config, requesterPaysSetupService, resourceBufferService)
+      config, requesterPaysSetupService, resourceBufferService, resourceBufferSaEmail)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -115,7 +115,7 @@ object WorkspaceService {
 }
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, resourceBufferService: ResourceBufferService)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport with Retry {
 
   import dataSource.dataAccess.driver.api._
@@ -1897,6 +1897,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
+      _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
     } yield (googleProjectId, googleProjectNumber)
   }
 
@@ -2159,7 +2160,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       }
                     }.flatten.toMap)
 
-                    _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3)))
+                    _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), policyMap, s3)))
                     response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
                   } yield response
                 })

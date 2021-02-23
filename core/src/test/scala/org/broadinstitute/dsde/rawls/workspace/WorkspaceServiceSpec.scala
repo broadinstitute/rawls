@@ -145,6 +145,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
     val resourceBufferService = Mockito.spy(new ResourceBufferService(resourceBufferDAO, resourceBufferConfig))
+    val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -170,7 +171,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       workspaceServiceConfig,
       requesterPaysSetupService,
       entityManager,
-      resourceBufferService
+      resourceBufferService,
+      resourceBufferSaEmail
     )_
 
     def cleanupSupervisor = {

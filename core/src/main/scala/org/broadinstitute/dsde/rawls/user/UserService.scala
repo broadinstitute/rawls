@@ -42,7 +42,8 @@ object UserService {
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
   }
 
-  def getComputeUserGroupEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
+  // this will no longer be used after v1 compute permissions are removed from billing projects (https://broadworkbench.atlassian.net/browse/CA-913)
+  def syncBillingProjectComputeUserPolicyToGoogleAndGetEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
       .syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.canComputeUser)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
@@ -379,7 +380,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator)), ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.batchComputeUser, SamBillingProjectRoles.notebookUser)), ownerUserInfo)
       ownerGroupEmail <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, project.projectName)
-      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project.projectName)
+      computeUserGroupEmail <- syncBillingProjectComputeUserPolicyToGoogleAndGetEmail(samDAO, project.projectName)
 
       policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole)
 
@@ -522,7 +523,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       //NOTE: we're syncing this to Sam ahead of the resource actually existing. is this fine? (ps these are sam calls)
       ownerGroupEmail <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
-      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, createProjectRequest.projectName)
+      computeUserGroupEmail <- syncBillingProjectComputeUserPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
 
       // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
       parentFolderId <- createProjectRequest.servicePerimeter.traverse(lookupFolderIdFromServicePerimeterName)

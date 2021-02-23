@@ -204,6 +204,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
     val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+    val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -226,7 +227,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       workspaceServiceConfig,
       requesterPaysSetupService,
       entityManager,
-      resourceBufferService
+      resourceBufferService,
+      resourceBufferSaEmail
     )_
 
     override val entityServiceConstructor = EntityService.constructor(

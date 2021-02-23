@@ -43,7 +43,7 @@ import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.util.ExecutionContexts
@@ -135,6 +135,15 @@ object Boot extends IOApp with LazyLogging {
       workbenchMetricBaseName = metricsPrefix
     )
 
+    val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
+    val source = scala.io.Source.fromFile(pathToCredentialJson)
+    val jsonCreds = try source.mkString finally source.close()
+    val googleIamDao = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)
+    val googleProjectOwnerRole = gcsConfig.getString("googleProjectOwnerRole")
+    val googleProjectViewerRole = gcsConfig.getString("googleProjectViewerRole")
+
+
+
     initAppDependencies[IO](conf).use { appDependencies =>
       val gcsDAO = new HttpGoogleServicesDAO(
         false,
@@ -167,7 +176,10 @@ object Boot extends IOApp with LazyLogging {
         terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
         terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
         accessContextManagerDAO = accessContextManagerDAO,
-        resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
+        resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson"),
+        googleIamDao = googleIamDao,
+        googleProjectOwnerRole = googleProjectOwnerRole,
+        googleProjectViewerRole = googleProjectViewerRole
       )
 
 
@@ -361,7 +373,7 @@ object Boot extends IOApp with LazyLogging {
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
       val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
-
+      val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
@@ -384,7 +396,8 @@ object Boot extends IOApp with LazyLogging {
         workspaceServiceConfig,
         requesterPaysSetupService,
         entityManager,
-        resourceBufferService
+        resourceBufferService,
+        resourceBufferSaEmail
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(

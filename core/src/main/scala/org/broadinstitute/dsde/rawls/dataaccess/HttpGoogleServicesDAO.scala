@@ -54,6 +54,7 @@ import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import cats.implicits.toTraverseOps
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
@@ -68,6 +69,8 @@ import scala.io.Source
 import scala.util.matching.Regex
 
 import io.opencensus.scala.Tracing._
+import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
+import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 
 case class Resources (
                        name: String,
@@ -125,7 +128,10 @@ class HttpGoogleServicesDAO(
                              terraBucketReaderRole: String,
                              terraBucketWriterRole: String,
                              override val accessContextManagerDAO: AccessContextManagerDAO,
-                             resourceBufferJsonFile: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+                             resourceBufferJsonFile: String,
+                             googleIamDao: GoogleIamDAO,
+                             googleProjectOwnerRole: String,
+                             googleProjectViewerRole: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
@@ -188,7 +194,7 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], policyMap: Map[SamResourcePolicyName, WorkbenchEmail], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
     def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
@@ -213,7 +219,7 @@ class HttpGoogleServicesDAO(
         // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
         // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
         _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities,
-          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardRetryPredicate, RetryPredicates.whenStatusCode(400)))
+          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardRetryPredicate, RetryPredicates.whenStatusCode(400))) // todo why 400 here? we check for 5xx and 409s elsewhere
       } yield ()
     }
 
@@ -234,6 +240,20 @@ class HttpGoogleServicesDAO(
       }
     }
 
+    def updateGoogleProjectIam(googleProject: GoogleProjectId, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], googleProjectOwnerRole: String, googleProjectViewerRole: String): Future[List[Boolean]] = {
+      // workspace owner - organizations/$ORG_ID/roles/google-project-owner
+      // workspace can-compute - organizations/$ORG_ID/roles/google-project-viewer
+
+      val policyGroupsToRoles = Map(
+        policyMap(SamWorkspacePolicyNames.owner) -> Set(googleProjectOwnerRole),
+        policyMap(SamWorkspacePolicyNames.canCompute) -> Set(googleProjectViewerRole)
+      )
+
+      for {
+        success <- policyGroupsToRoles.toList.traverse {case (email, roles) => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
+      } yield (success)
+    }
+
     // setupWorkspace main logic
     val traceId = TraceId(UUID.randomUUID())
 
@@ -241,8 +261,10 @@ class HttpGoogleServicesDAO(
       _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(googleProject.value), GcsBucketName(bucketName), None, labels, Option(traceId), true, Option(GcsBucketName(getStorageLogsBucketName(googleProject)))).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
       updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
       insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
+      updateGoogleProjectIamFuture = traceWithParent("updateGoogleProjectIam", parentSpan)(_ => updateGoogleProjectIam(googleProject, policyMap, googleProjectOwnerRole, googleProjectViewerRole))
       _ <- updateBucketIamFuture
       _ <- insertInitialStorageLogFuture
+      _ <- updateGoogleProjectIamFuture
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
   }
 
