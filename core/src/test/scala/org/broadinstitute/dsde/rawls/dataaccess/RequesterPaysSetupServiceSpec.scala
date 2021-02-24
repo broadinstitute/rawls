@@ -116,6 +116,6 @@ class RequesterPaysSetupServiceSpec extends AnyFlatSpec with Matchers with Mocki
     service.revokeAllUsersFromWorkspace(minimalTestData.workspace2).futureValue should contain theSameElementsAs expectedEmails
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe false
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, minimalTestData.userReader.userEmail)) shouldBe false
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace2.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
   }
 }
