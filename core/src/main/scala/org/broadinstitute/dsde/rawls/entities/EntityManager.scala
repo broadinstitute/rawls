@@ -75,12 +75,12 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
 object EntityManager {
   def defaultEntityManager(dataSource: SlickDataSource, workspaceManagerDAO: WorkspaceManagerDAO,
                            dataRepoDAO: DataRepoDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory,
-                           config: DataRepoEntityProviderConfig)
+                           config: DataRepoEntityProviderConfig, cacheEnabled: Boolean)
                           (implicit ec: ExecutionContext): EntityManager = {
     // create the EntityManager along with its associated provider-builders. Since entities are only accessed
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
     // and execution context for the rawls entity provider that the entity service uses.
-    val defaultEntityProviderBuilder = new LocalEntityProviderBuilder(dataSource) // implicit executionContext
+    val defaultEntityProviderBuilder = new LocalEntityProviderBuilder(dataSource, cacheEnabled) // implicit executionContext
     val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, config) // implicit executionContext
 
     new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))

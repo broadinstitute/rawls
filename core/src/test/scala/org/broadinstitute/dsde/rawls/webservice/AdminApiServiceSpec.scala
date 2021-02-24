@@ -222,46 +222,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when querying firecloud statistics with valid dates" in withTestDataApiServices { services =>
-    Get("/admin/statistics?startDate=2010-10-10&endDate=2011-10-10") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-      }
-  }
-
-  it should "return 400 when querying firecloud statistics with invalid (equal) dates" in withTestDataApiServices { services =>
-    Get("/admin/statistics?startDate=2010-10-10&endDate=2010-10-10") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.BadRequest) {
-          status
-        }
-      }
-  }
-
-  it should "return 400 when querying firecloud statistics with invalid dates" in withTestDataApiServices { services =>
-    Get("/admin/statistics?startDate=2011-10-10&endDate=2010-10-10") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.BadRequest) {
-          status
-        }
-      }
-  }
-
-  it should "return 500 when querying firecloud statistics illformed dates" in withTestDataApiServices { services =>
-    Get("/admin/statistics?startDate=foo&endDate=bar") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.InternalServerError) {
-          status
-        }
-      }
-  }
-
   it should "get queue status by user" in withConstantTestDataApiServices { services =>
     import driver.api._
 

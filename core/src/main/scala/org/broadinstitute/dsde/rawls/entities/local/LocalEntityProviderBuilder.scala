@@ -11,13 +11,13 @@ import scala.util.{Try, Success}
 /**
  * Builder for the Terra default entity provider
  */
-class LocalEntityProviderBuilder(dataSource: SlickDataSource)
+class LocalEntityProviderBuilder(dataSource: SlickDataSource, cacheEnabled: Boolean)
                                 (implicit protected val executionContext: ExecutionContext)
   extends EntityProviderBuilder[LocalEntityProvider] {
 
   override def builds: TypeTag[LocalEntityProvider] = typeTag[LocalEntityProvider]
 
   override def build(requestArguments: EntityRequestArguments): Try[LocalEntityProvider] = {
-    Success(new LocalEntityProvider(requestArguments.workspace, dataSource))
+    Success(new LocalEntityProvider(requestArguments.workspace, dataSource, cacheEnabled))
   }
 }

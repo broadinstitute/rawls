@@ -13,7 +13,7 @@ import scala.util.Try
 trait EntityProvider {
   def entityStoreId: Option[String]
 
-  def entityTypeMetadata(): Future[Map[String, EntityTypeMetadata]]
+  def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]]
 
   def createEntity(entity: Entity): Future[Entity]
 

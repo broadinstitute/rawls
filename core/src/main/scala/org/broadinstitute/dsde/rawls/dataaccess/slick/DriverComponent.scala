@@ -120,10 +120,6 @@ trait RawSqlQuery {
   implicit object SetUUIDParameter extends SetParameter[UUID] { def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) } }
   implicit object SetUUIDOptionParameter extends SetParameter[Option[UUID]] { def apply(v: Option[UUID], pp: PositionedParameters) { pp.setBytesOption(v.map(uuidColumnType.toBytes)) } }
 
-  implicit val getSummaryStatisticsResult = GetResult { r => SummaryStatistics(r.<<, r.<<, r.<<, r.<<) }
-  implicit val getSingleStatisticResult = GetResult { r => SingleStatistic(r.<<) }
-  implicit val getNamedStatisticResult = GetResult { r => NamedStatistic(r.<<, r.<<) }
-
   def concatSqlActions(builders: SQLActionBuilder*): SQLActionBuilder = {
     SQLActionBuilder(builders.flatMap(_.queryParts), new SetParameter[Unit] {
       def apply(p: Unit, pp: PositionedParameters): Unit = {
