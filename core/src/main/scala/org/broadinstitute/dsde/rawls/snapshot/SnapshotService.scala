@@ -44,7 +44,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val dataRepoReference = new DataRepoSnapshot().instanceName(terraDataRepoInstanceName).snapshot(snapshot.snapshotId)
       val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
-      val datasetUuid = UUID.randomUUID().toString.replace('-', '_')
+      val datasetName = "deltalayer_" + ref.getReferenceId.toString.replace('-', '_')
 
       val defaultIamRoles = Acl.Role.OWNER -> Seq((clientEmail, Acl.Entity.Type.USER))
 
@@ -59,11 +59,12 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         filteredSamPolicies = samPolicies.filter(samPolicy => accessPolicies.contains(samPolicy.policyName)).map(_.email) ++ projectOwnerPolicy
         samAclBindings = Acl.Role.READER -> filteredSamPolicies.map{ filteredSamPolicyEmail =>(filteredSamPolicyEmail, Acl.Entity.Type.GROUP) }.toSeq
         aclBindings = Map(samAclBindings, defaultIamRoles)
-        createdDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.createDataset(datasetUuid, datasetLabels))
-        updatedDataset <- bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace)).use(_.setDatasetIam(datasetUuid, aclBindings))
+        bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
+        _ <- bqService.use(_.createDataset(datasetName, datasetLabels))
+        _ <- bqService.use(_.setDatasetIam(datasetName, aclBindings))
       } yield {}
       IOresult.unsafeToFuture().map { _ =>
-        workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetUuid).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetUuid), userInfo.accessToken)
+        workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), userInfo.accessToken)
         ref
       }
     }
