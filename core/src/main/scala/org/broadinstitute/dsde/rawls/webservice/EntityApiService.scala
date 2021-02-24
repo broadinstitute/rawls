@@ -44,7 +44,7 @@ trait EntityApiService extends UserInfoDirectives {
 
             if (errors.isEmpty) {
               val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
-              complete { entityServiceConstructor(userInfo).QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject) }
+              complete { entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject) }
             } else {
               complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
             }
@@ -56,7 +56,7 @@ trait EntityApiService extends UserInfoDirectives {
             parameters('useCache.?) { (useCache) =>
               val useCacheBool = Try(useCache.getOrElse("false").toBoolean).getOrElse(false)
               complete {
-                entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, billingProject, useCacheBool)
+                entityServiceConstructor(userInfo).entityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, billingProject, useCacheBool)
               }
             }
           }
@@ -66,7 +66,7 @@ trait EntityApiService extends UserInfoDirectives {
             entity(as[Entity]) { entity =>
               addLocationHeader(entity.path(WorkspaceName(workspaceNamespace, workspaceName))) {
                 complete {
-                  entityServiceConstructor(userInfo).CreateEntity(WorkspaceName(workspaceNamespace, workspaceName), entity).map(StatusCodes.Created -> _)
+                  entityServiceConstructor(userInfo).createEntity(WorkspaceName(workspaceNamespace, workspaceName), entity).map(StatusCodes.Created -> _)
                 }
               }
             }
@@ -74,20 +74,20 @@ trait EntityApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           get {
-            complete { entityServiceConstructor(userInfo).GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, dataReference, billingProject) }
+            complete { entityServiceConstructor(userInfo).getEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, dataReference, billingProject) }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           patch {
             entity(as[Array[AttributeUpdateOperation]]) { operations =>
-              complete { entityServiceConstructor(userInfo).UpdateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations) }
+              complete { entityServiceConstructor(userInfo).updateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / "delete") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[AttributeEntityReference]]) { entities =>
-              complete { entityServiceConstructor(userInfo).DeleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, dataReference, billingProject) }
+              complete { entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, dataReference, billingProject) }
             }
           }
         } ~
@@ -96,7 +96,7 @@ trait EntityApiService extends UserInfoDirectives {
             withSizeLimit(batchUpsertMaxBytes) {
               entity(as[Array[EntityUpdateDefinition]]) { operations =>
                 complete {
-                  entityServiceConstructor(userInfo).BatchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations)
+                  entityServiceConstructor(userInfo).batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations)
                 }
               }
             }
@@ -105,27 +105,27 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[EntityUpdateDefinition]]) { operations =>
-              complete { entityServiceConstructor(userInfo).BatchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+              complete { entityServiceConstructor(userInfo).batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
           post {
             entity(as[EntityName]) { newEntityName =>
-              complete { entityServiceConstructor(userInfo).RenameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name) }
+              complete { entityServiceConstructor(userInfo).renameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
           post {
             entity(as[String]) { expression =>
-              complete { entityServiceConstructor(userInfo).EvaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression) }
+              complete { entityServiceConstructor(userInfo).evaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
           get {
-            complete { entityServiceConstructor(userInfo).ListEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType) }
+            complete { entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType) }
           }
         } ~
         path("workspaces" / "entities" / "copy") {
@@ -135,7 +135,7 @@ trait EntityApiService extends UserInfoDirectives {
                 val linkExistingEntitiesBool = Try(linkExistingEntities.getOrElse("false").toBoolean).getOrElse(false)
                 entity(as[EntityCopyDefinition]) { copyDefinition =>
                   complete {
-                    entityServiceConstructor(userInfo).CopyEntities(copyDefinition, request.uri, linkExistingEntitiesBool)
+                    entityServiceConstructor(userInfo).copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool)
                   }
                 }
               }

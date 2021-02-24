@@ -185,6 +185,7 @@ trait AttributeComponent {
   //noinspection TypeAnnotation
   protected abstract class AttributeScratchQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], TEMP_RECORD <: AttributeScratchRecord[OWNER_ID], T <: AttributeScratchTable[OWNER_ID, TEMP_RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[String], Option[Long], Option[Int], Option[Int], Boolean, Option[Timestamp], String) => TEMP_RECORD) extends TableQuery[T](cons) {
     def insertScratchAttributes(attributeRecs: Seq[RECORD])(transactionId: String): WriteAction[Int] = {
+      println("Inserting into scratch table....")
       batchInsertAttributes(attributeRecs, transactionId)
     }
 

@@ -33,7 +33,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           addLocationHeader(workspace.path) {
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).CreateWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                workspaceServiceConstructor(userInfo).createWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
               }
             }
           }
@@ -43,7 +43,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           parameterSeq { allParams =>
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).ListWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+                workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
               }
             }
           }
@@ -52,31 +52,31 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
-            complete { workspaceServiceConstructor(userInfo).UpdateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+            complete { workspaceServiceConstructor(userInfo).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations) }
           }
         } ~
           get {
             parameterSeq { allParams =>
               traceRequest { span =>
                 complete {
-                  workspaceServiceConstructor(userInfo).GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
+                  workspaceServiceConstructor(userInfo).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
                     WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
                 }
               }
             }
           } ~
           delete {
-            complete { workspaceServiceConstructor(userInfo).DeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
+            complete { workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
           }
       } ~
       path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).GetAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).getAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "bucketOptions") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).GetBucketOptions(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).getBucketOptions(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "clone") { (sourceNamespace, sourceWorkspace) =>
@@ -84,7 +84,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           entity(as[WorkspaceRequest]) { destWorkspace =>
             addLocationHeader(destWorkspace.toWorkspaceName.path) {
               complete {
-                workspaceServiceConstructor(userInfo).CloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace).map(w => StatusCodes.Created -> WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty)))
+                workspaceServiceConstructor(userInfo).cloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace).map(w => StatusCodes.Created -> WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty)))
               }
             }
           }
@@ -92,12 +92,12 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "acl") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).GetACL(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).getACL(WorkspaceName(workspaceNamespace, workspaceName)) }
         } ~
           patch {
             parameter('inviteUsersNotFound.?) { inviteUsersNotFound =>
               entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
-                complete { workspaceServiceConstructor(userInfo).UpdateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean) }
+                complete { workspaceServiceConstructor(userInfo).updateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean) }
               }
             }
           }
@@ -105,65 +105,65 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "library") { (workspaceNamespace, workspaceName) =>
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
-            complete { workspaceServiceConstructor(userInfo).UpdateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+            complete { workspaceServiceConstructor(userInfo).updateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations) }
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "catalog") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).GetCatalog(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).getCatalog(WorkspaceName(workspaceNamespace, workspaceName)) }
         } ~
           patch {
             entity(as[Array[WorkspaceCatalog]]) { catalogUpdate =>
-              complete { workspaceServiceConstructor(userInfo).UpdateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate) }
+              complete { workspaceServiceConstructor(userInfo).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate) }
             }
           }
       } ~
       path("workspaces" / Segment / Segment / "checkBucketReadAccess") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).CheckBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).checkBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "checkIamActionWithLock" / Segment) { (workspaceNamespace, workspaceName, requiredAction) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).CheckSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName), SamResourceAction(requiredAction)) }
+          complete { workspaceServiceConstructor(userInfo).checkSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName), SamResourceAction(requiredAction)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "lock") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).LockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).lockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "unlock") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).UnlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).unlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "bucketUsage") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).GetBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
       path("workspaces" / "tags") {
         parameter('q.?) { queryString =>
           get {
-            complete { workspaceServiceConstructor(userInfo).GetTags(queryString) }
+            complete { workspaceServiceConstructor(userInfo).getTags(queryString) }
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
         post {
-          complete { workspaceServiceConstructor(userInfo).SendChangeNotifications(WorkspaceName(namespace, name)) }
+          complete { workspaceServiceConstructor(userInfo).sendChangeNotifications(WorkspaceName(namespace, name)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "enableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).EnableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "disableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).DisableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete { workspaceServiceConstructor(userInfo).disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       }
   }
