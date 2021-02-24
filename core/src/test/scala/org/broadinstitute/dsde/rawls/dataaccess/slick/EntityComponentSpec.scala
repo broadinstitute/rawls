@@ -285,7 +285,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "list all entity types with their counts" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       assertResult(Map("PairSet" -> 1, "Individual" -> 2, "Sample" -> 8, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)) {
-        runAndWait(entityQuery.getEntityTypesWithCounts(context))
+        runAndWait(entityQuery.getEntityTypesWithCounts(context.workspaceIdAsUUID))
       }
     }
   }
@@ -299,7 +299,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       runAndWait(deleteSamples)
 
       assertResult(Map("PairSet" -> 1, "Individual" -> 2, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)) {
-        runAndWait(entityQuery.getEntityTypesWithCounts(context))
+        runAndWait(entityQuery.getEntityTypesWithCounts(context.workspaceIdAsUUID))
       }
     }
   }
@@ -319,7 +319,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
-      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context))
+      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID))
       assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
       desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
@@ -361,7 +361,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
     //so we test the existence of all keys correctly here...
-    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext))
+    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID))
     assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
     desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
@@ -1066,132 +1066,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         recWithAttrs.map(_.withoutAllAttributeValues)
       }
     }
-  }
-
-  it should "gather entity statistics for single namespace/name" in withDefaultTestDatabase {
-    val entityStats = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(Some(testData.wsName.namespace), Some(testData.wsName.name)))
-    val expected = Set(
-      NamedStatistic("Aliquot", 2),
-      NamedStatistic("Sample", 8),
-      NamedStatistic("Pair", 2),
-      NamedStatistic("PairSet", 1),
-      NamedStatistic("SampleSet", 5),
-      NamedStatistic("Individual", 2)
-    )
-    assertResult(expected)(entityStats.toSet)
-  }
-
-  it should "gather entity statistics for an entire namespace, without a name" in withDefaultTestDatabase {
-    val expected = Set(
-      NamedStatistic("Aliquot", 16),
-      NamedStatistic("Sample", 66),
-      NamedStatistic("Pair", 16),
-      NamedStatistic("PairSet", 8),
-      NamedStatistic("SampleSet", 40),
-      NamedStatistic("Individual", 16)
-    )
-    val entityStats1 = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(Some(testData.billingProject.projectName.value), None))
-    assertResult(expected)(entityStats1.toSet)
-    // add two sample sets to a different namespace
-    runAndWait(workspaceQuery.save(workspace2))
-    withWorkspaceContext(workspace2) { wsctx =>
-      runAndWait(entityQuery.save(wsctx, x2))
-      runAndWait(entityQuery.save(wsctx, x1))
-    }
-    // not found in original namespace
-    val entityStats2 = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(Some(testData.billingProject.projectName.value), None))
-    assertResult(expected)(entityStats2.toSet)
-    // yes found in new namespace
-    val entityStats3 = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(Some(workspace2.namespace), None))
-    assertResult(Set(NamedStatistic("SampleSet", 2)))(entityStats3.toSet)
-  }
-
-  it should "gather entity statistics for a name, across all namespaces" in withDefaultTestDatabase {
-    val entityStats1 = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(None, Some(testData.wsName.name)))
-    val expected1 = Set(
-      NamedStatistic("Aliquot", 2),
-      NamedStatistic("Sample", 8),
-      NamedStatistic("Pair", 2),
-      NamedStatistic("PairSet", 1),
-      NamedStatistic("SampleSet", 5),
-      NamedStatistic("Individual", 2)
-    )
-    assertResult(expected1)(entityStats1.toSet)
-    // add two sample sets in a different namespace
-    val wsOtherNamespace = testData.workspace.copy(namespace="somethingelse", workspaceId = UUID.randomUUID.toString)
-    runAndWait(workspaceQuery.save(wsOtherNamespace))
-    withWorkspaceContext(wsOtherNamespace) { wsctx =>
-      runAndWait(entityQuery.save(wsctx, x2))
-      runAndWait(entityQuery.save(wsctx, x1))
-    }
-    val entityStats2 = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(None, Some(testData.wsName.name)))
-    val expected2 = Set(
-      NamedStatistic("Aliquot", 2),
-      NamedStatistic("Sample", 8),
-      NamedStatistic("Pair", 2),
-      NamedStatistic("PairSet", 1),
-      NamedStatistic("SampleSet", 7),
-      NamedStatistic("Individual", 2)
-    )
-    assertResult(expected2)(entityStats2.toSet)
-  }
-
-  it should "gather entity statistics for the entire corpus, across all namespace/names" in withDefaultTestDatabase {
-    // add two sample sets in a different namespace
-    runAndWait(workspaceQuery.save(workspace2))
-    withWorkspaceContext(workspace2) { wsctx =>
-      runAndWait(entityQuery.save(wsctx, x2))
-      runAndWait(entityQuery.save(wsctx, x1))
-    }
-    val entityStats = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(None, None))
-    val expected = Set(
-      NamedStatistic("Aliquot", 16),
-      NamedStatistic("Sample", 66),
-      NamedStatistic("Pair", 16),
-      NamedStatistic("PairSet", 8),
-      NamedStatistic("SampleSet", 42),
-      NamedStatistic("Individual", 16)
-    )
-    assertResult(expected)(entityStats.toSet)
-  }
-
-  it should "not include deleted entities in entity statistics " in withDefaultTestDatabase {
-    // save two sample sets
-    withWorkspaceContext(testData.workspace) { wsctx =>
-      runAndWait(entityQuery.save(wsctx, x2))
-      runAndWait(entityQuery.save(wsctx, x1))
-    }
-    val entityStats1 = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(Some(testData.wsName.namespace), Some(testData.wsName.name)))
-    val expected1 = Set(
-      NamedStatistic("Aliquot", 2),
-      NamedStatistic("Sample", 8),
-      NamedStatistic("Pair", 2),
-      NamedStatistic("PairSet", 1),
-      NamedStatistic("SampleSet", 7),
-      NamedStatistic("Individual", 2)
-    )
-    assertResult(expected1)(entityStats1.toSet)
-
-    // now delete those two sample sets
-    withWorkspaceContext(testData.workspace) { wsctx =>
-      runAndWait(entityQuery.hide(wsctx, Seq(x1, x2).map(x => AttributeEntityReference(x.entityType, x.name))))
-    }
-    val entityStats2 = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(Some(testData.wsName.namespace), Some(testData.wsName.name)))
-    val expected2 = Set(
-      NamedStatistic("Aliquot", 2),
-      NamedStatistic("Sample", 8),
-      NamedStatistic("Pair", 2),
-      NamedStatistic("PairSet", 1),
-      NamedStatistic("SampleSet", 5),
-      NamedStatistic("Individual", 2)
-    )
-    assertResult(expected2)(entityStats2.toSet)
-  }
-
-  it should "return empty list for entity statistics when namespace/name matches nothing" in withDefaultTestDatabase {
-    val entityStats = runAndWait(entityQuery.EntityStatisticsQueries.countEntitiesofTypeInNamespace(Some("thisNamespaceDoesntExist"), None))
-    val expected = Set.empty[NamedStatistic]
-    assertResult(expected)(entityStats.toSet)
   }
 
   it should "delete all values in an attribute list" in withDefaultTestDatabase {

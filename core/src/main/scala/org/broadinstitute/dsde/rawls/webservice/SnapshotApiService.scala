@@ -4,6 +4,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import bio.terra.workspace.model.UpdateDataReferenceRequestBody
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
@@ -38,6 +39,13 @@ trait SnapshotApiService extends UserInfoDirectives {
       get {
         complete {
           snapshotServiceConstructor(userInfo).GetSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
+        }
+      } ~
+      patch {
+        entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
+          complete {
+            snapshotServiceConstructor(userInfo).UpdateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
+          }
         }
       } ~
       delete {

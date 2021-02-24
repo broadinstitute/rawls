@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.snapshot
 
 import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataReferenceRequestMetadata, DataRepoSnapshot, GoogleBigQueryDatasetUid, ReferenceTypeEnum}
+import bio.terra.workspace.model._
 import cats.effect.{ContextShift, IO}
 import com.google.cloud.bigquery.Acl
 import com.typesafe.scalalogging.LazyLogging
@@ -33,6 +33,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def CreateSnapshot(workspaceName: WorkspaceName, namedDataRepoSnapshot: NamedDataRepoSnapshot): Future[DataReferenceDescription] = createSnapshot(workspaceName, namedDataRepoSnapshot)
   def GetSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataReferenceDescription] = getSnapshot(workspaceName, snapshotId)
   def EnumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[DataReferenceList] = enumerateSnapshots(workspaceName, offset, limit)
+  def UpdateSnapshot(workspaceName: WorkspaceName, snapshotId: String, updateInfo: UpdateDataReferenceRequestBody): Future[Unit] = updateSnapshot(workspaceName, snapshotId, updateInfo)
   def DeleteSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[Unit] = deleteSnapshot(workspaceName, snapshotId)
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: NamedDataRepoSnapshot): Future[DataReferenceDescription] = {
@@ -42,7 +43,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       }
 
       val dataRepoReference = new DataRepoSnapshot().instanceName(terraDataRepoInstanceName).snapshot(snapshot.snapshotId)
-      val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
+      val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, snapshot.description, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
       val datasetName = "deltalayer_" + ref.getReferenceId.toString.replace('-', '_')
 
@@ -92,6 +93,13 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
           logger.warn(s"Unexpected error when enumerating snapshots: ${other.getMessage}")
           throw new RawlsExceptionWithErrorReport(ErrorReport(other))
       }
+    }
+  }
+
+  def updateSnapshot(workspaceName: WorkspaceName, snapshotId: String, updateInfo: UpdateDataReferenceRequestBody): Future[Unit] = {
+    val snapshotUuid = validateSnapshotId(snapshotId)
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
+      workspaceManagerDAO.updateDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, updateInfo, userInfo.accessToken)
     }
   }
 
