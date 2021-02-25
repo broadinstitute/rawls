@@ -29,7 +29,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingGroupEmail: String
 
   // returns bucket and group information
-  def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], policyMap: Map[SamResourcePolicyName, WorkbenchEmail], parentSpan: Span = null): Future[GoogleWorkspaceInfo]
+  def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], policyMap: Map[SamResourcePolicyName, WorkbenchEmail], projectOwnerPolicyEmail: WorkbenchEmail, parentSpan: Span = null): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(googleProject: GoogleProjectId): Future[Project]
 

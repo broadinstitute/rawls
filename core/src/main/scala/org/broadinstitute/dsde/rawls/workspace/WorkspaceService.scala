@@ -2160,7 +2160,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       }
                     }.flatten.toMap)
 
-                    _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), policyMap, s3)))
+                    _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), policyMap, projectOwnerPolicyEmail, s3)))
                     response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
                   } yield response
                 })
