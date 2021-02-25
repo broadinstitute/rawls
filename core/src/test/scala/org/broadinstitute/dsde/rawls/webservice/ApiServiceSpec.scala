@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.concurrent.TimeUnit
-
 import akka.actor.PoisonPill
 import akka.testkit.TestKitBase
 import com.typesafe.scalalogging.LazyLogging
@@ -38,6 +37,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
+import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -108,6 +108,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
+    val notificationGpsDAO: org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 
     def actorRefFactory = system
 
@@ -144,7 +145,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val googleGroupSyncTopic = "test-topic-name"
 
     val notificationTopic = "test-notification-topic"
-    val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
+    val notificationDAO = new PubSubNotificationDAO(notificationGpsDAO, notificationTopic)
 
     val drsResolver = new MarthaResolver(mockServer.mockServerBaseUrl)
 

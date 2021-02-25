@@ -100,6 +100,7 @@ object Dependencies {
   val workbenchGoogleMocks: ModuleID =  workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests")
   val workbenchGoogle2: ModuleID =      workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V)
   val workbenchGoogle2Tests: ModuleID = workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests")
+  val workbenchNotifications: ModuleID = workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-notifications" % "0.3-d74ff96")
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.111.0-alpha" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
@@ -219,6 +220,7 @@ object Dependencies {
     mockserverNetty,
     mockito,
     workbenchModel,
+    workbenchNotifications,
     workbenchGoogle,
     googleStorageLocal,
     workbenchGoogleMocks,

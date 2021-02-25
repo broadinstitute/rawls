@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
-
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
@@ -26,7 +25,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -39,7 +38,9 @@ import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchException, WorkbenchGroupName, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -871,7 +872,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             inviteNotifications <- Future.traverse(userToInvite) { invite =>
               samDAO.inviteUser(invite, userInfo).map { _ =>
-                Notifications.WorkspaceInvitedNotification(RawlsUserEmail(invite), userInfo.userSubjectId, workspaceName, workspace.bucketName)
+                Notifications.WorkspaceInvitedNotification(WorkbenchEmail(invite), WorkbenchUserId(userInfo.userSubjectId.value), NotificationWorkspaceName(workspaceName.namespace, workspaceName.name), workspace.bucketName)
               }
             }
 
@@ -959,9 +960,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         userIdInfo match {
           case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) =>
             if(accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
-              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId(googleSubjectId), NoAccess.toString, workspaceName, userInfo.userSubjectId))
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(WorkbenchUserId(googleSubjectId), NoAccess.toString, NotificationWorkspaceName(workspaceName.namespace, workspaceName.name), WorkbenchUserId(userInfo.userSubjectId.value)))
             else
-              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(RawlsUserSubjectId(googleSubjectId), accessUpdate.accessLevel.toString, workspaceName, userInfo.userSubjectId))
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(WorkbenchUserId(googleSubjectId), accessUpdate.accessLevel.toString, NotificationWorkspaceName(workspaceName.namespace, workspaceName.name), WorkbenchUserId(userInfo.userSubjectId.value)))
           case _ =>
         }
       }
@@ -975,7 +976,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)
 
       notificationMessages = userIdInfos.collect {
-        case UserIdInfo(_, _, Some(userId)) => Notifications.WorkspaceChangedNotification(RawlsUserSubjectId(userId), workspaceName)
+        case UserIdInfo(_, _, Some(userId)) => Notifications.WorkspaceChangedNotification(WorkbenchUserId(userId), NotificationWorkspaceName(workspaceName.namespace, workspaceName.name))
       }
     } yield {
       notificationDAO.fireAndForgetNotifications(notificationMessages)
