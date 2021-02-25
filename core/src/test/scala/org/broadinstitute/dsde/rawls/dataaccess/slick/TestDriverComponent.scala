@@ -1055,7 +1055,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
             //note that we don't save sample1 here, it was only used to generate cache entries that will differ from what full queries return

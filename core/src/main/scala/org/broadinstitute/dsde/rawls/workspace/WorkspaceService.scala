@@ -703,8 +703,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def copyBucketFiles(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, copyFilesWithPrefix: String): Future[List[Option[StorageObject]]] = {
-    gcsDAO.listObjectsWithPrefix(sourceWorkspaceContext.bucketName, copyFilesWithPrefix, Option(destWorkspaceContext.googleProject)).flatMap { objectsToCopy =>
-      Future.traverse(objectsToCopy) { objectToCopy =>  gcsDAO.copyFile(sourceWorkspaceContext.bucketName, objectToCopy.getName, destWorkspaceContext.bucketName, objectToCopy.getName, Option(destWorkspaceContext.googleProject)) }
+    gcsDAO.listObjectsWithPrefix(sourceWorkspaceContext.bucketName, copyFilesWithPrefix, Option(destWorkspaceContext.googleProjectId)).flatMap { objectsToCopy =>
+      Future.traverse(objectsToCopy) { objectToCopy =>  gcsDAO.copyFile(sourceWorkspaceContext.bucketName, objectToCopy.getName, destWorkspaceContext.bucketName, objectToCopy.getName, Option(destWorkspaceContext.googleProjectId)) }
     }
   }
 

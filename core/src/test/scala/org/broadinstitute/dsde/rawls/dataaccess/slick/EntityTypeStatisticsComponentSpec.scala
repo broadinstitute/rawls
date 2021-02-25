@@ -25,10 +25,12 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
         AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
       false,
       WorkspaceVersions.V2,
-      GoogleProjectId("test_google_project")
+      GoogleProjectId("test_google_project"),
+      None,
+      None
     )
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
 
     val testStats = Map(
       "sample" -> 1,
@@ -62,10 +64,12 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
         AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
       false,
       WorkspaceVersions.V2,
-      GoogleProjectId("test_google_project")
+      GoogleProjectId("test_google_project"),
+      None,
+      None
     )
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
 
     val testStats = Map(
       "sample" -> 1,
