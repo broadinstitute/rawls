@@ -83,6 +83,16 @@ object BootMonitors extends LazyLogging {
     //Boot workspace billing account monitor
     startWorkspaceBillingAccountMonitor(system, workspaceBillingAccountMonitorConfig, slickDataSource, gcsDAO)
 
+    //Boot entity statistics cache monitor
+    if(conf.getBoolean("entityStatisticsCache.enabled")) {
+      startEntityStatisticsCacheMonitor(
+        system,
+        slickDataSource,
+        util.toScalaDuration(conf.getDuration("entityStatisticsCache.timeoutPerWorkspace")),
+        util.toScalaDuration(conf.getDuration("entityStatisticsCache.standardPollInterval"))
+      )
+    }
+
     val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollJitter")),
@@ -196,6 +206,10 @@ object BootMonitors extends LazyLogging {
 
   private def startWorkspaceBillingAccountMonitor(system: ActorSystem, workspaceBillingAccountMonitorConfig: WorkspaceBillingAccountMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
     system.actorOf(WorkspaceBillingAccountMonitor.props(slickDataSource, gcsDAO, workspaceBillingAccountMonitorConfig.initialDelay, workspaceBillingAccountMonitorConfig.pollInterval))
+  }
+
+  private def startEntityStatisticsCacheMonitor(system: ActorSystem, slickDataSource: SlickDataSource, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration)(implicit cs: ContextShift[IO]) = {
+    system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval))
   }
 
   private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig, dataSource: SlickDataSource)(implicit cs: ContextShift[IO]) = {

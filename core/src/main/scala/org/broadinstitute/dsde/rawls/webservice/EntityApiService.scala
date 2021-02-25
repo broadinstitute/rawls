@@ -53,7 +53,12 @@ trait EntityApiService extends UserInfoDirectives {
       } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
           get {
-            complete { entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, billingProject) }
+            parameters('useCache.?) { (useCache) =>
+              val useCacheBool = Try(useCache.getOrElse("false").toBoolean).getOrElse(false)
+              complete {
+                entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, billingProject, useCacheBool)
+              }
+            }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>

@@ -215,7 +215,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     logger.debug("Checking Google Buckets...")
     // Note: call to `foldMap` depends on SubsystemStatusMonoid
     bucketsToCheck.toList.foldMap { bucket =>
-      googleServicesDAO.getBucket(bucket).map {
+      googleServicesDAO.getBucket(bucket, None).map {
         case Some(_) => OkStatus
         case None => failedStatus(s"Could not find bucket: $bucket")
       }

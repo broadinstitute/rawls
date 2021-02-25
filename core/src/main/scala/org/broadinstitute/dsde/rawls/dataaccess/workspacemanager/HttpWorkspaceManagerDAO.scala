@@ -8,7 +8,7 @@ import akka.stream.Materializer
 import bio.terra.workspace.api.WorkspaceApi
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.model.DataReferenceName
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
 
 import scala.concurrent.ExecutionContext
 
@@ -38,8 +38,12 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(accessToken).deleteWorkspace(workspaceId)
   }
 
-  override def createDataReference(workspaceId: UUID, name: DataReferenceName, referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
-    getWorkspaceApi(accessToken).createDataReference(new CreateDataReferenceRequestBody().name(name.value).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions), workspaceId)
+  override def createDataReference(workspaceId: UUID, name: DataReferenceName, description: DataReferenceDescriptionField, referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+    getWorkspaceApi(accessToken).createDataReference(new CreateDataReferenceRequestBody().name(name.value).description(description.value).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions), workspaceId)
+  }
+
+  override def updateDataReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
+    getWorkspaceApi(accessToken).updateDataReference(updateInfo, workspaceId, referenceId)
   }
 
   override def deleteDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {

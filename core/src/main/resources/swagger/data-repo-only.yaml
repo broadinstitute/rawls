@@ -10,6 +10,12 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - name: useCache
+          in: query
+          description: True to read entity statistics from cache if cache is up to date, false to bypass cache (slower). Default is false.
+          schema:
+            type: boolean
+            default: false
         - $ref: '#/components/parameters/dataReferenceQueryParam'
         - $ref: '#/components/parameters/billingProjectQueryParam'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete:
@@ -81,6 +87,9 @@ paths:
         - $ref: '#/components/parameters/dataReferenceQueryParam'
         - $ref: '#/components/parameters/billingProjectQueryParam'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
     get:
       tags:
         - snapshots
@@ -88,8 +97,6 @@ paths:
       description: Enumerate references to snapshots in the Terra Data Repo
       operationId: enumerateDataRepoSnapshot
       parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: offset
           in: query
           description: The number of items to skip before starting to collect the result
@@ -124,20 +131,12 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     post:
       tags:
         - snapshots
       summary: Create a snapshot
       description: Add a reference to a snapshot in the Terra Data Repo
       operationId: createDataRepoSnapshot
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Reference to the Data Repo snapshot
         content:
@@ -165,22 +164,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       x-codegen-request-body-name: namedDataRepoSnapshot
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+      - $ref: '#/components/parameters/snapshotIdPathParam'
     get:
       tags:
         - snapshots
       summary: Get a snapshot
       description: Get a reference to a snapshot in the Terra Data Repo
       operationId: getDataRepoSnapshot
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-        - $ref: '#/components/parameters/snapshotIdPathParam'
       responses:
         200:
           description: OK
@@ -200,26 +194,20 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
-    delete:
+    patch:
+      summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
+      operationId: updateDataRepoSnapshot
       tags:
         - snapshots
-      summary: Delete a snapshot
-      description: Delete a workspace's reference to a snapshot in the Terra Data
-        Repo
-      operationId: deleteDataRepoSnapshot
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-        - $ref: '#/components/parameters/snapshotIdPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDataReferenceRequestBody'
       responses:
         204:
           description: Successful Request
-          content: {}
         404:
           description: Workspace or snapshot not found
           content:
@@ -232,11 +220,28 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
+    delete:
+      tags:
+        - snapshots
+      summary: Delete a snapshot
+      description: Delete a workspace's reference to a snapshot in the Terra Data
+        Repo
+      operationId: deleteDataRepoSnapshot
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
 components:
   schemas:
     DataRepoSnapshot:
@@ -252,6 +257,7 @@ components:
           type: string
     NamedDataRepoSnapshot:
       type: object
+      required: [snapshotId, name]
       properties:
         snapshotId:
           type: string
@@ -259,13 +265,20 @@ components:
         name:
           type: string
           description: The name of the snapshot
+        description:
+          type: string
+          description: A description for the snapshot
+          default: ""
       description: A Data Repo snapshot
     DataRepoSnapshotReference:
       type: object
+      required: [referenceId, name, description, workspaceId, referenceType, reference, cloningInstructions]
       properties:
         referenceId:
           type: string
         name:
+          type: string
+        description:
           type: string
         workspaceId:
           type: string
@@ -276,8 +289,16 @@ components:
         cloningInstructions:
           type: string
       description: A Data Reference definition from Workspace Manager
+    UpdateDataReferenceRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
     DataRepoSnapshotReferenceList:
       type: object
+      required: [resources]
       properties:
         resources:
           type: array

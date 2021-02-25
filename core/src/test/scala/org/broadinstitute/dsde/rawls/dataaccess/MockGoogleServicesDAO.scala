@@ -121,15 +121,15 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def deleteBucket(bucketName: String) = Future.successful(true)
 
-  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(Some(new Bucket))
+  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(Some(new Bucket))
 
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = Future.successful(Some(List.fill(5)(new BucketAccessControl)))
 
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
-  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = Future.successful(List.empty)
+  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: Option[GoogleProjectId]): Future[List[StorageObject]] = Future.successful(List.empty)
 
-  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]] = Future.successful(None)
+  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String, userProject: Option[GoogleProjectId]): Future[Option[StorageObject]] = Future.successful(None)
 
   val adminList = scala.collection.mutable.Set("owner-access")
   val curatorList = scala.collection.mutable.Set("owner-access")
@@ -244,7 +244,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(new ProjectBillingInfo().setBillingAccountName(newBillingAccount.map(_.value).getOrElse("")).setProjectId(googleProjectId.value))
   }
 
-  override def getRegionForRegionalBucket(bucketName: String): Future[Option[String]] = {
+  override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] = {
     Future.successful {
       bucketName match {
         case "fc-regional-bucket" => Option("EUROPE-NORTH1")
