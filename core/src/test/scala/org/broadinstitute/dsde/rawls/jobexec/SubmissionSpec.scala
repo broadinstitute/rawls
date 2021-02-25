@@ -338,7 +338,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
-      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0))
+      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
 
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
@@ -1130,11 +1130,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
 
     val dataReferenceName = DataReferenceName("dataref")
+    val dataReferenceDescription = DataReferenceDescriptionField("description")
 
     val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
 
     withDataAndService({ workspaceService =>
-      workspaceService.workspaceManagerDAO.createDataReference(minimalTestData.workspace.workspaceIdAsUUID, dataReferenceName, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, new DataRepoSnapshot().instanceName(dataRepoDAO.getInstanceName).snapshot(snapshotUUID.toString), CloningInstructionsEnum.NOTHING, userInfo.accessToken)
+      workspaceService.workspaceManagerDAO.createDataReference(minimalTestData.workspace.workspaceIdAsUUID, dataReferenceName, dataReferenceDescription, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, new DataRepoSnapshot().instanceName(dataRepoDAO.getInstanceName).snapshot(snapshotUUID.toString), CloningInstructionsEnum.NOTHING, userInfo.accessToken)
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
       test(workspaceService, methodConfig, snapshotUUID)
     }, withMinimalTestDatabase[Any], bigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)), dataRepoDAO = dataRepoDAO)
@@ -1244,7 +1245,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val ex = intercept[RawlsExceptionWithErrorReport] {
         Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
       }
-      ex.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+      ex.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
       ex.errorReport.message shouldBe "Reference name unknown does not exist in workspace myNamespace/myWorkspace."
     }
   }

@@ -26,6 +26,7 @@ case class WorkspaceRecord(
                             workflowCollection: Option[String],
                             createdDate: Timestamp,
                             lastModified: Timestamp,
+  entityCacheLastUpdated: Timestamp,
                             createdBy: String,
                             isLocked: Boolean,
                             recordVersion: Long,
@@ -56,6 +57,7 @@ trait WorkspaceComponent {
     def workflowCollection = column[Option[String]]("workflow_collection", O.Length(255))
     def createdDate = column[Timestamp]("created_date", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def lastModified = column[Timestamp]("last_modified", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
+    def entityCacheLastUpdated = column[Timestamp]("entity_cache_last_updated", O.SqlType("TIMESTAMP(6)"))
     def createdBy = column[String]("created_by", O.Length(254))
     def isLocked = column[Boolean]("is_locked")
     def recordVersion = column[Long]("record_version")
@@ -66,7 +68,7 @@ trait WorkspaceComponent {
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
     def currentBillingAccountOnGoogleProject = column[Option[String]]("billing_account_on_google_project", O.Length(254))
-    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnGoogleProject) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, entityCacheLastUpdated, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnGoogleProject) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   /** raw/optimized SQL queries for working with workspace attributes
@@ -260,6 +262,10 @@ trait WorkspaceComponent {
       findByNameQuery(workspaceName).map(_.lastModified).update(currentTime)
     }
 
+    def updateCacheLastUpdated(workspaceId: UUID, timestamp: Timestamp) = {
+      findByIdQuery(workspaceId).map(_.entityCacheLastUpdated).update(timestamp)
+    }
+
     def lock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
       findByNameQuery(workspaceName).map(_.isLocked).update(true)
     }
@@ -429,8 +435,24 @@ trait WorkspaceComponent {
       filter(_.namespace.inSetBind(namespaceNames.map(_.value)))
     }
 
+    def findMostOutdatedEntityCacheAfter(timestamp: Timestamp): ReadAction[Option[(UUID, Timestamp)]] = {
+      // Find the workspace that has the entity cache that is the most out of date:
+      // A. Workspace has a cacheLastUpdated date that is not current ("current" means equal to lastModified)
+      // B. cacheLastUpdated is after @param timestamp
+      // C. Ordered by lastModified from oldest to newest. Meaning, return the workspace that was modified the longest ago
+      uniqueResult[(UUID, Timestamp)](filter(rec => rec.entityCacheLastUpdated < rec.lastModified && rec.entityCacheLastUpdated > timestamp).sortBy(_.lastModified.asc).take(1).map { ws => (ws.id, ws.lastModified) })
+    }
+
+    def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
+      val queryResult = uniqueResult[(Timestamp, Timestamp)](filter(rec => rec.id === workspaceId).map(ws => (ws.lastModified, ws.entityCacheLastUpdated)))
+      queryResult.map {
+        case Some((lastModified, entityCacheLastUpdated)) => lastModified.equals(entityCacheLastUpdated)
+        case _ => false
+      }
+    }
+
     private def loadWorkspace(lookup: WorkspaceQueryType, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Option[Workspace]] = {
-        uniqueResult(loadWorkspaces(lookup, attributeSpecs))
+      uniqueResult(loadWorkspaces(lookup, attributeSpecs))
     }
 
     private def loadWorkspaces(lookup: WorkspaceQueryType, attributeSpecsOption: Option[WorkspaceAttributeSpecs] = None): ReadAction[Seq[Workspace]] = {
@@ -449,7 +471,7 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.currentBillingAccountOnGoogleProject.map(_.value))
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.currentBillingAccountOnGoogleProject.map(_.value))
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord): Workspace = {

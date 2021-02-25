@@ -8,14 +8,16 @@ import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoog
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.fixture._
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
+import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
@@ -24,9 +26,13 @@ import DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
+import scala.concurrent.duration._
+
+
+
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually
-  with CleanUp with RandomUtil with Retry
+  with CleanUp with RandomUtil with Retry with ScalaFutures
   with BillingFixtures with WorkspaceFixtures with MethodFixtures {
 
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
@@ -92,6 +98,19 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe false)
 
         Rawls.billingV2.deleteBillingProject(billingProjectName)
+      }
+
+      "to get an error message when they try to create a workspace with a bucket region that is invalid" in {
+        implicit val token: AuthToken = ownerAuthToken
+        val invalidRegion = "invalid-region1"
+
+        val p = claimGPAllocProject(owner)
+        val workspaceName = prependUUID("owner-invalid-region-workspace")
+        val exception = intercept[RestException](Orchestration.workspaces.create(p.projectName, workspaceName, Set.empty, Option(invalidRegion))).message.parseJson.asJsObject
+
+        exception.fields("statusCode").convertTo[Int] should equal(400)
+        exception.fields("message").convertTo[String] should startWith("Workspace creation failed. Error trying to create bucket ")
+        exception.fields("message").convertTo[String] should endWith(s" in Google project `${p.projectName}` in region `${invalidRegion}`.")
       }
 
       "to add readers with can-share access" in {
@@ -278,6 +297,41 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
             exception.message.parseJson.asJsObject.fields("message").convertTo[String] should equal("may not grant readers compute access")
           }(ownerAuthToken)
+        }
+      }
+    }
+
+    "should allow readers" - {
+      "to clone a requester-pays workspace from a different project into their own project" in {
+        implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+
+        implicit val ownerToken: AuthToken = ownerAuthToken
+        implicit val user: Credentials = UserPool.chooseStudent
+        implicit val userToken: AuthToken = user.makeAuthToken()
+
+        val workspaceName = prependUUID("requester-pays")
+        val workspaceCloneName = s"$workspaceName-copy"
+
+        // user does not belong to the source project
+        withCleanBillingProject(owner) { sourceProjectName =>
+          withCleanBillingProject(user) { destProjectName =>
+            // The original workspace is in the source project. The user is a Reader on this workspace
+            withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
+              withCleanUp {
+                // Enable requester pays on the original workspace and wait for the change to propagate
+                val bucketName = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(ownerToken)).workspace.bucketName
+                googleStorageDAO.setRequesterPays(GcsBucketName(bucketName), true).futureValue
+                eventually {
+                  workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)).bucketOptions should contain(WorkspaceBucketOptions(true))
+                }
+
+                // The user clones the workspace into their project
+                Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(userToken)
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken)).workspace.name should be (workspaceCloneName)
+                register cleanUp Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
+              }
+            }(ownerToken)
+          }
         }
       }
     }

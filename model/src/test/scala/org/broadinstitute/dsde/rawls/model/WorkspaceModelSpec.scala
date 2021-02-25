@@ -42,6 +42,14 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             MethodRepoMethodFormat.write(DockstoreMethod("test-path", "test-version"))
           }
         }
+
+        "DockstoreTools" in {
+          assertResult {
+            """{"methodUri":"dockstoretools://test-path/test-version","sourceRepo":"dockstoretools","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
+          } {
+            MethodRepoMethodFormat.write(DockstoreToolsMethod("test-path", "test-version"))
+          }
+        }
       }
 
       "Deserialize" - {
@@ -127,6 +135,14 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
           intercept[spray.json.DeserializationException] {
             MethodRepoMethodFormat.read(
               """{"methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+          }
+        }
+
+        "DockstoreTools" in {
+          assertResult {
+            DockstoreToolsMethod("test-path", "test-version")
+          } {
+            MethodRepoMethodFormat.read("""{"sourceRepo":"dockstoretools","methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
           }
         }
 

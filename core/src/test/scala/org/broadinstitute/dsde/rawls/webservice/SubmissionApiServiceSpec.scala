@@ -492,6 +492,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           expectedResponse(testData.costedSubmission1),
           expectedResponse(testData.submission2),
           expectedResponse(testData.submissionUpdateEntity),
+          expectedResponse(testData.regionalSubmission),
           expectedResponse(testData.submissionUpdateWorkspace))) {
           responseAs[Seq[SubmissionListResponse]].toSet
         }
@@ -505,7 +506,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Map("Submitted" -> 7)) {
+          assertResult(Map("Submitted" -> 8)) {
             responseAs[Map[String, Int]]
           }
         }
@@ -552,7 +553,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     // also insert a dummy audit record with a different workflow id to attempt to confuse the code
     runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 42, WorkflowStatuses.Queued.toString, new java.sql.Timestamp(queuedTime-6000)) ) )
 
-    val existingSubmittedWorkflowCount = 19
+    val existingSubmittedWorkflowCount = 22
     val existingWorkflowCounts = Map("Submitted" -> existingSubmittedWorkflowCount)
 
     val resp = getQueueStatus(services.submissionRoutes)

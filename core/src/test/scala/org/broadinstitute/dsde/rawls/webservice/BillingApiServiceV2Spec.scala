@@ -218,6 +218,36 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
+  it should "return 400 when creating a project with a name that is too short" in withEmptyDatabaseAndApiServices { services =>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("short"), services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 when creating a project with a name that is too long" in withEmptyDatabaseAndApiServices { services =>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"), services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 when creating a project with a name that contains invalid characters" in withEmptyDatabaseAndApiServices { services =>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("!@#$%^&*()=+,. "), services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
   private def mockPositiveBillingProjectCreation(services: TestApiService, projectName: RawlsBillingProjectName): Unit = {
     val policies = services.userServiceConstructor(userInfo).defaultBillingProjectPolicies
     when(services.samDAO.createResourceFull(

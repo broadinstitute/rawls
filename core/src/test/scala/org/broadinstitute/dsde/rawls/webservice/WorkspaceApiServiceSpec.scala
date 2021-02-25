@@ -740,7 +740,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         val dateTime = currentTime()
         assertResult(Set(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testData.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 7)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testData.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 8)), false),
           WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testData.workspaceFailedSubmission.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, Option(testDate), 0)), false),
         )) {
           responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
@@ -846,6 +846,24 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.BadRequest) {
           status
         }
+      }
+  }
+
+  it should "return 400 if the bucket location requested is in an invalid format" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      attributes = Map.empty,
+      authorizationDomain = None,
+      bucketLocation = Option("US")
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        val errorText = responseAs[ErrorReport].message
+        assert(status == StatusCodes.BadRequest)
+        assert(errorText.contains("Workspace bucket location must be a single (not multi-) region of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
       }
   }
 

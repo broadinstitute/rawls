@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import com.google.api.services.bigquery.model.{TableCell, TableRow}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.joda.time.{DateTime, DateTimeZone}
 
@@ -112,7 +113,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
    */
   it should "bypass BigQuery with no workflow IDs" in {
     assertResult(Map.empty) {
-      Await.result(submissionCostService.getSubmissionCosts("submission-id", Seq.empty, "test", new DateTime(DateTimeZone.UTC), Option(new DateTime(DateTimeZone.UTC))), 1 minute)
+      Await.result(submissionCostService.getSubmissionCosts("submission-id", Seq.empty, GoogleProjectId("test"), new DateTime(DateTimeZone.UTC), Option(new DateTime(DateTimeZone.UTC))), 1 minute)
     }
   }
 }

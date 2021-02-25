@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
-
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
@@ -24,6 +23,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeT
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
@@ -31,6 +31,8 @@ import scala.concurrent.{Await, Future}
 import scala.language.{implicitConversions, postfixOps}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import java.sql.Timestamp
 
 // initialize database tables and connection pool only once
 object DbResource {
@@ -262,6 +264,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsNameConfigCopyDestination = WorkspaceName("myNamespace", "configCopyDestinationWS")
     val wsInterleaved = WorkspaceName("myNamespace", "myWSToTestInterleavedSubs")
     val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWSToTestWFFailureMode")
+    val wsRegionalName = WorkspaceName("myNamespace", "myRegionalWorkspace")
     val workspaceToTestGrantId = UUID.randomUUID()
 
     val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
@@ -290,6 +293,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs)
 
     val (workspace) = makeWorkspaceWithUsers(billingProject, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
+
+    val (regionalWorkspace) = makeWorkspaceWithUsers(billingProject, wsRegionalName.name, UUID.randomUUID().toString, "fc-regional-bucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser",
       wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)))
@@ -499,6 +504,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Seq.empty, Map.empty,
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
     val submission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
+      Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
+      Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
+    val regionalSubmission = createTestSubmission(regionalWorkspace, agoraMethodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
     val costedSubmission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
@@ -862,7 +870,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceInterleavedSubmissions,
       workspaceWorkflowFailureMode,
       workspaceToTestGrant,
-      workspaceConfigCopyDestination)
+      workspaceConfigCopyDestination,
+      regionalWorkspace)
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
 
     override def save() = {
@@ -902,6 +911,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 submissionQuery.create(context, submissionTerminateTest),
                 submissionQuery.create(context, submissionNoWorkflows),
                 submissionQuery.create(context, submission1),
+                submissionQuery.create(context, regionalSubmission),
                 submissionQuery.create(context, costedSubmission1),
                 submissionQuery.create(context, submission2),
                 submissionQuery.create(context, submissionUpdateEntity),
@@ -1024,6 +1034,39 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         workspaceQuery.createOrUpdate(workspace2)
       )
     }
+  }
+
+  class LocalEntityProviderTestData() extends TestData {
+    val workspaceName = WorkspaceName("namespace", "workspace-with-cache")
+    val wsAttrs = Map(AttributeName.withDefaultNS("description") -> AttributeString("a description"))
+    val creationTime = currentTime()
+    val workspace = Workspace(workspaceName.namespace, workspaceName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), creationTime, creationTime, "testUser", wsAttrs)
+
+    val participant1 = Entity("participant1", "participant", Map(AttributeName.withDefaultNS("attr1") -> AttributeString("value1"), AttributeName.withDefaultNS("attr2") -> AttributeString("value2")))
+    val sample1 = Entity("sample1", "sample", Map(AttributeName.withDefaultNS("attr5") -> AttributeString("value5"), AttributeName.withDefaultNS("attr6") -> AttributeString("value6")))
+
+    val workspaceEntities = Seq(participant1, sample1)
+
+    val workspaceAttrNameCacheEntries = workspaceEntities.groupBy(_.entityType).map { case (entityType, entities) =>
+      entityType -> entities.flatMap(_.attributes.keys)
+    }
+
+    val workspaceEntityTypeCacheEntries = workspaceEntities.groupBy(_.entityType).mapValues(_.length)
+
+    override def save() = {
+      DBIO.seq(
+        workspaceQuery.createOrUpdate(workspace),
+        withWorkspaceContext(workspace)({ context =>
+          DBIO.seq(
+            //note that we don't save sample1 here, it was only used to generate cache entries that will differ from what full queries return
+            entityQuery.save(context, participant1),
+            entityAttributeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceAttrNameCacheEntries),
+            entityTypeStatisticsQuery.batchInsert(workspace.workspaceIdAsUUID, workspaceEntityTypeCacheEntries),
+          )
+        })
+      )
+    }
+
   }
 
   /* This test data should remain constant! Changing this data set will likely break
@@ -1187,6 +1230,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val testData = new DefaultTestData()
   val constantData = new ConstantTestData()
   val minimalTestData = new MinimalTestData()
+  val localEntityProviderTestData = new LocalEntityProviderTestData()
 
   def withDefaultTestDatabase[T](testCode: => T): T = {
     withCustomTestDatabaseInternal(testData)(testCode)
@@ -1198,6 +1242,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T ={
     withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))
+  }
+
+  def withLocalEntityProviderTestDatabase[T](testCode: SlickDataSource => T): T ={
+    withCustomTestDatabaseInternal(localEntityProviderTestData)(testCode(slickDataSource))
   }
 
   def withConstantTestDatabase[T](testCode: => T): T = {

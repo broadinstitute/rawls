@@ -6,8 +6,8 @@ import cats.effect.{Blocker, ContextShift, IO, Timer}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.apache.commons.io.IOUtils
-
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
 import scala.concurrent.ExecutionContext
 
@@ -25,9 +25,9 @@ class GoogleBigQueryServiceFactory(blocker: Blocker)(implicit executionContext: 
   implicit lazy val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(executionContext)
   implicit lazy val timer: Timer[IO] = cats.effect.IO.timer(executionContext)
 
-  def getServiceForPet(petKey: String): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
+  def getServiceForPet(petKey: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
     val petCredentials = ServiceAccountCredentials.fromStream(IOUtils.toInputStream(petKey, Charset.defaultCharset))
-    GoogleBigQueryService.resource[IO](petCredentials, blocker)
+    GoogleBigQueryService.resource[IO](petCredentials, blocker, projectId)
   }
 
 }
