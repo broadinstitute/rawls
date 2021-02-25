@@ -392,7 +392,8 @@ object Boot extends IOApp with LazyLogging {
         appDependencies.bigQueryServiceFactory,
         conf.getString("dataRepo.terraInstanceName"),
         gcsConfig.getString("pathToCredentialJson"),
-        WorkbenchEmail(clientEmail)
+        WorkbenchEmail(clientEmail),
+        WorkbenchEmail(conf.getString("deltaLayer.deltaLayerStreamerEmail"))
       )
 
       val service = new RawlsApiServiceImpl(
