@@ -35,9 +35,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                      bucketName: String,
                      labels: Map[String, String],
                      parentSpan: Span = null,
+                     bucketLocation: Option[String],
                      policyMap: Map[SamResourcePolicyName, WorkbenchEmail],
-                     billingProjectOwnerPolicyEmail: WorkbenchEmail,
-                     bucketLocation: Option[String]): Future[GoogleWorkspaceInfo]
+                     billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(googleProject: GoogleProjectId): Future[Project]
 
