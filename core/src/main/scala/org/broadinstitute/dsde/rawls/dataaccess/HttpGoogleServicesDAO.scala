@@ -194,7 +194,7 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], policyMap: Map[SamResourcePolicyName, WorkbenchEmail], projectOwnerPolicyEmail: WorkbenchEmail, parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, googleProject: GoogleProjectId, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], policyMap: Map[SamResourcePolicyName, WorkbenchEmail], billingProjectOwnerPolicyEmail: WorkbenchEmail, parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
     def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
@@ -240,13 +240,13 @@ class HttpGoogleServicesDAO(
       }
     }
 
-    def updateGoogleProjectIam(googleProject: GoogleProjectId, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], googleProjectOwnerRole: String, googleProjectViewerRole: String, projectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {
+    def updateGoogleProjectIam(googleProject: GoogleProjectId, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], googleProjectOwnerRole: String, googleProjectViewerRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {
       // billing project owner - organizations/$ORG_ID/roles/google-project-owner
       // workspace owner - organizations/$ORG_ID/roles/google-project-owner
       // workspace can-compute - organizations/$ORG_ID/roles/google-project-viewer
 
       val policyGroupsToRoles = Map(
-        projectOwnerPolicyEmail -> Set(googleProjectOwnerRole),
+        billingProjectOwnerPolicyEmail -> Set(googleProjectOwnerRole),
         policyMap(SamWorkspacePolicyNames.owner) -> Set(googleProjectOwnerRole),
         policyMap(SamWorkspacePolicyNames.canCompute) -> Set(googleProjectViewerRole)
       )
@@ -263,7 +263,7 @@ class HttpGoogleServicesDAO(
       _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(googleProject.value), GcsBucketName(bucketName), None, labels, Option(traceId), true, Option(GcsBucketName(getStorageLogsBucketName(googleProject)))).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
       updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
       insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
-      updateGoogleProjectIamFuture = traceWithParent("updateGoogleProjectIam", parentSpan)(_ => updateGoogleProjectIam(googleProject, policyMap, googleProjectOwnerRole, googleProjectViewerRole, projectOwnerPolicyEmail))
+      updateGoogleProjectIamFuture = traceWithParent("updateGoogleProjectIam", parentSpan)(_ => updateGoogleProjectIam(googleProject, policyMap, googleProjectOwnerRole, googleProjectViewerRole, billingProjectOwnerPolicyEmail))
       _ <- updateBucketIamFuture
       _ <- insertInitialStorageLogFuture
       _ <- updateGoogleProjectIamFuture
