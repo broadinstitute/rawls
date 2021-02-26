@@ -34,6 +34,7 @@ import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCa
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -268,6 +269,9 @@ object Boot extends IOApp with LazyLogging {
       val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
       val marthaResolver = new MarthaResolver(marthaUrl)
 
+      val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
+      val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
+
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
           slickDataSource,
@@ -276,7 +280,8 @@ object Boot extends IOApp with LazyLogging {
           samDAO,
           requesterPaysRole,
           dmConfig,
-          projectTemplate
+          projectTemplate,
+          servicePerimeterService
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
@@ -381,7 +386,8 @@ object Boot extends IOApp with LazyLogging {
         workspaceServiceConfig,
         requesterPaysSetupService,
         entityManager,
-        resourceBufferService
+        resourceBufferService,
+        servicePerimeterService
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(

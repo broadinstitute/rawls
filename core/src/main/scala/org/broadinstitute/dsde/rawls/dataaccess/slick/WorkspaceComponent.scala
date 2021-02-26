@@ -266,6 +266,10 @@ trait WorkspaceComponent {
       findByIdQuery(workspaceId).map(_.entityCacheLastUpdated).update(timestamp)
     }
 
+    def updateGoogleProjectNumber(workspaceIds: Seq[UUID], googleProjectNumber: GoogleProjectNumber): WriteAction[Int] = {
+      findByIdsQuery(workspaceIds).map(_.googleProjectNumber).update(Option(googleProjectNumber.value))
+    }
+
     def lock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
       findByNameQuery(workspaceName).map(_.isLocked).update(true)
     }
