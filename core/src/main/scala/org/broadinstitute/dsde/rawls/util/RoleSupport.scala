@@ -20,7 +20,7 @@ trait RoleSupport {
     gcsDAO.isAdmin(userEmail.value) recoverWith { case t => throw new RawlsException("Unable to query for admin status.", t) }
   }
 
-  def asFCAdmin(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  def asFCAdmin[T](op: => Future[T]): Future[T] = {
     tryIsFCAdmin(userInfo.userEmail) flatMap { isAdmin =>
       if (isAdmin) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be an admin.")))
     }
