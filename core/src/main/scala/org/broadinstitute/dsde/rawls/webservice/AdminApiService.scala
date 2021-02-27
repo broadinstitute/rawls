@@ -4,6 +4,8 @@ package org.broadinstitute.dsde.rawls.webservice
  * Created by tsharpe on 9/25/15.
  */
 
+import akka.http.scaladsl.marshalling.ToResponseMarshallable
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -56,7 +58,12 @@ trait AdminApiService extends UserInfoDirectives {
     } ~
     path("admin" / "submissions" / Segment / Segment / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
       delete {
-        complete { workspaceServiceConstructor(userInfo).adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
+        complete {
+          workspaceServiceConstructor(userInfo).adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId).map { count =>
+            if(count == 1) StatusCodes.NoContent
+            else StatusCodes.NotFound -> s"Unable to abort submission. Submission ${submissionId} could not be found."
+          }
+        }
       }
     } ~
     path("admin" / "submissions" / "queueStatusByUser") {

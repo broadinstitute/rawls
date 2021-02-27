@@ -43,7 +43,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           parameterSeq { allParams =>
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+                workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span).map(StatusCodes.OK -> _)
               }
             }
           }
@@ -52,7 +52,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
-            complete { workspaceServiceConstructor(userInfo).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+            complete {
+              workspaceServiceConstructor(userInfo).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations).map(StatusCodes.OK -> _)
+            }
           }
         } ~
           get {
@@ -60,13 +62,15 @@ trait WorkspaceApiService extends UserInfoDirectives {
               traceRequest { span =>
                 complete {
                   workspaceServiceConstructor(userInfo).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
-                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span).map(StatusCodes.OK -> _)
                 }
               }
             }
           } ~
           delete {
-            complete { workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
+            complete {
+              workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(bucketName => StatusCodes.Accepted -> s"Your Google bucket $bucketName will be deleted within 24h.")
+            }
           }
       } ~
       path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
@@ -76,7 +80,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "bucketOptions") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getBucketOptions(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).getBucketOptions(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "clone") { (sourceNamespace, sourceWorkspace) =>
@@ -94,12 +100,16 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "acl") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getACL(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).getACL(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+          }
         } ~
           patch {
             parameter('inviteUsersNotFound.?) { inviteUsersNotFound =>
               entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
-                complete { workspaceServiceConstructor(userInfo).updateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean) }
+                complete {
+                  workspaceServiceConstructor(userInfo).updateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean).map(StatusCodes.OK -> _)
+                }
               }
             }
           }
@@ -107,17 +117,23 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "library") { (workspaceNamespace, workspaceName) =>
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
-            complete { workspaceServiceConstructor(userInfo).updateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+            complete {
+              workspaceServiceConstructor(userInfo).updateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations).map(StatusCodes.OK -> _)
+            }
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "catalog") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getCatalog(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).getCatalog(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+          }
         } ~
           patch {
             entity(as[Array[WorkspaceCatalog]]) { catalogUpdate =>
-              complete { workspaceServiceConstructor(userInfo).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate) }
+              complete {
+                workspaceServiceConstructor(userInfo).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate).map(StatusCodes.OK -> _)
+              }
             }
           }
       } ~
@@ -133,12 +149,16 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "lock") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).lockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).lockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "unlock") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).unlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).unlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "bucketUsage") { (workspaceNamespace, workspaceName) =>
@@ -149,13 +169,17 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / "tags") {
         parameter('q.?) { queryString =>
           get {
-            complete { workspaceServiceConstructor(userInfo).getTags(queryString) }
+            complete {
+              workspaceServiceConstructor(userInfo).getTags(queryString).map(StatusCodes.OK -> _)
+            }
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
         post {
-          complete { workspaceServiceConstructor(userInfo).sendChangeNotifications(WorkspaceName(namespace, name)) }
+          complete {
+            workspaceServiceConstructor(userInfo).sendChangeNotifications(WorkspaceName(namespace, name)).map(StatusCodes.OK -> _)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "enableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
