@@ -2139,8 +2139,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(s1 => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, s1) {
-      traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", s1) (_ => maybeRequireBillingProjectOwnerAccess(workspaceRequest) {
-        traceDBIOWithParent("findByName", s1)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
+      traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", parentSpan) (_ => maybeRequireBillingProjectOwnerAccess(workspaceRequest) {
+        traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
           case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
           case None =>
             val workspaceId = UUID.randomUUID.toString
@@ -2154,34 +2154,36 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             // add the workspace id to the span so we can find and correlate it later with other services
             s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
 
-            traceDBIOWithParent("getPolicySyncStatus", s1)(_ => DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))).flatMap { billingProjectOwnerPolicyEmail =>
-              traceDBIOWithParent("setupGoogleProject", s1)(_ => DBIO.from(setupGoogleProject(billingProject, billingAccount, s1, workspaceId))).flatMap { case (googleProjectId, googleProjectNumber) =>
-                traceDBIOWithParent("saveNewWorkspace", s1)(s2 => saveNewWorkspace(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, s2).flatMap { case (savedWorkspace, policyMap) =>
-                  // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
-                  traceDBIOWithParent("createResourceFull (google project)", s1)(_ => DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
+            for {
+              billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentSpan)(_ => DBIO.from(
+                  samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email)))
+              (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
+                  setupGoogleProject(billingProject, billingAccount, s1, workspaceId)))
+              (savedWorkspace, policyMap) <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(s2 =>
+                  saveNewWorkspace(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, s2))
+              // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
+              _ <- traceDBIOWithParent("createResourceFull (google project)", parentSpan)(_ => DBIO.from(
+                  samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
 
-                  for {
-                    //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
-                    //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
-                    //will never change, which would eliminate the call to sam entirely
-                    policyEmails <- DBIO.successful(policyMap.map { case (policyName, policyEmail) =>
-                      if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
-                        // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-                        // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-                        // the limit of 2000
-                        Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
-                      } else {
-                        WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
-                      }
-                    }.flatten.toMap)
+              //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
+              //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
+              //will never change, which would eliminate the call to sam entirely
+              policyEmails <- DBIO.successful(policyMap.map { case (policyName, policyEmail) =>
+                if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
+                  // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+                  // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+                  // the limit of 2000
+                  Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
+                } else {
+                  WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
+                }
+              }.flatten.toMap)
 
-                    _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", s2)(s3 => DBIO.from(gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3, workspaceRequest.bucketLocation, policyMap, billingProjectOwnerPolicyEmail)))
-                    _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))
-                    response <- traceDBIOWithParent("doOp", s2)(_ => op(savedWorkspace))
-                  } yield response
-                })
-              }
-            }
+              _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentSpan)(s3 => DBIO.from(
+                  gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), s3, workspaceRequest.bucketLocation, policyMap, billingProjectOwnerPolicyEmail)))
+              _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))
+              response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
+            } yield (response)
         }
       })
     })
