@@ -1,4 +1,4 @@
-FROM bigtruedata/sbt
+FROM us.gcr.io/broad-dsp-gcr-public/scala-baseimage
 
 COPY src /app/src
 COPY minnie-kenny.sh /app
