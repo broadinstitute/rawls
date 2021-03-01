@@ -1,4 +1,4 @@
-FROM us.gcr.io/broad-dsp-gcr-public/scala-baseimage
+FROM broadinstitute/scala-baseimage:jdk11-2.12.11-1.4.7
 
 COPY src /app/src
 COPY minnie-kenny.sh /app
