@@ -373,7 +373,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   //but that seems extremely shady
   def registerBillingProject(xfer: RawlsBillingProjectTransfer): Future[PerRequestMessage] = {
     val billingProjectName = RawlsBillingProjectName(xfer.project)
-    val project = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None)
+    val project = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, Option(RawlsBillingAccountName("billingAccounts/00708C-45D19D-27AAFA")), None)
     val ownerUserInfo = UserInfo(RawlsUserEmail(xfer.newOwnerEmail), OAuth2BearerToken(xfer.newOwnerToken), 3600, RawlsUserSubjectId("0"))
 
 
