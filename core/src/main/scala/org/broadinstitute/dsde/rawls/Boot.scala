@@ -134,16 +134,7 @@ object Boot extends IOApp with LazyLogging {
       workbenchMetricBaseName = metricsPrefix
     )
 
-    val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
-    val source = scala.io.Source.fromFile(pathToCredentialJson)
-    val jsonCreds = try source.mkString finally source.close()
-    val googleIamDao = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)
-    val googleProjectOwnerRole = gcsConfig.getString("googleProjectOwnerRole")
-    val googleProjectViewerRole = gcsConfig.getString("googleProjectViewerRole")
-
-
-
-    initAppDependencies[IO](conf).use { appDependencies =>
+    initAppDependencies[IO](conf, appName, metricsPrefix).use { appDependencies =>
       val gcsDAO = new HttpGoogleServicesDAO(
         false,
         clientSecrets,
@@ -176,9 +167,9 @@ object Boot extends IOApp with LazyLogging {
         terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
         accessContextManagerDAO = accessContextManagerDAO,
         resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson"),
-        googleIamDao = googleIamDao,
-        googleProjectOwnerRole = googleProjectOwnerRole,
-        googleProjectViewerRole = googleProjectViewerRole
+        googleIamDao = appDependencies.httpGoogleIamDAO,
+        googleProjectOwnerRole = gcsConfig.getString("googleProjectOwnerRole"),
+        googleProjectViewerRole = gcsConfig.getString("googleProjectViewerRole")
       )
 
 
@@ -504,10 +495,12 @@ object Boot extends IOApp with LazyLogging {
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
-  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config)(implicit executionContext: ExecutionContext): cats.effect.Resource[F, AppDependencies[F]] = {
+  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
+    val jsonFileSource = scala.io.Source.fromFile(pathToCredentialJson)
+    val jsonCreds = try jsonFileSource.mkString finally jsonFileSource.close()
     val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
     val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
@@ -521,7 +514,8 @@ object Boot extends IOApp with LazyLogging {
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
       bqServiceFactory = new GoogleBigQueryServiceFactory(blocker)(executionContext)
-    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory)
+      httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)
+    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO)
   }
 }
 
@@ -530,4 +524,5 @@ final case class AppDependencies[F[_]](
   googleStorageService: GoogleStorageService[F],
   googleServiceHttp: GoogleServiceHttp[F],
   topicAdmin: GoogleTopicAdmin[F],
-  bigQueryServiceFactory: GoogleBigQueryServiceFactory)
+  bigQueryServiceFactory: GoogleBigQueryServiceFactory,
+  httpGoogleIamDAO: HttpGoogleIamDAO)
