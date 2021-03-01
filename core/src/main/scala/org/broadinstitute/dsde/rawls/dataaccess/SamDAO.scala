@@ -62,6 +62,8 @@ trait SamDAO {
     */
   def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId, userEmail: RawlsUserEmail): Future[String]
 
+  def getPetServiceAccountToken(googleProject: GoogleProjectId, scopes: Set[String], userInfo: UserInfo): Future[String]
+
   def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String]
 
   def deleteUserPetServiceAccount(googleProject: GoogleProjectId, userInfo: UserInfo): Future[Unit]
@@ -76,4 +78,9 @@ object SamDAO {
   case object NotFound extends GetUserIdInfoResult
   case object NotUser extends GetUserIdInfoResult
   final case class User(userIdInfo: UserIdInfo) extends GetUserIdInfoResult
+  val defaultScopes = Set(
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile"
+  )
+  val bigQueryScope = "https://www.googleapis.com/auth/bigquery.readonly"
 }

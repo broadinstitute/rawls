@@ -5772,6 +5772,5 @@ components:
             email: email authorization
             profile: profile authorization
             https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
-            https://www.googleapis.com/auth/bigquery.readonly: BigQuery read only authorization
 security:
   - authorization: [openid, email, profile]

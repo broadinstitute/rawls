@@ -168,7 +168,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       bigQueryServiceFactory,
       mockServer.mockServerBaseUrl,
       "fakeCredentialPath",
-      WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
+      WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com")
     )
 
     override val genomicsServiceConstructor = GenomicsService.constructor(

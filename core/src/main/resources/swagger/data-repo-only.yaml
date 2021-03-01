@@ -164,12 +164,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       x-codegen-request-body-name: namedDataRepoSnapshot
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
-            - https://www.googleapis.com/auth/bigquery.readonly
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'

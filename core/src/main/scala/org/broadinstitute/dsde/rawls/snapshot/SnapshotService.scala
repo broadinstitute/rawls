@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.snapshot
 
 import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
 import cats.effect.{ContextShift, IO}
 import com.google.cloud.bigquery.Acl
@@ -59,13 +60,14 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         projectOwnerPolicy = samPolicies.filter(_.policyName == SamWorkspacePolicyNames.projectOwner).head.policy.memberEmails
         filteredSamPolicies = samPolicies.filter(samPolicy => accessPolicies.contains(samPolicy.policyName)).map(_.email) ++ projectOwnerPolicy
         samAclBindings = Acl.Role.READER -> filteredSamPolicies.map{ filteredSamPolicyEmail =>(filteredSamPolicyEmail, Acl.Entity.Type.GROUP) }.toSeq
-        aclBindings = Map(samAclBindings, defaultIamRoles)
+        aclBindings = defaultIamRoles + samAclBindings
         bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
         _ <- bqService.use(_.createDataset(datasetName, datasetLabels))
         _ <- bqService.use(_.setDatasetIam(datasetName, aclBindings))
-      } yield {}
-      IOresult.unsafeToFuture().map { _ =>
-        workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), userInfo.accessToken)
+        petToken <- IO.fromFuture(IO(samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryScope, userInfo)))
+      } yield { petToken }
+      IOresult.unsafeToFuture().map { petToken =>
+        workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
         ref
       }
     }
