@@ -255,13 +255,11 @@ class HttpGoogleServicesDAO(
     }
 
     def updateGoogleProjectIam(googleProject: GoogleProjectId, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], googleProjectOwnerRole: String, googleProjectViewerRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {
-      // billing project owner - organizations/$ORG_ID/roles/google-project-owner
-      // workspace owner - organizations/$ORG_ID/roles/google-project-owner
-      // workspace can-compute - organizations/$ORG_ID/roles/google-project-viewer
+      // billing project owner - organizations/$ORG_ID/roles/google-project-owner AND organizations/$ORG_ID/roles/google-project-viewer
+      // workspace can-compute (includes workspace owners and billing project owners) - organizations/$ORG_ID/roles/google-project-viewer
 
       val policyGroupsToRoles = Map(
-        billingProjectOwnerPolicyEmail -> Set(googleProjectOwnerRole),
-        policyMap(SamWorkspacePolicyNames.owner) -> Set(googleProjectOwnerRole),
+        billingProjectOwnerPolicyEmail -> Set(googleProjectOwnerRole, googleProjectViewerRole),
         policyMap(SamWorkspacePolicyNames.canCompute) -> Set(googleProjectViewerRole)
       )
 
