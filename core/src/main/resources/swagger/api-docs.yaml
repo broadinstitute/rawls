@@ -895,8 +895,8 @@ paths:
           schema:
             type: string
       responses:
-        202:
-          description: Successful request, check the project's status for completion
+        204:
+          description: Project has been added to the perimeter
           content: {}
         400:
           description: Project is already in perimeter or is not in 'Ready' state

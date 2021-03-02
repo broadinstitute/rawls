@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
@@ -31,8 +32,8 @@ import scala.util.{Failure, Success}
 object UserService {
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, requesterPaysRole, dmConfig, projectTemplate)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate, servicePerimeterService: ServicePerimeterService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -59,7 +60,7 @@ object UserService {
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate, servicePerimeterService: ServicePerimeterService)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
@@ -656,10 +657,19 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case None => gcsDAO.getGoogleProject(billingProject.googleProjectId).map(googleProject => GoogleProjectNumber(googleProject.getProjectNumber.toString))
       }
 
-      _ <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(status = CreationStatuses.AddingToPerimeter, servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
+      // all v2 workspaces in the specified Terra billing project will already have their own Google project number, but any v1 workspaces should store the Terra billing project's Google project number
+      workspaces <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.listWithBillingProject(projectName)
       }
-    } yield RequestComplete(StatusCodes.Accepted)
+      v1Workspaces = workspaces.filterNot(_.googleProjectNumber.isDefined)
+
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.updateGoogleProjectNumber(v1Workspaces.map(_.workspaceIdAsUUID), googleProjectNumber)
+        dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
+      }
+
+      _ <- servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName)
+    } yield RequestComplete(StatusCodes.NoContent)
   }
 }
 

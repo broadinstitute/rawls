@@ -14,7 +14,7 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, SwaggerConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, SwaggerConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -28,9 +28,10 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
-import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
+import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, GoogleProjectNumber, RawlsUser, ServicePerimeterName}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -149,6 +150,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val drsResolver = new MarthaResolver(mockServer.mockServerBaseUrl)
 
+    val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
+    val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
+
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -156,7 +160,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       samDAO,
       "requesterPaysRole",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
-      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
+      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
+      servicePerimeterService
     )_
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
@@ -223,6 +228,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       entityManager,
       resourceBufferService,
       resourceBufferSaEmail,
+      servicePerimeterService,
       googleIamDao = new MockGoogleIamDAO,
       googleProjectOwnerRole = "fakeGoogleProjectOwnerRole",
       googleProjectViewerRole = "fakeGoogleProjectViewerRole"
