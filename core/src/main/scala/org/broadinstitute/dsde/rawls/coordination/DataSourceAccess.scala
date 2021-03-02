@@ -20,6 +20,8 @@ trait DataSourceAccess {
   def inTransaction[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
                                  isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
                                 ): Future[A]
+
+  def withTempEntityTablesThenTransaction[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T]
 }
 
 /**
@@ -32,6 +34,8 @@ class UncoordinatedDataSourceAccess(override val slickDataSource: SlickDataSourc
                                          ): Future[A] = {
     slickDataSource.inTransaction(dataAccessFunction, isolationLevel)
   }
+
+  override def withTempEntityTablesThenTransaction[T](f: DataAccess => ReadWriteAction[T], isolationLevel: TransactionIsolation): Future[T] = slickDataSource.withTempEntityTablesThenTransaction(f, isolationLevel)
 }
 
 /**
@@ -60,4 +64,6 @@ class CoordinatedDataSourceAccess(override val slickDataSource: SlickDataSource,
       waitTimeout = waitTimeout,
     )).mapTo[A]
   }
+
+  override def withTempEntityTablesThenTransaction[T](f: DataAccess => ReadWriteAction[T], isolationLevel: TransactionIsolation): Future[T] = slickDataSource.withTempEntityTablesThenTransaction(f, isolationLevel)
 }

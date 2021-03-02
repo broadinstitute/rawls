@@ -30,6 +30,19 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
   }
 
+  def withTempEntityTablesThenTransaction[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
+    val sql = sqlu"""
+      create temporary table EXPREVAL_TEMP (id bigint(20) unsigned NOT NULL, name VARCHAR(254) NOT NULL, transaction_id CHAR(36) NOT NULL);" +
+      create temporary table ENTITY_ATTRIBUTE_TEMP (id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key, name text NOT NULL, value_string text, value_number double DEFAULT NULL, value_boolean bit(1) DEFAULT NULL, value_entity_ref bigint(20) unsigned DEFAULT NULL, list_index int(11) DEFAULT NULL, list_length int(11) DEFAULT NULL, owner_id bigint(20) unsigned NOT NULL, transaction_id CHAR(36) NOT NULL);" +
+      create temporary table WORKSPACE_ATTRIBUTE_TEMP (id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key, name text NOT NULL, value_string text, value_number double DEFAULT NULL, value_boolean bit(1) DEFAULT NULL, value_entity_ref bigint(20) unsigned DEFAULT NULL, list_index int(11) DEFAULT NULL, list_length int(11) DEFAULT NULL, owner_id binary(16) NOT NULL, transaction_id CHAR(36) NOT NULL);"
+    """
+
+    for {
+      _ <- database.run(sql)
+      result <- database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
+    } yield result
+  }
+
   def initWithLiquibase(liquibaseChangeLog: String, parameters: Map[String, AnyRef]) = {
     val dbConnection = database.source.createConnection()
     try {

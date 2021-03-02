@@ -10,7 +10,7 @@ trait ExprEvalComponent {
 
   import driver.api._
 
-  class ExprEvalScratch(tag: Tag) extends Table[ExprEvalRecord](tag, "EXPREVAL_SCRATCH") {
+  class ExprEvalScratch(tag: Tag) extends Table[ExprEvalRecord](tag, "EXPREVAL_TEMP") {
     def id = column[Long]("id")
     def name = column[String]("name", O.Length(254))
     def transactionId = column[String]("transaction_id")
