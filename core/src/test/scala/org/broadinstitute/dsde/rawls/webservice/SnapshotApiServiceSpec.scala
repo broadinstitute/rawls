@@ -5,12 +5,12 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, ReferenceTypeEnum, UpdateDataReferenceRequestBody}
+import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport, NamedDataRepoSnapshot, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 
 import scala.collection.JavaConverters._
@@ -22,7 +22,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   val defaultNamedSnapshotJson = httpJson(NamedDataRepoSnapshot(
     name = DataReferenceName("foo"),
-    description = DataReferenceDescriptionField("bar"),
+    description = Option(DataReferenceDescriptionField("bar")),
     snapshotId = "realsnapshot"
   ))
   val defaultSnapshotUpdateBodyJson = httpJson(new UpdateDataReferenceRequestBody().name("foo2").description("bar2"))
@@ -110,7 +110,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     Post(baseSnapshotsPath, httpJson(
       NamedDataRepoSnapshot(
         name = DataReferenceName("foo"),
-        description = DataReferenceDescriptionField("bar"),
+        description = Option(DataReferenceDescriptionField("bar")),
         snapshotId = "fakesnapshot"
       )
     )) ~>
@@ -221,7 +221,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         Post(baseSnapshotsPath, httpJson(
           NamedDataRepoSnapshot(
             name = DataReferenceName("bar"),
-            description = DataReferenceDescriptionField("bar"),
+            description = Option(DataReferenceDescriptionField("bar")),
             snapshotId = "realsnapshot2"
           )
         )) ~>
@@ -327,7 +327,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when a user tries to update a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
     val dataReference = new DataRepoSnapshot().instanceName("foo").snapshot("bar")
-    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), DataReferenceDescriptionField("description"), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
+    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), Option(DataReferenceDescriptionField("description")), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
     Patch(s"${baseSnapshotsPath}/${id.toString}", defaultSnapshotUpdateBodyJson) ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
@@ -374,7 +374,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when a user tries to delete a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
     val dataReference = new DataRepoSnapshot().instanceName("foo").snapshot("bar")
-    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), DataReferenceDescriptionField("description"), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
+    val id = services.workspaceManagerDAO.createDataReference(UUID.fromString(testData.workspace.workspaceId), DataReferenceName("test"), Option(DataReferenceDescriptionField("description")), ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataReference, CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getReferenceId
     Delete(s"${baseSnapshotsPath}/${id.toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
