@@ -166,10 +166,7 @@ object Boot extends IOApp with LazyLogging {
         terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
         terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
         accessContextManagerDAO = accessContextManagerDAO,
-        resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson"),
-        googleIamDao = appDependencies.httpGoogleIamDAO,
-        googleProjectOwnerRole = gcsConfig.getString("googleProjectOwnerRole"),
-        googleProjectViewerRole = gcsConfig.getString("googleProjectViewerRole")
+        resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
       )
 
 
@@ -385,7 +382,10 @@ object Boot extends IOApp with LazyLogging {
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,
-        resourceBufferSaEmail
+        resourceBufferSaEmail,
+        googleIamDao = appDependencies.httpGoogleIamDAO,
+        googleProjectOwnerRole = gcsConfig.getString("googleProjectOwnerRole"),
+        googleProjectViewerRole = gcsConfig.getString("googleProjectViewerRole")
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
@@ -495,7 +495,7 @@ object Boot extends IOApp with LazyLogging {
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
-  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext): cats.effect.Resource[F, AppDependencies[F]] = {
+  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
@@ -514,7 +514,7 @@ object Boot extends IOApp with LazyLogging {
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
       bqServiceFactory = new GoogleBigQueryServiceFactory(blocker)(executionContext)
-      httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)
+      httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(system, executionContext)
     } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO)
   }
 }

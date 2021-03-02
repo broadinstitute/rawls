@@ -70,8 +70,6 @@ import scala.io.Source
 import scala.util.matching.Regex
 
 import io.opencensus.scala.Tracing._
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 
 case class Resources (
                        name: String,
@@ -129,10 +127,7 @@ class HttpGoogleServicesDAO(
                              terraBucketReaderRole: String,
                              terraBucketWriterRole: String,
                              override val accessContextManagerDAO: AccessContextManagerDAO,
-                             resourceBufferJsonFile: String,
-                             googleIamDao: GoogleIamDAO,
-                             googleProjectOwnerRole: String,
-                             googleProjectViewerRole: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+                             resourceBufferJsonFile: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
@@ -203,9 +198,7 @@ class HttpGoogleServicesDAO(
                               bucketName: String,
                               labels: Map[String, String],
                               parentSpan: Span = null,
-                              bucketLocation: Option[String],
-                              policyMap: Map[SamResourcePolicyName, WorkbenchEmail],
-                              billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[GoogleWorkspaceInfo] = {
+                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
     def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
@@ -254,20 +247,6 @@ class HttpGoogleServicesDAO(
       }
     }
 
-    def updateGoogleProjectIam(googleProject: GoogleProjectId, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], googleProjectOwnerRole: String, googleProjectViewerRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {
-      // billing project owner - organizations/$ORG_ID/roles/google-project-owner AND organizations/$ORG_ID/roles/google-project-viewer
-      // workspace can-compute (includes workspace owners and billing project owners) - organizations/$ORG_ID/roles/google-project-viewer
-
-      val policyGroupsToRoles = Map(
-        billingProjectOwnerPolicyEmail -> Set(googleProjectOwnerRole, googleProjectViewerRole),
-        policyMap(SamWorkspacePolicyNames.canCompute) -> Set(googleProjectViewerRole)
-      )
-
-      for {
-        success <- policyGroupsToRoles.toList.traverse {case (email, roles) => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
-      } yield (success)
-    }
-
     // setupWorkspace main logic
     val traceId = TraceId(UUID.randomUUID())
 
@@ -290,10 +269,8 @@ class HttpGoogleServicesDAO(
       }) //ACL = None because bucket IAM will be set separately in updateBucketIam
       updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
       insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
-      updateGoogleProjectIamFuture = traceWithParent("updateGoogleProjectIam", parentSpan)(_ => updateGoogleProjectIam(googleProject, policyMap, googleProjectOwnerRole, googleProjectViewerRole, billingProjectOwnerPolicyEmail))
       _ <- updateBucketIamFuture
       _ <- insertInitialStorageLogFuture
-      _ <- updateGoogleProjectIamFuture
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
   }
 

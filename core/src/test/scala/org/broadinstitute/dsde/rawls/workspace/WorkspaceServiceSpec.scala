@@ -21,7 +21,7 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
@@ -172,7 +172,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       requesterPaysSetupService,
       entityManager,
       resourceBufferService,
-      resourceBufferSaEmail
+      resourceBufferSaEmail,
+      googleIamDao = new MockGoogleIamDAO,
+      googleProjectOwnerRole = "fakeGoogleProjectOwnerRole",
+      googleProjectViewerRole = "fakeGoogleProjectViewerRole"
     )_
 
     def cleanupSupervisor = {

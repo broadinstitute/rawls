@@ -108,9 +108,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
                               bucketName: String,
                               labels: Map[String, String],
                               parentSpan: Span =  null,
-                              bucketLocation: Option[String],
-                              policyMap: Map[SamResourcePolicyName, WorkbenchEmail],
-                              billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[GoogleWorkspaceInfo] = {
+                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
 
     val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
     Future.successful(googleWorkspaceInfo)

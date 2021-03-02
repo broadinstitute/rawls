@@ -30,7 +30,7 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually
@@ -371,7 +371,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,
-        resourceBufferSaEmail
+        resourceBufferSaEmail,
+        googleIamDao = new MockGoogleIamDAO,
+        googleProjectOwnerRole = "fakeGoogleProjectOwnerRole",
+        googleProjectViewerRole = "fakeGoogleProjectViewerRole"
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
