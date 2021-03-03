@@ -1932,11 +1932,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], terraBillingProjectOwnerRole: String, terraWorkspaceWriterRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {
-    // billing project owner - organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-writer
-    // workspace can-compute (includes workspace owners and billing project owners) - organizations/$ORG_ID/roles/terra-workspace-writer
+    // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-writer
+      // billing project owner
+    // organizations/$ORG_ID/roles/terra-workspace-writer  // these are the groups that have can-compute permissions on the workspace
+      // workspace owner
+      // workspace can-compute
+
 
     val policyGroupsToRoles = Map(
       billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceWriterRole),
+      policyMap(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceWriterRole),
       policyMap(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceWriterRole)
     )
 
