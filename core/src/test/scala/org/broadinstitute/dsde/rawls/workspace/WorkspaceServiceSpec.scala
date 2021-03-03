@@ -180,8 +180,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDao = new MockGoogleIamDAO,
-      googleProjectOwnerRole = "fakeGoogleProjectOwnerRole",
-      googleProjectViewerRole = "fakeGoogleProjectViewerRole"
+      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+      terraWorkspaceWriterRole = "fakeTerraWorkspaceWriterRole"
     )_
 
     def cleanupSupervisor = {

@@ -379,8 +379,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         resourceBufferSaEmail,
         servicePerimeterService,
         googleIamDao = new MockGoogleIamDAO,
-        googleProjectOwnerRole = "fakeGoogleProjectOwnerRole",
-        googleProjectViewerRole = "fakeGoogleProjectViewerRole"
+        terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+        terraWorkspaceWriterRole = "fakeTerraWorkspaceWriterRole"
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {

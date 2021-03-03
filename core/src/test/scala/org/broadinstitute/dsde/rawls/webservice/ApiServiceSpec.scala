@@ -230,8 +230,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDao = new MockGoogleIamDAO,
-      googleProjectOwnerRole = "fakeGoogleProjectOwnerRole",
-      googleProjectViewerRole = "fakeGoogleProjectViewerRole"
+      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+      terraWorkspaceWriterRole = "fakeTerraWorkspaceWriterRole"
     )_
 
     override val entityServiceConstructor = EntityService.constructor(

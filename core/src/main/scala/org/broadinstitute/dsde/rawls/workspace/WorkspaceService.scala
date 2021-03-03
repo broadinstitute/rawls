@@ -72,7 +72,7 @@ object WorkspaceService {
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
                   entityManager: EntityManager, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String,
                   servicePerimeterService: ServicePerimeterService,
-                  googleIamDao: GoogleIamDAO, googleProjectOwnerRole: String, googleProjectViewerRole: String)
+                  googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceWriterRole: String)
                  (userInfo: UserInfo)
                  (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
@@ -83,7 +83,7 @@ object WorkspaceService {
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
       config, requesterPaysSetupService, resourceBufferService, resourceBufferSaEmail, servicePerimeterService,
-      googleIamDao: GoogleIamDAO, googleProjectOwnerRole: String, googleProjectViewerRole: String)
+      googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceWriterRole: String)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -121,7 +121,7 @@ object WorkspaceService {
 }
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String, servicePerimeterService: ServicePerimeterService, googleIamDao: GoogleIamDAO, googleProjectOwnerRole: String, googleProjectViewerRole: String)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String, servicePerimeterService: ServicePerimeterService, googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceWriterRole: String)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport with Retry {
 
   import dataSource.dataAccess.driver.api._
@@ -1927,17 +1927,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
       _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
-      _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyMap, googleProjectOwnerRole, googleProjectViewerRole, billingProjectOwnerPolicyEmail))
+      _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyMap, terraBillingProjectOwnerRole, terraWorkspaceWriterRole, billingProjectOwnerPolicyEmail))
     } yield (googleProjectId, googleProjectNumber)
   }
 
-  private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], googleProjectOwnerRole: String, googleProjectViewerRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {
-    // billing project owner - organizations/$ORG_ID/roles/google-project-owner AND organizations/$ORG_ID/roles/google-project-viewer
-    // workspace can-compute (includes workspace owners and billing project owners) - organizations/$ORG_ID/roles/google-project-viewer
+  private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], terraBillingProjectOwnerRole: String, terraWorkspaceWriterRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {
+    // billing project owner - organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-writer
+    // workspace can-compute (includes workspace owners and billing project owners) - organizations/$ORG_ID/roles/terra-workspace-writer
 
     val policyGroupsToRoles = Map(
-      billingProjectOwnerPolicyEmail -> Set(googleProjectOwnerRole, googleProjectViewerRole),
-      policyMap(SamWorkspacePolicyNames.canCompute) -> Set(googleProjectViewerRole)
+      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceWriterRole),
+      policyMap(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceWriterRole)
     )
 
     for {
