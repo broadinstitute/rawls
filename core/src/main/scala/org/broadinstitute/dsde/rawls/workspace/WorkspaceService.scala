@@ -135,7 +135,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def ListAllWorkspaces = listAllWorkspaces()
   def GetTags(query: Option[String]) = getTags(query)
   def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
-  def CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) = cloneWorkspace(sourceWorkspace, destWorkspace)
+  def CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest, parentSpan: Span = null) = cloneWorkspace(sourceWorkspace, destWorkspace, parentSpan)
   def GetACL(workspaceName: WorkspaceName) = getACL(workspaceName)
   def UpdateACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean) = updateACL(workspaceName, aclUpdates, inviteUsersNotFound)
   def SendChangeNotifications(workspaceName: WorkspaceName) = sendChangeNotifications(workspaceName)
@@ -644,7 +644,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
-  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
+  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
     destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
 
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
@@ -667,8 +667,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
                         // add to or replace current attributes, on an individual basis
                         val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
-
-                        withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, bucketLocation = bucketLocationOption), destBillingProject, dataAccess) { destWorkspaceContext =>
+traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
+                        withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, bucketLocation = bucketLocationOption), destBillingProject, dataAccess, s1) { destWorkspaceContext =>
                           dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
                             dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                               val inserts = methodConfigShorts.map { methodConfigShort =>
@@ -679,6 +679,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                               DBIO.seq(inserts: _*)
                             } andThen {
                             DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                          }
                           }
                         }
                       }
