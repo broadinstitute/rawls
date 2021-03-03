@@ -82,5 +82,5 @@ object SamDAO {
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile"
   )
-  val bigQueryScope = "https://www.googleapis.com/auth/bigquery.readonly"
+  val bigQueryReadOnlyScope = "https://www.googleapis.com/auth/bigquery.readonly"
 }

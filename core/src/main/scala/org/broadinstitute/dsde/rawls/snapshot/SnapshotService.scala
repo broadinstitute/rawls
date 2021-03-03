@@ -62,9 +62,8 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         samAclBindings = Acl.Role.READER -> filteredSamPolicies.map{ filteredSamPolicyEmail =>(filteredSamPolicyEmail, Acl.Entity.Type.GROUP) }.toSeq
         aclBindings = defaultIamRoles + samAclBindings
         bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
-        _ <- bqService.use(_.createDataset(datasetName, datasetLabels))
-        _ <- bqService.use(_.setDatasetIam(datasetName, aclBindings))
-        petToken <- IO.fromFuture(IO(samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryScope, userInfo)))
+        _ <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings))
+        petToken <- IO.fromFuture(IO(samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryReadOnlyScope, userInfo)))
       } yield { petToken }
       IOresult.unsafeToFuture().map { petToken =>
         workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
