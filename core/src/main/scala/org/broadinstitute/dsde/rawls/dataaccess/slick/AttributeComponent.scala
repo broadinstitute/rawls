@@ -170,11 +170,11 @@ trait AttributeComponent {
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
   }
 
-  class EntityAttributeScratchTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeScratchRecord](tag, "ENTITY_ATTRIBUTE_SCRATCH") {
+  class EntityAttributeScratchTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeScratchRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <> (EntityAttributeScratchRecord.tupled, EntityAttributeScratchRecord.unapply)
   }
 
-  class WorkspaceAttributeScratchTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeScratchRecord](tag, "WORKSPACE_ATTRIBUTE_SCRATCH") {
+  class WorkspaceAttributeScratchTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeScratchRecord](tag, "WORKSPACE_ATTRIBUTE_TEMP") {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeScratchRecord.tupled, WorkspaceAttributeScratchRecord.unapply)
   }
 
@@ -362,7 +362,7 @@ trait AttributeComponent {
       def updateInMasterAction(transactionId: String) = {
           sql"""
           update #${baseTableRow.tableName} a
-              join #${baseTableRow.tableName}_SCRATCH ta
+              join #${baseTableRow.tableName}_TEMP ta
               on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
                   and ta.transaction_id = $transactionId
@@ -378,7 +378,7 @@ trait AttributeComponent {
       }
 
       def clearAttributeScratchTableAction(transactionId: String) = {
-        sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
+        sqlu"""delete from #${baseTableRow.tableName}_TEMP where transaction_id = $transactionId"""
       }
 
       def updateAction(insertIntoScratchFunction: String => WriteAction[Int]) = {

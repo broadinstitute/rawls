@@ -68,7 +68,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       assertResult(0) {
         runAndWait({
           evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.type") andThen
-            sql"select count(*) from EXPREVAL_SCRATCH".as[Int].head
+            sql"select count(*) from EXPREVAL_TEMP".as[Int].head
         })
       }
     }
