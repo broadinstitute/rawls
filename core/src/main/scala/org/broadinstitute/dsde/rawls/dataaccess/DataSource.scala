@@ -22,7 +22,7 @@ object DataSource {
 
 class SlickDataSource(val initialDatabaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) extends LazyLogging {
   val dataAccess = new DataAccessComponent(initialDatabaseConfig.profile, initialDatabaseConfig.config.getInt("batchSize"))
-  val databaseConfig = DatabaseConfig.forConfig[JdbcProfile]("", initialDatabaseConfig.config.withValue("db.connectionInitSql", ConfigValueFactory.fromAnyRef("call createTempTables()")))
+  val databaseConfig = DatabaseConfig.forConfig[JdbcProfile]("", initialDatabaseConfig.config.withValue("db.connectionInitSql", ConfigValueFactory.fromAnyRef("call createAttributeTempTables()")))
 
   val database = databaseConfig.db
 
