@@ -118,8 +118,7 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
   }
 
   override def createDataset(datasetName: String, labels: Map[String, String], aclBindings: Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]): IO[DatasetId] = {
-    val dataset = DatasetInfo.newBuilder(datasetName).build().getDatasetId
-    IO.pure(dataset)
+    IO.pure(DatasetInfo.newBuilder(datasetName).build().getDatasetId)
   }
 
 }
