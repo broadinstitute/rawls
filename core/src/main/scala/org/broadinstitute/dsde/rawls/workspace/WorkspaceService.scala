@@ -1874,18 +1874,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   // helper methods
 
-  private def createWorkflowCollectionForWorkspace(workspaceId: String, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], parentSpan: Span = null) = {
+  private def createWorkflowCollectionForWorkspace(workspaceId: String, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], parentSpan: Span = null) = {
     for {
       _ <- traceWithParent("createResourceFull",parentSpan)( _ => samDAO.createResourceFull(
               SamResourceTypeNames.workflowCollection,
               workspaceId,
               Map(
                 SamWorkflowCollectionPolicyNames.workflowCollectionOwnerPolicyName ->
-                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.projectOwner), policyMap(SamWorkspacePolicyNames.owner)), Set.empty, Set(SamWorkflowCollectionRoles.owner)),
+                  SamPolicy(Set(policyEmailsByName(SamWorkspacePolicyNames.projectOwner), policyEmailsByName(SamWorkspacePolicyNames.owner)), Set.empty, Set(SamWorkflowCollectionRoles.owner)),
                 SamWorkflowCollectionPolicyNames.workflowCollectionWriterPolicyName ->
-                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.canCompute)), Set.empty, Set(SamWorkflowCollectionRoles.writer)),
+                  SamPolicy(Set(policyEmailsByName(SamWorkspacePolicyNames.canCompute)), Set.empty, Set(SamWorkflowCollectionRoles.writer)),
                 SamWorkflowCollectionPolicyNames.workflowCollectionReaderPolicyName ->
-                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.reader), policyMap(SamWorkspacePolicyNames.writer)), Set.empty, Set(SamWorkflowCollectionRoles.reader))
+                  SamPolicy(Set(policyEmailsByName(SamWorkspacePolicyNames.reader), policyEmailsByName(SamWorkspacePolicyNames.writer)), Set.empty, Set(SamWorkflowCollectionRoles.reader))
               ),
               Set.empty,
               userInfo,
@@ -1906,7 +1906,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     *
     * @param billingAccount
     * @param workspaceId
-    * @param policyMap Map[SamResourcePolicyName, WorkbenchEmail]
+    * @param policyEmailsByName Map[SamResourcePolicyName, WorkbenchEmail]
     * @param billingProjectOwnerPolicyEmail
     * @param span
     * @return Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
@@ -1915,7 +1915,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                                   billingProject: RawlsBillingProject,
                                   billingAccount: RawlsBillingAccountName,
                                   workspaceId: String,
-                                  policyMap: Map[SamResourcePolicyName, WorkbenchEmail],
+                                  policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                                   billingProjectOwnerPolicyEmail: WorkbenchEmail,
                                   span: Span = null) = {
     val projectPoolType = billingProject.servicePerimeter match {
@@ -1928,11 +1928,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
       _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
-      _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyMap, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail))
+      _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail))
     } yield (googleProjectId, googleProjectNumber)
   }
 
-  private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {
+  private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {
     // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
       // billing project owner
     // organizations/$ORG_ID/roles/terra-workspace-can-compute
@@ -1942,13 +1942,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     val policyGroupsToRoles = Map(
       billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole),
-      policyMap(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole),
-      policyMap(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole)
+      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole),
+      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole)
     )
 
-    for {
-      success <- policyGroupsToRoles.toList.traverse {case (email, roles) => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
-    } yield (success)
+    // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
+    policyGroupsToRoles.toList.traverse {case (email, roles) => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
   }
 
   private def getGoogleProjectNumber(googleProjectId: GoogleProjectId): Future[GoogleProjectNumber] = {
@@ -2043,20 +2042,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val canComputePolicy = SamWorkspacePolicyNames.canCompute -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.canCompute))
     val canCatalogPolicy = SamWorkspacePolicyNames.canCatalog -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.canCatalog))
 
-    val defaultPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy, canCatalogPolicy)
+    val allPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy, canCatalogPolicy)
 
-    DBIO.from(for {
-      resource <- {
-        traceWithParent("createResourceFull (workspace)", parentSpan)(_ => samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, None))
-      }
-    } yield (resource)
+    DBIO.from(
+      traceWithParent("createResourceFull (workspace)", parentSpan)(_ =>
+        samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, allPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, None))
     )
   }
 
-  private def syncPolicies(workspaceId: String, policyMap: Map[SamResourcePolicyName, WorkbenchEmail], workspaceRequest: WorkspaceRequest, parentSpan: Span) = {
+  private def syncPolicies(workspaceId: String, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], workspaceRequest: WorkspaceRequest, parentSpan: Span) = {
     traceWithParent("traversePolicies", parentSpan) (s1 =>
-      Future.traverse(policyMap) { x =>
-        val policyName = x._1
+      Future.traverse(policyEmailsByName.keys) { policyName =>
         if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
           // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
           // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
@@ -2101,9 +2097,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       googleProjectNumber = googleProjectNumber,
       currentBillingAccountOnWorkspace
     )
-    for {
-      _ <- traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
-    } yield(workspace)
+    traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
+      .map(_ => workspace)
   }
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.
@@ -2136,16 +2131,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentSpan)(_ => DBIO.from(
                   samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email)))
               resource <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
-              // policyMap has policyName -> policyEmail
-              policyMap: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
+              policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
               (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
-                  setupGoogleProject(billingProject, billingAccount, workspaceId, policyMap, billingProjectOwnerPolicyEmail, parentSpan)))
+                  setupGoogleProject(billingProject, billingAccount, workspaceId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                   createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
               _ <- DBIO.from({
                 // declare these next two Futures so they start in parallel
-                val createWorkflowCollectionFuture = traceWithParent("createWorkflowCollectionForWorkspace", parentSpan)(span => (createWorkflowCollectionForWorkspace(workspaceId, policyMap, span)))
-                val syncPoliciesFuture = syncPolicies(workspaceId, policyMap, workspaceRequest, parentSpan)
+                val createWorkflowCollectionFuture = traceWithParent("createWorkflowCollectionForWorkspace", parentSpan)(span => (createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, span)))
+                val syncPoliciesFuture = syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentSpan)
                 for {
                   _ <- createWorkflowCollectionFuture
                   _ <- syncPoliciesFuture
@@ -2157,7 +2151,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
               //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
               //will never change, which would eliminate the call to sam entirely
-              policyEmails <- DBIO.successful(policyMap.map { case (policyName, policyEmail) =>
+              policyEmails <- DBIO.successful(policyEmailsByName.map { case (policyName, policyEmail) =>
                 if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
                   // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
                   // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
