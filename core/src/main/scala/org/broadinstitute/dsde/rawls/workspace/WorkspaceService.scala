@@ -667,19 +667,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
                         // add to or replace current attributes, on an individual basis
                         val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
-traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
-                        withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, bucketLocation = bucketLocationOption), destBillingProject, dataAccess, s1) { destWorkspaceContext =>
-                          dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                            dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-                              val inserts = methodConfigShorts.map { methodConfigShort =>
-                                dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-                                  dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                        traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
+                          withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, bucketLocation = bucketLocationOption), destBillingProject, dataAccess, s1) { destWorkspaceContext =>
+                            dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                              dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                                val inserts = methodConfigShorts.map { methodConfigShort =>
+                                  dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                                    dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                                  }
                                 }
-                              }
-                              DBIO.seq(inserts: _*)
-                            } andThen {
-                            DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
-                          }
+                                DBIO.seq(inserts: _*)
+                              } andThen {
+                              DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                            }
                           }
                         }
                       }
