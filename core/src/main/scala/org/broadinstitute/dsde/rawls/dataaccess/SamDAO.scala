@@ -79,8 +79,8 @@ object SamDAO {
   case object NotUser extends GetUserIdInfoResult
   final case class User(userIdInfo: UserIdInfo) extends GetUserIdInfoResult
   val defaultScopes = Set(
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile"
+    com.google.api.services.oauth2.Oauth2Scopes.USERINFO_EMAIL,
+    com.google.api.services.oauth2.Oauth2Scopes.USERINFO_PROFILE
   )
-  val bigQueryReadOnlyScope = "https://www.googleapis.com/auth/bigquery.readonly"
+  val bigQueryReadOnlyScope = com.google.api.services.bigquery.BigqueryScopes.BIGQUERY_READONLY
 }
