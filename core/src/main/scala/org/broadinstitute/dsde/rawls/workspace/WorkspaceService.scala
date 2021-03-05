@@ -83,7 +83,7 @@ object WorkspaceService {
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
       config, requesterPaysSetupService, resourceBufferService, resourceBufferSaEmail, servicePerimeterService,
-      googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String)
+      googleIamDao, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -1904,6 +1904,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     * 1. Claim Project from RBS
     * 2. Update Billing Account information on Google Project
     *
+    * @param billingProject
     * @param billingAccount
     * @param workspaceId
     * @param policyEmailsByName Map[SamResourcePolicyName, WorkbenchEmail]
@@ -2137,16 +2138,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                   createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
               _ <- DBIO.from({
-                // declare these next two Futures so they start in parallel
+                // declare these next Futures so they start in parallel
                 val createWorkflowCollectionFuture = traceWithParent("createWorkflowCollectionForWorkspace", parentSpan)(span => (createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, span)))
                 val syncPoliciesFuture = syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentSpan)
+                val createGoogleProjectResource = traceWithParent("createResourceFull (google project)", parentSpan)(_ => // create the google-project resource in Sam with the workspace as the resource parent
+                  samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value))))
                 for {
                   _ <- createWorkflowCollectionFuture
                   _ <- syncPoliciesFuture
+                  _ <- createGoogleProjectResource
                 } yield()})
-              // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
-              _ <- traceDBIOWithParent("createResourceFull (google project)", parentSpan)(_ => DBIO.from(
-                  samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
 
               //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
               //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
