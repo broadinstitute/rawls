@@ -32,6 +32,15 @@ class SlickDataSource(val initialDatabaseConfig: DatabaseConfig[JdbcProfile])(im
     database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
   }
 
+  def inTransactionWithTempTables[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
+    val sql = sqlu"""call createAttributeTempTables()"""
+
+    for {
+      _ <- database.run(sql)
+      result <- database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
+    } yield result
+  }
+
   def initWithLiquibase(liquibaseChangeLog: String, parameters: Map[String, AnyRef]) = {
     // use a database specified with the initialDatabaseConfig because the regular databaseConfig assumes
     // a procedure called createTempTables exists but it is liquibase that creates that procedure

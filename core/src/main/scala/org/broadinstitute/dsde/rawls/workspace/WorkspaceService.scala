@@ -175,7 +175,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
-        traceWithParent("withNewWorkspaceContext", s2)( s3 => dataSource.inTransaction({ dataAccess =>
+        traceWithParent("withNewWorkspaceContext", s2)( s3 => dataSource.inTransactionWithTempTables({ dataAccess =>
           withNewWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
             DBIO.successful(workspaceContext)
           }
