@@ -169,8 +169,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     } else {
       for {
         // we exclude workflows submitted by users that have exceeded the max workflows per user
-        excludedUsers <- dataAccess.workflowQuery.listSubmittersWithMoreWorkflowsThan(maxActiveWorkflowsPerUser, WorkflowStatuses.runningStatuses)
-        workflowRecs <- dataAccess.workflowQuery.findQueuedWorkflows(excludedUsers.map { case (submitter, count) => submitter }, SubmissionStatuses.terminalStatuses :+ SubmissionStatuses.Aborting).take(batchSize).result
+        excludedUsersMap <- dataAccess.workflowQuery.listSubmittersWithMoreWorkflowsThan(maxActiveWorkflowsPerUser, WorkflowStatuses.runningStatuses).map(_.toMap)
+        excludedUsers = excludedUsersMap.keys.toSeq
+        excludedStatuses = SubmissionStatuses.terminalStatuses :+ SubmissionStatuses.Aborting
+        workflowRecs: Seq[WorkflowRecord] <- dataAccess.workflowQuery.findQueuedWorkflows(excludedUsers, excludedStatuses).take(batchSize).result
         reservedRecs <- if (workflowRecs.isEmpty) {
             DBIO.successful(None)
           } else {
@@ -311,6 +313,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   def submitWorkflowBatch(batch: WorkflowBatch)(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
 
     val WorkflowBatch(workflowIds, submissionRec, workspaceRec) = batch
+
+    logger.info(s"Submitting batch of ${workflowIds.size} workflows for submission ${submissionRec.id} in workspace ${workspaceRec.namespace}/${workspaceRec.name} (${workspaceRec.id})")
 
     // implicitly passed to WorkflowComponent methods which update status
     implicit val wfStatusCounter = (status: WorkflowStatus) =>
