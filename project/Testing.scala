@@ -55,7 +55,7 @@ object Testing {
     (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).evaluated,
 
     parallelExecution in Test := false
-  ) ++ MinnieKenny.testSettings
+  ) ++ Seq(javaOptions += "-Dmockserver.logLevel=WARN") ++ MinnieKenny.testSettings
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {
     def withTestSettings: Project = project
