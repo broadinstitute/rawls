@@ -9,6 +9,7 @@ object Merging {
     case PathList("com", "typesafe", _ @ _*) => MergeStrategy.last
     case PathList("com", "google", "auto", "value", _ @ _*) => MergeStrategy.last
     case PathList("io", "sundr", _ @ _*) => MergeStrategy.last
+    case PathList("javax", "activation", _ @ _*) => MergeStrategy.first
     // For the following error:
     //[error] java.lang.RuntimeException: deduplicate: different file contents found in the following:
     //[error] /root/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.11.4/protobuf-java-3.11.4.jar:google/protobuf/field_mask.proto
