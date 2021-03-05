@@ -11,7 +11,7 @@ import scala.collection.JavaConverters._
 
 case class DataReferenceName(value: String) extends ValueObject
 case class DataReferenceDescriptionField(value: String = "") extends ValueObject
-case class NamedDataRepoSnapshot(name: DataReferenceName, description: DataReferenceDescriptionField, snapshotId: String)
+case class NamedDataRepoSnapshot(name: DataReferenceName, description: Option[DataReferenceDescriptionField], snapshotId: String)
 
 object DataReferenceModelJsonSupport extends JsonSupport {
   def stringOrNull(in: Any): JsValue = Option(in) match {
