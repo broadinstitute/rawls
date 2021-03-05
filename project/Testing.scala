@@ -1,3 +1,4 @@
+import MinnieKenny.testSettings
 import sbt.Keys._
 import sbt._
 
@@ -58,7 +59,7 @@ object Testing {
     (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).evaluated,
 
     parallelExecution in Test := false
-  ) ++ MinnieKenny.testSettings
+  ) ++ (if (sys.props.getOrElse("secrets.skip", false) != "true") MinnieKenny.testSettings else List())
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {
     def withTestSettings: Project = project
