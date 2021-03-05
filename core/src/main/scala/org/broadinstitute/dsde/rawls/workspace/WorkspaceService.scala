@@ -2138,35 +2138,33 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                   createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
               _ <- DBIO.from({
-                //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
-                //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
-                //will never change, which would eliminate the call to sam entirely
-                val policyEmails = policyEmailsByName.map { case (policyName, policyEmail) =>
-                  if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
-                    // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-                    // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-                    // the limit of 2000
-                    Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
-                  } else {
-                    WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
-                  }
-                }.flatten.toMap
-
                 // declare these next Futures so they start in parallel
-                val createWorkflowCollectionFuture = traceWithParent("createWorkflowCollectionForWorkspace", parentSpan)(span =>
-                  createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, span))
+                val createWorkflowCollectionFuture = traceWithParent("createWorkflowCollectionForWorkspace", parentSpan)(span => (createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, span)))
                 val syncPoliciesFuture = syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentSpan)
-                val createGoogleProjectResourceFuture = traceWithParent("createResourceFull (google project)", parentSpan)(_ => // create the google-project resource in Sam with the workspace as the resource parent
+                val createGoogleProjectResource = traceWithParent("createResourceFull (google project)", parentSpan)(_ => // create the google-project resource in Sam with the workspace as the resource parent
                   samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value))))
-                val setupWorkspaceFuture = traceWithParent("gcsDAO.setupWorkspace", parentSpan)(span =>
-                  gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceRequest.bucketLocation))
-
                 for {
                   _ <- createWorkflowCollectionFuture
                   _ <- syncPoliciesFuture
-                  _ <- createGoogleProjectResourceFuture
-                  _ <- setupWorkspaceFuture
+                  _ <- createGoogleProjectResource
                 } yield()})
+
+              //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
+              //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
+              //will never change, which would eliminate the call to sam entirely
+              policyEmails <- DBIO.successful(policyEmailsByName.map { case (policyName, policyEmail) =>
+                if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
+                  // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+                  // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+                  // the limit of 2000
+                  Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
+                } else {
+                  WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
+                }
+              }.flatten.toMap)
+
+              _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentSpan)(span => DBIO.from(
+                  gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceRequest.bucketLocation)))
               _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))
               response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
             } yield (response)
