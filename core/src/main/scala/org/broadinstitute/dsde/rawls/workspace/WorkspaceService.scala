@@ -532,7 +532,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
-  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
+  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
     destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
 
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
@@ -553,18 +553,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
                     // add to or replace current attributes, on an individual basis
                     val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
-
-                    withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, bucketLocation = bucketLocationOption), dataAccess) { destWorkspaceContext =>
-                      dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                        dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-                          val inserts = methodConfigShorts.map { methodConfigShort =>
-                            dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-                              dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                    traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
+                      withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, bucketLocation = bucketLocationOption), dataAccess, s1) { destWorkspaceContext =>
+                        dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                          dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                            val inserts = methodConfigShorts.map { methodConfigShort =>
+                              dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                                dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                              }
                             }
-                          }
-                          DBIO.seq(inserts: _*)
-                        } andThen {
-                        DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                            DBIO.seq(inserts: _*)
+                          } andThen {
+                          DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                        }
                       }
                     }
                   }
