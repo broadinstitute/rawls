@@ -27,8 +27,7 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
   import dataAccess.driver.api._
 
   def inTransaction[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
-    // database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
-    inTransactionWithAttrTempTable[T](f, isolationLevel)
+     database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
   }
 
   // creates the ENTITY_ATTRIBUTE_TEMP for use by this transaction, executes the transaction, drops the temp table

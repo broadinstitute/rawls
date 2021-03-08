@@ -61,7 +61,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   }
 
   override def createEntity(entity: Entity): Future[Entity] = {
-    dataSource.inTransaction { dataAccess =>
+    dataSource.inTransactionWithAttrTempTable { dataAccess =>
       dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspace.toWorkspaceName}")))
         case None => dataAccess.entityQuery.save(workspaceContext, entity)
