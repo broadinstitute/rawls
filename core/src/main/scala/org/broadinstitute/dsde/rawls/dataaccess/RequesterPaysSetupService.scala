@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import cats.effect.{ContextShift, IO}
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace, WorkspaceVersions}
 import cats.implicits._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -52,13 +52,20 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
 
   private def revokeEmails(emails: Set[BondServiceAccountEmail], userEmail: RawlsUserEmail, workspace: Workspace): Future[Unit] = {
     for {
-      _ <- dataSource.inTransaction { dataAccess =>
+      keepBindings <- dataSource.inTransaction { dataAccess =>
         for {
           _ <- dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
-        } yield ()
+          // TODO (CA-1236): Remove after PPW migration is complete, we won't need to track on workspace namespace anymore, since google project will be per workspace
+          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(workspace.namespace, userEmail)
+        } yield keepBindings
       }
-
-      _ <- googleServicesDAO.removePolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email)))
+      // TODO (CA-1236): Clean up the if statement once PPW migration is complete. There will be no more V1 workspaces so this will be dead code
+      // only remove google bindings if there are no workspaces left in the namespace (i.e. project) or the workspace is V2
+      _ <- if (keepBindings && workspace.workspaceVersion == WorkspaceVersions.V1) {
+        Future.successful(())
+      } else {
+        googleServicesDAO.removePolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email)))
+      }
     } yield ()
   }
 }

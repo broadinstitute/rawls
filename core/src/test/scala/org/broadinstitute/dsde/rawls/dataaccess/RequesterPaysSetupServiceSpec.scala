@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions
 import org.scalatestplus.mockito.MockitoSugar
 import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
@@ -116,5 +117,35 @@ class RequesterPaysSetupServiceSpec extends AnyFlatSpec with Matchers with Mocki
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe false
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, minimalTestData.userReader.userEmail)) shouldBe false
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace2.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
+  }
+
+  "revokeAllUsersFromWorkspace" should "unlink all in workspace without preemptive unlinking in V1 Workspace" in withMinimalTestDatabaseAndServices { service =>
+    val user1SA = BondServiceAccountEmail("bondSA1")
+    val user2SA = BondServiceAccountEmail("bondSA2")
+    val expectedEmails = Set(user1SA, user2SA)
+
+    // add users to 2 workspaces in same namespace
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(minimalTestData.v1Workspace.toWorkspaceName, userInfo.userEmail, Set(user1SA)))
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(minimalTestData.v1Workspace2.toWorkspaceName, userInfo.userEmail, Set(user1SA)))
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(minimalTestData.v1Workspace.toWorkspaceName, minimalTestData.userReader.userEmail, Set(user2SA)))
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(minimalTestData.v1Workspace2.toWorkspaceName, minimalTestData.userReader.userEmail, Set(user2SA)))
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, minimalTestData.userReader.userEmail)) shouldBe true
+
+    // add 2 users to mock google bindings
+    val initialBindings = Map(service.requesterPaysRole -> expectedEmails.map(expectedEmail => "serviceAccount:" + expectedEmail.client_email))
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.v1Workspace.googleProjectId, initialBindings)
+
+    // remove users from 1 workspace and check that it did not get removed from google bindings
+    service.revokeAllUsersFromWorkspace(minimalTestData.v1Workspace).futureValue should contain theSameElementsAs expectedEmails
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, minimalTestData.userReader.userEmail)) shouldBe true
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.v1Workspace.googleProjectId) shouldBe Some(initialBindings)
+
+    // remove users from other workspace and check that it did get removed from google bindings
+    service.revokeAllUsersFromWorkspace(minimalTestData.v1Workspace2).futureValue should contain theSameElementsAs expectedEmails
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe false
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, minimalTestData.userReader.userEmail)) shouldBe false
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.v1Workspace2.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
   }
 }
