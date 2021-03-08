@@ -209,7 +209,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
     withAttributeNamespaceCheck(namesToCheck) {
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-        dataSource.inTransaction { dataAccess =>
+        dataSource.inTransactionWithAttrTempTable { dataAccess =>
           val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
             val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
             entityUpdates.map { entityUpdate =>
