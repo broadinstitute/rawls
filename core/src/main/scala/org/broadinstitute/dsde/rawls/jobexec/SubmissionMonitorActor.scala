@@ -465,7 +465,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         }
         optWs foreach { workspace: Workspace =>
           logger.debug(s"Updating ${workspace.attributes.size} workspace attributes in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. First 100: ${workspace.attributes.take(100)}")
-
         }
 
         Left(updates)
