@@ -78,10 +78,9 @@ class RequesterPaysSetupServiceSpec extends AnyFlatSpec with Matchers with Mocki
     val initialBindings = Map(service.requesterPaysRole -> Set("serviceAccount:" + expectedEmail.client_email))
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.workspace.googleProjectId, initialBindings)
 
-    // remove user from 1 workspace and check that it did not get removed from google bindings
     service.revokeUserFromWorkspace(userInfo.userEmail, minimalTestData.workspace).futureValue shouldBe List(expectedEmail)
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProjectId) shouldBe Some(initialBindings)
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
 
     // remove user from other workspace and check that it did get removed from google bindings
     service.revokeUserFromWorkspace(userInfo.userEmail, minimalTestData.workspace2).futureValue shouldBe List(expectedEmail)
@@ -110,7 +109,7 @@ class RequesterPaysSetupServiceSpec extends AnyFlatSpec with Matchers with Mocki
     service.revokeAllUsersFromWorkspace(minimalTestData.workspace).futureValue should contain theSameElementsAs expectedEmails
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
     runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, minimalTestData.userReader.userEmail)) shouldBe true
-    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProjectId) shouldBe Some(initialBindings)
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
 
     // remove users from other workspace and check that it did get removed from google bindings
     service.revokeAllUsersFromWorkspace(minimalTestData.workspace2).futureValue should contain theSameElementsAs expectedEmails

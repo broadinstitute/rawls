@@ -52,19 +52,13 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
 
   private def revokeEmails(emails: Set[BondServiceAccountEmail], userEmail: RawlsUserEmail, workspace: Workspace): Future[Unit] = {
     for {
-      keepBindings <- dataSource.inTransaction { dataAccess =>
+      _ <- dataSource.inTransaction { dataAccess =>
         for {
           _ <- dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
-          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(workspace.namespace, userEmail)
-        } yield keepBindings
+        } yield ()
       }
 
-      // only remove google bindings if there are no workspaces left in the namespace (i.e. project)
-      _ <- if (keepBindings) {
-        Future.successful(())
-      } else {
-        googleServicesDAO.removePolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email)))
-      }
+      _ <- googleServicesDAO.removePolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email)))
     } yield ()
   }
 }
