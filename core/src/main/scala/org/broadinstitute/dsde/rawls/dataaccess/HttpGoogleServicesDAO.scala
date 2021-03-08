@@ -54,6 +54,7 @@ import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import cats.implicits.toTraverseOps
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
@@ -225,7 +226,7 @@ class HttpGoogleServicesDAO(
         // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
         // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
         _ <- googleStorageService.overrideIamPolicy(GcsBucketName(bucketName), roleToIdentities,
-          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardRetryPredicate, RetryPredicates.whenStatusCode(400)))
+          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardRetryPredicate, RetryPredicates.whenStatusCode(400))) // todo why 400 here? we check for 5xx and 409s elsewhere
       } yield ()
     }
 

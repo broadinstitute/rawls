@@ -43,7 +43,7 @@ import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.util.ExecutionContexts
@@ -135,7 +135,7 @@ object Boot extends IOApp with LazyLogging {
       workbenchMetricBaseName = metricsPrefix
     )
 
-    initAppDependencies[IO](conf).use { appDependencies =>
+    initAppDependencies[IO](conf, appName, metricsPrefix).use { appDependencies =>
       val gcsDAO = new HttpGoogleServicesDAO(
         false,
         clientSecrets,
@@ -363,7 +363,7 @@ object Boot extends IOApp with LazyLogging {
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
       val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
-
+      val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
@@ -387,7 +387,11 @@ object Boot extends IOApp with LazyLogging {
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,
-        servicePerimeterService
+        resourceBufferSaEmail,
+        servicePerimeterService,
+        googleIamDao = appDependencies.httpGoogleIamDAO,
+        terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
+        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole")
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
@@ -497,10 +501,12 @@ object Boot extends IOApp with LazyLogging {
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
-  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config)(implicit executionContext: ExecutionContext): cats.effect.Resource[F, AppDependencies[F]] = {
+  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
+    val jsonFileSource = scala.io.Source.fromFile(pathToCredentialJson)
+    val jsonCreds = try jsonFileSource.mkString finally jsonFileSource.close()
     val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
     val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
@@ -514,7 +520,8 @@ object Boot extends IOApp with LazyLogging {
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
       bqServiceFactory = new GoogleBigQueryServiceFactory(blocker)(executionContext)
-    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory)
+      httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(system, executionContext)
+    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO)
   }
 }
 
@@ -523,4 +530,5 @@ final case class AppDependencies[F[_]](
   googleStorageService: GoogleStorageService[F],
   googleServiceHttp: GoogleServiceHttp[F],
   topicAdmin: GoogleTopicAdmin[F],
-  bigQueryServiceFactory: GoogleBigQueryServiceFactory)
+  bigQueryServiceFactory: GoogleBigQueryServiceFactory,
+  httpGoogleIamDAO: HttpGoogleIamDAO)
