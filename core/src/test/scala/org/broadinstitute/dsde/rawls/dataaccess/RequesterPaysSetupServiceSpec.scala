@@ -100,11 +100,9 @@ class RequesterPaysSetupServiceSpec extends AnyFlatSpec with Matchers with Mocki
     val initialBindings = Map(service.requesterPaysRole -> expectedEmails.map(expectedEmail => "serviceAccount:" + expectedEmail.client_email))
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.workspace.googleProjectId, initialBindings)
 
-    // remove users from 1 workspace and check that it did not get removed from google bindings
     service.revokeAllUsersFromWorkspace(minimalTestData.workspace).futureValue should contain theSameElementsAs expectedEmails
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
 
-    // remove users from other workspace and check that it did get removed from google bindings
     service.revokeAllUsersFromWorkspace(minimalTestData.workspace2).futureValue should contain theSameElementsAs expectedEmails
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace2.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
   }
@@ -148,11 +146,9 @@ class RequesterPaysSetupServiceSpec extends AnyFlatSpec with Matchers with Mocki
     val initialBindings = Map(service.requesterPaysRole -> expectedEmails.map(expectedEmail => "serviceAccount:" + expectedEmail.client_email))
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.v1Workspace.googleProjectId, initialBindings)
 
-    // remove users from 1 workspace and check that it did not get removed from google bindings
     service.revokeAllUsersFromWorkspace(minimalTestData.v1Workspace).futureValue should contain theSameElementsAs expectedEmails
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.v1Workspace.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
 
-    // remove users from other workspace and check that it did get removed from google bindings
     service.revokeAllUsersFromWorkspace(minimalTestData.workspace2).futureValue should contain theSameElementsAs expectedEmails
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace2.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
   }
@@ -171,11 +167,9 @@ class RequesterPaysSetupServiceSpec extends AnyFlatSpec with Matchers with Mocki
     val initialBindings = Map(service.requesterPaysRole -> expectedEmails.map(expectedEmail => "serviceAccount:" + expectedEmail.client_email))
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.workspace.googleProjectId, initialBindings)
 
-    // remove users from 1 workspace and check that it did not get removed from google bindings
     service.revokeAllUsersFromWorkspace(minimalTestData.workspace).futureValue should contain theSameElementsAs expectedEmails
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.workspace.googleProjectId) shouldBe Some(initialBindings)
 
-    // remove users from other workspace and check that it did get removed from google bindings
     service.revokeAllUsersFromWorkspace(minimalTestData.v1Workspace2).futureValue should contain theSameElementsAs expectedEmails
     service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.v1Workspace2.googleProjectId) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
   }

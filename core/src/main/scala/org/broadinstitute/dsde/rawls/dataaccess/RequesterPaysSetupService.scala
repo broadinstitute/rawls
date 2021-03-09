@@ -56,7 +56,7 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
         for {
           _ <- dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
           // TODO (CA-1236): Remove after PPW migration is complete, we won't need to track on workspace namespace anymore, since google project will be per workspace
-          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(workspace.namespace, userEmail)
+          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespaceAssociatedGoogleProject(workspace.namespace, userEmail)
         } yield keepBindings
       }
       // TODO (CA-1236): Clean up the if statement once PPW migration is complete. There will be no more V1 workspaces so this will be dead code
