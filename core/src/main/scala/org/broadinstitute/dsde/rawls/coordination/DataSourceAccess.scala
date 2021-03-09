@@ -20,6 +20,10 @@ trait DataSourceAccess {
   def inTransaction[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
                                  isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
                                 ): Future[A]
+
+  def inTransactionWithAttrTempTable[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
+                                 isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
+                                ): Future[A]
 }
 
 /**
@@ -31,6 +35,12 @@ class UncoordinatedDataSourceAccess(override val slickDataSource: SlickDataSourc
                                           isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
                                          ): Future[A] = {
     slickDataSource.inTransaction(dataAccessFunction, isolationLevel)
+  }
+
+  override def inTransactionWithAttrTempTable[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
+                                          isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
+                                         ): Future[A] = {
+    slickDataSource.inTransactionWithAttrTempTable(dataAccessFunction, isolationLevel)
   }
 }
 
@@ -60,4 +70,9 @@ class CoordinatedDataSourceAccess(override val slickDataSource: SlickDataSource,
       waitTimeout = waitTimeout,
     )).mapTo[A]
   }
+
+  // TODO: AS-627 implement!
+  override def inTransactionWithAttrTempTable[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
+                                                           isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
+                                                          ): Future[A] = ???
 }
