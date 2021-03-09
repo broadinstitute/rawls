@@ -61,7 +61,7 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
       }
       // TODO (CA-1236): Clean up the if statement once PPW migration is complete. There will be no more V1 workspaces so this will be dead code
       // only remove google bindings if there are no workspaces left in the namespace (i.e. project) or the workspace is V2
-      _ <- if (keepBindings && workspace.workspaceVersion == WorkspaceVersions.V1) {
+      _ <- if (keepBindings) {
         Future.successful(())
       } else {
         googleServicesDAO.removePolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email)))

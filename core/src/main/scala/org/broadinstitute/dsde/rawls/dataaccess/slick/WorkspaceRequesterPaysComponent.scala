@@ -4,7 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.BondServiceAccountEmail
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, WorkspaceName, WorkspaceVersions}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 
 case class WorkspaceRequesterPaysRecord(id: Long, workspaceId: UUID, userEmail: String, serviceAccountEmail: String)
@@ -40,7 +40,7 @@ trait WorkspaceRequesterPaysComponent {
     // TODO (CA-1235/1236): Remove after PPW migration is done. We will no longer need to track users on a per namespace basis, since Google Projects are scoped to the workspace
     def userExistsInWorkspaceNamespace(namespace: String, userEmail: RawlsUserEmail): ReadAction[Boolean] = {
       val query = (workspaceQuery join workspaceRequesterPaysQuery on (_.id === _.workspaceId)).filter { case (ws, rp) =>
-          ws.namespace === namespace && rp.userEmail === userEmail.value
+          ws.namespace === namespace && rp.userEmail === userEmail.value && ws.workspaceVersion === WorkspaceVersions.V1.toString()
       }
 
       query.exists.result
