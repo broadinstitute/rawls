@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess.BondServiceAccountEmail
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUserEmail, Workspace, WorkspaceVersions}
 
 class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   "WorkspaceRequesterPaysComponentSpec" should "crud" in withEmptyTestDatabase {
@@ -19,7 +19,12 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       currentTime(),
       "me",
       Map.empty,
-      false)
+      false,
+      WorkspaceVersions.V1,
+      GoogleProjectId("google_project_id"),
+      None,
+      None
+    )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
 
