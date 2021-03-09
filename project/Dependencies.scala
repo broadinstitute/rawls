@@ -108,8 +108,10 @@ object Dependencies {
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
-  val workspaceManager = excludeGuavaJDK5("bio.terra" % "workspace-manager-client" % "0.13.0-SNAPSHOT")
-  val dataRepo = excludeGuavaJDK5("bio.terra" % "datarepo-client" % "1.0.44-SNAPSHOT")
+  def swaggerClientExcludes(m: ModuleID): ModuleID = m.exclude("jakarta.activation", "jakarta.activation-api")
+
+  val workspaceManager = swaggerClientExcludes("bio.terra" % "workspace-manager-client" % "0.13.0-SNAPSHOT")
+  val dataRepo = swaggerClientExcludes("bio.terra" % "datarepo-client" % "1.0.44-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.0-M2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.0-M2"
