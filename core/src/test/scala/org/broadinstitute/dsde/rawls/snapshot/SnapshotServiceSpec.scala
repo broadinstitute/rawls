@@ -73,8 +73,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
   }
 
-  // WIP test whether it fails gracefully
-
   "SnapshotService" should {
     "not leave an orphaned bq dataset if creating a snapshot reference fails" in withMinimalTestDatabase { dataSource =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
