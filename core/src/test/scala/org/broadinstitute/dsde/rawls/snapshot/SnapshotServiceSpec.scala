@@ -48,7 +48,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       when(mockBigQueryServiceFactory.getServiceFromCredentialPath(any[String], any[GoogleProject])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-      when(mockWorkspaceManagerDAO.createDataReference(any[UUID], any[DataReferenceName], any[DataReferenceDescriptionField], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])).thenReturn(new DataReferenceDescription().referenceId(UUID.randomUUID()).name("foo").description("").workspaceId(UUID.randomUUID()).cloningInstructions(CloningInstructionsEnum.NOTHING))
+      when(mockWorkspaceManagerDAO.createDataReference(any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])).thenReturn(new DataReferenceDescription().referenceId(UUID.randomUUID()).name("foo").description("").workspaceId(UUID.randomUUID()).cloningInstructions(CloningInstructionsEnum.NOTHING))
 
       val workspace = minimalTestData.workspace
 
@@ -63,11 +63,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         fakeDeltaLayerStreamerEmail
       )(userInfo)
 
-      Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), DataReferenceDescriptionField("foo"), "bar")), Duration.Inf)
+      Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), "bar")), Duration.Inf)
 
       verify(mockSamDAO, times(1)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
       verify(mockBigQueryServiceFactory, times(1)).getServiceFromCredentialPath(fakeCredentialPath, GoogleProject(workspace.namespace))
-      verify(mockWorkspaceManagerDAO, times(1)).createDataReference(any[UUID], any[DataReferenceName], any[DataReferenceDescriptionField], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(1)).createDataReference(any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])
       verify(mockWorkspaceManagerDAO, times(1)).createBigQueryDataset(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
     }
 
@@ -88,7 +88,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
-      when(mockWorkspaceManagerDAO.createDataReference(any[UUID], any[DataReferenceName], any[DataReferenceDescriptionField], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])).thenThrow(new RuntimeException)
+      when(mockWorkspaceManagerDAO.createDataReference(any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])).thenThrow(new RuntimeException)
 
       val workspace = minimalTestData.workspace
 
@@ -104,7 +104,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       )(userInfo)
 
       try {
-        Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), DataReferenceDescriptionField("foo"), "bar")), Duration.Inf)
+        Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), "bar")), Duration.Inf)
       }
       catch {
         case e: RuntimeException => "WSM snapshot info not returned"
@@ -112,7 +112,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       verify(mockSamDAO, times(0)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
       verify(mockBigQueryServiceFactory, times(0)).getServiceFromCredentialPath(fakeCredentialPath, GoogleProject(workspace.namespace))
-      verify(mockWorkspaceManagerDAO, times(1)).createDataReference(any[UUID], any[DataReferenceName], any[DataReferenceDescriptionField], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(1)).createDataReference(any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])
       verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDataset(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
     }
 

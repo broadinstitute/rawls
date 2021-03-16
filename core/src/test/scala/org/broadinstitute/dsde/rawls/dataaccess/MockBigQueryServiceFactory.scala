@@ -121,4 +121,5 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
     IO.pure(DatasetInfo.newBuilder(datasetName).build().getDatasetId)
   }
 
+  override def deleteDataset(datasetName: String): IO[Boolean] = IO.pure(true)
 }
