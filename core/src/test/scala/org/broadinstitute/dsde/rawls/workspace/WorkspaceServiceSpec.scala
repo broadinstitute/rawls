@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, _}
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -37,8 +37,8 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
+import org.mockito.{ArgumentMatchers, Mockito}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, spy, verify, when}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.duration._
@@ -89,7 +89,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
-    val samDAO = new MockSamDAO(dataSource)
+    val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new MockGooglePubSubDAO
     val workspaceManagerDAO = mock[MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
@@ -1213,6 +1213,23 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
     workspace.googleProjectId.value should not be empty
     workspace.googleProjectNumber should not be empty
+  }
+
+  it should "create Sam resource for google project" in withTestDataServices { services =>
+    val newWorkspaceName = "new-workspace"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    // Verify that samDAO.createResourceFull was called
+    verify(services.samDAO).createResourceFull(
+      ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+      ArgumentMatchers.eq(workspace.googleProjectId.value),
+      any[Map[SamResourcePolicyName, SamPolicy]],
+      any[Set[String]],
+      any[UserInfo],
+      any[Option[SamFullyQualifiedResourceId]]
+    )
   }
 
   // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
