@@ -412,15 +412,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       // Delete resource in sam outside of DB transaction
       _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
-      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo)
       // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
-      _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recoverWith {
+      _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recover {
         //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
         case e: ApiException => {
-          if(e.getCode != StatusCodes.NotFound.intValue) {
-            logger.warn(s"Unexpected failure deleting workspace in Workspace Manager. Received ${e.getCode}: [${e.getResponseBody}]")
+          samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo).map { _ =>
+            if(e.getCode != StatusCodes.NotFound.intValue) {
+              logger.warn(s"Unexpected failure deleting workspace in Workspace Manager. Received ${e.getCode}: [${e.getResponseBody}]")
+            }
+            Success(())
           }
-          Success(())
         }
       }
     } yield {
