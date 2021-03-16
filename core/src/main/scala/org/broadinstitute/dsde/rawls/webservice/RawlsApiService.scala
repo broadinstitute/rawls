@@ -86,20 +86,12 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  // enable/disable snapshot routes based on a config flag
-  val dataRepoEnabled = Try(ConfigFactory.load().getBoolean("dataRepo.enabled")).toOption.getOrElse(false)
-  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ billingRoutesV2 ~ notificationsRoutes ~ servicePerimeterRoutes
-
-  val concatenatedRoutes = if (dataRepoEnabled) {
-    baseApiRoutes ~ snapshotRoutes
-  } else {
-    baseApiRoutes
-  }
+  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ billingRoutesV2 ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
   def apiRoutes =
     options(complete(OK)) ~
     withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
-      concatenatedRoutes
+      baseApiRoutes
     }
 
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
