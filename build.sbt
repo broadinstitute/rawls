@@ -50,6 +50,7 @@ lazy val rawls = project.in(file("."))
 // This appears to do some magic to configure itself. It consistently fails in some environments
 // unless it is loaded after the settings definitions above.
 Revolver.settings
+Global / excludeLintKeys += debugSettings // To avoid lint warning
 
 mainClass in reStart := Some("org.broadinstitute.dsde.rawls.Boot")
 

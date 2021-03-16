@@ -30,12 +30,13 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = ()
 
-  override def createDataReference(workspaceId: UUID, name: DataReferenceName, description: DataReferenceDescriptionField, referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+  override def createDataReference(workspaceId: UUID, name: DataReferenceName, description: Option[DataReferenceDescriptionField], referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
     if(reference.toString.contains("fakesnapshot"))
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found"))
     else {
       val newId = UUID.randomUUID()
-      val ref = new DataReferenceDescription().referenceId(newId).name(name.value).description(description.value).workspaceId(workspaceId).referenceType(referenceType).reference(reference).cloningInstructions(CloningInstructionsEnum.NOTHING)
+      val ref = new DataReferenceDescription().referenceId(newId).name(name.value).workspaceId(workspaceId).referenceType(referenceType).reference(reference).cloningInstructions(CloningInstructionsEnum.NOTHING)
+      description.map(d => ref.description(d.value))
       references.put((workspaceId, newId), ref)
       mockReferenceResponse(workspaceId, newId)
     }
