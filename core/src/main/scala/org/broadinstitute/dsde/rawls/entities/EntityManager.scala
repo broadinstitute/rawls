@@ -65,9 +65,11 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     */
   def resolveProviderFuture(entityRequestArguments: EntityRequestArguments)(implicit executionContext: ExecutionContext): Future[EntityProvider] = {
     Future.fromTry(resolveProvider(entityRequestArguments)).recoverWith {
-      case regrets: DataEntityException =>
-        // bubble up the status code from the DataEntityException
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets)))
+      // rethrow DataEntityException
+      case dee: DataEntityException => Future.failed(dee)
+      // wrap other errors
+      case e: Exception =>
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport("Unexpected error during entity profvider resolution", ErrorReport(e))))
     }
   }
 }
