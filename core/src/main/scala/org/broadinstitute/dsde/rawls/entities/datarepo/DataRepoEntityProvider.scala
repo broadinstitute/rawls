@@ -107,7 +107,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     val tableModel = getTableModel(snapshotModel, entityType)
 
     // validate pagination parameters
-    val pageCount = Math.ceil(tableModel.getRowCount / incomingQuery.pageSize).toInt
+    val pageCount = Math.ceil(tableModel.getRowCount.toFloat / incomingQuery.pageSize).toInt
     if (incomingQuery.page > pageCount) {
       throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages $pageCount")
     }
