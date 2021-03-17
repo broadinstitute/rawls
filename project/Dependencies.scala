@@ -110,7 +110,7 @@ object Dependencies {
 
   def excludeJakartaActivationApi(m: ModuleID): ModuleID = m.exclude("jakarta.activation", "jakarta.activation-api")
 
-  val workspaceManager = excludeJakartaActivationApi("bio.terra" % "workspace-manager-client" % "0.13.0-SNAPSHOT")
+  val workspaceManager = excludeJakartaActivationApi("bio.terra" % "workspace-manager-client" % "0.15.0-SNAPSHOT")
   val dataRepo = excludeJakartaActivationApi("bio.terra" % "datarepo-client" % "1.0.44-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.0-M2"
