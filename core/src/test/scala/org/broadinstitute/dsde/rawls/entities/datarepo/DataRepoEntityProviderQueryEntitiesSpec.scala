@@ -109,13 +109,22 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
-  it should "throw bad request the supplied sort field does not exist in the target table" in {
+  it should "throw bad request if the supplied sort field does not exist in the target table" in {
     val provider = createTestProvider()
 
     val ex = intercept[DataEntityException] {
       provider.queryEntities("table1", defaultEntityQuery.copy(sortField = "unknownColumn"))
     }
     assertResult("sortField not valid for this entity type") { ex.getMessage }
+  }
+
+  it should "throw bad request if the requested page is greater than actual pages" in {
+    val provider = createTestProvider()
+
+    val ex = intercept[DataEntityException] {
+      provider.queryEntities("table1", defaultEntityQuery.copy(page = 42))
+    }
+    assertResult("requested page 42 is greater than the number of pages 1") { ex.getMessage }
   }
 
   it should "throw bad request if a filter is supplied" in {

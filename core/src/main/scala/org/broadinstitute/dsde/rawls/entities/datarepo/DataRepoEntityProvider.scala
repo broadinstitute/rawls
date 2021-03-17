@@ -106,6 +106,12 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     // extract table definition, with PK, from snapshot schema
     val tableModel = getTableModel(snapshotModel, entityType)
 
+    // validate pagination parameters
+    val pageCount = Math.ceil(tableModel.getRowCount / incomingQuery.pageSize).toInt
+    if (incomingQuery.page > pageCount) {
+      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages $pageCount")
+    }
+
     // validate sort column exists in the snapshot's table description, or sort column is
     // one of the magic fields "datarepo_row_id" or "name"
     if (datarepoRowIdColumn != incomingQuery.sortField &&
