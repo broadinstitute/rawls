@@ -106,12 +106,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     // extract table definition, with PK, from snapshot schema
     val tableModel = getTableModel(snapshotModel, entityType)
 
-    // validate pagination parameters
-    val pageCount = Math.ceil(tableModel.getRowCount.toFloat / incomingQuery.pageSize).toInt
-    if (incomingQuery.page > pageCount) {
-      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages $pageCount")
-    }
-
     // validate sort column exists in the snapshot's table description, or sort column is
     // one of the magic fields "datarepo_row_id" or "name"
     if (datarepoRowIdColumn != incomingQuery.sortField &&
@@ -129,6 +123,14 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       incomingQuery
     }
 
+    // calculate the pagination metadata
+    val metadata = queryResultsMetadata(tableModel.getRowCount, finalQuery)
+
+    // validate requested page against actual number of pages
+    if (finalQuery.page > metadata.filteredPageCount) {
+      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages ${metadata.filteredPageCount}")
+    }
+
     // determine data project
     val dataProject = snapshotModel.getDataProject
     // determine view name
@@ -144,7 +146,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     } yield {
       // translate the BQ results into a Rawls query result
       val page = queryResultsToEntities(queryResults, entityType, pk)
-      val metadata = queryResultsMetadata(tableModel.getRowCount, finalQuery)
       EntityQueryResponse(finalQuery, metadata, page)
     }
     resultIO.unsafeToFuture()
