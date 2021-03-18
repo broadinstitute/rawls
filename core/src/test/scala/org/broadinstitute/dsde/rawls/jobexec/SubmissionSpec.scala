@@ -1139,7 +1139,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
 
     val dataReferenceName = DataReferenceName("dataref")
-    val dataReferenceDescription = DataReferenceDescriptionField("description")
+    val dataReferenceDescription = Option(DataReferenceDescriptionField("description"))
 
     val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
 
