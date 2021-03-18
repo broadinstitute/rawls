@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
-import .RequestComplete
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatestplus.mockito.MockitoSugar
@@ -62,7 +61,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource)
 
       val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
-      val expected = RequestComplete(StatusCodes.Accepted)
+      val expected = Unit
       actual shouldEqual expected
     }
   }
@@ -83,7 +82,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, gcsDAO = mockGcsDAO)
 
       val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
-      val expected = RequestComplete(StatusCodes.Accepted)
+      val expected = Unit
       actual shouldEqual expected
     }
   }
@@ -182,7 +181,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       verify(mockGcsDAO).deleteProject(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
-      actual shouldEqual RequestComplete(StatusCodes.NoContent)
+      actual shouldEqual Unit
     }
   }
 
@@ -211,7 +210,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf)
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
     }
@@ -228,7 +227,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf)
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }
