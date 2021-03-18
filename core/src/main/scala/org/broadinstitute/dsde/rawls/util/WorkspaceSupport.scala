@@ -150,6 +150,6 @@ trait WorkspaceSupport {
     }
   }
 
-  def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
+  def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist or you do not have permission to use it"
   def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 }
