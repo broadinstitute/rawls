@@ -1078,7 +1078,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "204 on add linked service accounts to workspace" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
-      assertResult(Unit) {
+      assertResult(()) {
         rqComplete
       }
     }
@@ -1122,7 +1122,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "204 on remove linked service accounts to workspace" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
-      assertResult(Unit) {
+      assertResult(()) {
         rqComplete
       }
     }
@@ -1131,7 +1131,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "204 on remove linked service accounts to workspace which does not exist" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName.copy(name = "DNE")), Duration.Inf)
-      assertResult(Unit) {
+      assertResult(()) {
         rqComplete
       }
     }
@@ -1141,7 +1141,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     populateWorkspacePolicies(services)
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
-      assertResult(Unit) {
+      assertResult(()) {
         rqComplete
       }
     }
@@ -1151,7 +1151,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     populateWorkspacePolicies(services)
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
-      assertResult(Unit) {
+      assertResult(()) {
         rqComplete
       }
     }

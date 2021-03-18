@@ -61,7 +61,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource)
 
       val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
-      val expected = Unit
+      val expected = ()
       actual shouldEqual expected
     }
   }
@@ -82,7 +82,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, gcsDAO = mockGcsDAO)
 
       val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
-      val expected = Unit
+      val expected = ()
       actual shouldEqual expected
     }
   }
@@ -181,7 +181,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       verify(mockGcsDAO).deleteProject(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
-      actual shouldEqual Unit
+      actual shouldEqual ()
     }
   }
 
