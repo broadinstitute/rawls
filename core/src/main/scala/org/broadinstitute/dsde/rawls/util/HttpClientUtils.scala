@@ -44,7 +44,7 @@ trait HttpClientUtils extends LazyLogging {
               s"If you believe this is a mistake, please try your request again. " +
               s"Error occurred calling uri ${httpRequest.uri}"
           else
-            s"http error calling uri ${httpRequest.uri}"
+            s"HTTP error calling URI ${httpRequest.uri}. Response first 1000: ${entityAsString.take(1000)}"
           throw new RawlsExceptionWithErrorReport(ErrorReport(response.status, message))
         }
       }
@@ -66,7 +66,7 @@ trait HttpClientUtils extends LazyLogging {
       } else {
         Unmarshal(response.entity).to[String] map { entityAsString =>
           logger.debug(s"http error status ${response.status} calling uri ${httpRequest.uri}, response: ${entityAsString}")
-          throw new RawlsExceptionWithErrorReport(ErrorReport(response.status, s"http error calling uri ${httpRequest.uri}"))
+          throw new RawlsExceptionWithErrorReport(ErrorReport(response.status, s"HTTP error calling URI ${httpRequest.uri}. Response first 1000: ${entityAsString.take(1000)}"))
         }
       }
     }

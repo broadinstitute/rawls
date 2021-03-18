@@ -101,7 +101,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
     scheduleInitialMonitorPass
     registerGlobalJobExecGauges()
-    system.scheduler.schedule(0 seconds, submissionMonitorConfig.submissionPollInterval, self, RefreshGlobalJobExecGauges)
+    system.scheduler.scheduleAtFixedRate(0 seconds, submissionMonitorConfig.submissionPollInterval, self, RefreshGlobalJobExecGauges)
   }
 
   override def receive = {
