@@ -19,7 +19,6 @@ import scala.concurrent.duration.FiniteDuration
   * Created by dvoet on 6/4/15.
   */
 trait SubmissionApiService extends UserInfoDirectives {
-  import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService

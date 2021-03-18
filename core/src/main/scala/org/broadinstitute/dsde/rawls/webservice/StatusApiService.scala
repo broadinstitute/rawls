@@ -13,7 +13,6 @@ import scala.concurrent.ExecutionContext
   */
 trait StatusApiService {
   implicit val executionContext: ExecutionContext
-  import PerRequest.requestCompleteMarshaller
   val statusServiceConstructor: () => StatusService
 
   val statusRoute: server.Route = {

@@ -21,7 +21,6 @@ import scala.util.{Failure, Success, Try}
  */
 
 trait EntityApiService extends UserInfoDirectives {
-  import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
   val entityServiceConstructor: UserInfo => EntityService
