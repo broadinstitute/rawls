@@ -13,18 +13,7 @@ object Merging {
     //[error] java.lang.RuntimeException: deduplicate: different file contents found in the following:
     //[error] /root/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.11.4/protobuf-java-3.11.4.jar:google/protobuf/field_mask.proto
     //[error] /root/.cache/coursier/v1/https/repo1.maven.org/maven2/com/typesafe/akka/akka-protobuf-v3_2.12/2.6.5/akka-protobuf-v3_2.12-2.6.5.jar:google/protobuf/field_mask.proto
-    case PathList("google", "protobuf", "field_mask.proto")         => MergeStrategy.first
-    case PathList("google", "protobuf", "descriptor.proto")         => MergeStrategy.first
-    case PathList("google", "protobuf", "any.proto")     => MergeStrategy.first
-    case PathList("google", "protobuf", "api.proto")     => MergeStrategy.first
-    case PathList("google", "protobuf", "duration.proto")     => MergeStrategy.first
-    case PathList("google", "protobuf", "empty.proto")     => MergeStrategy.first
-    case PathList("google", "protobuf", "source_context.proto")     => MergeStrategy.first
-    case PathList("google", "protobuf", "struct.proto")     => MergeStrategy.first
-    case PathList("google", "protobuf", "timestamp.proto")     => MergeStrategy.first
-    case PathList("google", "protobuf", "type.proto")     => MergeStrategy.first
-    case PathList("google", "protobuf", "wrappers.proto")     => MergeStrategy.first
-    case PathList("google", "protobuf", "compiler", "plugin.proto") => MergeStrategy.first
+    case PathList("google", "protobuf", _ @ _*)         => MergeStrategy.first
     case "application.conf" => MergeStrategy.first
     case "version.conf" => MergeStrategy.concat
     case "logback.xml" => MergeStrategy.first
