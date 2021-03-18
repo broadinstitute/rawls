@@ -38,8 +38,11 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(accessToken).deleteWorkspace(workspaceId)
   }
 
-  override def createDataReference(workspaceId: UUID, name: DataReferenceName, description: DataReferenceDescriptionField, referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
-    getWorkspaceApi(accessToken).createDataReference(new CreateDataReferenceRequestBody().name(name.value).description(description.value).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions), workspaceId)
+  override def createDataReference(workspaceId: UUID, name: DataReferenceName, description: Option[DataReferenceDescriptionField], referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+    val request = new CreateDataReferenceRequestBody().name(name.value).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions)
+    description.map(d => request.description(d.value))
+
+    getWorkspaceApi(accessToken).createDataReference(request, workspaceId)
   }
 
   override def updateDataReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {

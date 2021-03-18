@@ -23,7 +23,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeT
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
@@ -1018,6 +1017,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"), CreationStatuses.Ready, None, None)
     val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val wsName2 = WorkspaceName(billingProject.projectName.value, "myWorkspace2")
+    val v1WsName = WorkspaceName(billingProject.projectName.value, "myV1Workspace")
+    val v1WsName2 = WorkspaceName(billingProject.projectName.value, "myV1Workspace2")
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set.empty)
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set.empty)
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set.empty)
@@ -1027,11 +1028,17 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     val workspace2 = Workspace(wsName2.namespace, wsName2.name, UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
+    // TODO (CA-1235): Remove these after PPW Migration is complete
+    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None)
+    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None)
 
     override def save() = {
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
-        workspaceQuery.createOrUpdate(workspace2)
+        workspaceQuery.createOrUpdate(workspace2),
+        // TODO (CA-1235): Remove these after PPW Migration is complete
+        workspaceQuery.createOrUpdate(v1Workspace),
+        workspaceQuery.createOrUpdate(v1Workspace2)
       )
     }
   }

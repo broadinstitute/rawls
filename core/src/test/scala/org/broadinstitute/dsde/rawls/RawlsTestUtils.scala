@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.Workspace
-import org.mockserver.model.StringBody
+import org.mockserver.model.RegexBody
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.Suite
 
@@ -71,8 +71,8 @@ trait RawlsTestUtils extends Suite with TestDriverComponent with Matchers {
   }
 
   // MockServer's .withBody doesn't have a built-in string contains feature.  This serves that purpose.
-  def mockServerContains(text: String): StringBody = {
-    val anythingWithNewlines = "((.|\n|\r)*)"
-    StringBody.regex(anythingWithNewlines + Regex.quote(text.toString) + anythingWithNewlines)
+  def mockServerContains(text: String): RegexBody = {
+    // "(?s)" turns on DOTALL mode, where a "." matches a line break as well as any character
+    new RegexBody("(?s).*" + Regex.quote(text) + ".*")
   }
 }

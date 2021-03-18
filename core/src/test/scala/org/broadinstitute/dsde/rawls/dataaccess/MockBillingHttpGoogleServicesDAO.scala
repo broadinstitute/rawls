@@ -10,6 +10,7 @@ import com.google.api.services.cloudbilling.model.BillingAccount
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
 import org.joda.time.DateTime
 
 import scala.collection.mutable

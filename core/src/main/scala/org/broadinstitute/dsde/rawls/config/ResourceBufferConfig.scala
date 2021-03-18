@@ -6,7 +6,8 @@ import org.broadinstitute.dsde.rawls.model.ProjectPoolId
 case class ResourceBufferConfig(
                                  url: String,
                                  regularProjectPoolId: ProjectPoolId,
-                                 exfiltrationControlledPoolId: ProjectPoolId
+                                 exfiltrationControlledPoolId: ProjectPoolId,
+                                 saEmail: String
                                )
 
 object ResourceBufferConfig{
@@ -14,7 +15,8 @@ object ResourceBufferConfig{
     ResourceBufferConfig(
       conf.getString("url"),
       ProjectPoolId(conf.getString("projectPool.regular")),
-      ProjectPoolId(conf.getString("projectPool.exfiltrationControlled"))
+      ProjectPoolId(conf.getString("projectPool.exfiltrationControlled")),
+      conf.getString("saEmail")
     )
   }
 }

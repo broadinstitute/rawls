@@ -37,7 +37,7 @@ import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
@@ -203,6 +203,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
     val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+    val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -226,7 +227,11 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       requesterPaysSetupService,
       entityManager,
       resourceBufferService,
-      servicePerimeterService
+      resourceBufferSaEmail,
+      servicePerimeterService,
+      googleIamDao = new MockGoogleIamDAO,
+      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
     )_
 
     override val entityServiceConstructor = EntityService.constructor(

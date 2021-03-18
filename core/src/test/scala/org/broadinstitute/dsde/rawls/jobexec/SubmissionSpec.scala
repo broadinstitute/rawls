@@ -31,7 +31,7 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually
@@ -348,6 +348,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+      val resourceBufferSaEmail = resourceBufferConfig.saEmail
+
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
@@ -374,7 +376,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,
-        servicePerimeterService
+        resourceBufferSaEmail,
+        servicePerimeterService,
+        googleIamDao = new MockGoogleIamDAO,
+        terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+        terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
@@ -1133,7 +1139,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
 
     val dataReferenceName = DataReferenceName("dataref")
-    val dataReferenceDescription = DataReferenceDescriptionField("description")
+    val dataReferenceDescription = Option(DataReferenceDescriptionField("description"))
 
     val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
 

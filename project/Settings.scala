@@ -27,6 +27,10 @@ object Settings {
     javaOptions += "-Xmx2G"
   )
 
+  val java11BuildSettings = Seq( // can be wrapped into commonBuildSettings when rawls-model can publish java 11
+    javacOptions ++= Seq("--release", "11")
+  )
+
   val commonCompilerSettings = Seq(
     "-unchecked",
     "-feature",
@@ -78,13 +82,14 @@ object Settings {
   val googleSettings = commonSettings ++ List(
     name := "workbench-google",
     libraryDependencies ++= googleDependencies
-  ) ++ versionSettings ++ noPublishSettings
+  ) ++ versionSettings ++ noPublishSettings ++ java11BuildSettings
 
   //the full list of settings for the rawlsModel project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
   //thus commonSettings needs to be added first.
   val modelSettings = cross212and213 ++ commonSettings ++ List(
     name := "rawls-model",
+    javacOptions ++= Seq("--release", "8"), // has to publish a java 8 artifact
     libraryDependencies ++= modelDependencies
   ) ++ versionSettings ++ publishSettings
 
@@ -94,7 +99,7 @@ object Settings {
   val utilSettings = commonSettings ++ List(
     name := "workbench-util",
     libraryDependencies ++= utilDependencies
-  ) ++ versionSettings ++ noPublishSettings
+  ) ++ versionSettings ++ noPublishSettings ++ java11BuildSettings
 
   //the full list of settings for the workbenchMetrics project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -102,7 +107,7 @@ object Settings {
   val metricsSettings = commonSettings ++ List(
     name := "workbench-metrics",
     libraryDependencies ++= metricsDependencies
-  ) ++ versionSettings ++ noPublishSettings
+  ) ++ versionSettings ++ noPublishSettings ++ java11BuildSettings
 
   //the full list of settings for the rawlsCore project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -111,7 +116,7 @@ object Settings {
     name := "rawls-core",
     version := "0.1",
     libraryDependencies ++= rawlsCoreDependencies
-  ) ++ antlr4CodeGenerationSettings ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings
+  ) ++ antlr4CodeGenerationSettings ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java11BuildSettings
   //NOTE: rawlsCoreCompileSettings above has to be last, because something in commonSettings or rawlsAssemblySettings
   //overwrites it if it's before them. I (hussein) don't know what that is and I don't care to poke the bear to find out.
 
@@ -121,6 +126,6 @@ object Settings {
   val rootSettings = commonSettings ++ List(
     name := "rawls",
     version := "0.1"
-  ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings
+  ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java11BuildSettings
   //See immediately above NOTE.
 }
