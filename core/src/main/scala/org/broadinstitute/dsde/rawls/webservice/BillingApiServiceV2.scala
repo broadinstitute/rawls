@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
@@ -15,7 +17,6 @@ import scala.concurrent.ExecutionContext
 trait BillingApiServiceV2 extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
-  import PerRequest.requestCompleteMarshaller
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
@@ -27,12 +28,15 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
         pathEnd {
           get {
             complete {
-              userServiceConstructor(userInfo).getBillingProject(RawlsBillingProjectName(projectId))
+              userServiceConstructor(userInfo).getBillingProject(RawlsBillingProjectName(projectId)).map {
+                case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse)
+                case None => StatusCodes.NotFound -> None
+              }
             }
           } ~
             delete {
               complete {
-                userServiceConstructor(userInfo).deleteBillingProject(RawlsBillingProjectName(projectId))
+                userServiceConstructor(userInfo).deleteBillingProject(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
               }
             }
         } ~
@@ -40,7 +44,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             pathEnd {
               get {
                 complete {
-                  userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId))
+                  userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId)).map(StatusCodes.OK -> _)
                 }
               }
             } ~
@@ -48,12 +52,12 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
               path(Segment / Segment) { (workbenchRole, userEmail) =>
                 put {
                   complete {
-                    userServiceConstructor(userInfo).addUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
+                    userServiceConstructor(userInfo).addUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))).map(_ => StatusCodes.OK)
                   }
                 } ~
                   delete {
                     complete {
-                      userServiceConstructor(userInfo).removeUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
+                      userServiceConstructor(userInfo).removeUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))).map(_ => StatusCodes.OK)
                     }
                   }
               }
@@ -61,12 +65,14 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
       } ~
       pathEnd {
         get {
-          complete { userServiceConstructor(userInfo).listBillingProjectsV2() }
+          complete {
+            userServiceConstructor(userInfo).listBillingProjectsV2().map(StatusCodes.OK -> _)
+          }
         } ~
         post {
           entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
             complete {
-              userServiceConstructor(userInfo).createBillingProjectV2(createProjectRequest)
+              userServiceConstructor(userInfo).createBillingProjectV2(createProjectRequest).map(_ => StatusCodes.Created)
             }
           }
         }

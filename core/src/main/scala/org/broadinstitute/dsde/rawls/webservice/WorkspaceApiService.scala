@@ -21,7 +21,6 @@ import io.opencensus.scala.akka.http.TracingDirective._
   */
 
 trait WorkspaceApiService extends UserInfoDirectives {
-  import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService

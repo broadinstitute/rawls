@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, MockWorks
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import .RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO

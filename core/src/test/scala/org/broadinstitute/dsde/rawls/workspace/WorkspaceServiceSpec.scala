@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import .RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO

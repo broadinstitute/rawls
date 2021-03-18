@@ -20,7 +20,6 @@ import scala.concurrent.ExecutionContext
   */
 
 trait MethodConfigApiService extends UserInfoDirectives {
-  import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
