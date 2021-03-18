@@ -75,7 +75,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).getAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "bucketOptions") { (workspaceNamespace, workspaceName) =>
@@ -139,12 +141,19 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "checkBucketReadAccess") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).checkBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).checkBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.OK)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "checkIamActionWithLock" / Segment) { (workspaceNamespace, workspaceName, requiredAction) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).checkSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName), SamResourceAction(requiredAction)) }
+          complete {
+            workspaceServiceConstructor(userInfo).checkSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName), SamResourceAction(requiredAction)).map {
+              case true => StatusCodes.NoContent
+              case false => StatusCodes.Forbidden
+            }
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "lock") { (workspaceNamespace, workspaceName) =>
@@ -163,7 +172,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "bucketUsage") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+          }
         }
       } ~
       path("workspaces" / "tags") {
@@ -184,12 +195,16 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "enableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "disableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+          }
         }
       }
   }
