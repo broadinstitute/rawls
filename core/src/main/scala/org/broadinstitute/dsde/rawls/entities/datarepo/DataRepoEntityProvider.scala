@@ -124,7 +124,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
     }
 
     // if Data Repo indicates this table is empty, return immediately without error, don't query BigQuery
-    if (tableModel.getRowCount == 0) {
+    if (tableModel.getRowCount == 0 && finalQuery.page == 1) {
       // pagination metadata indicates 0 results but 1 page - it's 1 page of 0 - we never want to indicate 0 pages
       Future.successful(EntityQueryResponse(finalQuery, EntityQueryResultMetadata(0, 0, 1), List.empty[Entity]))
     } else {
