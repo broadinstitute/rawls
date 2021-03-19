@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -123,32 +123,38 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       incomingQuery
     }
 
-    // calculate the pagination metadata
-    val metadata = queryResultsMetadata(tableModel.getRowCount, finalQuery)
+    // if Data Repo indicates this table is empty, return immediately without error, don't query BigQuery
+    if (tableModel.getRowCount == 0) {
+      // pagination metadata indicates 0 results but 1 page - it's 1 page of 0 - we never want to indicate 0 pages
+      Future.successful(EntityQueryResponse(finalQuery, EntityQueryResultMetadata(0, 0, 1), List.empty[Entity]))
+    } else {
+      // calculate the pagination metadata
+      val metadata = queryResultsMetadata(tableModel.getRowCount, finalQuery)
 
-    // validate requested page against actual number of pages
-    if (finalQuery.page > metadata.filteredPageCount) {
-      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages ${metadata.filteredPageCount}")
+      // validate requested page against actual number of pages
+      if (finalQuery.page > metadata.filteredPageCount) {
+        throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages ${metadata.filteredPageCount}")
+      }
+
+      // determine data project
+      val dataProject = snapshotModel.getDataProject
+      // determine view name
+      val viewName = snapshotModel.getName
+
+      val queryConfigBuilder = queryConfigForQueryEntities(dataProject, viewName, entityType, finalQuery)
+
+      val resultIO = for {
+        // get pet service account key for this user
+        petKey <- getPetSAKey
+        // execute the query against BQ
+        queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
+      } yield {
+        // translate the BQ results into a Rawls query result
+        val page = queryResultsToEntities(queryResults, entityType, pk)
+        EntityQueryResponse(finalQuery, metadata, page)
+      }
+      resultIO.unsafeToFuture()
     }
-
-    // determine data project
-    val dataProject = snapshotModel.getDataProject
-    // determine view name
-    val viewName = snapshotModel.getName
-
-    val queryConfigBuilder = queryConfigForQueryEntities(dataProject, viewName, entityType, finalQuery)
-
-    val resultIO = for {
-      // get pet service account key for this user
-      petKey <- getPetSAKey
-      // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
-    } yield {
-      // translate the BQ results into a Rawls query result
-      val page = queryResultsToEntities(queryResults, entityType, pk)
-      EntityQueryResponse(finalQuery, metadata, page)
-    }
-    resultIO.unsafeToFuture()
   }
 
   def pkFromSnapshotTable(tableModel: TableModel): String = {

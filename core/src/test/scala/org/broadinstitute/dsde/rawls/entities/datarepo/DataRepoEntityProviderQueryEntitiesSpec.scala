@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import bio.terra.datarepo.model.TableModel
+import bio.terra.datarepo.model.{ColumnModel, TableModel}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
-import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{createTestTableResult, createKeyList}
+import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{createKeyList, createTestTableResult}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
@@ -93,6 +93,25 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
       val expected = Seq.empty[Entity]
       assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
       assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
+      assertResult(expected) { entityQueryResponse.results }
+    }
+  }
+
+  it should "return empty Seq and appropriate metadata if Data Repo indicates zero rows" in {
+    val emptyTables: List[TableModel] = List(
+      new TableModel().name("table1").primaryKey(null).rowCount(0)
+        .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
+      new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
+        .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava)
+    )
+
+    val provider = createTestProvider(snapshotModel = createSnapshotModel(tables = emptyTables))
+
+    provider.queryEntities("table1", defaultEntityQuery) map { entityQueryResponse: EntityQueryResponse =>
+      // this is the default expected value, should it move to the support trait?
+      val expected = Seq.empty[Entity]
+      assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
+      assertResult(EntityQueryResultMetadata(unfilteredCount = 0, filteredCount = 0, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
       assertResult(expected) { entityQueryResponse.results }
     }
   }
