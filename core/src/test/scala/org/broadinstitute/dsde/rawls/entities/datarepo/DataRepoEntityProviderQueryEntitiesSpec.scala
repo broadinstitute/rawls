@@ -116,6 +116,22 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
+  it should "throw bad request if Data Repo indicates zero rows and user requested page > 1" in {
+    val emptyTables: List[TableModel] = List(
+      new TableModel().name("table1").primaryKey(null).rowCount(0)
+        .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
+      new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
+        .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava)
+    )
+
+    val provider = createTestProvider(snapshotModel = createSnapshotModel(tables = emptyTables))
+
+    val ex = intercept[DataEntityException] {
+      provider.queryEntities("table1", defaultEntityQuery.copy(page = 2))
+    }
+    assertResult("requested page 2 is greater than the number of pages 1") { ex.getMessage }
+  }
+
   it should "fail if pet credentials not available from Sam" in {
     val provider = createTestProvider(
       samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))

@@ -123,10 +123,14 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       incomingQuery
     }
 
-    // if Data Repo indicates this table is empty, return immediately without error, don't query BigQuery
-    if (tableModel.getRowCount == 0 && finalQuery.page == 1) {
-      // pagination metadata indicates 0 results but 1 page - it's 1 page of 0 - we never want to indicate 0 pages
-      Future.successful(EntityQueryResponse(finalQuery, EntityQueryResultMetadata(0, 0, 1), List.empty[Entity]))
+    // if Data Repo indicates this table is empty, return immediately, don't query BigQuery
+    if (tableModel.getRowCount == 0 ) {
+      if (finalQuery.page == 1) {
+        // pagination metadata indicates 0 results but 1 page - it's 1 page of 0 - we never want to indicate 0 pages
+        Future.successful(EntityQueryResponse(finalQuery, EntityQueryResultMetadata(0, 0, 1), List.empty[Entity]))
+      } else {
+        throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages 1")
+      }
     } else {
       // calculate the pagination metadata
       val metadata = queryResultsMetadata(tableModel.getRowCount, finalQuery)
