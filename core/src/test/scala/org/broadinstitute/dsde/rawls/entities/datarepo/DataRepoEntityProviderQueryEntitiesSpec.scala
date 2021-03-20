@@ -116,20 +116,24 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
-  it should "throw bad request if Data Repo indicates zero rows and user requested page > 1" in {
-    val emptyTables: List[TableModel] = List(
-      new TableModel().name("table1").primaryKey(null).rowCount(0)
-        .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
-      new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
-        .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava)
-    )
+  List (2,10,42,Integer.MAX_VALUE) foreach { x =>
+    it should s"throw bad request if Data Repo indicates zero rows and user requested page > 1 (requested page: $x)" in {
+      val emptyTables: List[TableModel] = List(
+        new TableModel().name("table1").primaryKey(null).rowCount(0)
+          .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
+        new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
+          .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava)
+      )
 
-    val provider = createTestProvider(snapshotModel = createSnapshotModel(tables = emptyTables))
+      val provider = createTestProvider(snapshotModel = createSnapshotModel(tables = emptyTables))
 
-    val ex = intercept[DataEntityException] {
-      provider.queryEntities("table1", defaultEntityQuery.copy(page = 2))
+      val ex = intercept[DataEntityException] {
+        provider.queryEntities("table1", defaultEntityQuery.copy(page = x))
+      }
+      assertResult(s"requested page $x is greater than the number of pages 1") {
+        ex.getMessage
+      }
     }
-    assertResult("requested page 2 is greater than the number of pages 1") { ex.getMessage }
   }
 
   it should "fail if pet credentials not available from Sam" in {
@@ -153,13 +157,28 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     assertResult("sortField not valid for this entity type") { ex.getMessage }
   }
 
-  it should "throw bad request if the requested page is greater than actual pages" in {
-    val provider = createTestProvider()
+  List (2,10,42,Integer.MAX_VALUE) foreach { x =>
+    it should s"throw bad request if the requested page is greater than actual pages (requested page: $x)" in {
+      val provider = createTestProvider()
 
-    val ex = intercept[DataEntityException] {
-      provider.queryEntities("table1", defaultEntityQuery.copy(page = 42))
+      val ex = intercept[DataEntityException] {
+        provider.queryEntities("table1", defaultEntityQuery.copy(page = x))
+      }
+      assertResult(s"requested page $x is greater than the number of pages 1") {
+        ex.getMessage
+      }
     }
-    assertResult("requested page 42 is greater than the number of pages 1") { ex.getMessage }
+  }
+
+  List (0,-1,-42,Integer.MIN_VALUE) foreach { x =>
+    it should s"throw bad request if the requested page is less than 1 (requested page: $x)" in {
+      val provider = createTestProvider()
+
+      val ex = intercept[DataEntityException] {
+        provider.queryEntities("table1", defaultEntityQuery.copy(page = x))
+      }
+      assertResult("page value must be at least 1.") { ex.getMessage }
+    }
   }
 
   it should "throw bad request if a filter is supplied" in {

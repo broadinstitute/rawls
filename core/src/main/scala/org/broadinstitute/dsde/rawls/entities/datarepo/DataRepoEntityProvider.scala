@@ -123,23 +123,18 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       incomingQuery
     }
 
-    // if Data Repo indicates this table is empty, return immediately, don't query BigQuery
-    if (tableModel.getRowCount == 0 ) {
-      if (finalQuery.page == 1) {
-        // pagination metadata indicates 0 results but 1 page - it's 1 page of 0 - we never want to indicate 0 pages
-        Future.successful(EntityQueryResponse(finalQuery, EntityQueryResultMetadata(0, 0, 1), List.empty[Entity]))
-      } else {
-        throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages 1")
-      }
+    // calculate the pagination metadata
+    val metadata = queryResultsMetadata(tableModel.getRowCount, finalQuery)
+
+    // validate requested page against actual number of pages
+    if (finalQuery.page > metadata.filteredPageCount) {
+      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages ${metadata.filteredPageCount}")
+    }
+
+    // if Data Repo indicates this table is empty, create an empty list and don't query BigQuery
+    val futurePage: Future[List[Entity]] = if (tableModel.getRowCount == 0) {
+      Future.successful(List.empty[Entity])
     } else {
-      // calculate the pagination metadata
-      val metadata = queryResultsMetadata(tableModel.getRowCount, finalQuery)
-
-      // validate requested page against actual number of pages
-      if (finalQuery.page > metadata.filteredPageCount) {
-        throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages ${metadata.filteredPageCount}")
-      }
-
       // determine data project
       val dataProject = snapshotModel.getDataProject
       // determine view name
@@ -154,11 +149,13 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
         queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
       } yield {
         // translate the BQ results into a Rawls query result
-        val page = queryResultsToEntities(queryResults, entityType, pk)
-        EntityQueryResponse(finalQuery, metadata, page)
+        queryResultsToEntities(queryResults, entityType, pk)
       }
       resultIO.unsafeToFuture()
     }
+
+    futurePage map { page => EntityQueryResponse(finalQuery, metadata, page) }
+
   }
 
   def pkFromSnapshotTable(tableModel: TableModel): String = {
