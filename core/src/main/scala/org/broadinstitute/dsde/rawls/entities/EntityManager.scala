@@ -67,7 +67,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     Future.fromTry(resolveProvider(entityRequestArguments)).recoverWith {
       case regrets: DataEntityException =>
         // bubble up the status code from the DataEntityException
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets)))
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage)))
     }
   }
 }
