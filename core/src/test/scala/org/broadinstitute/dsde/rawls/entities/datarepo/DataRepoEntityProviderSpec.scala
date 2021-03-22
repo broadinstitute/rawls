@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
+import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, RelationshipTermModel, TableModel}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
@@ -7,6 +8,7 @@ import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory._
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
@@ -17,6 +19,10 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookup
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, DataReferenceName, Entity, EntityTypeMetadata, GoogleProjectId, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
+import org.mockserver.integration.ClientAndServer.startClientAndServer
+import org.mockserver.model.Header
+import org.mockserver.model.HttpRequest.request
+import org.mockserver.model.HttpResponse.response
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
@@ -791,6 +797,35 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         |LEFT JOIN `proj.view.debTable` `dep` ON `root`.`fk` = `dep`.`fk`
         |LEFT JOIN `proj.view.debTable2` `dep2` ON `dep`.`fk2` = `dep2`.`fk2`
         |GROUP BY `root`.`zoe`, `root`.`bob`;""".stripMargin
+  }
+
+  it should "connect to a Data Repo instance via client" in {
+    /* This test uses the data repo client lib to connect to a mock data repo server.
+        It verifies that the client lib version in use by Rawls is functional
+        and has no inherent runtime errors. Anything beyond this simple connectivity test
+        should likely be an integration test talking to a real Data Repo instance.
+     */
+    val jsonHeader = new Header("Content-Type", "application/json")
+    val mockSnapshotId = java.util.UUID.randomUUID()
+    val mockPort = 32123
+
+    val mockServer = startClientAndServer(mockPort)
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath(s"/api/repository/v1/snapshots/${mockSnapshotId.toString}")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(s"""{"id":"${mockSnapshotId.toString}"}""")
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    val dataRepoDAO = new HttpDataRepoDAO("mock", s"http://localhost:$mockPort")
+    val snapshotResponse = dataRepoDAO.getSnapshot(mockSnapshotId, userInfo.accessToken)
+    mockServer.stopAsync()
+
+    snapshotResponse.getId shouldBe mockSnapshotId.toString
   }
 
 }
