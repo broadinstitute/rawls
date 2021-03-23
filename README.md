@@ -20,7 +20,27 @@ brew install git-secrets # if not already installed
 cd rawls
 sbt antlr4:antlr4Generate # Generates source code for IntellIJ IDEA
 ./minnie-kenny.sh -f
+```
+
+## Unit Testing with MySQL in Docker
+Ensure that docker is up to date and initialized.
+Spin up mysql locally and validate that it is working:
+
+```sh
+./docker/run-mysql.sh start
+```
+
+Run tests.
+
+```sh
+export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310"
 sbt clean compile test
+```
+
+And when you're done, spin down mysql (it is also fine to leave it running for your next round of tests):
+
+```sh
+./docker/run-mysql.sh stop
 ```
 
 ## Running Locally
@@ -31,9 +51,9 @@ sbt clean compile test
 * Broad internal internet connection (or VPN, non-split recommended)
 * Render the local configuration files. From the root of the [firecloud-develop](https://github.com/broadinstitute/firecloud-develop) repo, run:
 ```sh
-./firecloud-setup.sh
+sh run-context/local/scripts/firecloud-setup.sh
 ```
-Note: this script will offer to set up configuration for several other services as well. You can skip those if you only want to set up configuration for Rawls
+Note: this script will offer to set up configuration for several other services as well. You can skip those if you only want to set up configuration for Rawls. If this is your first time running Rawls or rendering congiguration files, you will want to run through the "Setup vault" step.
 
 *  The `/etc/hosts` file on your machine must contain this entry (for calling Rawls endpoints):
 ```sh
@@ -74,27 +94,6 @@ If you are writing Liquibase migrations or doing database work, it is mandatory 
 * Swagger UI: https://rawls.dsde-dev.broadinstitute.org
 * Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
 * Running locally in docker https://github.com/broadinstitute/firecloud-develop
-
-## Unit Testing with MySQL in Docker
-Ensure that docker is up to date and initialized.
-Spin up mysql locally and validate that it is working:
-
-```sh
-./docker/run-mysql.sh start
-```
-
-Run tests.
-
-```sh
-export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310"
-sbt clean compile test
-```
-
-And when you're done, spin down mysql (it is also fine to leave it running for your next round of tests):
-
-```sh
-./docker/run-mysql.sh stop
-```
 
 ## Build Rawls docker image
 
