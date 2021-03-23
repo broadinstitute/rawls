@@ -29,7 +29,7 @@ sbt clean compile test
 
 * [Docker Desktop](https://www.docker.com/products/docker-desktop) (4GB+, 8GB recommended)
 * Broad internal internet connection (or VPN, non-split recommended)
-* Render the local configuration files. From the root of the firecloud-develop repo, run:
+* Render the local configuration files. From the root of the [firecloud-develop](https://github.com/broadinstitute/firecloud-develop) repo, run:
 ```sh
 ./firecloud-setup.sh
 ```
