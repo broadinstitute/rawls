@@ -309,7 +309,7 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
 
     // (input pageSize, result set size) -> expected number of pages in result set
     val pagination = Map(
-      (10, 0) -> 0,
+      (10, 0) -> 1,
       (10, 1) -> 1,
       (10, 9) -> 1,
       (10, 10) -> 1,
