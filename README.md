@@ -1,3 +1,5 @@
+
+
 [![Build Status](https://github.com/broadinstitute/rawls/workflows/Scala%20tests%20with%20coverage/badge.svg?branch=develop
 )](https://travis-ci.com/broadinstitute/rawls?branch=develop)
 [![Coverage Status](https://img.shields.io/codecov/c/gh/broadinstitute/rawls)](https://codecov.io/gh/broadinstitute/rawls)
@@ -5,7 +7,7 @@
 
 # rawls
 
-1. The workspace manager for the Prometheus project
+1. The workspace/entity/submission/method config manager for Terra
 2. Bill Rawls, Deputy Commissioner for Operations from *The Wire*:
 
 ![](http://vignette2.wikia.nocookie.net/thewire/images/b/b5/Rawls.jpg)
@@ -21,7 +23,51 @@ sbt antlr4:antlr4Generate # Generates source code for IntellIJ IDEA
 sbt clean compile test
 ```
 
-See the wiki for detailed documentation.
+## Running Locally
+
+### Requirements:
+
+* [Docker Desktop](https://www.docker.com/products/docker-desktop) (4GB+, 8GB recommended)
+* Broad internal internet connection (or VPN, non-split recommended)
+* Render the local configuration files. From the root of the firecloud-develop repo, run:
+```sh
+./firecloud-setup.sh
+```
+Note: this script will offer to set up configuration for several other services as well. You can skip those if you only want to set up configuration for Rawls
+
+*  The `/etc/hosts` file on your machine must contain this entry (for calling Rawls endpoints):
+```sh
+127.0.0.1	local.broadinstitute.org
+```
+
+### Running:
+
+After satisfying the above requirements, execute the following command from the root of the Rawls repo:
+
+```sh
+./config/docker-rsync-local-rawls.sh
+```
+
+If Rawls successfully starts up, you can now access the Rawls Swagger page: https://local.broadinstitute.org:20443/
+
+### Useful Tricks:
+
+#### Front & Back Rawls
+
+By default, a locally run Rawls will boot as a "front" instance of Rawls. A front Rawls will serve all HTTP requests and can modify the database, but it will not do monitoring tasks such as submission monitoring, PFB imports, or Google billing project creation.
+
+If you are developing a ticket that deals with any sort of monitoring or asynchronous features, you will likely want to boot your Rawls as a "back" instance, which will run a fully-featured instance of Rawls with monitoring tasks enabled. To boot your local instance as a "back" instance, run*:
+
+```
+BACK_RAWLS=true ./config/docker-rsync-local-rawls.sh
+```
+
+***Important**: It is highly recommended that use your own Cloud SQL instance when running an instance of back Rawls. See note below on database work.
+
+#### Developing Database Schema Changes
+
+If you are writing Liquibase migrations or doing database work, it is mandatory that you create your own Cloud SQL instance and develop against that. To point to your own CloudSQL instance, modify `/config/sqlproxy.env` accordingly
+
 
 
 ## Developer quick links:
