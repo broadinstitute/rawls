@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -131,24 +131,31 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
       throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages ${metadata.filteredPageCount}")
     }
 
-    // determine data project
-    val dataProject = snapshotModel.getDataProject
-    // determine view name
-    val viewName = snapshotModel.getName
+    // if Data Repo indicates this table is empty, create an empty list and don't query BigQuery
+    val futurePage: Future[List[Entity]] = if (tableModel.getRowCount == 0) {
+      Future.successful(List.empty[Entity])
+    } else {
+      // determine data project
+      val dataProject = snapshotModel.getDataProject
+      // determine view name
+      val viewName = snapshotModel.getName
 
-    val queryConfigBuilder = queryConfigForQueryEntities(dataProject, viewName, entityType, finalQuery)
+      val queryConfigBuilder = queryConfigForQueryEntities(dataProject, viewName, entityType, finalQuery)
 
-    val resultIO = for {
-      // get pet service account key for this user
-      petKey <- getPetSAKey
-      // execute the query against BQ
-      queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
-    } yield {
-      // translate the BQ results into a Rawls query result
-      val page = queryResultsToEntities(queryResults, entityType, pk)
-      EntityQueryResponse(finalQuery, metadata, page)
+      val resultIO = for {
+        // get pet service account key for this user
+        petKey <- getPetSAKey
+        // execute the query against BQ
+        queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
+      } yield {
+        // translate the BQ results into a Rawls query result
+        queryResultsToEntities(queryResults, entityType, pk)
+      }
+      resultIO.unsafeToFuture()
     }
-    resultIO.unsafeToFuture()
+
+    futurePage map { page => EntityQueryResponse(finalQuery, metadata, page) }
+
   }
 
   def pkFromSnapshotTable(tableModel: TableModel): String = {
