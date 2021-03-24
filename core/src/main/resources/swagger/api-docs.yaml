@@ -1541,7 +1541,6 @@ paths:
             type: boolean
             default: false
         - $ref: '#/components/parameters/dataReferenceQueryParam'
-        - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:
         200:
           description: Successful Request
