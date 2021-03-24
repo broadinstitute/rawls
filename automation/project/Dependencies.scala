@@ -25,8 +25,9 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions:_*)
 
-  val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.0.44-SNAPSHOT"
   val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.16.0-SNAPSHOT"
+  val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
+  val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
 
   val rootDependencies = Seq(
     // proactively pull in latest versions of Jackson libs, instead of relying on the versions
@@ -64,6 +65,7 @@ object Dependencies {
     workbenchServiceTest,
 
     dataRepo,
+    dataRepoJersey,
     workspaceManager,
 
     // required by workbenchGoogle
