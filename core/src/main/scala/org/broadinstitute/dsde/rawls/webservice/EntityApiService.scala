@@ -56,7 +56,7 @@ trait EntityApiService extends UserInfoDirectives {
             parameters('useCache.?) { (useCache) =>
               val useCacheBool = Try(useCache.getOrElse("false").toBoolean).getOrElse(false)
               complete {
-                entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, billingProject, useCacheBool)
+                entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, useCacheBool)
               }
             }
           }
