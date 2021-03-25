@@ -41,6 +41,7 @@ import com.google.cloud.Identity
 import fs2.Stream
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
@@ -58,6 +59,7 @@ import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
+import com.google.api.services.lifesciences.v2beta.CloudLifeSciences
 import com.google.cloud.storage.StorageException
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -67,8 +69,9 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
 import scala.io.Source
 import scala.util.matching.Regex
-
 import io.opencensus.scala.Tracing._
+
+import scala.util.control.NoStackTrace
 
 case class Resources (
                        name: String,
@@ -747,17 +750,19 @@ class HttpGoogleServicesDAO(
   }
 
   override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
-    implicit val service = GoogleInstrumentedService.Genomics
     val genomicsServiceAccountCredential = getGenomicsServiceAccountCredential
     genomicsServiceAccountCredential.refreshToken()
 
-    if (opId.startsWith("operations")) {
+    def papiv1Handler(opId: String) = {
       // PAPIv1 ids start with "operations". We have to use a direct http call instead of a client library because
       // the client lib does not support PAPIv1 and PAPIv2 concurrently.
       new GenomicsV1DAO().getOperation(opId, OAuth2BearerToken(genomicsServiceAccountCredential.getAccessToken))
-    } else {
+    }
+
+    def papiv2Alpha1Handler(opId: String) = {
       val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, genomicsServiceAccountCredential).setApplicationName(appName).build()
       val operationRequest = genomicsApi.projects().operations().get(opId)
+      implicit val service = GoogleInstrumentedService.Genomics
 
       retryWithRecoverWhen500orGoogleError(() => {
         // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
@@ -769,6 +774,26 @@ class HttpGoogleServicesDAO(
         case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
       }
     }
+
+    def lifeSciencesBetaHandler(opId: String) = {
+      val lifeSciencesApi = new CloudLifeSciences.Builder(httpTransport, jsonFactory, genomicsServiceAccountCredential).setApplicationName(appName).build()
+      val operationRequest = lifeSciencesApi.projects().locations().operations().get(opId)
+      implicit val service = GoogleInstrumentedService.LifeSciences
+
+      retryWithRecoverWhen500orGoogleError(() => {
+        // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
+        // So, use Google's functionality to get the json string, then parse it back into a generic json object
+        Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
+      }) {
+        // Recover from Google 404 errors because it's an expected return status.
+        // Here we use `None` to represent a 404 from Google.
+        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
+      }
+    }
+
+    def noMatchHandler(opId: String) = Future.failed(new Exception(s"Operation ID '$opId' is not a supported format"))
+
+    handleByOperationIdType(opId, papiv1Handler, papiv2Alpha1Handler, lifeSciencesBetaHandler, noMatchHandler)
   }
 
   override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] = {
@@ -1191,6 +1216,25 @@ class HttpGoogleServicesDAO(
     retryExponentially(when500orGoogleError)( () => {
       new CloudResourceManagerV2DAO().getFolderId(folderName, OAuth2BearerToken(credential.getAccessToken))
     })
+  }
+}
+
+object HttpGoogleServicesDAO {
+  def handleByOperationIdType[T](opId: String,
+                                 papiV1Handler: String => T,
+                                 papiV2alpha1Handler: String => T,
+                                 lifeSciencesBetaHandler: String => T,
+                                 noMatchHandler: String => T): T = {
+    val papiv1AlphaIdRegex = "operations/[^/]*".r
+    val papiv2Alpha1IdRegex = "projects/[^/]*/operations/[^/]*".r
+    val lifeSciencesBetaIdRegex = "projects/[^/]*/locations/[^/]*/operations/[^/]*".r
+
+    opId match {
+      case papiv1AlphaIdRegex() => papiV1Handler(opId)
+      case papiv2Alpha1IdRegex() => papiV2alpha1Handler(opId)
+      case lifeSciencesBetaIdRegex() => lifeSciencesBetaHandler(opId)
+      case _ => noMatchHandler(opId)
+    }
   }
 }
 
