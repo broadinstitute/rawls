@@ -53,6 +53,7 @@ trait EntityApiService extends UserInfoDirectives {
       } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
           get {
+            //if useCache param is unset or set to a value that won't coerce to a boolean, default to true
             parameters('useCache.?) { (useCache) =>
               val useCacheBool = Try(useCache.getOrElse("true").toBoolean).getOrElse(true)
               complete {
