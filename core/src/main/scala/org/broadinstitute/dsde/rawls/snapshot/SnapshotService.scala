@@ -56,14 +56,39 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)))
         aclBindings = calculateDatasetAcl(samPolicies)
         bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
-        _ <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings))
+        _ <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings)).redeem {
+          //undo all previously completed steps
+          createSnapshotRecover(
+            undoCreateDataReference(workspaceContext.workspaceIdAsUUID, ref.getReferenceId, userInfo.accessToken)
+          )
+        }
         petToken <- IO.fromFuture(IO(samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryReadOnlyScope, userInfo)))
       } yield { petToken }
       IOResult.unsafeToFuture().map { petToken =>
-        workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
+        IO.pure(workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))).redeem {
+          //undo all previously completed steps
+          createSnapshotRecover(
+            undoCreateDataReference(workspaceContext.workspaceIdAsUUID, ref.getReferenceId, userInfo.accessToken),
+            undoCreateBigQueryDataset(workspaceName, datasetName)
+          )
+        }
         ref
       }
     }
+  }
+
+  private def undoCreateDataReference(workspaceId: UUID, referenceId: UUID, userToken: OAuth2BearerToken) = IO.pure(workspaceManagerDAO.deleteDataReference(workspaceId, referenceId, userToken))
+  private def undoCreateBigQueryDataset(workspaceName: WorkspaceName, datasetName: String) = {
+    val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
+    bqService.use(_.deleteDataset(datasetName))
+  }
+
+  private def createSnapshotRecover[T, U](undoFunctions: (T) => IO[U]*): PartialFunction[Throwable, Throwable] = {
+    case t:Throwable =>
+      undoFunctions.map(x => x) // do all of the functions
+
+      //throw a final error at the end
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot: ${t.getMessage}"))
   }
 
   def getSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataReferenceDescription] = {
