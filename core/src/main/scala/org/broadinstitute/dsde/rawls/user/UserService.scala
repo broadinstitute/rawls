@@ -63,9 +63,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   import dataSource.dataAccess.driver.api._
 
-  def SetRefreshToken(token: UserRefreshToken) = setRefreshToken(token)
-  def GetRefreshTokenDate = getRefreshTokenDate()
-
   def GetBillingProjectStatus(projectName: RawlsBillingProjectName) = getBillingProjectStatus(projectName)
   def GetBillingProject(projectName: RawlsBillingProjectName) = getBillingProject(projectName)
   def ListBillingProjects = listBillingProjects
@@ -82,8 +79,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def CreateBillingProjectFull(createProjectRequest: CreateRawlsBillingProjectFullRequest) = startBillingProjectCreation(createProjectRequest)
   def CreateBillingProjectFullV2(createProjectRequest: CreateRawlsBillingProjectFullRequest) = createBillingProjectV2(createProjectRequest)
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamBillingProjectActions.readPolicies) { getBillingProjectMembers(projectName) }
-
-  def AdminDeleteRefreshToken(userRef: RawlsUserRef) = asFCAdmin { deleteRefreshToken(userRef) }
 
   def IsAdmin(userEmail: RawlsUserEmail) = { isAdmin(userEmail) }
   def IsLibraryCurator(userEmail: RawlsUserEmail) = { isLibraryCurator(userEmail) }
@@ -103,20 +98,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeterName.value, UTF_8.name), action, userInfo).flatMap {
       case true => op
       case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Service Perimeter does not exist or you do not have access")))
-    }
-  }
-
-  def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
-    gcsDAO.storeToken(userInfo, userRefreshToken.refreshToken).map(_ => RequestComplete(StatusCodes.Created))
-  }
-
-  def getRefreshTokenDate(): Future[PerRequestMessage] = {
-    gcsDAO.getTokenDate(RawlsUser(userInfo)).map(_ match {
-      case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"no refresh token stored for ${userInfo.userEmail}"))
-      case Some(date) => RequestComplete(UserRefreshTokenDate(date))
-    }).recover {
-      case t: TokenResponseException =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(t.getStatusCode, t))
     }
   }
 
@@ -416,11 +397,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def deleteRefreshToken(rawlsUserRef: RawlsUserRef): Future[PerRequestMessage] = {
-    deleteRefreshTokenInternal(rawlsUserRef).map(_ => RequestComplete(StatusCodes.OK))
-
-  }
-
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
       _ <- validateCreateProjectRequest(createProjectRequest)
@@ -549,14 +525,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(folderId) => Future.successful(folderId)
     }
   }
-
-  private def deleteRefreshTokenInternal(rawlsUserRef: RawlsUserRef): Future[Unit] = {
-    for {
-      _ <- gcsDAO.revokeToken(rawlsUserRef)
-      _ <- gcsDAO.deleteToken(rawlsUserRef).recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
-    } yield { Unit }
-  }
-
 
   // User needs to be an owner of the billing project and have the AddProject action on the service perimeter
   private def requirePermissionsToAddToServicePerimeter(servicePerimeterName: ServicePerimeterName, projectName: RawlsBillingProjectName)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {

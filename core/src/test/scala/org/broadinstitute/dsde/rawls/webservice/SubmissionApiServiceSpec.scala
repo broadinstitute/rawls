@@ -43,7 +43,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
 
     val gcsDAO = new MockGoogleServicesDAO("test")
-    gcsDAO.storeToken(userInfo, "test_token")
 
     val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
     try {

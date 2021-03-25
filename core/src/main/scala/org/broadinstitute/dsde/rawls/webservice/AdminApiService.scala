@@ -89,11 +89,6 @@ trait AdminApiService extends UserInfoDirectives {
          complete { resultFuture }
         }
       }
-    } ~
-    path("admin" / "refreshToken" / Segment ) { userSubjectId =>
-      delete {
-        complete { userServiceConstructor(userInfo).AdminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))) }
-      }
     }
   }
 }
