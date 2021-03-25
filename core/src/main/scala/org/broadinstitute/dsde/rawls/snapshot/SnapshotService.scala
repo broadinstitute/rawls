@@ -4,7 +4,9 @@ import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
+import cats.data.NonEmptyList
 import cats.effect.{ContextShift, IO}
+import cats.syntax.traverse._
 import com.google.cloud.bigquery.Acl
 import com.google.cloud.bigquery.Acl.Entity
 import com.typesafe.scalalogging.LazyLogging
@@ -85,7 +87,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
   private def createSnapshotRecover[T, U](undoFunctions: (T) => IO[U]*): PartialFunction[Throwable, Throwable] = {
     case t:Throwable =>
-      undoFunctions.map(x => x) // do all of the functions
+      NonEmptyList.of(undoFunctions).sequence //run the IOs in sequence
 
       //throw a final error at the end
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot: ${t.getMessage}"))
