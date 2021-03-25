@@ -322,7 +322,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
           .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
           .build()))
     } catch {
-      case ex: GoogleJsonResponseException if t.getStatusCode == StatusCodes.Forbidden.intValue =>
+      case ex: GoogleJsonResponseException if ex.getStatusCode == StatusCodes.Forbidden.intValue =>
         throw new RawlsException(s"Billing project {googleProject.value} either does not exist or the user does not have access to it.")
     }
   }
