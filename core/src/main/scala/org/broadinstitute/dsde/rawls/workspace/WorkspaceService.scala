@@ -1916,6 +1916,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                                   billingProject: RawlsBillingProject,
                                   billingAccount: RawlsBillingAccountName,
                                   workspaceId: String,
+                                  workspaceName: WorkspaceName,
                                   policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                                   billingProjectOwnerPolicyEmail: WorkbenchEmail,
                                   span: Span = null) = {
@@ -1927,6 +1928,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
+      _ <- traceWithParent("updateGoogleProjectDisplayName", span)(_ => gcsDAO.updateGoogleProjectName(googleProjectId, workspaceName.toString))
+      _ <- traceWithParent("addGoogleProjectLabel: namespace", span)(_ => gcsDAO.addGoogleProjectLabel(googleProjectId, "workspaceNamespace", workspaceName.namespace))
+      _ <- traceWithParent("addGoogleProjectLabel: name", span)(_ => gcsDAO.addGoogleProjectLabel(googleProjectId, "workspaceName", workspaceName.name))
+      _ <- traceWithParent("addGoogleProjectLabel: id", span)(_ => gcsDAO.addGoogleProjectLabel(googleProjectId, "workspaceId", workspaceId))
       googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
       _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
       _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail))
@@ -2125,6 +2130,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               case Some(ba) if !billingProject.invalidBillingAccount => ba
               case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing or invalid for Billing Project: ${billingProject}"))
             }
+            val workspaceName = WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)
             // add the workspace id to the span so we can find and correlate it later with other services
             parentSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
 
@@ -2134,7 +2140,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               resource <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
               policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
               (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
-                  setupGoogleProject(billingProject, billingAccount, workspaceId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
+                  setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                   createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
               _ <- DBIO.from({

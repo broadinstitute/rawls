@@ -228,6 +228,11 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(OperationStatus(true, None))
   }
 
+
+  override def addGoogleProjectLabel(googleProject: GoogleProjectId, key: String, value: String): Future[Unit] = Future.successful(())
+
+  override def updateGoogleProjectName(googleProject: GoogleProjectId, name: String): Future[Unit] = Future.successful(())
+
   override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
 
   override def deleteV1Project(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())

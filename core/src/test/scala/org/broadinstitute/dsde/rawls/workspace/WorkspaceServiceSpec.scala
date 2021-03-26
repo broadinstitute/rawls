@@ -1364,6 +1364,26 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
   }
 
+  it should "Update a Google Project name after claiming from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.gcsDAO).updateGoogleProjectName(any[GoogleProjectId], ArgumentMatchers.eq(s"${testData.testProject1Name.value}/${newWorkspaceName}"))
+  }
+
+  it should "Apply labels to a Google Project after claiming from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceNamespace"), ArgumentMatchers.eq(newWorkspaceName))
+    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceName"), ArgumentMatchers.eq(testData.testProject1Name.value))
+    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceId"), any[String])
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "creating a Workspace in a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices { services =>

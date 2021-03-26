@@ -160,9 +160,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getResourceBufferServiceAccountCredential: Credential
 
-  def getServiceAccountRawlsUser(): Future[RawlsUser]
+  def getServiceAccountRawlsUser: Future[RawlsUser]
 
-  def getServiceAccountUserInfo(): Future[UserInfo]
+  def getServiceAccountUserInfo: Future[UserInfo]
 
   def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions]
 
@@ -189,7 +189,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def removePolicyBindings(googleProject: GoogleProjectId, policiesToRemove: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(googleProject) { existingPolicies =>
     val updatedKeysWithRemovedPolicies: Map[String, Set[String]] = policiesToRemove.keys.map { k =>
-      val existingForKey = existingPolicies.get(k).getOrElse(Set.empty)
+      val existingForKey = existingPolicies.getOrElse(k, Set.empty)
       val updatedForKey = existingForKey diff policiesToRemove(k)
       k -> updatedForKey
     }.toMap
@@ -231,6 +231,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
 
   def deleteV1Project(googleProject: GoogleProjectId): Future[Unit]
+
+  def addGoogleProjectLabel(googleProject: GoogleProjectId, key: String, value: String): Future[Unit]
+
+  def updateGoogleProjectName(googleProject: GoogleProjectId, name: String): Future[Unit]
 
   def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]
 
