@@ -4,6 +4,7 @@ import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
+import cats.data.NonEmptyList
 import cats.effect.{ContextShift, IO}
 import com.google.cloud.bigquery.Acl
 import com.google.cloud.bigquery.Acl.Entity
@@ -59,7 +60,16 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         _ <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings))
         petToken <- IO.fromFuture(IO(samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryReadOnlyScope, userInfo)))
       } yield { petToken }
-      IOResult.unsafeToFuture().map { petToken =>
+
+      IOResult.unsafeToFuture().recover {
+        case t: Throwable =>
+          //fire and forget these undos, we've made our best effort to fix things at this point
+          for {
+            _ <- deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture()
+            _ <- IO.pure(workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, ref.getReferenceId, userInfo.accessToken)).unsafeToFuture()
+          } yield {}
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
+      }.map { petToken =>
         workspaceManagerDAO.createBigQueryDataset(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
         ref
       }
@@ -115,6 +125,11 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       case Failure(_) =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "SnapshotId must be a valid UUID."))
     }
+  }
+
+  private def deleteBigQueryDataset(workspaceName: WorkspaceName, datasetName: String) = {
+    val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
+    bqService.use(_.deleteDataset(datasetName))
   }
 
   private def calculateDatasetAcl(samPolicies: Set[SamPolicyWithNameAndEmail]): Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]] = {
