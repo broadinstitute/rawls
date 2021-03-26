@@ -80,6 +80,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def deleteSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[Unit] = {
     val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
+      workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
       workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
     }
   }

@@ -66,7 +66,7 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
   }
 
   override def deleteDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {
-    references.getOrElse((workspaceId, referenceId), throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
-    references -= ((workspaceId, referenceId))
+    if (references.contains(workspaceId, referenceId))
+      references -= ((workspaceId, referenceId))
   }
 }
