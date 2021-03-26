@@ -68,7 +68,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockSamDAO, times(1)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
       verify(mockBigQueryServiceFactory, times(1)).getServiceFromCredentialPath(fakeCredentialPath, GoogleProject(workspace.namespace))
       verify(mockWorkspaceManagerDAO, times(1)).createDataReference(any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])
-      verify(mockWorkspaceManagerDAO, times(1)).createBigQueryDataset(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(1)).createBigQueryDatasetReference(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
     }
 
   }
@@ -113,7 +113,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockSamDAO, times(0)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
       verify(mockBigQueryServiceFactory, times(0)).getServiceFromCredentialPath(fakeCredentialPath, GoogleProject(workspace.namespace))
       verify(mockWorkspaceManagerDAO, times(1)).createDataReference(any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])
-      verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDataset(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDatasetReference(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
     }
 
   }
