@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import bio.terra.datarepo.model.TableModel
+import bio.terra.datarepo.model.{ColumnModel, TableModel}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
-import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{createTestTableResult, createKeyList}
+import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{createKeyList, createTestTableResult}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
@@ -97,6 +97,45 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
+  it should "return empty Seq and appropriate metadata if Data Repo indicates zero rows" in {
+    val emptyTables: List[TableModel] = List(
+      new TableModel().name("table1").primaryKey(null).rowCount(0)
+        .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
+      new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
+        .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava)
+    )
+
+    val provider = createTestProvider(snapshotModel = createSnapshotModel(tables = emptyTables))
+
+    provider.queryEntities("table1", defaultEntityQuery) map { entityQueryResponse: EntityQueryResponse =>
+      // this is the default expected value, should it move to the support trait?
+      val expected = Seq.empty[Entity]
+      assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
+      assertResult(EntityQueryResultMetadata(unfilteredCount = 0, filteredCount = 0, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
+      assertResult(expected) { entityQueryResponse.results }
+    }
+  }
+
+  List (2,10,42,Integer.MAX_VALUE) foreach { x =>
+    it should s"throw bad request if Data Repo indicates zero rows and user requested page > 1 (requested page: $x)" in {
+      val emptyTables: List[TableModel] = List(
+        new TableModel().name("table1").primaryKey(null).rowCount(0)
+          .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
+        new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
+          .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava)
+      )
+
+      val provider = createTestProvider(snapshotModel = createSnapshotModel(tables = emptyTables))
+
+      val ex = intercept[DataEntityException] {
+        provider.queryEntities("table1", defaultEntityQuery.copy(page = x))
+      }
+      assertResult(s"requested page $x is greater than the number of pages 1") {
+        ex.getMessage
+      }
+    }
+  }
+
   it should "fail if pet credentials not available from Sam" in {
     val provider = createTestProvider(
       samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
@@ -109,13 +148,37 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
-  it should "throw bad request the supplied sort field does not exist in the target table" in {
+  it should "throw bad request if the supplied sort field does not exist in the target table" in {
     val provider = createTestProvider()
 
     val ex = intercept[DataEntityException] {
       provider.queryEntities("table1", defaultEntityQuery.copy(sortField = "unknownColumn"))
     }
     assertResult("sortField not valid for this entity type") { ex.getMessage }
+  }
+
+  List (2,10,42,Integer.MAX_VALUE) foreach { x =>
+    it should s"throw bad request if the requested page is greater than actual pages (requested page: $x)" in {
+      val provider = createTestProvider()
+
+      val ex = intercept[DataEntityException] {
+        provider.queryEntities("table1", defaultEntityQuery.copy(page = x))
+      }
+      assertResult(s"requested page $x is greater than the number of pages 1") {
+        ex.getMessage
+      }
+    }
+  }
+
+  List (0,-1,-42,Integer.MIN_VALUE) foreach { x =>
+    it should s"throw bad request if the requested page is less than 1 (requested page: $x)" in {
+      val provider = createTestProvider()
+
+      val ex = intercept[DataEntityException] {
+        provider.queryEntities("table1", defaultEntityQuery.copy(page = x))
+      }
+      assertResult("page value must be at least 1.") { ex.getMessage }
+    }
   }
 
   it should "throw bad request if a filter is supplied" in {

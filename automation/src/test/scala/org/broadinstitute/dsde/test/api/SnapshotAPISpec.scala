@@ -58,7 +58,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       }
     }
 
-    "should allow snapshot references to be added to workspaces" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) ignore {
+    "should allow snapshot references to be added to workspaces" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
@@ -103,7 +103,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       }
     }
 
-    "should report the same tables/columns via metadata API as TDR reports" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) ignore {
+    "should report the same tables/columns via metadata API as TDR reports" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val numSnapshotsToVerify = 2
 
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
@@ -156,7 +156,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
     }
 
-    "should be able to run analysis on a snapshot" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) ignore {
+    "should be able to run analysis on a snapshot" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
@@ -299,7 +299,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
     logger.info(s"calling data repo at $dataRepoBaseUrl as user ${credentials.email} ... ")
     val drSnapshots = Try(dataRepoApi.enumerateSnapshots(
-      0, numSnapshots, "created_date", "desc", "")) match {
+      0, numSnapshots, "created_date", "desc", "", java.util.Collections.emptyList() )) match {
       case Success(s) => s
       case Failure(ex) =>
         logger.error(s"data repo call as user ${credentials.email} failed: ${ex.getMessage}", ex)
