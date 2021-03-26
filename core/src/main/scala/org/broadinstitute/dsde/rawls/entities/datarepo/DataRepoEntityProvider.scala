@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
 import cats.effect.{ContextShift, IO}
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, QueryParameterValue, TableResult}
 import com.typesafe.scalalogging.LazyLogging
@@ -315,10 +316,15 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
 
   private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String, projectToBill: GoogleProject): IO[TableResult] = {
     logger.debug(s"runBigQuery attempting against project  ${projectToBill.value}")
-    bqServiceFactory.getServiceForPet(petKey, projectToBill).use(_.query(
-      bqQueryJobConfigBuilder
-        .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
-        .build()))
+    try {
+      bqServiceFactory.getServiceForPet(petKey, projectToBill).use(_.query(
+        bqQueryJobConfigBuilder
+          .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
+          .build()))
+    } catch {
+      case ex: GoogleJsonResponseException if ex.getStatusCode == StatusCodes.Forbidden.intValue =>
+        throw new RawlsException(s"Billing project {googleProject.value} either does not exist or the user does not have access to it.")
+    }
   }
 
   /**
