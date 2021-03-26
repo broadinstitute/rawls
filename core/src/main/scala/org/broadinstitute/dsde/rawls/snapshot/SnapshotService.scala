@@ -63,14 +63,21 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
       IOResult.unsafeToFuture().recover {
         case t: Throwable =>
-          //fire and forget these undos, we've made our best effort to fix things at this point
-          for {
-            _ <- deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture()
-            _ <- IO.pure(workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, ref.getReferenceId, userInfo.accessToken)).unsafeToFuture()
-          } yield {}
+          //fire and forget this undo, we've made our best effort to fix things at this point
+          IO.pure(workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, ref.getReferenceId, userInfo.accessToken)).unsafeToFuture()
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
       }.map { petToken =>
-        workspaceManagerDAO.createBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
+        try {
+          workspaceManagerDAO.createBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
+        } catch {
+          case t: Throwable =>
+            //fire and forget these undos, we've made our best effort to fix things at this point
+            for {
+              _ <- deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture()
+              _ <- IO.pure(workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, ref.getReferenceId, userInfo.accessToken)).unsafeToFuture()
+            } yield {}
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
+        }
         ref
       }
     }
