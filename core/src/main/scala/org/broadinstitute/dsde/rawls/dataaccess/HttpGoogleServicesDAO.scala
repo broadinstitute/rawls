@@ -59,7 +59,7 @@ import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
-import com.google.api.services.lifesciences.v2beta.CloudLifeSciences
+import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLifeSciencesScopes}
 import com.google.cloud.storage.StorageException
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -140,6 +140,7 @@ class HttpGoogleServicesDAO(
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(GenomicsScopes.GENOMICS) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
+  val lifesciencesScopes = Seq(CloudLifeSciencesScopes.CLOUD_PLATFORM)
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
@@ -750,16 +751,19 @@ class HttpGoogleServicesDAO(
   }
 
   override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
-    val genomicsServiceAccountCredential = getGenomicsServiceAccountCredential
-    genomicsServiceAccountCredential.refreshToken()
+
 
     def papiv1Handler(opId: String) = {
       // PAPIv1 ids start with "operations". We have to use a direct http call instead of a client library because
       // the client lib does not support PAPIv1 and PAPIv2 concurrently.
+      val genomicsServiceAccountCredential = getGenomicsServiceAccountCredential
+      genomicsServiceAccountCredential.refreshToken()
       new GenomicsV1DAO().getOperation(opId, OAuth2BearerToken(genomicsServiceAccountCredential.getAccessToken))
     }
 
     def papiv2Alpha1Handler(opId: String) = {
+      val genomicsServiceAccountCredential = getGenomicsServiceAccountCredential
+      genomicsServiceAccountCredential.refreshToken()
       val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, genomicsServiceAccountCredential).setApplicationName(appName).build()
       val operationRequest = genomicsApi.projects().operations().get(opId)
       implicit val service = GoogleInstrumentedService.Genomics
@@ -776,7 +780,9 @@ class HttpGoogleServicesDAO(
     }
 
     def lifeSciencesBetaHandler(opId: String) = {
-      val lifeSciencesApi = new CloudLifeSciences.Builder(httpTransport, jsonFactory, genomicsServiceAccountCredential).setApplicationName(appName).build()
+      val lifeSciencesAccountCredential = getLifeSciencesServiceAccountCredential()
+      lifeSciencesAccountCredential.refreshToken()
+      val lifeSciencesApi = new CloudLifeSciences.Builder(httpTransport, jsonFactory, lifeSciencesAccountCredential).setApplicationName(appName).build()
       val operationRequest = lifeSciencesApi.projects().locations().operations().get(opId)
       implicit val service = GoogleInstrumentedService.LifeSciences
 
@@ -1099,6 +1105,16 @@ class HttpGoogleServicesDAO(
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(genomicsScopes.asJava)
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+  }
+
+  def getLifeSciencesServiceAccountCredential(): Credential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountId(clientEmail)
+      .setServiceAccountScopes(lifesciencesScopes.asJava)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
