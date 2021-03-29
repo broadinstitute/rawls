@@ -970,7 +970,7 @@ class HttpGoogleServicesDAO(
     * 3) if updated policies are the same as existing policies return false, don't call google
     * 4) if updated policies are different than existing policies update google and return true
     *
-    * @param googleProject google project name
+    * @param googleProject google project id
     * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
     *                       which will be handled appropriately when sent to google.
     * @return true if google was called to update policies, false otherwise
@@ -1044,6 +1044,16 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  /**
+    * Updates google project (display) name. Note that the "Project name" is defined as:
+    * "A human-readable name for your project. The project name isn't used by any Google APIs.
+    * You can edit the project name at any time during or after project creation. Project names do not need to be unique."
+    * For more info, see: https://cloud.google.com/resource-manager/docs/creating-managing-projects#before_you_begin
+    *
+    * @param googleProject google project id
+    * @param name google project's (display) name
+    * @return
+    */
   override def updateGoogleProjectName(googleProject: GoogleProjectId, name: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 

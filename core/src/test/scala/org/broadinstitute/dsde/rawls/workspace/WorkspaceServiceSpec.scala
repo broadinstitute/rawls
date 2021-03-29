@@ -1365,22 +1365,24 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   }
 
   it should "Update a Google Project name after claiming from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceNamespace = testData.testProject1Name.value
     val newWorkspaceName = "space_for_workin"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
 
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
-    verify(services.gcsDAO).updateGoogleProjectName(any[GoogleProjectId], ArgumentMatchers.eq(s"${testData.testProject1Name.value}/${newWorkspaceName}"))
+    verify(services.gcsDAO).updateGoogleProjectName(any[GoogleProjectId], ArgumentMatchers.eq(s"${newWorkspaceNamespace}/${newWorkspaceName}"))
   }
 
   it should "Apply labels to a Google Project after claiming from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceNamespace = testData.testProject1Name.value
     val newWorkspaceName = "space_for_workin"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
 
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
-    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceNamespace"), ArgumentMatchers.eq(newWorkspaceName))
-    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceName"), ArgumentMatchers.eq(testData.testProject1Name.value))
+    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceNamespace"), ArgumentMatchers.eq(newWorkspaceNamespace))
+    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceName"), ArgumentMatchers.eq(newWorkspaceName))
     verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceId"), any[String])
   }
 

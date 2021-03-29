@@ -212,7 +212,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   /**
     * Internal function to update project IAM bindings.
     *
-    * @param googleProject  google project name
+    * @param googleProject  google project id
     * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
     *                       which will be handled appropriately when sent to google.
     * @return true if google was called to update policies, false otherwise
