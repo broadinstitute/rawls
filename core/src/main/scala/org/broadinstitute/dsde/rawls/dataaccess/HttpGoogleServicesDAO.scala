@@ -1032,9 +1032,8 @@ class HttpGoogleServicesDAO(
 
   override def addGoogleProjectLabel(googleProject: GoogleProjectId, key: String, value: String): Future[Unit] = {
     implicit val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.CloudResourceManager
+    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
-    val cloudResourceManagerServiceAccountCredential = getCloudResourceManagerServiceAccountCredential
-    val cloudResourceManager = getCloudResourceManager(cloudResourceManagerServiceAccountCredential)
     for {
       project <- getGoogleProject(googleProject)
       _ = project.getLabels.put(key, value)
@@ -1056,9 +1055,8 @@ class HttpGoogleServicesDAO(
     */
   override def updateGoogleProjectName(googleProject: GoogleProjectId, name: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
+    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
-    val cloudResourceManagerServiceAccountCredential = getCloudResourceManagerServiceAccountCredential
-    val cloudResourceManager = getCloudResourceManager(cloudResourceManagerServiceAccountCredential)
     for {
       _ <- executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProject.value, new Project().setName(name)))
     } yield {
@@ -1068,11 +1066,9 @@ class HttpGoogleServicesDAO(
 
   override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]= {
     implicit val service = GoogleInstrumentedService.Billing
-    val cloudResourceManagerServiceAccountCredential = getCloudResourceManagerServiceAccountCredential
     val billingServiceAccountCredential = getBillingServiceAccountCredential
-
-    val cloudResourceManager = getCloudResourceManager(cloudResourceManagerServiceAccountCredential)
     val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
     for {
       _ <- retryWhen500orGoogleError(() => {
@@ -1144,6 +1140,12 @@ class HttpGoogleServicesDAO(
 
   def getGroupDirectory = {
     new Directory.Builder(httpTransport, jsonFactory, getGroupServiceAccountCredential).setApplicationName(appName).build()
+  }
+
+  private def getCloudResourceManagerWithCloudResourceManagerServiceAccount = {
+    val cloudResourceManagerServiceAccountCredential = getCloudResourceManagerServiceAccountCredential
+    val cloudResourceManager = getCloudResourceManager(cloudResourceManagerServiceAccountCredential)
+    cloudResourceManager
   }
 
   private def getUserCredential(userInfo: UserInfo): Credential = {
