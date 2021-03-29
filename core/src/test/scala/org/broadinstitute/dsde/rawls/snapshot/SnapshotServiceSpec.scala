@@ -71,9 +71,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO, times(1)).createBigQueryDatasetReference(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
     }
 
-  }
-
-  it should {
     "not leave an orphaned bq dataset if creating a snapshot reference fails" in withMinimalTestDatabase { dataSource =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
@@ -88,7 +85,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
-      when(mockWorkspaceManagerDAO.createDataReference(any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])).thenThrow(new RuntimeException)
+      when(mockWorkspaceManagerDAO.createDataReference(any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])).thenThrow(new RuntimeException("oh no!"))
 
       val workspace = minimalTestData.workspace
 
@@ -103,12 +100,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         fakeDeltaLayerStreamerEmail
       )(userInfo)
 
-      try {
+      val createException = intercept[RuntimeException] {
         Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), "bar")), Duration.Inf)
       }
-      catch {
-        case e: RuntimeException => "WSM snapshot info not returned"
-      }
+      createException.getMessage shouldBe "oh no!"
 
       verify(mockSamDAO, times(0)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
       verify(mockBigQueryServiceFactory, times(0)).getServiceFromCredentialPath(fakeCredentialPath, GoogleProject(workspace.namespace))
@@ -116,9 +111,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDatasetReference(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
     }
 
-  }
-
-  it should {
     "not leave an orphaned snapshot data reference if creating a BQ dataset in Google fails" in withMinimalTestDatabase { dataSource =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
@@ -148,12 +140,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         fakeDeltaLayerStreamerEmail
       )(userInfo)
 
-      try {
+      val createException = intercept[RawlsExceptionWithErrorReport] {
         Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), "bar")), Duration.Inf)
       }
-      catch {
-        case e: RawlsExceptionWithErrorReport => "WSM snapshot info not returned"
-      }
+      createException.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+      assert(createException.errorReport.message.contains("Unable to create snapshot reference in workspace"))
 
       verify(mockSamDAO, times(1)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
       verify(mockBigQueryServiceFactory, times(1)).getServiceFromCredentialPath(fakeCredentialPath, GoogleProject(workspace.namespace))
@@ -162,9 +153,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDatasetReference(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
     }
 
-  }
-
-  it should {
     "not leave an orphaned snapshot data reference nor an orphaned BQ dataset if creating a BQ data reference in WSM fails" in withMinimalTestDatabase { dataSource =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
@@ -195,12 +183,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         fakeDeltaLayerStreamerEmail
       )(userInfo)
 
-      try {
+      val createException = intercept[RawlsExceptionWithErrorReport] {
         Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), "bar")), Duration.Inf)
       }
-      catch {
-        case e: RawlsExceptionWithErrorReport => "WSM snapshot info not returned"
-      }
+      createException.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+      assert(createException.errorReport.message.contains("Unable to create snapshot reference in workspace"))
 
       verify(mockSamDAO, times(1)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
       verify(mockBigQueryServiceFactory, times(2)).getServiceFromCredentialPath(fakeCredentialPath, GoogleProject(workspace.namespace))
