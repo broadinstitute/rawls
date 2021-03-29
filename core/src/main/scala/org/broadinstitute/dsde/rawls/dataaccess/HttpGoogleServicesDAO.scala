@@ -1030,13 +1030,13 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def addGoogleProjectLabel(googleProject: GoogleProjectId, key: String, value: String): Future[Unit] = {
+  override def addGoogleProjectLabels(googleProject: GoogleProjectId, labels: Map[String, String]): Future[Unit] = {
     implicit val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.CloudResourceManager
     val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
     for {
       project <- getGoogleProject(googleProject)
-      _ = project.getLabels.put(key, value)
+      _ = project.getLabels.putAll(labels.asJava)
       _ <- executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProject.value, project))
     } yield {
 
