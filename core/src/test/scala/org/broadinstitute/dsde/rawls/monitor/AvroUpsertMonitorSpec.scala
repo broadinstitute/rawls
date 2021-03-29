@@ -195,7 +195,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   }
 
   it should "mark the import job as failed on malformed json file" in withTestDataApiServices { services =>
-    val timeout = 90000 milliseconds
+    val timeout = 120000 milliseconds
     val interval = 250 milliseconds
     val importId1 = UUID.randomUUID()
 
@@ -227,12 +227,12 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
         msg.attributes.get("importId").contains(importId1.toString) &&
           msg.attributes.get("newStatus").contains("Error") &&
           msg.attributes.get("action").contains("status")
-      })
+      }, s"statusMessages was: ${statusMessages}")
     }
   }
 
   it should "mark the import job as failed on valid json that doesn't match our model" in withTestDataApiServices { services =>
-    val timeout = 90000 milliseconds
+    val timeout = 120000 milliseconds
     val interval = 250 milliseconds
     val importId1 = UUID.randomUUID()
 
@@ -264,12 +264,12 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
         msg.attributes.get("importId").contains(importId1.toString) &&
           msg.attributes.get("newStatus").contains("Error") &&
           msg.attributes.get("action").contains("status")
-      })
+      }, s"statusMessages was: ${statusMessages}")
     }
   }
 
   it should "mark the import job as failed if upsert file doesn't exist" in withTestDataApiServices { services =>
-    val timeout = 90000 milliseconds
+    val timeout = 120000 milliseconds
     val interval = 250 milliseconds
     val importId1 = UUID.randomUUID()
 
@@ -302,7 +302,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
         msg.attributes.get("importId").contains(importId1.toString) &&
           msg.attributes.get("newStatus").contains("Error") &&
           msg.attributes.get("action").contains("status")
-      })
+      }, s"statusMessages was: ${statusMessages}")
     }
   }
 
