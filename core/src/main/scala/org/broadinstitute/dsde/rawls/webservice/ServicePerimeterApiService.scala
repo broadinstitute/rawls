@@ -26,7 +26,7 @@ trait ServicePerimeterApiService extends UserInfoDirectives {
     path("servicePerimeters" / Segment / "projects" / Segment) { (servicePerimeterName, projectId) =>
       put {
         complete {
-          userServiceConstructor(userInfo).AddProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)), RawlsBillingProjectName(projectId))
+          userServiceConstructor(userInfo).addProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)), RawlsBillingProjectName(projectId))
         }
       }
     }

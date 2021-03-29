@@ -30,7 +30,7 @@ trait AdminApiService extends UserInfoDirectives {
       delete {
         entity(as[Map[String, String]]) { ownerInfo =>
           complete {
-            userServiceConstructor(userInfo).AdminDeleteBillingProject(RawlsBillingProjectName(projectId), ownerInfo)
+            userServiceConstructor(userInfo).adminDeleteBillingProject(RawlsBillingProjectName(projectId), ownerInfo)
           }
         }
       }
@@ -38,51 +38,51 @@ trait AdminApiService extends UserInfoDirectives {
     path("admin" / "project" / "registration") {
       post {
         entity(as[RawlsBillingProjectTransfer]) { xfer =>
-          complete { userServiceConstructor(userInfo).AdminRegisterBillingProject(xfer) }
+          complete { userServiceConstructor(userInfo).adminRegisterBillingProject(xfer) }
         }
       }
     } ~
     path("admin" / "project" / "registration" / Segment) { (projectName) =>
       delete {
         entity(as[Map[String, String]]) { ownerInfo =>
-          complete { userServiceConstructor(userInfo).AdminUnregisterBillingProject(RawlsBillingProjectName(projectName), ownerInfo) }
+          complete { userServiceConstructor(userInfo).adminUnregisterBillingProjectWithOwnerInfo(RawlsBillingProjectName(projectName), ownerInfo) }
         }
       }
     } ~
     path("admin" / "submissions") {
       get {
-        complete { workspaceServiceConstructor(userInfo).AdminListAllActiveSubmissions }
+        complete { workspaceServiceConstructor(userInfo).adminListAllActiveSubmissions() }
       }
     } ~
     path("admin" / "submissions" / Segment / Segment / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
       delete {
-        complete { workspaceServiceConstructor(userInfo).AdminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
+        complete { workspaceServiceConstructor(userInfo).adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
       }
     } ~
     path("admin" / "submissions" / "queueStatusByUser") {
       get {
-        complete { workspaceServiceConstructor(userInfo).AdminWorkflowQueueStatusByUser }
+        complete { workspaceServiceConstructor(userInfo).adminWorkflowQueueStatusByUser }
       }
     } ~
     path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
       put {
-        complete { userServiceConstructor(userInfo).AdminAddLibraryCurator(RawlsUserEmail(userEmail)) }
+        complete { userServiceConstructor(userInfo).adminAddLibraryCurator(RawlsUserEmail(userEmail)) }
       } ~
       delete {
-        complete { userServiceConstructor(userInfo).AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)) }
+        complete { userServiceConstructor(userInfo).adminRemoveLibraryCurator(RawlsUserEmail(userEmail)) }
       }
     } ~
     path("admin" / "workspaces") {
       get {
         parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) { (nameOption, stringOption, numberOption, booleanOption) =>
           val resultFuture = nameOption match {
-            case None => workspaceServiceConstructor(userInfo).ListAllWorkspaces
+            case None => workspaceServiceConstructor(userInfo).listAllWorkspaces()
             case Some(attributeName) =>
               val name = AttributeName.fromDelimitedName(attributeName)
               (stringOption, numberOption, booleanOption) match {
-                case (Some(string), None, None) => workspaceServiceConstructor(userInfo).AdminListWorkspacesWithAttribute(name, AttributeString(string))
-                case (None, Some(number), None) => workspaceServiceConstructor(userInfo).AdminListWorkspacesWithAttribute(name, AttributeNumber(number.toDouble))
-                case (None, None, Some(boolean)) => workspaceServiceConstructor(userInfo).AdminListWorkspacesWithAttribute(name, AttributeBoolean(boolean.toBoolean))
+                case (Some(string), None, None) => workspaceServiceConstructor(userInfo).adminListWorkspacesWithAttribute(name, AttributeString(string))
+                case (None, Some(number), None) => workspaceServiceConstructor(userInfo).adminListWorkspacesWithAttribute(name, AttributeNumber(number.toDouble))
+                case (None, None, Some(boolean)) => workspaceServiceConstructor(userInfo).adminListWorkspacesWithAttribute(name, AttributeBoolean(boolean.toBoolean))
                 case _ => throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
               }
           }
@@ -92,7 +92,7 @@ trait AdminApiService extends UserInfoDirectives {
     } ~
     path("admin" / "refreshToken" / Segment ) { userSubjectId =>
       delete {
-        complete { userServiceConstructor(userInfo).AdminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))) }
+        complete { userServiceConstructor(userInfo).adminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))) }
       }
     }
   }

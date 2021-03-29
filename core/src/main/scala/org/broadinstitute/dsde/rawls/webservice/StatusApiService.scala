@@ -17,7 +17,7 @@ trait StatusApiService {
   val statusRoute: server.Route = {
     path("status") {
       get {
-        complete { statusServiceConstructor().GetStatus }
+        complete { statusServiceConstructor().getStatus }
       }
     }
   }

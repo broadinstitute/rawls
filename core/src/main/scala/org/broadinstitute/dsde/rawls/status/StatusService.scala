@@ -26,8 +26,6 @@ object StatusService {
 class StatusService(val healthMonitor: ActorRef)(implicit val executionContext: ExecutionContext) {
   implicit val timeout = Timeout(1 minute)
 
-  def GetStatus = getStatus
-
   def getStatus: Future[PerRequestMessage] = {
     (healthMonitor ? GetCurrentStatus).mapTo[StatusCheckResponse].map { statusCheckResponse =>
       val criticalStatusOk = Subsystems.CriticalSubsystems.forall { subsystem =>

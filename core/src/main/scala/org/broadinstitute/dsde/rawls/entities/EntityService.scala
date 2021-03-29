@@ -36,20 +36,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   import dataSource.dataAccess.driver.api._
 
-  def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
-  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = getEntity(workspaceName, entityType, entityName, dataReference, billingProject)
-  def UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) = updateEntity(workspaceName, entityType, entityName, operations)
-  def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = deleteEntities(workspaceName, entities, dataReference, billingProject)
-  def RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) = renameEntity(workspaceName, entityType, entityName, newName)
-  def EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) = evaluateExpression(workspaceName, entityType, entityName, expression)
-  def GetEntityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], useCache: Boolean) = entityTypeMetadata(workspaceName, dataReference, billingProject, useCache)
-  def ListEntities(workspaceName: WorkspaceName, entityType: String) = listEntities(workspaceName, entityType)
-  def QueryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId]) = queryEntities(workspaceName, dataReference, entityType, query, billingProject)
-  def CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri, linkExistingEntities: Boolean) = copyEntities(entityCopyDefinition, uri, linkExistingEntities)
-  def BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) = batchUpdateEntities(workspaceName, entityUpdates, true)
-  def BatchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) = batchUpdateEntities(workspaceName, entityUpdates, false)
-
-
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] = {
     withAttributeNamespaceCheck(entity) {
       for {
@@ -259,8 +245,12 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
   }
 
-  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean = false): Future[PerRequestMessage] = {
-    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert).map(_ => RequestComplete(StatusCodes.NoContent))
+  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): Future[PerRequestMessage] = {
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false).map(_ => RequestComplete(StatusCodes.NoContent))
+  }
+
+  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): Future[PerRequestMessage] = {
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true).map(_ => RequestComplete(StatusCodes.NoContent))
   }
 
 
