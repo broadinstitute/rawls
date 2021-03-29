@@ -1381,9 +1381,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
-    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceNamespace"), ArgumentMatchers.eq(newWorkspaceNamespace))
-    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceName"), ArgumentMatchers.eq(newWorkspaceName))
-    verify(services.gcsDAO).addGoogleProjectLabel(any[GoogleProjectId], ArgumentMatchers.eq("workspaceId"), any[String])
+    verify(services.gcsDAO).addGoogleProjectLabels(any[GoogleProjectId], any[Map[String, String]])
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
