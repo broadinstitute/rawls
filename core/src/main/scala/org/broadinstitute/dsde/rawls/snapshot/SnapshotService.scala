@@ -46,40 +46,42 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       }
 
       val dataRepoReference = new DataRepoSnapshot().instanceName(terraDataRepoInstanceName).snapshot(snapshot.snapshotId)
-      val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, snapshot.description, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
+      val snapshotRef = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, snapshot.description, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
-      val datasetName = "deltalayer_" + ref.getReferenceId.toString.replace('-', '_')
+      val datasetName = "deltalayer_" + snapshotRef.getReferenceId.toString.replace('-', '_')
 
       val datasetLabels = Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_id" -> snapshot.snapshotId)
 
       // create BQ dataset, get workspace policies from Sam, and add those Sam policies to the dataset IAM
-      val IOResult = for {
+      val createDatasetIO = for {
         samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)))
         aclBindings = calculateDatasetAcl(samPolicies)
         bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
         _ <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings))
-        petToken <- IO.fromFuture(IO(samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryReadOnlyScope, userInfo)))
-      } yield { petToken }
+      } yield { }
 
-      IOResult.unsafeToFuture().recover {
+      createDatasetIO.unsafeToFuture().recover {
         case t: Throwable =>
           //fire and forget this undo, we've made our best effort to fix things at this point
-          IO.pure(workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, ref.getReferenceId, userInfo.accessToken)).unsafeToFuture()
+          IO.pure(workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, snapshotRef.getReferenceId, userInfo.accessToken)).unsafeToFuture()
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
-      }.map { petToken =>
-        try {
-          workspaceManagerDAO.createBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
-        } catch {
+      }.flatMap { _ =>
+
+        val createBQReferenceFuture = for {
+          petToken <- samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryReadOnlyScope, userInfo)
+          bigQueryRef = workspaceManagerDAO.createBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, new DataReferenceRequestMetadata().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GoogleBigQueryDatasetUid().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
+        } yield { bigQueryRef }
+
+        createBQReferenceFuture.recover {
           case t: Throwable =>
             //fire and forget these undos, we've made our best effort to fix things at this point
             for {
               _ <- deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture()
-              _ <- IO.pure(workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, ref.getReferenceId, userInfo.accessToken)).unsafeToFuture()
+              _ <- IO.pure(workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, snapshotRef.getReferenceId, userInfo.accessToken)).unsafeToFuture()
             } yield {}
             throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
         }
-        ref
-      }
+      }.map { _ => snapshotRef}
     }
   }
 
