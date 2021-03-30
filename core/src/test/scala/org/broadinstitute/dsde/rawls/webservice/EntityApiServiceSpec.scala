@@ -2552,7 +2552,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     assert(argumentCaptor.getValue)
   }
 
-  it should "respect useCache parameter if set to true" in withMockedEntityService { services =>
+  it should "respect useCache parameter if set to false" in withMockedEntityService { services =>
     Get(s"${constantData.workspace.path}/entities?useCache=false") ~>
       sealRoute(services.entityRoutes) ~>
       check {
