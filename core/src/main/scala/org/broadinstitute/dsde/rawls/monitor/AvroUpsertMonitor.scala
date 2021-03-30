@@ -149,9 +149,11 @@ object AvroUpsertMonitor {
              importStatusPubSubTopic: String,
              importServiceDAO: ImportServiceDAO,
              batchSize: Int,
-             dataSource: SlickDataSource)(implicit cs: ContextShift[IO]): Props =
+             dataSource: SlickDataSource)(implicit cs: ContextShift[IO]): Props = {
+    System.err.println(s"starting AvroUpsertMonitorActor for pull:$pubSubSubscriptionName and publish:$importStatusPubSubTopic")
     Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO,
       pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize, dataSource))
+  }
 }
 
 class AvroUpsertMonitorActor(

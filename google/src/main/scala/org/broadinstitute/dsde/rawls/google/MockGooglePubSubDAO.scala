@@ -26,11 +26,15 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
   val messageLog = new ConcurrentLinkedQueue[String]
   val acks = new ConcurrentLinkedQueue[String]
 
-  def logMessage(topic: String, message: String) = messageLog.add(s"$topic|$message")
+  def logMessage(topic: String, message: String) = {
+    System.err.println(s"****************** logMessage: $topic|$message")
+    messageLog.add(s"$topic|$message")
+  }
   def receivedMessage(topic: String, message: String, count: Int = 1) = messageLog.toArray.filter(_ == s"$topic|$message").size == count
 
 
   override def createTopic(topicName: String): Future[Boolean] = {
+    System.err.println(s"****************** createTopic: $topicName")
     val initialCount = topics.size
     topics += (topicName -> Collections.synchronizedSet(new util.HashSet[Subscription]()).asScala)
     Future.successful(topics.size != initialCount)
@@ -52,6 +56,7 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
   override def publishMessages(topicName: String, messages: scala.collection.immutable.Seq[MessageRequest]): Future[Unit] = Future {
     val subscriptions = topics.getOrElse(topicName, throw new RawlsException(s"no topic named $topicName"))
     messages.foreach(message => logMessage(topicName, message.text))
+    System.err.println(s"****************** publishMessages: ${messages.size} messages to topic $topicName, with ${subscriptions.size} subscriptions: ${subscriptions.map(_.name).mkString(",")}")
     for {
       sub <- subscriptions
       message <- messages
@@ -82,13 +87,16 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
   }
 
   override def createSubscription(topicName: String, subscriptionName: String, ackDeadlineSeconds: Option[Int] = None): Future[Boolean] = Future {
+    System.err.println(s"****************** createSubscription: $topicName|$subscriptionName")
     if (!topics.contains(topicName)) throw new RawlsException(s"no topic named $topicName")
     if (subscriptionsByName.contains(subscriptionName)) {
+      System.err.println(s"****************** createSubscription: $topicName|$subscriptionName already exists")
       false
     } else {
       val subscription = Subscription(subscriptionName, topicName, new ConcurrentLinkedQueue[MessageRequest]())
       topics(topicName) += subscription
       subscriptionsByName += subscriptionName -> subscription
+      System.err.println(s"****************** createSubscription: $topicName|$subscriptionName should now be created")
       true
     }
   }
