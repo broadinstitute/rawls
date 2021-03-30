@@ -1,13 +1,13 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
-
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -15,6 +15,9 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{verify, when}
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsArray, JsBoolean, JsNumber, JsObject, JsString}
 
@@ -31,6 +34,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
   case class TestApiServiceForAuthDomains(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
     override val samDAO: MockSamDAOForAuthDomains = new MockSamDAOForAuthDomains(dataSource)
+  }
+  case class TestApiServiceForMockedEntityService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
+    val service = mock[EntityService]
+    override val entityServiceConstructor = UserInfo => service
+    when(service.entityTypeMetadata(any[WorkspaceName], any[Option[DataReferenceName]], any[Option[GoogleProjectId]], any[Boolean]))
+      .thenReturn(Future.successful(new RequestComplete[Map[String, EntityTypeMetadata]](Map("Test" -> EntityTypeMetadata(5000, "for-test", List("Attribute1", "Attribute2"))))))
+
   }
 
   class MockSamDAOForAuthDomains(slickDataSource: SlickDataSource) extends MockSamDAO(slickDataSource) {
@@ -64,6 +74,15 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  def withApiServicesMockedEntityService[T](dataSource: SlickDataSource)(testCode: TestApiServiceForMockedEntityService => T): T = {
+    val apiService = TestApiServiceForMockedEntityService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
   def withTestDataApiServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
@@ -79,6 +98,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   def withConstantTestDataApiServices[T](testCode: TestApiService => T): T = {
     withConstantTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
+    }
+  }
+
+  def withMockedEntityService[T](testCode: TestApiServiceForMockedEntityService => T): T = {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      withApiServicesMockedEntityService(dataSource)(testCode)
     }
   }
 
@@ -2513,4 +2538,45 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+
+  it should "pass true by default to useCache argument" in withMockedEntityService { services =>
+    Get(s"${constantData.workspace.path}/entities") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]){
+          status
+        }
+      }
+    val argumentCaptor = captor[Boolean]
+    verify(services.service).entityTypeMetadata(any[WorkspaceName], any[Option[DataReferenceName]], any[Option[GoogleProjectId]], argumentCaptor.capture())
+    assert(argumentCaptor.getValue)
+  }
+
+  it should "respect useCache parameter if set to false" in withMockedEntityService { services =>
+    Get(s"${constantData.workspace.path}/entities?useCache=false") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]){
+          status
+        }
+      }
+    val argumentCaptor = captor[Boolean]
+    verify(services.service).entityTypeMetadata(any[WorkspaceName], any[Option[DataReferenceName]], any[Option[GoogleProjectId]], argumentCaptor.capture())
+    assert(!argumentCaptor.getValue)
+  }
+
+  it should "default to true if useCache set to some value other than 'false'" in withMockedEntityService { services =>
+    Get(s"${constantData.workspace.path}/entities?useCache=mysterious") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]){
+          status
+        }
+      }
+    val argumentCaptor = captor[Boolean]
+    verify(services.service).entityTypeMetadata(any[WorkspaceName], any[Option[DataReferenceName]], any[Option[GoogleProjectId]], argumentCaptor.capture())
+    assert(argumentCaptor.getValue)
+  }
+
+
 }
