@@ -39,7 +39,9 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
   override def pullMessages(subscriptionName: String, maxMessages: Int): Future[scala.collection.immutable.Seq[PubSubMessage]] = Future {
     val subscription = subscriptionsByName.getOrElse(subscriptionName, throw new RawlsException(s"no subscription named $subscriptionName"))
     (0 until maxMessages).map(_ => Option(subscription.queue.poll())).collect {
-      case Some(message) => PubSubMessage(UUID.randomUUID().toString, message.text, message.attributes)
+      case Some(message) =>
+        System.err.println(s"****************** pull: ${subscription.topic}|$subscriptionName|${message.text}|${message.attributes}")
+        PubSubMessage(UUID.randomUUID().toString, message.text, message.attributes)
     }
   }
 
@@ -53,6 +55,7 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
     for {
       sub <- subscriptions
       message <- messages
+      _ = System.err.println(s"****************** publish: $topicName|${sub.name}|${message.text}|${message.attributes}")
     } yield {
       sub.queue.add(message)
     }
