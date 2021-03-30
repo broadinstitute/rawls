@@ -228,11 +228,17 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
       val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName(pubsubPrefix), 1), Duration.apply(10, TimeUnit.SECONDS))
 
+      if (statusMessages.nonEmpty) {
+        statusMessages foreach { msg =>
+          logger.warn(s">>>>>>> found message looking for $importId1 on ${importWriteSubscriptionName(pubsubPrefix)}: ${msg.contents} | ${msg.attributes}")
+        }
+      }
+
       assert(statusMessages.exists { msg =>
         msg.attributes.get("importId").contains(importId1.toString) &&
           msg.attributes.get("newStatus").contains("Error") &&
           msg.attributes.get("action").contains("status")
-      }, s"statusMessages was: ${statusMessages}")
+      }, s"statusMessages looking for $importId1 on ${importWriteSubscriptionName(pubsubPrefix)} was: ${statusMessages}")
     }
   }
 
@@ -266,11 +272,17 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
       val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName(pubsubPrefix), 1), Duration.apply(10, TimeUnit.SECONDS))
 
+      if (statusMessages.nonEmpty) {
+        statusMessages foreach { msg =>
+          logger.warn(s">>>>>>> found message looking for $importId1 on ${importWriteSubscriptionName(pubsubPrefix)}: ${msg.contents} | ${msg.attributes}")
+        }
+      }
+
       assert(statusMessages.exists { msg =>
         msg.attributes.get("importId").contains(importId1.toString) &&
           msg.attributes.get("newStatus").contains("Error") &&
           msg.attributes.get("action").contains("status")
-      }, s"statusMessages was: ${statusMessages}")
+      }, s"statusMessages looking for $importId1 on ${importWriteSubscriptionName(pubsubPrefix)} was: ${statusMessages}")
     }
   }
 
@@ -305,11 +317,17 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
       val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName(pubsubPrefix), 1), Duration.apply(10, TimeUnit.SECONDS))
 
+      if (statusMessages.nonEmpty) {
+        statusMessages foreach { msg =>
+          logger.warn(s">>>>>>> found message looking for $importId1 on ${importWriteSubscriptionName(pubsubPrefix)}: ${msg.contents} | ${msg.attributes}")
+        }
+      }
+
       assert(statusMessages.exists { msg =>
         msg.attributes.get("importId").contains(importId1.toString) &&
           msg.attributes.get("newStatus").contains("Error") &&
           msg.attributes.get("action").contains("status")
-      }, s"statusMessages was: ${statusMessages}")
+      }, s"statusMessages looking for $importId1 on ${importWriteSubscriptionName(pubsubPrefix)} was: ${statusMessages}")
     }
   }
 
