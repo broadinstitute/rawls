@@ -98,11 +98,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   }
 
   def setUp(services: TestApiService, pubsubPrefix: String) = {
+    val duration = Duration.apply(10, TimeUnit.SECONDS)
+
     // create the two topics
-    services.gpsDAO.createTopic(importReadPubSubTopic(pubsubPrefix))
-    services.gpsDAO.createTopic(importWritePubSubTopic(pubsubPrefix)) map { _ =>
+    // TODO: AS-706 these are futures, we need to wait for them to complete before continuing on!
+    Await.result(services.gpsDAO.createTopic(importReadPubSubTopic(pubsubPrefix)), duration)
+    Await.result(services.gpsDAO.createTopic(importWritePubSubTopic(pubsubPrefix)) map { _ =>
       services.gpsDAO.createSubscription(importWritePubSubTopic(pubsubPrefix), importWriteSubscriptionName(pubsubPrefix))
-    }
+    }, duration)
 
     val mockImportServiceDAO =  new MockImportServiceDAO()
 
