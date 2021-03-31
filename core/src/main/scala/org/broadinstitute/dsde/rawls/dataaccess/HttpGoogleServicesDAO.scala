@@ -1064,6 +1064,17 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project] = {
+    implicit val service = GoogleInstrumentedService.CloudResourceManager
+    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
+
+    for {
+      project <- executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProjectId.value, googleProjectWithUpdates))
+    } yield {
+      project
+    }
+  }
+
   override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]= {
     implicit val service = GoogleInstrumentedService.Billing
     val billingServiceAccountCredential = getBillingServiceAccountCredential

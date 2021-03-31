@@ -9,6 +9,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
+import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
@@ -55,6 +56,7 @@ import spray.json._
 
 import scala.language.postfixOps
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters.{mapAsJavaMapConverter, mapAsScalaMapConverter}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -1928,9 +1930,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
-      _ <- traceWithParent("updateGoogleProjectDisplayName", span)(_ => gcsDAO.updateGoogleProjectName(googleProjectId, workspaceName.toString))
-      _ <- traceWithParent("addGoogleProjectLabels", span)(_ => gcsDAO.addGoogleProjectLabels(googleProjectId, Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId)))
-      googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
+      googleProjectLabels = Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId)
+      googleProjectNumber <- traceWithParent("setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber", span)(_ => setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber(googleProjectId, googleProjectLabels))
       _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
       _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail))
     } yield (googleProjectId, googleProjectNumber)
@@ -1960,6 +1961,32 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
       }
     }
+  }
+
+  // do all the google-y things in Cloud Resource Manager
+  private def setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber(googleProjectId: GoogleProjectId, newLabels: Map[String, String]): Future[GoogleProjectNumber] = {
+
+    val validLabels = newLabels.map{case (key, value) => (gcsDAO.labelSafeString(key), gcsDAO.labelSafeString(value))}
+
+    for {
+      googleProject <- gcsDAO.getGoogleProject(googleProjectId)
+      googleProjectNumber = Option(googleProject.getProjectNumber) match {
+        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
+        case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
+      }
+
+      // RBS projects already come with some labels. In order to not lose those, we need to combine those existing labels with the new labels
+      existingLabels = googleProject.getLabels.asScala
+
+      updatedLabels = existingLabels ++ newLabels
+
+      // create a Project with fields that we want to update. Then send that to gcsDAO to update the project
+      googleProjectWithValuesToUpdate = new Project()
+        .setName("Terra-managed Google project")
+        .setLabels(updatedLabels.asJava)
+      _ <- gcsDAO.updateGoogleProject(googleProjectId, googleProjectWithValuesToUpdate)
+
+    } yield (googleProjectNumber)
   }
 
   /**
