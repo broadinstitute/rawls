@@ -36,7 +36,7 @@ import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, Moc
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
-import org.mockito.{ArgumentMatchers, Mockito}
+import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -45,6 +45,7 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.CollectionConverters.mapAsScalaMapConverter
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -1364,24 +1365,40 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
   }
 
-  it should "Update a Google Project name after claiming from Resource Buffering Service" in withTestDataServices { services =>
+  it should "Update a Google Project name after claiming a project from Resource Buffering Service" in withTestDataServices { services =>
     val newWorkspaceNamespace = testData.testProject1Name.value
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
+    val captor = ArgumentCaptor.forClass(classOf[Project])
 
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
-    verify(services.gcsDAO).updateGoogleProjectName(any[GoogleProjectId], ArgumentMatchers.eq(s"${newWorkspaceNamespace}/${newWorkspaceName}"))
+    verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
+    val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
+
+    val expectedProjectName = "Terra-managed Google project"
+    val actualProjectName = capturedProject.getName
+
+    actualProjectName shouldBe expectedProjectName
   }
 
-  it should "Apply labels to a Google Project after claiming from Resource Buffering Service" in withTestDataServices { services =>
+  it should "Apply labels to a Google Project after claiming a project from Resource Buffering Service" in withTestDataServices { services =>
     val newWorkspaceNamespace = testData.testProject1Name.value
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
+    val captor = ArgumentCaptor.forClass(classOf[Project])
 
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
-    verify(services.gcsDAO).addGoogleProjectLabels(any[GoogleProjectId], any[Map[String, String]])
+    verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
+    val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
+
+    val expectedNewLabels = Map("workspaceNamespace" -> newWorkspaceNamespace, "workspaceName" -> newWorkspaceName, "workspaceId" -> workspace.workspaceId)
+    val expectedLabelSize = 6
+    val actualLabels = capturedProject.getLabels.asScala
+
+    actualLabels.size shouldBe expectedLabelSize
+    expectedNewLabels.toSet subsetOf actualLabels.toSet
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
