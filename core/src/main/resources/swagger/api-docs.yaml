@@ -1539,12 +1539,8 @@ paths:
           description: True to read entity statistics from cache if cache is up to date, false to bypass cache (slower). Default is true.
           schema:
             type: boolean
-<<<<<<< HEAD
             default: true
-=======
-            default: false
         - $ref: '#/components/parameters/dataReferenceQueryParam'
->>>>>>> Enable Workspace Manager functionality in Rawls by default
       responses:
         200:
           description: Successful Request
