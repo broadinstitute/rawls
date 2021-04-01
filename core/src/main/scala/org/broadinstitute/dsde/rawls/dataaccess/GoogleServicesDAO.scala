@@ -236,6 +236,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def updateGoogleProjectName(googleProject: GoogleProjectId, name: String): Future[Unit]
 
+  def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project]
+
   def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]
 
   def getAccessTokenUsingJson(saKey: String): Future[String]
