@@ -1964,7 +1964,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   // do all the google-y things in Cloud Resource Manager
-  private def setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber(googleProjectId: GoogleProjectId, newLabels: Map[String, String]): Future[GoogleProjectNumber] = {
+  private[workspace] def setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber(googleProjectId: GoogleProjectId, newLabels: Map[String, String]): Future[GoogleProjectNumber] = {
 
     val validLabels = gcsDAO.labelSafeMap(newLabels)
 

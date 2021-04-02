@@ -1401,6 +1401,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     actualLabels should contain allElementsOf expectedNewLabels
   }
 
+  "setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber" should "return a Google project number" in withTestDataServices { services =>
+    val googleProjectNumber = Await.result(services.workspaceService.setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber(GoogleProjectId("project-id"), Map.empty), Duration.Inf)
+
+    googleProjectNumber.value.length should be > 0
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "creating a Workspace in a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices { services =>
