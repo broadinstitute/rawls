@@ -57,7 +57,7 @@ trait EntityApiService extends UserInfoDirectives {
             parameters('useCache.?) { (useCache) =>
               val useCacheBool = Try(useCache.getOrElse("true").toBoolean).getOrElse(true)
               complete {
-                entityServiceConstructor(userInfo).entityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, billingProject, useCacheBool)
+                entityServiceConstructor(userInfo).entityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, None, useCacheBool)
               }
             }
           }
@@ -88,7 +88,7 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / "delete") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[AttributeEntityReference]]) { entities =>
-              complete { entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, dataReference, billingProject) }
+              complete { entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, None, None) }
             }
           }
         } ~
