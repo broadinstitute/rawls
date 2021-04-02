@@ -1971,7 +1971,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       // create a Project with fields that we want to update. Then send that to gcsDAO to update the project
       googleProjectWithValuesToUpdate = new Project()
-        .setName("Terra-managed Google project")
+        .setName(gcsDAO.googleProjectNameSafeString("Terra-managed Google project"))
         .setLabels(updatedLabels.asJava)
       _ <- gcsDAO.updateGoogleProject(googleProjectId, googleProjectWithValuesToUpdate)
 

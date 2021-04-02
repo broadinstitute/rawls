@@ -266,6 +266,21 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def labelSafeMap(m: Map[String, String], prefix: String = ""): Map[String, String] = m.map { case (key, value) =>
     labelSafeString(key, prefix) -> labelSafeString(value, prefix) }
 
+  /**
+    * Valid text for google project name.
+    *
+    * "The optional user-assigned display name of the Project. It must be 4 to 30 characters. Allowed
+    * characters are: lowercase and uppercase letters, numbers, hyphen, single-quote, double-quote,
+    * space, and exclamation point."
+    *
+    * For more info see: https://cloud.google.com/resource-manager/reference/rest/v1/projects
+    * @param name
+    * @return
+    */
+  def googleProjectNameSafeString(name: String): String = {
+    name.toLowerCase.replaceAll("[^a-z0-9\\-'\" !]", "-").take(30)
+  }
+
   def getGoogleProjectNumberFromOption(googleProjectId: GoogleProjectId, maybeGoogleProjectNumber: Option[GoogleProjectNumber]): GoogleProjectNumber = maybeGoogleProjectNumber match {
     case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
     case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
