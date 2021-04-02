@@ -1955,25 +1955,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     policyGroupsToRoles.toList.traverse {case (email, roles) => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
   }
 
-  private def getGoogleProjectNumber(googleProjectId: GoogleProjectId): Future[GoogleProjectNumber] = {
-    gcsDAO.getGoogleProject(googleProjectId).map { p => Option(p.getProjectNumber) match {
-        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
-        case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
-      }
-    }
-  }
-
-  // do all the google-y things in Cloud Resource Manager
+  // do all the google-y things in Cloud Resource Manager to reduce the number of calls made to google so we can avoid quota issues
   private def setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber(googleProjectId: GoogleProjectId, newLabels: Map[String, String]): Future[GoogleProjectNumber] = {
 
     val validLabels = gcsDAO.labelSafeMap(newLabels)
 
     for {
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
-      googleProjectNumber = Option(googleProject.getProjectNumber) match {
-        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
-        case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
-      }
+      googleProjectNumber = gcsDAO.getGoogleProjectNumberFromOption(googleProjectId, Option(GoogleProjectNumber(googleProject.getProjectNumber.toString)))
 
       // RBS projects already come with some labels. In order to not lose those, we need to combine those existing labels with the new labels
       existingLabels = googleProject.getLabels.asScala

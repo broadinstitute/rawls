@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.model.StatusCodes
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
@@ -7,7 +8,7 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.typesafe.config.Config
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -264,6 +265,11 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def labelSafeMap(m: Map[String, String], prefix: String = ""): Map[String, String] = m.map { case (key, value) =>
     labelSafeString(key, prefix) -> labelSafeString(value, prefix) }
+
+  def getGoogleProjectNumberFromOption(googleProjectId: GoogleProjectId, maybeGoogleProjectNumber: Option[GoogleProjectNumber]): GoogleProjectNumber = maybeGoogleProjectNumber match {
+    case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
+    case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
+  }
 
   def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit]
 
