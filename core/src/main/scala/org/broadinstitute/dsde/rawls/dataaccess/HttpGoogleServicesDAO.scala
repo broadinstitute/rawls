@@ -1029,40 +1029,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def addGoogleProjectLabels(googleProject: GoogleProjectId, labels: Map[String, String]): Future[Unit] = {
-    implicit val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.CloudResourceManager
-    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
-
-    for {
-      project <- getGoogleProject(googleProject)
-      _ = project.getLabels.putAll(labels.asJava)
-      _ <- executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProject.value, project))
-    } yield {
-
-    }
-  }
-
-  /**
-    * Updates google project (display) name. Note that the "Project name" is defined as:
-    * "A human-readable name for your project. The project name isn't used by any Google APIs.
-    * You can edit the project name at any time during or after project creation. Project names do not need to be unique."
-    * For more info, see: https://cloud.google.com/resource-manager/docs/creating-managing-projects#before_you_begin
-    *
-    * @param googleProject google project id
-    * @param name google project's (display) name
-    * @return
-    */
-  override def updateGoogleProjectName(googleProject: GoogleProjectId, name: String): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.CloudResourceManager
-    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
-
-    for {
-      _ <- executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProject.value, new Project().setName(name)))
-    } yield {
-
-    }
-  }
-
   override def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
     val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
