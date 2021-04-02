@@ -1966,7 +1966,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // do all the google-y things in Cloud Resource Manager
   private def setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber(googleProjectId: GoogleProjectId, newLabels: Map[String, String]): Future[GoogleProjectNumber] = {
 
-    val validLabels = newLabels.map{case (key, value) => (gcsDAO.labelSafeString(key), gcsDAO.labelSafeString(value))}
+    val validLabels = gcsDAO.labelSafeMap(newLabels)
 
     for {
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
@@ -1978,7 +1978,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // RBS projects already come with some labels. In order to not lose those, we need to combine those existing labels with the new labels
       existingLabels = googleProject.getLabels.asScala
 
-      updatedLabels = existingLabels ++ newLabels
+      updatedLabels = existingLabels ++ validLabels
 
       // create a Project with fields that we want to update. Then send that to gcsDAO to update the project
       googleProjectWithValuesToUpdate = new Project()

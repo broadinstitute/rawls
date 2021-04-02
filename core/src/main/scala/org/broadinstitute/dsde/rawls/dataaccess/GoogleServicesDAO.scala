@@ -244,10 +244,26 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]
 
+  /**
+    * Convert a string to a legal gcp label text, with an optional prefix
+    * See: https://cloud.google.com/compute/docs/labeling-resources#restrictions
+    *
+    * @param s
+    * @param prefix defaults to "fc-"
+    * @return
+    */
   def labelSafeString(s: String, prefix: String = "fc-"): String = {
-    // https://cloud.google.com/compute/docs/labeling-resources#restrictions
     prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
   }
+
+  /**
+    * Convert a map of labels to legal gcp label text. Runs [[labelSafeString]] on all keys and values in the map.
+    * @param m Map of label key value pairs
+    * @param prefix
+    * @return
+    */
+  def labelSafeMap(m: Map[String, String], prefix: String = ""): Map[String, String] = m.map { case (key, value) =>
+    labelSafeString(key, prefix) -> labelSafeString(value, prefix) }
 
   def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit]
 
