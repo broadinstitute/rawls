@@ -279,12 +279,11 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   /**
     * Handles getting the google project number from the google [[Project]]
-    * @param googleProjectId
     * @param googleProject
     * @return GoogleProjectNumber
     */
-  def getGoogleProjectNumberFromGoogleProject(googleProjectId: GoogleProjectId, googleProject: Project): GoogleProjectNumber = googleProject.getProjectNumber match {
-    case null => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
+  def getGoogleProjectNumberFromGoogleProject(googleProject: Project): GoogleProjectNumber = googleProject.getProjectNumber match {
+    case null => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProject.getProjectId}"))
     case googleProjectNumber: java.lang.Long => GoogleProjectNumber(googleProjectNumber.toString)
   }
 

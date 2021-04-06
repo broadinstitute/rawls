@@ -1962,7 +1962,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     for {
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
-      googleProjectNumber = gcsDAO.getGoogleProjectNumberFromGoogleProject(googleProjectId, googleProject)
+      googleProjectNumber = gcsDAO.getGoogleProjectNumberFromGoogleProject(googleProject)
 
       // RBS projects already come with some labels. In order to not lose those, we need to combine those existing labels with the new labels
       existingLabels = googleProject.getLabels.asScala
