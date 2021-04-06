@@ -69,4 +69,6 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
     if (references.contains(workspaceId, referenceId))
       references -= ((workspaceId, referenceId))
   }
+
+  override def createBigQueryDatasetReference(workspaceId: UUID, metadata: DataReferenceRequestMetadata, dataset: GoogleBigQueryDatasetUid, accessToken: OAuth2BearerToken): BigQueryDatasetReference = new BigQueryDatasetReference
 }

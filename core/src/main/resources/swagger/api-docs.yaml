@@ -5988,6 +5988,5 @@ components:
             email: email authorization
             profile: profile authorization
             https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
-
 security:
   - authorization: [openid, email, profile]

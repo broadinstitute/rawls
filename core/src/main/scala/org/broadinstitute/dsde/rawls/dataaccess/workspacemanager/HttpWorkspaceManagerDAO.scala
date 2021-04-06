@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.workspace.api.WorkspaceApi
+import bio.terra.workspace.api.{ReferencedGcpResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
@@ -24,6 +23,10 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
 
   private def getWorkspaceApi(accessToken: OAuth2BearerToken): WorkspaceApi = {
     new WorkspaceApi(getApiClient(accessToken.token))
+  }
+
+  private def getReferencedGcpResourceApi(accessToken: OAuth2BearerToken): ReferencedGcpResourceApi = {
+    new ReferencedGcpResourceApi(getApiClient(accessToken.token))
   }
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = {
@@ -63,6 +66,11 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
 
   override def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList = {
     getWorkspaceApi(accessToken).enumerateReferences(workspaceId, offset, limit)
+  }
+
+  override def createBigQueryDatasetReference(workspaceId: UUID, metadata: DataReferenceRequestMetadata, dataset: GoogleBigQueryDatasetUid, accessToken: OAuth2BearerToken): BigQueryDatasetReference = {
+    val createBigQueryDatasetReference = new CreateBigQueryDatasetReferenceRequestBody().dataset(dataset).metadata(metadata)
+    getReferencedGcpResourceApi(accessToken).createBigQueryDatasetReference(createBigQueryDatasetReference, workspaceId)
   }
 
 }

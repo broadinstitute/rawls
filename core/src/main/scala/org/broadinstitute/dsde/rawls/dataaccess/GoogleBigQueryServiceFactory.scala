@@ -30,4 +30,8 @@ class GoogleBigQueryServiceFactory(blocker: Blocker)(implicit executionContext: 
     GoogleBigQueryService.resource[IO](petCredentials, blocker, projectId)
   }
 
+  def getServiceFromCredentialPath(credentialPath: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
+    GoogleBigQueryService.resource[IO](credentialPath, projectId, blocker)
+  }
+
 }
