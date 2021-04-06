@@ -274,12 +274,18 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return
     */
   def googleProjectNameSafeString(name: String): String = {
-    name.toLowerCase.replaceAll("[^a-z0-9\\-'\" !]", "-").take(30)
+    name.replaceAll("[^a-zA-Z0-9\\-'\" !]", "-").take(30)
   }
 
-  def getGoogleProjectNumberFromOption(googleProjectId: GoogleProjectId, maybeGoogleProjectNumber: Option[GoogleProjectNumber]): GoogleProjectNumber = maybeGoogleProjectNumber match {
-    case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
-    case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
+  /**
+    * Handles getting the google project number from the google [[Project]]
+    * @param googleProjectId
+    * @param googleProject
+    * @return GoogleProjectNumber
+    */
+  def getGoogleProjectNumberFromGoogleProject(googleProjectId: GoogleProjectId, googleProject: Project): GoogleProjectNumber = googleProject.getProjectNumber match {
+    case null => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
+    case googleProjectNumber: java.lang.Long => GoogleProjectNumber(googleProjectNumber.toString)
   }
 
   def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit]

@@ -655,7 +655,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       googleProjectNumber <- billingProject.googleProjectNumber match {
         case Some(existingGoogleProjectNumber) => Future.successful(existingGoogleProjectNumber)
         case None => gcsDAO.getGoogleProject(billingProject.googleProjectId).map(googleProject =>
-          gcsDAO.getGoogleProjectNumberFromOption(billingProject.googleProjectId, Option(GoogleProjectNumber(googleProject.getProjectNumber.toString))))
+          gcsDAO.getGoogleProjectNumberFromGoogleProject(billingProject.googleProjectId, googleProject))
       }
 
       // all v2 workspaces in the specified Terra billing project will already have their own Google project number, but any v1 workspaces should store the Terra billing project's Google project number

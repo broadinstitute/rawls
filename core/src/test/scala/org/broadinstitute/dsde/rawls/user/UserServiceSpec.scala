@@ -88,11 +88,13 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       runAndWait(rawlsBillingProjectQuery.create(project))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val googleProjectNumber = 42L
-      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.successful(new Project().setProjectNumber(googleProjectNumber)))
+      val googleProjectNumber = GoogleProjectNumber("42")
+      val googleProject = new Project().setProjectNumber(googleProjectNumber.value.toLong)
+      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.successful(googleProject))
       val folderId = "folders/1234567"
       when(mockGcsDAO.getFolderId(defaultServicePerimeterName.value.split("/").last)).thenReturn(Future.successful(Option(folderId)))
       when(mockGcsDAO.addProjectToFolder(project.googleProjectId, folderId)).thenReturn(Future.successful(()))
+      when(mockGcsDAO.getGoogleProjectNumberFromGoogleProject(project.googleProjectId, googleProject)).thenReturn(googleProjectNumber)
 
       val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
       when(mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)).thenReturn(Future.successful(()))
@@ -109,7 +111,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       }.futureValue.getOrElse(fail(s"Project ${project.projectName} not found"))
 
       updatedProject.servicePerimeter shouldBe Option(defaultServicePerimeterName)
-      updatedProject.googleProjectNumber shouldBe Option(GoogleProjectNumber(googleProjectNumber.toString))
+      updatedProject.googleProjectNumber shouldBe Option(googleProjectNumber)
     }
   }
 
