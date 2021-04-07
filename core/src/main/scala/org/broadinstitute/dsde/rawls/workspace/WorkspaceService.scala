@@ -1930,8 +1930,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
-      googleProjectLabels = Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId)
-      googleProjectNumber <- traceWithParent("setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber", span)(_ => setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber(googleProjectId, googleProjectLabels))
+      googleProjectLabels = gcsDAO.labelSafeMap(Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId))
+      googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
+      googleProject <- traceWithParent("setUpProjectInCloudResourceManager", span)(_ => setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName))
+      googleProjectNumber = gcsDAO.getGoogleProjectNumber(googleProject)
       _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
       _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail))
     } yield (googleProjectId, googleProjectNumber)
@@ -1955,27 +1957,28 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     policyGroupsToRoles.toList.traverse {case (email, roles) => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
   }
 
-  // do all the google-y things in Cloud Resource Manager to reduce the number of calls made to google so we can avoid quota issues
-  private def setUpProjectInCloudResourceManagerAndGetGoogleProjectNumber(googleProjectId: GoogleProjectId, newLabels: Map[String, String]): Future[GoogleProjectNumber] = {
-
-    val validLabels = gcsDAO.labelSafeMap(newLabels)
-
+  /**
+    * Update google project with the labels and google project name to reduce the number of calls made to google so we can avoid quota issues
+    * @param googleProjectId
+    * @param newLabels Make sure labels are google-safe by running gcsDAO.labelSafeMap()
+    * @param googleProjectName Make sure the project name is google-safe by running gcsDAO.googleProjectNameSafeString()
+    * @return
+    */
+  private def setUpProjectInCloudResourceManager(googleProjectId: GoogleProjectId, newLabels: Map[String, String], googleProjectName: String): Future[Project] = {
     for {
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
-      googleProjectNumber = gcsDAO.getGoogleProjectNumberFromGoogleProject(googleProject)
 
       // RBS projects already come with some labels. In order to not lose those, we need to combine those existing labels with the new labels
       existingLabels = googleProject.getLabels.asScala
-
-      updatedLabels = existingLabels ++ validLabels
+      combinedLabels = existingLabels ++ newLabels
 
       // create a Project with fields that we want to update. Then send that to gcsDAO to update the project
       googleProjectWithValuesToUpdate = new Project()
-        .setName(gcsDAO.googleProjectNameSafeString("Terra-managed Google project"))
-        .setLabels(updatedLabels.asJava)
+        .setName(googleProjectName)
+        .setLabels(combinedLabels.asJava)
       _ <- gcsDAO.updateGoogleProject(googleProjectId, googleProjectWithValuesToUpdate)
 
-    } yield (googleProjectNumber)
+    } yield (googleProject)
   }
 
   /**

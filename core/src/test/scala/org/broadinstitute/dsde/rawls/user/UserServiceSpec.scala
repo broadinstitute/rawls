@@ -94,7 +94,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val folderId = "folders/1234567"
       when(mockGcsDAO.getFolderId(defaultServicePerimeterName.value.split("/").last)).thenReturn(Future.successful(Option(folderId)))
       when(mockGcsDAO.addProjectToFolder(project.googleProjectId, folderId)).thenReturn(Future.successful(()))
-      when(mockGcsDAO.getGoogleProjectNumberFromGoogleProject(googleProject)).thenReturn(googleProjectNumber)
+      when(mockGcsDAO.getGoogleProjectNumber(googleProject)).thenReturn(googleProjectNumber)
 
       val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
       when(mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)).thenReturn(Future.successful(()))
