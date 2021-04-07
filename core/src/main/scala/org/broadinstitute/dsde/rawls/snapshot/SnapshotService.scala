@@ -42,7 +42,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val dataRepoReference = new DataRepoSnapshot().instanceName(terraDataRepoInstanceName).snapshot(snapshot.snapshotId)
       val snapshotRef = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, snapshot.description, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
-      val datasetName = "deltalayer_" + snapshotRef.getReferenceId.toString.replace('-', '_')
+      val datasetName = generateDatasetName(snapshotRef)
 
       val datasetLabels = Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_id" -> snapshot.snapshotId)
 
@@ -114,8 +114,13 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def deleteSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[Unit] = {
     val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
-      workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
+      val snapshotRef = workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
       workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
+
+      val datasetName = generateDatasetName(snapshotRef)
+      val datasetRef = workspaceManagerDAO.getBigQueryDatasetReferenceByName(workspaceContext.workspaceIdAsUUID, datasetName, userInfo.accessToken)
+      workspaceManagerDAO.deleteBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, datasetRef.getMetadata.getReferenceId, userInfo.accessToken)
+      deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture()
     }
   }
 
@@ -150,5 +155,9 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
     defaultIamRoles + samAclBindings
   }
+
+  private def generateDatasetName(snapshotReference: DataReferenceDescription) = {
+    "deltalayer_" + snapshotReference.getReferenceId.toString.replace('-', '_')
+}
 
 }
