@@ -279,7 +279,7 @@ object Boot extends IOApp with LazyLogging {
         GenomicsService.constructor(slickDataSource, gcsDAO)
       val submissionCostService: SubmissionCostService =
         SubmissionCostService.constructor(
-          gcsConfig.getString("billingExportTableName"),
+          gcsConfig.getString("cromwellWorkflowCostTableName"),
           gcsConfig.getString("serviceProject"),
           gcsConfig.getInt("billingSearchWindowDays"),
           bigQueryDAO
