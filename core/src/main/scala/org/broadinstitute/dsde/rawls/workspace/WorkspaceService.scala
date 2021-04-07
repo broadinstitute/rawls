@@ -1969,7 +1969,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
 
       // RBS projects already come with some labels. In order to not lose those, we need to combine those existing labels with the new labels
-      existingLabels = googleProject.getLabels.asScala
+      existingLabels = googleProject.getLabels match {
+        case null => Map.empty
+        case map => map.asScala
+      }
       combinedLabels = existingLabels ++ newLabels
 
       updatedProject <- gcsDAO.updateGoogleProject(googleProjectId, googleProject.setName(googleProjectName).setLabels(combinedLabels.asJava))
