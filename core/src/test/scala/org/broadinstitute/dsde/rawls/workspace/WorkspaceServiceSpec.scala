@@ -1376,7 +1376,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
     val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
 
-    val expectedProjectName = "Terra-managed Google project"
+    val expectedProjectName = "arbitrary--space-for-workin"
     val actualProjectName = capturedProject.getName
 
     actualProjectName shouldBe expectedProjectName

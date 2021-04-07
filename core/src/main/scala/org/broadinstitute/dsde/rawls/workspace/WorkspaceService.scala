@@ -1972,13 +1972,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       existingLabels = googleProject.getLabels.asScala
       combinedLabels = existingLabels ++ newLabels
 
-      // create a Project with fields that we want to update. Then send that to gcsDAO to update the project
-      googleProjectWithValuesToUpdate = new Project()
-        .setName(googleProjectName)
-        .setLabels(combinedLabels.asJava)
-      _ <- gcsDAO.updateGoogleProject(googleProjectId, googleProjectWithValuesToUpdate)
-
-    } yield (googleProject)
+      updatedProject <- gcsDAO.updateGoogleProject(googleProjectId, googleProject.setName(googleProjectName).setLabels(combinedLabels.asJava))
+    } yield (updatedProject)
   }
 
   /**

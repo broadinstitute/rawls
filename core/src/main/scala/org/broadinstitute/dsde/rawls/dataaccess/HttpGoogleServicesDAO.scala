@@ -1033,17 +1033,13 @@ class HttpGoogleServicesDAO(
     * Updates the project specified by the googleProjectId with any values in googleProjectWithUpdates.
     * @param googleProjectId project to update
     * @param googleProjectWithUpdates [[Project]] with values to update. For example, a (new Project().setName("ex")) will update the name of the googleProjectId project.
-    * @return
+    * @return the project passed in as googleProjectWithUpdates
     */
-  override def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Unit] = {
+  override def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
     val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
-    for {
-      _ <- executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProjectId.value, googleProjectWithUpdates))
-    } yield {
-      // nothing -- `cloudResourceManager.projects().update` just returns the request back to us so return nothing instead
-    }
+    executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProjectId.value, googleProjectWithUpdates)).map(project => project)
   }
 
   override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]= {
