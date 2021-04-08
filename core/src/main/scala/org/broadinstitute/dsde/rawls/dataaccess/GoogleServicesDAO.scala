@@ -256,10 +256,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   /**
     * Convert a map of labels to legal gcp label text. Runs [[labelSafeString]] on all keys and values in the map.
     * @param m Map of label key value pairs
-    * @param prefix
+    * @param prefix defaults to "fc-"
     * @return
     */
-  def labelSafeMap(m: Map[String, String], prefix: String = ""): Map[String, String] = m.map { case (key, value) =>
+  def labelSafeMap(m: Map[String, String], prefix: String = "fc-"): Map[String, String] = m.map { case (key, value) =>
     labelSafeString(key, prefix) -> labelSafeString(value, prefix) }
 
   /**

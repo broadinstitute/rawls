@@ -1393,7 +1393,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
     val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
 
-    val expectedNewLabels = services.gcsDAO.labelSafeMap(Map("workspaceNamespace" -> newWorkspaceNamespace, "workspaceName" -> newWorkspaceName, "workspaceId" -> workspace.workspaceId))
+    val expectedNewLabels = services.gcsDAO.labelSafeMap(Map("workspaceNamespace" -> newWorkspaceNamespace, "workspaceName" -> newWorkspaceName, "workspaceId" -> workspace.workspaceId), "")
     val expectedLabelSize = 6
     val actualLabels = capturedProject.getLabels.asScala
 

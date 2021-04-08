@@ -1930,7 +1930,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
-      googleProjectLabels = gcsDAO.labelSafeMap(Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId))
+      googleProjectLabels = gcsDAO.labelSafeMap(Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId), "")
       googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
       googleProject <- traceWithParent("setUpProjectInCloudResourceManager", span)(_ => setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName))
       googleProjectNumber = gcsDAO.getGoogleProjectNumber(googleProject)
