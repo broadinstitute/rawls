@@ -320,7 +320,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       if (projectChildren.contains(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))) {
         for {
           _ <- deletePetsInProject(GoogleProjectId(projectName.value), userInfoForSam)
-          _ <- gcsDAO.deleteProject(GoogleProjectId(projectName.value))
+          _ <- toFutureTry(gcsDAO.deleteProject(GoogleProjectId(projectName.value))) map {
+            case Failure(t) => logger.warn(s"failure deleting google project ${projectName} from google during project deletion.", t)
+            case Success(b) => b
+          }
           _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, userInfoForSam)
         } yield ()
       } else {
