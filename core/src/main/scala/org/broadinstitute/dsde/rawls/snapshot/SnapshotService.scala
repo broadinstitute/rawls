@@ -107,6 +107,8 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def updateSnapshot(workspaceName: WorkspaceName, snapshotId: String, updateInfo: UpdateDataReferenceRequestBody): Future[Unit] = {
     val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
+      // check that snapshot exists before updating it. If the snapshot does not exist, the GET attempt will throw a 404
+      // TODO: these WSM APIs are in the process of being deprecated. We should update with new APIs as they become available
       workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
       workspaceManagerDAO.updateDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, updateInfo, userInfo.accessToken)
     }
@@ -115,6 +117,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def deleteSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[Unit] = {
     val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
+      // check that snapshot exists before deleting it. If the snapshot does not exist, the GET attempt will throw a 404
       workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
       workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
     }

@@ -57,12 +57,14 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
   }
 
   override def updateDataReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
-    val existingRef = references.getOrElse((workspaceId, referenceId), throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
-    references.update((workspaceId, referenceId), existingRef.name(
-      if (updateInfo.getName != null) updateInfo.getName else existingRef.getName
-    ).description(
-      if (updateInfo.getDescription != null) updateInfo.getDescription else existingRef.getDescription
-    ))
+    if (references.contains(workspaceId, referenceId)) {
+      val existingRef = references.get(workspaceId, referenceId).get
+      references.update((workspaceId, referenceId), existingRef.name(
+        if (updateInfo.getName != null) updateInfo.getName else existingRef.getName
+      ).description(
+        if (updateInfo.getDescription != null) updateInfo.getDescription else existingRef.getDescription
+      ))
+    }
   }
 
   override def deleteDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {
