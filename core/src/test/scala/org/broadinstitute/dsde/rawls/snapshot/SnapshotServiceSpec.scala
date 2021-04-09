@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceRequestMetadata, DataRepoSnapshot, GoogleBigQueryDatasetUid, ReferenceTypeEnum}
+import bio.terra.workspace.model.{BigQueryDatasetReference, CloningInstructionsEnum, DataReferenceDescription, DataReferenceMetadata, DataReferenceRequestMetadata, DataRepoSnapshot, GoogleBigQueryDatasetUid, ReferenceTypeEnum}
 import cats.effect.{IO, Resource}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO}
@@ -236,6 +236,48 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO, times(1)).createDataReference(any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[ReferenceTypeEnum], any[DataRepoSnapshot], any[CloningInstructionsEnum], any[OAuth2BearerToken])
       verify(mockWorkspaceManagerDAO, times(1)).deleteDataReference(any[UUID], any[UUID], any[OAuth2BearerToken])
       verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDatasetReference(any[UUID], any[DataReferenceRequestMetadata], any[GoogleBigQueryDatasetUid], any[OAuth2BearerToken])
+    }
+
+    "remove all resources when a snapshot reference is deleted" in withMinimalTestDatabase { dataSource =>
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
+      when(mockSamDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])).thenReturn(Future.successful(Set(SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner, SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set.empty), WorkbenchEmail("")))))
+
+      val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
+      when(mockBigQueryServiceFactory.getServiceFromCredentialPath(any[String], any[GoogleProject])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
+
+      val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+
+      val snapshotDataReferenceId = UUID.randomUUID()
+      when(mockWorkspaceManagerDAO.getDataReference(any[UUID], any[UUID], any[OAuth2BearerToken])).thenReturn(new DataReferenceDescription().referenceId(snapshotDataReferenceId).name("foo").description("").workspaceId(UUID.randomUUID()).cloningInstructions(CloningInstructionsEnum.NOTHING))
+
+      when(mockWorkspaceManagerDAO.getBigQueryDatasetReferenceByName(any[UUID], any[String], any[OAuth2BearerToken])).thenReturn(new BigQueryDatasetReference().metadata(new DataReferenceMetadata().referenceId(UUID.randomUUID())).dataset(new GoogleBigQueryDatasetUid))
+
+      val workspace = minimalTestData.workspace
+
+      val snapshotService = SnapshotService.constructor(
+        slickDataSource,
+        mockSamDAO,
+        mockWorkspaceManagerDAO,
+        mockBigQueryServiceFactory,
+        "fake-terra-data-repo-dev",
+        fakeCredentialPath,
+        fakeRawlsClientEmail,
+        fakeDeltaLayerStreamerEmail
+      )(userInfo)
+
+      val deltaLayerDatasetName = snapshotService.generateDatasetName(snapshotDataReferenceId)
+
+      val snapshotUUID = UUID.randomUUID()
+
+      Await.result(snapshotService.deleteSnapshot(workspace.toWorkspaceName, snapshotUUID.toString), Duration.Inf)
+
+      verify(mockWorkspaceManagerDAO, times(1)).getDataReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID),any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(1)).deleteDataReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID), any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(1)).getBigQueryDatasetReferenceByName(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(deltaLayerDatasetName), any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(1)).deleteBigQueryDatasetReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), any[UUID], any[OAuth2BearerToken])
+      verify(mockBigQueryServiceFactory, times(1)).getServiceFromCredentialPath(any[String], any[GoogleProject])
+
     }
 
   }
