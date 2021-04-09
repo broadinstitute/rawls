@@ -355,7 +355,14 @@ class AvroUpsertMonitorActor(
             attempt <- IO.fromFuture(IO(toFutureTry(performUpsertBatch(idx, chunk.toList))))
             _ <- sig.set(false)
           } yield {
-            logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
+            attempt match {
+              case Failure(regrets:RawlsExceptionWithErrorReport) =>
+                val loggedErrors = regrets.errorReport.causes.take(10).map(_.message)
+                logger.warn(s"upsert batch #$idx for jobId ${jobId.toString} contained errors: ${loggedErrors.mkString(", ")}")
+                logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
+              case _ =>
+                logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
+            }
             attempt
           }
       }.pauseWhen(sig)
@@ -371,16 +378,18 @@ class AvroUpsertMonitorActor(
         case Failure(regrets:RawlsExceptionWithErrorReport) => regrets.errorReport.causes
       } flatten
 
+      // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
+      // Cap the failure reports at 100.
+      val failureReportsForCaller = failureReports.take(100)
+
+      val additionalErrorString = if (failureReports.size > failureReportsForCaller.size) {
+        "; only the first 100 errors are shown."
+      } else {
+        "."
+      }
+
       // fail if nothing at all succeeded
       if (numSuccesses == 0) {
-        // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
-        // Cap the failure reports at 100.
-        val failureReportsForCaller = failureReports.take(100)
-        val additionalErrorString = if (failureReports.size > failureReportsForCaller.size) {
-          "; only the first 100 errors are shown."
-        } else {
-          "."
-        }
         throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest,
           s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString",
           failureReportsForCaller))
@@ -389,7 +398,7 @@ class AvroUpsertMonitorActor(
       val elapsed = System.currentTimeMillis() - startTime
       logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted, ${failureReports.size} failed.")
 
-      Future.successful(ImportUpsertResults(numSuccesses, failureReports))
+      Future.successful(ImportUpsertResults(numSuccesses, failureReportsForCaller))
 
     } catch {
       // try/catch for any synchronous exceptions, not covered by a Future.recover(). Potential for retry here, in case of transient failures
