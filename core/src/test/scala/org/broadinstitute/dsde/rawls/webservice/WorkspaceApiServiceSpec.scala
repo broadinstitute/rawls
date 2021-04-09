@@ -1134,7 +1134,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "clone workspace use different bucket location if bucketLocation is in request" in withTestDataApiServices { services =>
     val newBucketLocation = Option("us-terra-1");
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("us-terra-1"))
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("us-terra1"))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
