@@ -256,7 +256,12 @@ class AvroUpsertMonitorActor(
           publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
           toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, workspace, attributes.userEmail)) map {
             case Success(importUpsertResults) =>
-              val msg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
+              val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
+              val baseMsg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
+              val msg = if (importUpsertResults.failures.isEmpty)
+                baseMsg
+              else
+                baseMsg + s" First 100 failures are: $failureMessages"
               publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, Option(msg))
             case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
           }
@@ -358,8 +363,8 @@ class AvroUpsertMonitorActor(
             attempt match {
               case Failure(regrets:RawlsExceptionWithErrorReport) =>
                 // should we log more than the first 10?
-                val loggedErrors = regrets.errorReport.causes.take(10).map(_.message)
-                logger.warn(s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The first 10 errors are: ${loggedErrors.mkString(", ")}")
+                val loggedErrors = stringMessageFromFailures(regrets.errorReport.causes.toList, 100)
+                logger.warn(s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors")
               case _ => // noop; here for completeness of matching
             }
             logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
@@ -411,6 +416,8 @@ class AvroUpsertMonitorActor(
     }
   }
 
+  private def stringMessageFromFailures(errorReports: List[RawlsErrorReport], maxFailures: Int = 100): String =
+    errorReports.take(maxFailures).map(_.message).mkString("; ")
 
   private def acknowledgeMessage(ackId: String) = {
     logger.info(s"acking message with ackId $ackId")
