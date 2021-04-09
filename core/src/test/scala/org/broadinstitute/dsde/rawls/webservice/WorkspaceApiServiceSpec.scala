@@ -18,6 +18,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.model.headers._
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -1131,11 +1132,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
 
-  it should "have an empty owner policy when cloning a workspace with noWorkspaceOwner" in withTestDataApiServicesCustomizableMockSam { services =>
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("us-"))
-    populateBillingProjectPolicies(services)
-    val expectedOwnerPolicyEmail = ""
-
+  it should "clone workspace use different bucket location if bucketLocation is in request" in withTestDataApiServices { services =>
+    val newBucketLocation = Option("us-terra-1");
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("us-terra-1"))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1143,11 +1142,32 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        assertResult(expectedOwnerPolicyEmail) {
-          val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
-          val policiesWithNameAndEmail = Await.result(services.samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, ws.workspaceId, userInfo), Duration.Inf)
-          val actualOwnerPolicyEmail = policiesWithNameAndEmail.find(_.policyName == SamWorkspacePolicyNames.owner).get.email.value
-          actualOwnerPolicyEmail
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          assert(copiedWorkspace.attributes == testData.workspace.attributes)
+
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
+            }
+          }
+          verify(services.gcsDAO).setupWorkspace(
+            any[UserInfo],
+            ArgumentMatchers.eq(testData.workspace.googleProject),
+            any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
+            ArgumentMatchers.eq(testData.workspace.bucketName),
+            any[Map[String, String]], null,
+            newBucketLocation
+          )
+        }
+
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
+          header("Location")
         }
       }
   }

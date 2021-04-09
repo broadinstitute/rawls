@@ -544,7 +544,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           val bucketLocationFuture: Future[Option[String]] = if(destWorkspaceRequest.bucketLocation.isEmpty) (for {
             sourceWorkspaceContext <- getWorkspaceContext(permCtx.toWorkspaceName)
             bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName, Option(GoogleProjectId(destWorkspaceRequest.namespace)))
-          } yield bucketLocation) else withWorkspaceBucketRegionCheck(Future(destWorkspaceRequest.bucketLocation))
+          } yield bucketLocation) else withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {Future(destWorkspaceRequest.bucketLocation)}
 
           bucketLocationFuture flatMap { bucketLocationOption =>
             dataSource.inTransaction({ dataAccess =>
