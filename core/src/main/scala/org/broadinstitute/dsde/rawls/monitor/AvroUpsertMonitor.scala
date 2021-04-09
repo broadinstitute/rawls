@@ -357,12 +357,12 @@ class AvroUpsertMonitorActor(
           } yield {
             attempt match {
               case Failure(regrets:RawlsExceptionWithErrorReport) =>
+                // TODO: should we log more than the first 10?
                 val loggedErrors = regrets.errorReport.causes.take(10).map(_.message)
                 logger.warn(s"upsert batch #$idx for jobId ${jobId.toString} contained errors: ${loggedErrors.mkString(", ")}")
-                logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
-              case _ =>
-                logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
+              case _ => // noop; here for completeness of matching
             }
+            logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
             attempt
           }
       }.pauseWhen(sig)
@@ -381,7 +381,6 @@ class AvroUpsertMonitorActor(
       // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
       // Cap the failure reports at 100.
       val failureReportsForCaller = failureReports.take(100)
-
       val additionalErrorString = if (failureReports.size > failureReportsForCaller.size) {
         "; only the first 100 errors are shown."
       } else {
@@ -396,9 +395,11 @@ class AvroUpsertMonitorActor(
       }
 
       val elapsed = System.currentTimeMillis() - startTime
-      logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted, ${failureReports.size} failed.")
+      logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted," +
+        s" ${failureReports.size} failed$additionalErrorString Errors: ${failureReportsForCaller.map(_.message).mkString(", ")}")
 
-      Future.successful(ImportUpsertResults(numSuccesses, failureReportsForCaller))
+      //
+      Future.successful(ImportUpsertResults(numSuccesses, failureReports))
 
     } catch {
       // try/catch for any synchronous exceptions, not covered by a Future.recover(). Potential for retry here, in case of transient failures
