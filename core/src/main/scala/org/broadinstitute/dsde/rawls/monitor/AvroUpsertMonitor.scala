@@ -362,7 +362,6 @@ class AvroUpsertMonitorActor(
           } yield {
             attempt match {
               case Failure(regrets:RawlsExceptionWithErrorReport) =>
-                // should we log more than the first 10?
                 val loggedErrors = stringMessageFromFailures(regrets.errorReport.causes.toList, 100)
                 logger.warn(s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors")
               case _ => // noop; here for completeness of matching
@@ -403,7 +402,6 @@ class AvroUpsertMonitorActor(
       logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted," +
         s" ${failureReports.size} failed$additionalErrorString Errors: ${failureReportsForCaller.map(_.message).mkString(", ")}")
 
-      //
       Future.successful(ImportUpsertResults(numSuccesses, failureReports))
 
     } catch {
