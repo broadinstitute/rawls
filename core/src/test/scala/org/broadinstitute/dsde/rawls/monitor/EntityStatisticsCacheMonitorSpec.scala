@@ -47,6 +47,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
       override val dataSource: SlickDataSource = slickDataSource
       override implicit val executionContext: ExecutionContext = defaultExecutionContext
       override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
+      override val workspaceCooldown: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.workspaceCooldown"))
     }
 
     //Scenario: there is one workspace in the test data set used for this test. The first sweep should return Sweep,
@@ -65,6 +66,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
       override val dataSource: SlickDataSource = slickDataSource
       override implicit val executionContext: ExecutionContext = defaultExecutionContext
       override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
+      override val workspaceCooldown: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.workspaceCooldown"))
     }
 
     //Scenario: there is one workspace in the test data set used for this test. The first time we sweep,
@@ -79,6 +81,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
       override val dataSource: SlickDataSource = slickDataSource
       override implicit val executionContext: ExecutionContext = defaultExecutionContext
       override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
+      override val workspaceCooldown: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.workspaceCooldown"))
     }
 
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
@@ -113,6 +116,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
       override val dataSource: SlickDataSource = slickDataSource
       override implicit val executionContext: ExecutionContext = defaultExecutionContext
       override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
+      override val workspaceCooldown: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.workspaceCooldown"))
     }
 
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
