@@ -1130,8 +1130,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "clone a workspace with bucketLocation" in withTestDataApiServices { services =>
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("user-location-2"))
+
+  it should "have an empty owner policy when cloning a workspace with noWorkspaceOwner" in withTestDataApiServicesCustomizableMockSam { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("us-"))
+    populateBillingProjectPolicies(services)
+    val expectedOwnerPolicyEmail = ""
+
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1139,25 +1143,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
-          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
-
-          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
-            //Name, namespace, creation date, and owner might change, so this is all that remains.
-            assertResult(runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSet) {
-              runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext)).toSet
-            }
-            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
-              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
-            }
-            assertResult(copiedWorkspace.bucketName)
-          }
+        assertResult(expectedOwnerPolicyEmail) {
+          val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          val policiesWithNameAndEmail = Await.result(services.samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, ws.workspaceId, userInfo), Duration.Inf)
+          val actualOwnerPolicyEmail = policiesWithNameAndEmail.find(_.policyName == SamWorkspacePolicyNames.owner).get.email.value
+          actualOwnerPolicyEmail
         }
+      }
+  }
 
-        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
-          header("Location")
-        }
+  it should "return 400 if the cloned bucket location requested is in an invalid format" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("US"))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        val errorText = responseAs[ErrorReport].message
+        assert(status == StatusCodes.BadRequest)
+        assert(errorText.contains("Workspace bucket location must be a single (not multi-) region of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
       }
   }
 
