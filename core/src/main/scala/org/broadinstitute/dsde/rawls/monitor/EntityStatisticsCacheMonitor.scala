@@ -108,7 +108,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
     }
   }
 
-  private def nowMinus(duration: FiniteDuration): Timestamp = {
+  def nowMinus(duration: FiniteDuration): Timestamp = {
     val durationSeconds = duration.toSeconds.toInt
     val nowTime = Calendar.getInstance
     nowTime.add(Calendar.SECOND, durationSeconds * -1)
