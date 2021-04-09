@@ -151,7 +151,7 @@ trait WorkspaceSupport {
         if (region.matches(singleRegionPattern)) op
         else {
           val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = s"Workspace bucket location must be a single " +
-            s"(not multi-) region of format: $singleRegionPattern.")
+            s"(not multi-) region of format: $singleRegionPattern." + "but we got" + bucketRegion)
           throw new RawlsExceptionWithErrorReport(errorReport = err)
         }
       case None => op
