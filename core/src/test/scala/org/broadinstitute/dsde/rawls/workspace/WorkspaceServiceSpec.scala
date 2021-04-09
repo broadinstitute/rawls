@@ -1180,4 +1180,15 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
+//  it should "204 on remove linked service accounts to workspace with read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+//    populateWorkspacePolicies(services)
+//    withWorkspaceContext(testData.workspace) { ctx =>
+//      val cloneRequest: WorkspaceRequest = WorkspaceRequest("namespace", "name", Map(), Option(Set()), Option(String), Option(true), Option("us-local-1"))
+//      val rqComplete = Await.result(services.workspaceService.cloneWorkspace(testData.workspace.toWorkspaceName, cloneRequest), Duration.Inf)
+//      assertResult(RequestComplete(StatusCodes.NoContent)) {
+//        rqComplete
+//      }
+//    }
+//  }
+
 }

@@ -1130,6 +1130,37 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "clone a workspace with bucketLocation" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("user-location-2"))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
+            }
+            assertResult(copiedWorkspace.bucketName)
+          }
+        }
+
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
+          header("Location")
+        }
+      }
+  }
+
   it should "return 200 when requesting an ACL from an existing workspace" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
