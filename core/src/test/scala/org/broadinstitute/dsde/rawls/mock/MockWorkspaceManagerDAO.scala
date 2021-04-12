@@ -76,5 +76,5 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def deleteBigQueryDatasetReference(workspaceId: UUID, resourceId: UUID, accessToken: OAuth2BearerToken): Unit = ()
 
-  override def getBigQueryDatasetReferenceByName(workspaceId: UUID, name: String, accessToken: OAuth2BearerToken): BigQueryDatasetReference = new BigQueryDatasetReference
+  override def getBigQueryDatasetReferenceByName(workspaceId: UUID, name: String, accessToken: OAuth2BearerToken): BigQueryDatasetReference = new BigQueryDatasetReference().metadata(new DataReferenceMetadata().referenceId(UUID.randomUUID())).dataset(new GoogleBigQueryDatasetUid)
 }
