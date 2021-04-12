@@ -17,6 +17,7 @@ import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.model.headers._
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -1147,6 +1148,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "clone workspace use different bucket location if bucketLocation is in request" in withApiServicesMockitoGcsDao { services =>
     val newBucketLocation = Option("us-terra-1");
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("us-terra1"))
+    when(services.gcsDAO.setupWorkspace(any[UserInfo], ArgumentMatchers.eq(testData.workspace.googleProject),
+      any[Map[WorkspaceAccessLevel, WorkbenchEmail]], ArgumentMatchers.eq(testData.workspace.bucketName), any[Map[String, String]], any[Span], ArgumentMatchers.eq(newBucketLocation))).thenReturn(Future.successful(null))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1167,14 +1170,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
             }
           }
-          verify(services.gcsDAO).setupWorkspace(
-            any[UserInfo],
-            ArgumentMatchers.eq(testData.workspace.googleProject),
-            any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
-            ArgumentMatchers.eq(testData.workspace.bucketName),
-            any[Map[String, String]], null,
-            newBucketLocation
-          )
+          verify(services.gcsDAO).setupWorkspace(any[UserInfo], ArgumentMatchers.eq(testData.workspace.googleProject),
+            any[Map[WorkspaceAccessLevel, WorkbenchEmail]], ArgumentMatchers.eq(testData.workspace.bucketName), any[Map[String, String]], any[Span], ArgumentMatchers.eq(newBucketLocation))
         }
 
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
