@@ -151,6 +151,18 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  def withApiServicesMockitoGcsDao[T](testCode: TestApiService => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource => {
+      val apiService = new TestApiService(dataSource, testData.userProjectOwner.userEmail.value, mock[MockGoogleServicesDAO](RETURNS_SMART_NULLS), new MockGooglePubSubDAO)
+      try {
+        testCode(apiService)
+      } finally {
+        apiService.cleanupSupervisor
+      }
+    }
+    }
+  }
+
   class TestWorkspaces() extends TestData {
     val userProjectOwner = RawlsUser(UserInfo(RawlsUserEmail("project-owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543210101")))
     val userOwner = RawlsUser(UserInfo(testData.userOwner.userEmail, OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
@@ -1132,7 +1144,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
 
-  it should "clone workspace use different bucket location if bucketLocation is in request" in withTestDataApiServices { services =>
+  it should "clone workspace use different bucket location if bucketLocation is in request" in withApiServicesMockitoGcsDao { services =>
     val newBucketLocation = Option("us-terra-1");
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("us-terra1"))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
