@@ -1948,7 +1948,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     )
 
     // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
-    policyGroupsToRoles.toList.traverse {case (email, roles) => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
+    policyGroupsToRoles.toList.traverse {case (email, roles) =>
+      googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
   }
 
   private def getGoogleProjectNumber(googleProjectId: GoogleProjectId): Future[GoogleProjectNumber] = {
@@ -2059,7 +2060,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
           // the limit of 2000
           Future.successful(())
-        } else if (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined) {
+        } else if (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined || policyName == SamWorkspacePolicyNames.canCompute) {
           // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
           // granted bucket access (and thus need a google group)
           traceWithParent(s"syncPolicy-${policyName}", s1)(_ => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName))
