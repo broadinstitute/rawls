@@ -12,9 +12,11 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEv
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
-import org.broadinstitute.dsde.rawls.util.{CollectionUtils, EntitySupport}
+import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
+import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -25,7 +27,8 @@ import scala.util.{Failure, Success, Try}
  */
 class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource, cacheEnabled: Boolean)
                          (implicit protected val executionContext: ExecutionContext)
-  extends EntityProvider with LazyLogging with EntitySupport with ExpressionEvaluationSupport {
+  extends EntityProvider with LazyLogging
+    with EntitySupport with AttributeSupport with ExpressionEvaluationSupport {
 
   import dataSource.dataAccess.driver.api._
 
@@ -156,6 +159,68 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     } else {
       EntityQueryResponse(query, EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount), page)
     }
+  }
+
+  def batchUpdateEntitiesInternal(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Traversable[Entity]] = {
+    val namesToCheck = for {
+      update <- entityUpdates
+      operation <- update.operations
+    } yield operation.name
+
+    withAttributeNamespaceCheck(namesToCheck) {
+      dataSource.inTransaction { dataAccess =>
+        val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
+          val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
+          entityUpdates.map { entityUpdate =>
+            entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
+              case Some(e) =>
+                Try(applyOperationsToEntity(e, entityUpdate.operations))
+              case None =>
+                if (upsert) {
+                  Try(applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations))
+                } else {
+                  Failure(new RuntimeException("Entity does not exist"))
+                }
+            })
+          }
+        }
+
+        val saveAction = updateTrialsAction flatMap { updateTrials =>
+          val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
+            ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
+          }
+          if (errorReports.nonEmpty) {
+            DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
+          } else {
+            val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
+
+            dataAccess.entityQuery.save(workspaceContext, t)
+          }
+        }
+
+        saveAction
+      }
+    }
+  }
+
+  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
+    batchUpdateEntitiesInternal(entityUpdates, upsert = false)
+
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
+    batchUpdateEntitiesInternal(entityUpdates, upsert = true)
+
+  // TODO: this tiny method is copied from EntityService; should be DRY
+  /**
+   * Applies the sequence of operations in order to the entity.
+   *
+   * @param entity to update
+   * @param operations sequence of operations
+   * @throws org.broadinstitute.dsde.rawls.workspace.AttributeNotFoundException when removing from a list attribute that does not exist
+   * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
+   * @return the updated entity
+   */
+  def applyOperationsToEntity(entity: Entity, operations: Seq[AttributeUpdateOperation]): Entity = {
+    entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
   }
 
 }

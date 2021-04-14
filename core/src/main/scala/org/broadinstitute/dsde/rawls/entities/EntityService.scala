@@ -180,7 +180,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   }
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean): Future[PerRequestMessage] =
-
     getWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { destWorkspaceContext =>
       getWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { sourceWorkspaceContext =>
         dataSource.inTransaction { dataAccess =>
@@ -201,58 +200,30 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def batchUpdateEntitiesInternal(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean = false): Future[Traversable[Entity]] = {
-    val namesToCheck = for {
-      update <- entityUpdates
-      operation <- update.operations
-    } yield operation.name
-
-    withAttributeNamespaceCheck(namesToCheck) {
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-        dataSource.inTransaction { dataAccess =>
-          val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
-            val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
-            entityUpdates.map { entityUpdate =>
-              entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
-                case Some(e) =>
-                  Try(applyOperationsToEntity(e, entityUpdate.operations))
-                case None =>
-                  if (upsert) {
-                    Try(applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations))
-                  } else {
-                    Failure(new RuntimeException("Entity does not exist"))
-                  }
-              })
-            }
-          }
-
-          val saveAction = updateTrialsAction flatMap { updateTrials =>
-            val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
-              ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
-            }
-            if (!errorReports.isEmpty) {
-              DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
-            } else {
-              val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
-
-              dataAccess.entityQuery.save(workspaceContext, t)
-            }
-          }
-
-          saveAction
-        }
+  def batchUpdateEntitiesInternal(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Traversable[Entity]] =
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+      for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        entities <- if (upsert) {
+                      entityProvider.batchUpdateEntities(entityUpdates)
+                    } else {
+                      entityProvider.batchUpsertEntities(entityUpdates)
+                    }
+      } yield {
+        entities
       }
     }
-  }
 
-  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): Future[PerRequestMessage] = {
-    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false).map(_ => RequestComplete(StatusCodes.NoContent))
-  }
+  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject) map { _ =>
+      PerRequest.RequestComplete(StatusCodes.NoContent)
+    }
 
-  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): Future[PerRequestMessage] = {
-    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true).map(_ => RequestComplete(StatusCodes.NoContent))
-  }
-
+  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject) map { _ =>
+      PerRequest.RequestComplete(StatusCodes.NoContent)
+    }
 
   /**
     * Applies the sequence of operations in order to the entity.

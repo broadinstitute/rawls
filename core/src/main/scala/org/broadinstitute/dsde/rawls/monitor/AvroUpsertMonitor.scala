@@ -333,7 +333,7 @@ class AvroUpsertMonitorActor(
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProject, userEmail)
-          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = true)
+          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = true, None, None)
         } yield {
           upsertResults
         }
