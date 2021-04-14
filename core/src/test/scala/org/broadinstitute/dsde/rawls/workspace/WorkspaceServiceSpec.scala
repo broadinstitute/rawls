@@ -1366,8 +1366,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   }
 
   it should "Update a Google Project name after claiming a project from Resource Buffering Service" in withTestDataServices { services =>
-    val newWorkspaceNamespace = testData.testProject1Name.value
-    val newWorkspaceName = "space_for_workin"
+    val newWorkspaceNamespace = "short_-NS1"
+    val newWorkspaceName = "plus Long_ name to get past 30 chars since the google-project name is truncated at 30 chars and formatted as namespace--name"
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(newWorkspaceNamespace), CreationStatuses.Ready, Option(RawlsBillingAccountName("fakeBillingAcct")), None)
+    runAndWait(rawlsBillingProjectQuery.create(billingProject))
     val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
     val captor = ArgumentCaptor.forClass(classOf[Project])
 
@@ -1376,15 +1378,16 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
     val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
 
-    val expectedProjectName = "arbitrary--space-for-workin"
+    val expectedProjectName = "short--NS1--plus Long- name to"
     val actualProjectName = capturedProject.getName
-
     actualProjectName shouldBe expectedProjectName
   }
 
   it should "Apply labels to a Google Project after claiming a project from Resource Buffering Service" in withTestDataServices { services =>
-    val newWorkspaceNamespace = testData.testProject1Name.value
-    val newWorkspaceName = "space_for_workin"
+    val newWorkspaceNamespace = "Long_Namespace---30-char-limit"
+    val newWorkspaceName = "Plus Long_ name to get past 63 chars since the labels are truncated at 63 chars"
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(newWorkspaceNamespace), CreationStatuses.Ready, Option(RawlsBillingAccountName("fakeBillingAcct")), None)
+    runAndWait(rawlsBillingProjectQuery.create(billingProject))
     val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
     val captor = ArgumentCaptor.forClass(classOf[Project])
 
@@ -1393,8 +1396,11 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
     val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
 
-    val expectedNewLabels = services.gcsDAO.labelSafeMap(Map("workspaceNamespace" -> newWorkspaceNamespace, "workspaceName" -> newWorkspaceName, "workspaceId" -> workspace.workspaceId), "")
-    val expectedLabelSize = 6
+    val expectedNewLabels = Map("workspacenamespace" -> "long_namespace---30-char-limit",
+      "workspacename" -> "plus-long_-name-to-get-past-63-chars-since-the-labels-are-trunc",
+      "workspaceid" -> workspace.workspaceId)
+    val numberOfLabelsFromBuffer = 3
+    val expectedLabelSize = numberOfLabelsFromBuffer + expectedNewLabels.size
     val actualLabels = capturedProject.getLabels.asScala
 
     actualLabels.size shouldBe expectedLabelSize
