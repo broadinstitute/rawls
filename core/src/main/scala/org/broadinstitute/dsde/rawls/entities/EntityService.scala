@@ -206,11 +206,11 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
       for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        entities <- if (upsert) {
-                      entityProvider.batchUpsertEntities(entityUpdates)
-                    } else {
-                      entityProvider.batchUpdateEntities(entityUpdates)
-                    }
+        entities       <- if (upsert) {
+                            entityProvider.batchUpsertEntities(entityUpdates)
+                          } else {
+                            entityProvider.batchUpdateEntities(entityUpdates)
+                          }
       } yield {
         entities
       }
@@ -223,19 +223,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
     batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject).map (_ =>
       RequestComplete(StatusCodes.NoContent))
-
-  /**
-    * Applies the sequence of operations in order to the entity.
-    *
-    * @param entity to update
-    * @param operations sequence of operations
-    * @throws org.broadinstitute.dsde.rawls.workspace.AttributeNotFoundException when removing from a list attribute that does not exist
-    * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
-    * @return the updated entity
-    */
-  def applyOperationsToEntity(entity: Entity, operations: Seq[AttributeUpdateOperation]): Entity = {
-    entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
-  }
 
   private def bigQueryRecover: PartialFunction[Throwable, PerRequestMessage] = {
     case dee:DataEntityException =>
