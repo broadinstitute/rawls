@@ -83,3 +83,11 @@ VAULT_TOKEN=$(cat ~/.vault-token) ARTIFACTORY_USERNAME=dsdejenkins ARTIFACTORY_P
 You can view what is in the artifactory here: https://broadinstitute.jfrog.io/broadinstitute/webapp/#/home
 
 After publishing, update [model/CHANGELOG.md](model/CHANGELOG.md) properly.
+
+
+## Troubleshooting
+
+If you get this error message: `java.lang.IllegalArgumentException: invalid flag: --release`:
+* Run `java -version` and verify that you're running jdk11. If not, you will need to install / update your PATH.
+
+For integration test issues, see [automation/README.md](automation/README.md).
