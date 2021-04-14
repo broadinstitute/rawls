@@ -206,9 +206,9 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         entities <- if (upsert) {
-                      entityProvider.batchUpdateEntities(entityUpdates)
-                    } else {
                       entityProvider.batchUpsertEntities(entityUpdates)
+                    } else {
+                      entityProvider.batchUpdateEntities(entityUpdates)
                     }
       } yield {
         entities
