@@ -161,7 +161,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  def batchUpdateEntitiesInternal(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Traversable[Entity]] = {
+  def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Traversable[Entity]] = {
     val namesToCheck = for {
       update <- entityUpdates
       operation <- update.operations
@@ -204,10 +204,10 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   }
 
   override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
-    batchUpdateEntitiesInternal(entityUpdates, upsert = false)
+    batchUpdateEntitiesImpl(entityUpdates, upsert = false)
 
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
-    batchUpdateEntitiesInternal(entityUpdates, upsert = true)
+    batchUpdateEntitiesImpl(entityUpdates, upsert = true)
 
   // TODO: this tiny method is copied from EntityService; should be DRY
   /**

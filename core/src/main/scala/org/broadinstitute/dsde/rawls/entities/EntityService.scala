@@ -180,6 +180,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   }
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean): Future[PerRequestMessage] =
+
     getWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { destWorkspaceContext =>
       getWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { sourceWorkspaceContext =>
         dataSource.inTransaction { dataAccess =>
@@ -216,14 +217,12 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
-    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject) map { _ =>
-      PerRequest.RequestComplete(StatusCodes.NoContent)
-    }
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject).map (_ =>
+      RequestComplete(StatusCodes.NoContent))
 
   def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
-    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject) map { _ =>
-      PerRequest.RequestComplete(StatusCodes.NoContent)
-    }
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject).map (_ =>
+      RequestComplete(StatusCodes.NoContent))
 
   /**
     * Applies the sequence of operations in order to the entity.

@@ -404,7 +404,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
 
   override def expressionValidator: ExpressionValidator = new DataRepoEntityExpressionValidator(snapshotModel)
 
-  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = ???
+  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
+    throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = ???
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
+    throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
 }
