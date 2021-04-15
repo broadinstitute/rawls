@@ -1179,5 +1179,4 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       }
     }
   }
-
 }

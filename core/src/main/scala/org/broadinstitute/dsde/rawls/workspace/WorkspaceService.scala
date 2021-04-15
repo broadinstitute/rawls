@@ -539,11 +539,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withAttributeNamespaceCheck(workspaceAttributeNames) {
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
         getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
+          // if bucket location does not exist in request, use the same location as source workspace. Otherwise use the one from request
           // if the source bucket is a regional bucket, retrieve the region as the destination bucket also needs to be created in the same region
-          val bucketLocationFuture: Future[Option[String]] = for {
+          val bucketLocationFuture: Future[Option[String]] = if(destWorkspaceRequest.bucketLocation.isEmpty) (for {
             sourceWorkspaceContext <- getWorkspaceContext(permCtx.toWorkspaceName)
             bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName, Option(GoogleProjectId(destWorkspaceRequest.namespace)))
-          } yield bucketLocation
+          } yield bucketLocation) else withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {Future(destWorkspaceRequest.bucketLocation)}
 
           bucketLocationFuture flatMap { bucketLocationOption =>
             dataSource.inTransaction({ dataAccess =>
