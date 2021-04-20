@@ -122,9 +122,12 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
 
       val datasetName = generateDatasetName(snapshotRef.getReferenceId)
-      val datasetRef = workspaceManagerDAO.getBigQueryDatasetReferenceByName(workspaceContext.workspaceIdAsUUID, datasetName, userInfo.accessToken)
-      workspaceManagerDAO.deleteBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, datasetRef.getMetadata.getReferenceId, userInfo.accessToken)
-      deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture()
+      deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture().map { _ =>
+        val datasetRef = workspaceManagerDAO.getBigQueryDatasetReferenceByName(workspaceContext.workspaceIdAsUUID, datasetName, userInfo.accessToken)
+        workspaceManagerDAO.deleteBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, datasetRef.getMetadata.getReferenceId, userInfo.accessToken)
+      }.recover {
+        case t: Throwable => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Your snapshot reference was deleted, but an error occurred while deleting its Delta Layer companion dataset. Error: ${t.getMessage}"))
+      }
     }
   }
 
