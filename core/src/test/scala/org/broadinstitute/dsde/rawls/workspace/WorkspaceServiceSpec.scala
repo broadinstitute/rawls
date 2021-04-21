@@ -36,7 +36,7 @@ import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, Moc
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
-import org.mockito.{ArgumentMatchers, Mockito}
+import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -45,6 +45,7 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.CollectionConverters.mapAsScalaMapConverter
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -1362,6 +1363,48 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
     verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+  }
+
+  it should "Update a Google Project name after claiming a project from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceNamespace = "short_-NS1"
+    val newWorkspaceName = "plus Long_ name to get past 30 chars since the google-project name is truncated at 30 chars and formatted as namespace--name"
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(newWorkspaceNamespace), CreationStatuses.Ready, Option(RawlsBillingAccountName("fakeBillingAcct")), None)
+    runAndWait(rawlsBillingProjectQuery.create(billingProject))
+    val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
+    val captor = ArgumentCaptor.forClass(classOf[Project])
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
+    val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
+
+    val expectedProjectName = "short--NS1--plus Long- name to"
+    val actualProjectName = capturedProject.getName
+    actualProjectName shouldBe expectedProjectName
+  }
+
+  it should "Apply labels to a Google Project after claiming a project from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceNamespace = "Long_Namespace---30-char-limit"
+    val newWorkspaceName = "Plus Long_ name to get past 63 chars since the labels are truncated at 63 chars"
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(newWorkspaceNamespace), CreationStatuses.Ready, Option(RawlsBillingAccountName("fakeBillingAcct")), None)
+    runAndWait(rawlsBillingProjectQuery.create(billingProject))
+    val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
+    val captor = ArgumentCaptor.forClass(classOf[Project])
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
+    val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
+
+    val expectedNewLabels = Map("workspacenamespace" -> "long_namespace---30-char-limit",
+      "workspacename" -> "plus-long_-name-to-get-past-63-chars-since-the-labels-are-trunc",
+      "workspaceid" -> workspace.workspaceId)
+    val numberOfLabelsFromBuffer = 3
+    val expectedLabelSize = numberOfLabelsFromBuffer + expectedNewLabels.size
+    val actualLabels = capturedProject.getLabels.asScala
+
+    actualLabels.size shouldBe expectedLabelSize
+    actualLabels should contain allElementsOf expectedNewLabels
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
