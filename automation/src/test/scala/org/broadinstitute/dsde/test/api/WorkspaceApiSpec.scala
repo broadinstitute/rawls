@@ -48,6 +48,41 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
   "Rawls" - {
+
+    "should set labels on the underlying Google Project when creating a new Workspace" in {
+      val owner: Credentials = UserPool.chooseProjectOwner
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
+      val billingProjectName = s"workspaceapi-labels-${makeRandomId()}" // lowercase and hyphens due to google's label and display name requirements
+      Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
+      val workspaceName = prependUUID("rbs-project-labels-test")
+
+      implicit val ec: ExecutionContext = ExecutionContext.global
+      val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
+      val jsonCreds = try source.mkString finally source.close()
+      val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
+
+      Rawls.workspaces.create(billingProjectName, workspaceName)
+      val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+      createdWorkspaceResponse.workspace.name should be(workspaceName)
+      val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
+
+      // verify display name (starts with namespace, ends with name, limited to 30 chars)
+      val maybeDisplayName = googleProjectDao.getProjectName(createdWorkspaceGoogleProject.value).futureValue
+      maybeDisplayName.getOrElse("") should startWith(createdWorkspaceResponse.workspace.namespace)
+
+      // verify labels exist and that we didn't accidentally forget the buffer labels
+      val bufferLabels = Map("vpc-network-name" -> "network", "vpc-subnetwork-name" -> "subnetwork")
+      val rawlsLabels = Map("workspacenamespace" -> createdWorkspaceResponse.workspace.namespace,
+        "workspaceid" -> createdWorkspaceResponse.workspace.workspaceId,
+        "workspacename" -> createdWorkspaceResponse.workspace.name)
+      val labels = googleProjectDao.getLabels(createdWorkspaceGoogleProject.value).futureValue
+      labels should contain allElementsOf bufferLabels
+      labels should contain allElementsOf rawlsLabels
+
+      Rawls.workspaces.delete(billingProjectName, workspaceName)
+      Rawls.billingV2.deleteBillingProject(billingProjectName)
+    }
+
     "should allow project owners" - {
       "to create, clone, and delete workspaces" in {
         implicit val token: AuthToken = ownerAuthToken
@@ -80,7 +115,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         implicit val ec: ExecutionContext = ExecutionContext.global
         val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
         val jsonCreds = try source.mkString finally source.close()
-        val googleProjectDao = new HttpGoogleProjectDAO("appName", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
+        val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
 
         Rawls.workspaces.create(billingProjectName, workspaceName)
         val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))

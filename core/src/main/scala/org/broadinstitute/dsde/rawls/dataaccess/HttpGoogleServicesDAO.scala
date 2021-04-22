@@ -68,7 +68,6 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
 import scala.io.Source
 import scala.util.matching.Regex
-
 import io.opencensus.scala.Tracing._
 
 case class Resources (
@@ -825,9 +824,8 @@ class HttpGoogleServicesDAO(
 
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
-    val credential = getDeploymentManagerAccountCredential
 
-    val cloudResManager = getCloudResourceManager(credential)
+    val cloudResManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
     retryWhen500orGoogleError(() => {
       executeGoogleRequest(cloudResManager.projects().get(googleProject.value))
@@ -971,13 +969,13 @@ class HttpGoogleServicesDAO(
     * 3) if updated policies are the same as existing policies return false, don't call google
     * 4) if updated policies are different than existing policies update google and return true
     *
-    * @param googleProject google project name
+    * @param googleProject google project id
     * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
     *                       which will be handled appropriately when sent to google.
     * @return true if google was called to update policies, false otherwise
     */
   override protected def updatePolicyBindings(googleProject: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
-    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
+    val cloudResManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
     for {
@@ -1013,7 +1011,7 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Billing
     val billingServiceAccountCredential = getBillingServiceAccountCredential
 
-    val resMgr = getCloudResourceManager(billingServiceAccountCredential)
+    val resMgr = getCloudResourceManagerWithCloudResourceManagerServiceAccount
     val billingManager = getCloudBillingManager(billingServiceAccountCredential)
 
     for {
@@ -1031,20 +1029,31 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  /**
+    * Updates the project specified by the googleProjectId with any values in googleProjectWithUpdates.
+    * @param googleProjectId project to update
+    * @param googleProjectWithUpdates [[Project]] with values to update. For example, a (new Project().setName("ex")) will update the name of the googleProjectId project.
+    * @return the project passed in as googleProjectWithUpdates
+    */
+  override def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project] = {
+    implicit val service = GoogleInstrumentedService.CloudResourceManager
+    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
+
+    executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProjectId.value, googleProjectWithUpdates)).map(project => project)
+  }
+
   override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]= {
     implicit val service = GoogleInstrumentedService.Billing
-    val cloudResourceManagerServiceAccountCredential = getCloudResourceManagerServiceAccountCredential
     val billingServiceAccountCredential = getBillingServiceAccountCredential
-
-    val resMgr = getCloudResourceManager(cloudResourceManagerServiceAccountCredential)
     val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
     for {
       _ <- retryWhen500orGoogleError(() => {
         executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${googleProject.value}", new ProjectBillingInfo().setBillingEnabled(false)))
       })
       _ <- retryWithRecoverWhen500orGoogleError(() => {
-        executeGoogleRequest(resMgr.projects().delete(googleProject.value))
+        executeGoogleRequest(cloudResourceManager.projects().delete(googleProject.value))
       }) {
         case e: GoogleJsonResponseException if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) => new Empty()
         // stop trying to delete an already deleted project
@@ -1109,6 +1118,12 @@ class HttpGoogleServicesDAO(
 
   def getGroupDirectory = {
     new Directory.Builder(httpTransport, jsonFactory, getGroupServiceAccountCredential).setApplicationName(appName).build()
+  }
+
+  private def getCloudResourceManagerWithCloudResourceManagerServiceAccount = {
+    val cloudResourceManagerServiceAccountCredential = getCloudResourceManagerServiceAccountCredential
+    val cloudResourceManager = getCloudResourceManager(cloudResourceManagerServiceAccountCredential)
+    cloudResourceManager
   }
 
   private def getUserCredential(userInfo: UserInfo): Credential = {
@@ -1258,7 +1273,7 @@ class HttpGoogleServicesDAO(
 
   override def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
-    val cloudResourceManager = getCloudResourceManager(getBillingServiceAccountCredential)
+    val cloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
     retryWhen500orGoogleError( () => {
       val existingProject = executeGoogleRequest(cloudResourceManager.projects().get(googleProject.value))

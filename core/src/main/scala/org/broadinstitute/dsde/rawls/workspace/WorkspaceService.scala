@@ -9,6 +9,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
+import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
@@ -55,6 +56,7 @@ import spray.json._
 
 import scala.language.postfixOps
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters.{mapAsJavaMapConverter, mapAsScalaMapConverter}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -1916,6 +1918,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                                   billingProject: RawlsBillingProject,
                                   billingAccount: RawlsBillingAccountName,
                                   workspaceId: String,
+                                  workspaceName: WorkspaceName,
                                   policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                                   billingProjectOwnerPolicyEmail: WorkbenchEmail,
                                   span: Span = null) = {
@@ -1927,7 +1930,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
-      googleProjectNumber <- traceWithParent("getProjectNumberFromGoogle", span)(_ => getGoogleProjectNumber(googleProjectId))
+      googleProjectLabels = gcsDAO.labelSafeMap(Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId), "")
+      googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
+      googleProject <- traceWithParent("setUpProjectInCloudResourceManager", span)(_ => setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName))
+      googleProjectNumber = gcsDAO.getGoogleProjectNumber(googleProject)
       _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
       _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail))
     } yield (googleProjectId, googleProjectNumber)
@@ -1952,12 +1958,26 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
   }
 
-  private def getGoogleProjectNumber(googleProjectId: GoogleProjectId): Future[GoogleProjectNumber] = {
-    gcsDAO.getGoogleProject(googleProjectId).map { p => Option(p.getProjectNumber) match {
-        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProjectId}"))
-        case Some(longProjectNumber) => GoogleProjectNumber(longProjectNumber.toString)
+  /**
+    * Update google project with the labels and google project name to reduce the number of calls made to google so we can avoid quota issues
+    * @param googleProjectId
+    * @param newLabels Make sure labels are google-safe by running gcsDAO.labelSafeMap()
+    * @param googleProjectName Make sure the project name is google-safe by running gcsDAO.googleProjectNameSafeString()
+    * @return
+    */
+  private def setUpProjectInCloudResourceManager(googleProjectId: GoogleProjectId, newLabels: Map[String, String], googleProjectName: String): Future[Project] = {
+    for {
+      googleProject <- gcsDAO.getGoogleProject(googleProjectId)
+
+      // RBS projects already come with some labels. In order to not lose those, we need to combine those existing labels with the new labels
+      existingLabels = googleProject.getLabels match {
+        case null => Map.empty
+        case map => map.asScala
       }
-    }
+      combinedLabels = existingLabels ++ newLabels
+
+      updatedProject <- gcsDAO.updateGoogleProject(googleProjectId, googleProject.setName(googleProjectName).setLabels(combinedLabels.asJava))
+    } yield (updatedProject)
   }
 
   /**
@@ -2126,6 +2146,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               case Some(ba) if !billingProject.invalidBillingAccount => ba
               case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Billing Account is missing or invalid for Billing Project: ${billingProject}"))
             }
+            val workspaceName = WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)
             // add the workspace id to the span so we can find and correlate it later with other services
             parentSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
 
@@ -2134,6 +2155,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email)))
               resource <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
               policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
+              (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
+                  setupGoogleProject(billingProject, billingAccount, workspaceId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
+              savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
+                  createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
               _ <- DBIO.from({
                 // declare these next two Futures so they start in parallel
                 val createWorkflowCollectionFuture = traceWithParent("createWorkflowCollectionForWorkspace", parentSpan)(span => (createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, span)))
@@ -2143,9 +2168,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   _ <- syncPoliciesFuture
                 } yield()})
               (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
-                  setupGoogleProject(billingProject, billingAccount, workspaceId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
+                setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
-                  createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
+                createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
               // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
               _ <- traceDBIOWithParent("createResourceFull (google project)", parentSpan)(_ => DBIO.from(
                   samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))

@@ -70,3 +70,14 @@ sbt "testOnly *GoogleSpec -- -z \"have a search field\""
 
 For more information see [SBT's documentation](http://www.scala-sbt.org/0.13/docs/Testing.html#Test+Framework+Arguments).
 
+
+### Hotswapping Rawls jar in your fiab
+
+To avoid the lengthy cycle of updating your fiab via fiab-stop and fiab-start, 
+you can instead run the [automation/hotswap.sh](hotswap.sh) script from the repo's root folder. 
+
+### Troubleshooting
+
+If you see an error like this:
+* ```javax.net.ssl.SSLHandshakeException: PKIX path building failed: sun.security.provider.certpath.SunCertPathBuilderException: unable to find valid certification path to requested target```
+  * Then check to make sure that your test config does not include `enableSNIExtension`. This flag is no longer needed.

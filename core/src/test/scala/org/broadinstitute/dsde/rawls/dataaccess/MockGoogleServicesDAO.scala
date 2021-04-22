@@ -21,6 +21,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters.mapAsJavaMapConverter
 import scala.util.Random
 
 class MockGoogleServicesDAO(groupsPrefix: String,
@@ -117,7 +118,12 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def getAccessTokenUsingJson(saKey: String): Future[String] = Future.successful("token")
   override def getUserInfoUsingJson(saKey: String): Future[UserInfo] = Future.successful(UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000")))
 
-  override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] = Future.successful(new Project().setProjectNumber(Random.nextLong()))
+  val mockLabelsFromRbs = Map(
+    "vpc-network-name" -> "value for vpc-network-name",
+    "vpc-subnetwork-name" -> "value for vpc-subnetwork-name",
+    "buffer-config-name" -> "value for buffer-config-name"
+  )
+  override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] = Future.successful(new Project().setProjectNumber(Random.nextLong()).setLabels(mockLabelsFromRbs.asJava))
 
   override def deleteBucket(bucketName: String) = Future.successful(true)
 
@@ -227,6 +233,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
     Future.successful(OperationStatus(true, None))
   }
+
+
+  override def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project] = Future.successful((googleProjectWithUpdates))
 
   override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
 
