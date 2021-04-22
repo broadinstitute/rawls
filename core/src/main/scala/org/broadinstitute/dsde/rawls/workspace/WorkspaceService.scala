@@ -2155,10 +2155,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email)))
               resource <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
               policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
-              (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
-                  setupGoogleProject(billingProject, billingAccount, workspaceId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
-              savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
-                  createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
               _ <- DBIO.from({
                 // declare these next two Futures so they start in parallel
                 val createWorkflowCollectionFuture = traceWithParent("createWorkflowCollectionForWorkspace", parentSpan)(span => (createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, span)))
