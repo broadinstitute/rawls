@@ -42,7 +42,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val dataRepoReference = new DataRepoSnapshot().instanceName(terraDataRepoInstanceName).snapshot(snapshot.snapshotId)
       val snapshotRef = workspaceManagerDAO.createDataReference(workspaceContext.workspaceIdAsUUID, snapshot.name, snapshot.description, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, dataRepoReference, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
-      val datasetName = "deltalayer_" + snapshotRef.getReferenceId.toString.replace('-', '_')
+      val datasetName = generateDatasetName(snapshotRef.getReferenceId)
 
       val datasetLabels = Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_id" -> snapshot.snapshotId)
 
@@ -118,8 +118,18 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       // check that snapshot exists before deleting it. If the snapshot does not exist, the GET attempt will throw a 404
-      workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
+      val snapshotRef = workspaceManagerDAO.getDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
       workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
+
+      val datasetName = generateDatasetName(snapshotRef.getReferenceId)
+      deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture().map { _ =>
+        val datasetRef = workspaceManagerDAO.getBigQueryDatasetReferenceByName(workspaceContext.workspaceIdAsUUID, datasetName, userInfo.accessToken)
+        workspaceManagerDAO.deleteBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, datasetRef.getMetadata.getReferenceId, userInfo.accessToken)
+      }.recover {
+        case t: Throwable =>
+          logger.warn(s"A snapshot reference was deleted, but an error occurred while deleting its Delta Layer companion dataset: snapshot ref ID: ${snapshotRef.getReferenceId}, dataset name: ${datasetName}")
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Your snapshot reference was deleted, but an error occurred while deleting its Delta Layer companion dataset. Error: ${t.getMessage}"))
+      }
     }
   }
 
@@ -154,5 +164,9 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
     defaultIamRoles + samAclBindings
   }
+
+  private[snapshot] def generateDatasetName(datasetReferenceId: UUID) = {
+    "deltalayer_" + datasetReferenceId.toString.replace('-', '_')
+}
 
 }
