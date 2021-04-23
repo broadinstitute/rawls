@@ -9,6 +9,7 @@ import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, Quer
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
+import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base._
@@ -30,6 +31,7 @@ import scala.util.{Failure, Success, Try}
 
 class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: EntityRequestArguments,
                              samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory,
+                             deltaLayerWriter: DeltaLayerWriter,
                              config: DataRepoEntityProviderConfig)
                             (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with DataRepoBigQuerySupport with LazyLogging with ExpressionEvaluationSupport {

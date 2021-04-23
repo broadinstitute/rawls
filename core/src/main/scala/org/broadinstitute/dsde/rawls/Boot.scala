@@ -24,6 +24,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceMa
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
+import org.broadinstitute.dsde.rawls.deltalayer.GcsDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -42,7 +43,7 @@ import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.util.ExecutionContexts
 import org.http4s.Uri
 import org.http4s.client.blaze.BlazeClientBuilder
@@ -353,7 +354,14 @@ object Boot extends IOApp with LazyLogging {
       val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
       // create the entity manager.
-      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO, appDependencies.bigQueryServiceFactory, DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")), conf.getBoolean("entityStatisticsCache.enabled"))
+
+      val dataRepoEntityProviderConf = conf.getConfig("dataRepoEntityProvider")
+      val deltaLayerWriter = new GcsDeltaLayerWriter(appDependencies.googleStorageService,
+        GcsBucketName(dataRepoEntityProviderConf.getString("deltaLayerSourceBucket")))
+      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
+        appDependencies.bigQueryServiceFactory, deltaLayerWriter,
+        DataRepoEntityProviderConfig(dataRepoEntityProviderConf),
+        conf.getBoolean("entityStatisticsCache.enabled"))
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
