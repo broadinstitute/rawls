@@ -354,13 +354,11 @@ object Boot extends IOApp with LazyLogging {
       val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
       // create the entity manager.
-
-      val dataRepoEntityProviderConf = conf.getConfig("dataRepoEntityProvider")
       val deltaLayerWriter = new GcsDeltaLayerWriter(appDependencies.googleStorageService,
-        GcsBucketName(dataRepoEntityProviderConf.getString("deltaLayerSourceBucket")))
+        GcsBucketName(conf.getString("deltaLayer.deltaLayerSourceBucket")))
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
         appDependencies.bigQueryServiceFactory, deltaLayerWriter,
-        DataRepoEntityProviderConfig(dataRepoEntityProviderConf),
+        DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
         conf.getBoolean("entityStatisticsCache.enabled"))
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
