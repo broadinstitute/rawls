@@ -1447,6 +1447,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // the arguments passed to it so that we can verify that they were correct
     verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture)
     servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
+
+    // verify that we set the folder for the perimeter
+    verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProjectId), any[String])
   }
 
   "cloneWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
@@ -1624,5 +1627,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // the arguments passed to it so that we can verify that they were correct
     verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture)
     servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
+
+    // verify that we set the folder for the perimeter
+    verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProjectId), any[String])
   }
 }

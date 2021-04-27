@@ -649,8 +649,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       }
 
       // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
-      folderId <- lookupFolderIdFromServicePerimeterName(servicePerimeterName)
-      _ <- gcsDAO.addProjectToFolder(billingProject.googleProjectId, folderId)
+      _ <- moveGoogleProjectToServicePerimeterFolder(servicePerimeterName, billingProject.googleProjectId)
 
       googleProjectNumber <- billingProject.googleProjectNumber match {
         case Some(existingGoogleProjectNumber) => Future.successful(existingGoogleProjectNumber)
@@ -671,6 +670,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       _ <- servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName)
     } yield RequestComplete(StatusCodes.NoContent)
+  }
+
+  def moveGoogleProjectToServicePerimeterFolder(servicePerimeterName: ServicePerimeterName, googleProjectId: GoogleProjectId): Future[Unit] = {
+    for {
+      folderId <- lookupFolderIdFromServicePerimeterName(servicePerimeterName)
+      _ <- gcsDAO.addProjectToFolder(googleProjectId, folderId)
+    } yield ()
   }
 }
 
