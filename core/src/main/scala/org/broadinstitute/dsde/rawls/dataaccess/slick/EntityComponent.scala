@@ -435,6 +435,9 @@ trait EntityComponent {
 
     // create or replace entities
 
+    // TODO: can this be optimized? It nicely reuses the save(..., entities) method, but that method
+    // does a lot of work. This single-entity save could, for instance, look for simple cases e.g. no references,
+    // and take an easier code path.
     def save(workspaceContext: Workspace, entity: Entity): ReadWriteAction[Entity] = {
       save(workspaceContext, Seq(entity)).map(_.head)
     }
@@ -533,7 +536,7 @@ trait EntityComponent {
 
           val totalDeleteIds = deleteIds ++ extraDeleteIds
 
-          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, totalDeleteIds, entityAttributeScratchQuery.insertScratchAttributes)
+          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, totalDeleteIds, entityAttributeTempQuery.insertScratchAttributes)
         }
       }
     }
@@ -603,7 +606,7 @@ trait EntityComponent {
       } yield attributeRec
 
       entityAttributeQuery.findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
-        entityAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeScratchQuery.insertScratchAttributes)
+        entityAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes)
       }
     }
 

@@ -68,7 +68,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-        dataSource.inTransaction { dataAccess =>
+        dataSource.inTransactionWithAttrTempTable { dataAccess =>
           withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
             val updateAction = Try {
               val updatedEntity = applyOperationsToEntity(entity, operations)

@@ -313,7 +313,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     // and will be re-processed next time we call queryForWorkflowStatus().
     // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
     // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
-    datasource.inTransaction { dataAccess =>
+    datasource.inTransactionWithAttrTempTable { dataAccess =>
       handleOutputs(workflowsWithOutputs, dataAccess)
     } recoverWith {
       // If there is something fatally wrong handling outputs, mark the workflows as failed
