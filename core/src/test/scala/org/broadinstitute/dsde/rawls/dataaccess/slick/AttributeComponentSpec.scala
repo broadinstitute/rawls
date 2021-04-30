@@ -1,15 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.joda.time.DateTime
 import spray.json.{JsObject, JsString}
 
-import scala.concurrent.Await
+import java.util.concurrent.Executors
+import scala.collection.concurrent.TrieMap
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.util.{Failure, Success}
 
 /**
  * Created by dvoet on 2/9/16.
@@ -373,50 +375,110 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
-  it should "extra data in entity attribute temp table should not mess things up" in withEmptyTestDatabase {
-    val workspaceId: UUID = UUID.randomUUID()
-    val workspace = Workspace(
-      "test_namespace",
-      "test_name",
-      workspaceId.toString,
-      "bucketname",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "me",
-      Map.empty,
-      false)
+  List(8, 17, 32, 65, 128, 257) foreach { parallelism =>
+    it should s"handle $parallelism simultaneous writes to their own entity attribute temp tables" in withEmptyTestDatabase {
 
-    val entity = Entity("e", "et", Map(
-      AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
-      AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
-      AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)))
+      var threadIds: TrieMap[String, Long] = TrieMap.empty
 
-    val updatedEntity = entity.copy(attributes = Map(AttributeName.withDefaultNS("attributeString") -> AttributeString(UUID.randomUUID().toString)))
+      // we test saving entities across two workspaces, which we'll call "odd" and "even"
+      val workspaceIdOdd: UUID = UUID.randomUUID()
+      val workspaceIdEven: UUID = UUID.randomUUID()
 
-    def saveWorkspace = DbResource.dataSource.inTransaction(d => d.workspaceQuery.save(workspace))
-    def saveEntity = DbResource.dataSource.inTransaction(d => d.entityQuery.save(workspace, entity))
+      val workspaceOdd = Workspace(
+        "test_namespace", "workspaceOdd", workspaceIdOdd.toString, "bucketname", Some("workflow-collection"),
+        currentTime(), currentTime(), "me", Map.empty, false)
+      val workspaceEven = Workspace(
+        "test_namespace", "workspaceEven", workspaceIdEven.toString, "bucketname", Some("workflow-collection"),
+        currentTime(), currentTime(), "me", Map.empty, false)
 
-    val updateAction = for {
-      entityRec <- this.entityQuery.findEntityByName(workspaceId, entity.entityType, entity.name).result
-      _ <- this.entityAttributeScratchQuery += EntityAttributeScratchRecord(0, entityRec.head.id, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, None, false, None, "not a transaction id")
-      _ <- this.entityQuery.save(workspace, updatedEntity).transactionally
-      result <- this.entityAttributeScratchQuery.map { r => (r.name, r.valueString) }.result
-    } yield {
-      result
-    }
+      def isOdd(i: Int) = i % 2 == 1
+      def isEven(i: Int) = !isOdd(i)
 
-    assertResult(Vector(("attributeString", Some("foo")))) {
-      val doIt = for {
-        _ <- saveWorkspace
-        _ <- saveEntity
-        result <- DbResource.dataSource.database.run(updateAction.withPinnedSession)
-      } yield result
-      Await.result(doIt, Duration.Inf)
-    }
+      val entityType: String = "et"
 
-    assertResult(Option(updatedEntity)) {
-      runAndWait(this.entityQuery.get(workspace, entity.entityType, entity.name))
+      def saveEntity(e: Entity): Future[Entity] = DbResource.dataSource.inTransactionWithAttrTempTable { d =>
+        val targetWorkspace = if (isOdd(e.name.toInt))
+          workspaceOdd
+        else
+          workspaceEven
+        d.entityQuery.save(targetWorkspace, e)
+      }
+
+      // create the entities-to-be-saved
+      val entitiesToSave:Map[Int, Entity] = (1 to parallelism).map { idx =>
+        (idx, Entity(s"$idx", entityType, Map(
+          AttributeName.withDefaultNS("uuid") -> AttributeString(UUID.randomUUID().toString),
+          AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
+          AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159))))
+      }.toMap
+      withClue(s"should have prepped $parallelism entities to save"){entitiesToSave.size shouldBe (parallelism)}
+
+      // save the workspaces
+      val savedWorkspaceOdd = runAndWait(workspaceQuery.save(workspaceOdd))
+      withClue("workspace (odd) should have saved") {savedWorkspaceOdd.workspaceId shouldBe (workspaceIdOdd.toString)}
+      val savedWorkspaceEven = runAndWait(workspaceQuery.save(workspaceEven))
+      withClue("workspace (even) should have saved") {savedWorkspaceEven.workspaceId shouldBe (workspaceIdEven.toString)}
+
+      // in parallel, save entities to the workspace
+      // set up an execution context with $parallelism threads
+      // some futures will execute on the same threads but we ensure
+      // at least some parallelism and validate that in a later assert statement
+      implicit val executionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(parallelism))
+
+      val saveQueries = entitiesToSave.values map saveEntity
+      val parallelSaves = scala.concurrent.Future.traverse(saveQueries) { f =>
+        f.map {
+          f.map { entity =>
+            threadIds += (s"${entity.entityType}/${entity.name}" -> Thread.currentThread().getId)
+            entity
+          }
+          Success(_)
+        }.recover { case e => Failure(e) }(executionContext)
+      }
+      val saveAttempts =  Await.result(parallelSaves, Duration.Inf)
+
+      val saveFailures = saveAttempts.collect { case Failure(ex) => ex }
+      val savedEntities = saveAttempts.collect { case Success(e) => e }
+
+      withClue("should not have any failures during save") { saveFailures shouldBe empty }
+      withClue(s"should have saved exactly $parallelism entities") { saveFailures shouldBe empty }
+
+      // query all entities for workspace (odd)
+      val actualEntitiesOdd = runAndWait(entityQuery.listActiveEntitiesOfType(workspaceOdd, entityType))
+      // query all entities for workspace (even)
+      val actualEntitiesEven = runAndWait(entityQuery.listActiveEntitiesOfType(workspaceEven, entityType))
+
+      // validate save counts entities
+      val expectedCountOdd = Math.ceil(parallelism.toDouble/2d)
+      val expectedCountEven = Math.floor(parallelism.toDouble/2d)
+      withClue(s"should have saved exactly $expectedCountOdd and $expectedCountEven entities" +
+        s" to workspaces odd and even, respectively") {
+        (actualEntitiesOdd.size, actualEntitiesEven.size) shouldBe (expectedCountOdd, expectedCountEven)
+      }
+
+      // validate individual entities (odd)
+      actualEntitiesOdd.foreach { actual =>
+        // name should be the index
+        val idx = actual.name.toInt
+        val expected = entitiesToSave.get(idx).orElse(fail(s"an entity was saved with name $idx;" +
+          s" that name should not exist"))
+        withClue(s"entity with name ${actual.name} should have saved to the odd workspace") { isOdd(actual.name.toInt) }
+        withClue(s"actual entity did not match expected") { Option(actual) shouldBe (expected) }
+      }
+
+      //validate that the entity saves happened in parallel by looking for
+      //multiple unique thread ids
+      assert(threadIds.values.toSet.size > 1)
+
+      // validate individual entities (even)
+      actualEntitiesEven.foreach { actual =>
+        // name should be the index
+        val idx = actual.name.toInt
+        val expected = entitiesToSave.get(idx).orElse(fail(s"an entity was saved with name $idx;" +
+          s" that name should not exist"))
+        withClue(s"entity with name ${actual.name} should have saved to the even workspace") { isEven(actual.name.toInt) }
+        withClue(s"actual entity did not match expected") { Option(actual) shouldBe (expected) }
+      }
     }
   }
 

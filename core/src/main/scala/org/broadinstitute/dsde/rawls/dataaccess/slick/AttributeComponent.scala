@@ -50,7 +50,7 @@ case class EntityAttributeRecord(id: Long,
                                  deleted: Boolean,
                                  deletedDate: Option[Timestamp]) extends AttributeRecord[Long]
 
-case class EntityAttributeScratchRecord(id: Long,
+case class EntityAttributeTempRecord(id: Long,
                                      ownerId: Long, // entity id
                                      namespace: String,
                                      name: String,
@@ -170,8 +170,8 @@ trait AttributeComponent {
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
   }
 
-  class EntityAttributeScratchTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeScratchRecord](tag, "ENTITY_ATTRIBUTE_SCRATCH") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <> (EntityAttributeScratchRecord.tupled, EntityAttributeScratchRecord.unapply)
+  class EntityAttributeTempTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeTempRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <> (EntityAttributeTempRecord.tupled, EntityAttributeTempRecord.unapply)
   }
 
   class WorkspaceAttributeScratchTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeScratchRecord](tag, "WORKSPACE_ATTRIBUTE_SCRATCH") {
@@ -195,7 +195,7 @@ trait AttributeComponent {
     }
   }
 
-  protected object entityAttributeScratchQuery extends AttributeScratchQuery[Long, EntityAttributeRecord, EntityAttributeScratchRecord, EntityAttributeScratchTable](new EntityAttributeScratchTable(_), EntityAttributeScratchRecord)
+  protected object entityAttributeTempQuery extends AttributeScratchQuery[Long, EntityAttributeRecord, EntityAttributeTempRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_), EntityAttributeTempRecord)
   protected object workspaceAttributeScratchQuery extends AttributeScratchQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeScratchRecord, WorkspaceAttributeScratchTable](new WorkspaceAttributeScratchTable(_), WorkspaceAttributeScratchRecord)
 
   /**
@@ -360,9 +360,11 @@ trait AttributeComponent {
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
       def updateInMasterAction(transactionId: String) = {
+          val tableSuffix = getTableSuffix(baseTableRow.tableName)
+
           sql"""
           update #${baseTableRow.tableName} a
-              join #${baseTableRow.tableName}_SCRATCH ta
+              join #${baseTableRow.tableName}_#${tableSuffix} ta
               on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
                   and ta.transaction_id = $transactionId
@@ -378,7 +380,11 @@ trait AttributeComponent {
       }
 
       def clearAttributeScratchTableAction(transactionId: String) = {
-        sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
+        val tableSuffix = getTableSuffix(baseTableRow.tableName)
+
+        if(tableSuffix == "SCRATCH")
+          sqlu"""delete from #${baseTableRow.tableName}_#${tableSuffix} where transaction_id = $transactionId"""
+        else DBIO.successful(0)
       }
 
       def updateAction(insertIntoScratchFunction: String => WriteAction[Int]) = {
@@ -465,5 +471,12 @@ trait AttributeComponent {
     }
 
     private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
+
+    private def getTableSuffix(tableName: String): String = {
+      if (tableName == "ENTITY_ATTRIBUTE")
+        "TEMP"
+      else
+        "SCRATCH"
+    }
   }
 }

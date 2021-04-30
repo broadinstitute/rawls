@@ -78,8 +78,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val wdlParser = new CachingWDLParser(wdlParserConfig, mockCromwellSwaggerClient)
   val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
+  // TODO: can we be any more targeted about inTransaction vs. inTransactionWithAttrTempTable here?
+  // this is used by many tests to set up fixture data, which includes saving entities, therefore it needs
+  // the temp table.
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
-    Await.result(DbResource.dataSource.inTransaction { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
+    Await.result(DbResource.dataSource.inTransactionWithAttrTempTable { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
   }
 
   protected def runMultipleAndWait[R](count: Int, duration: Duration = 1 minutes)(actionGenerator: Int => DBIOAction[R, _ <: NoStream, _ <: Effect]): R = {
@@ -88,7 +91,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   private def retryConcurrentModificationException[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect]): Future[R] = {
-    DbResource.dataSource.database.run(action.map{ x => Thread.sleep((Math.random() * 500).toLong); x }).recoverWith {
+
+    import scala.language.existentials
+
+    val chain = (DbResource.dataSource.createTempTable andThen action.map{ x => Thread.sleep((Math.random() * 500).toLong); x } andFinally DbResource.dataSource.dropTempTable).withPinnedSession
+
+    DbResource.dataSource.database.run(chain).recoverWith {
       case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action)
       case rollbackException: MySQLTransactionRollbackException if rollbackException.getMessage.contains("try restarting transaction") => retryConcurrentModificationException(action)
     }
