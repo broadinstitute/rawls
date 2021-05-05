@@ -262,7 +262,7 @@ class AvroUpsertMonitorActor(
                 baseMsg
               else
                 baseMsg + s" First 100 failures are: $failureMessages"
-              publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, Option(msg))
+              publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(msg))
             case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
           }
         }
