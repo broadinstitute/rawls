@@ -2130,7 +2130,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       workspaceVersion = WorkspaceVersions.V2,
       googleProjectId = googleProjectId,
       googleProjectNumber = googleProjectNumber,
-      currentBillingAccountOnWorkspace
+      currentBillingAccountOnWorkspace,
+      billingAccountErrorMessage = None
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)

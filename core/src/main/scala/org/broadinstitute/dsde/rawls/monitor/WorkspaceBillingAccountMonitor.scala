@@ -22,7 +22,7 @@ object WorkspaceBillingAccountMonitor {
   case object CheckAll extends WorkspaceBillingAccountsMessage
 }
 
-class WorkspaceBillingAccountMonitor(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
+class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
 
   context.system.scheduler.scheduleWithFixedDelay(initialDelay, pollInterval, self, CheckAll)
 
@@ -32,7 +32,7 @@ class WorkspaceBillingAccountMonitor(datasource: SlickDataSource, gcsDAO: Google
 
   private def checkAll() = {
     for {
-      workspacesToUpdate <- datasource.inTransaction { dataAccess =>
+      workspacesToUpdate <- dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.listWorkspaceGoogleProjectsToUpdateWithNewBillingAccount()
       }
       _ <- workspacesToUpdate.toList.traverse {
@@ -45,11 +45,15 @@ class WorkspaceBillingAccountMonitor(datasource: SlickDataSource, gcsDAO: Google
     for {
       _ <- gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, newBillingAccount).recoverWith {
         case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
-          datasource.inTransaction( { dataAccess =>
+          dataSource.inTransaction( { dataAccess =>
             dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(newBillingAccount.get, isInvalid = true)
           }).map(_ => throw e)
+        case e =>
+          dataSource.inTransaction { dataAccess =>
+            dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessage(googleProjectId, e.getMessage)
+          }
       }
-      dbResult <- datasource.inTransaction( { dataAccess =>
+      dbResult <- dataSource.inTransaction( { dataAccess =>
         dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
       })
     } yield dbResult

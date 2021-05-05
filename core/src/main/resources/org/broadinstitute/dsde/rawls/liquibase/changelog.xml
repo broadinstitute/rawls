@@ -79,4 +79,5 @@
     <include file="changesets/20210129_add_entity_statistics_cache_tables.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20201106_workspace_google_project_columns.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20201113_add_billing_account_workspace.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210430_add_workspace_billing_account_error_message.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
