@@ -360,9 +360,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     def updateWorkspace = {
       DbResource.dataSource.database.run(
-        (this.workspaceAttributeScratchQuery += WorkspaceAttributeScratchRecord(0, workspaceId, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, None, false, None, "not a transaction id")) andThen
+        (this.workspaceAttributeTempQuery += WorkspaceAttributeTempRecord(0, workspaceId, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, None, false, None, "not a transaction id")) andThen
           this.workspaceQuery.save(updatedWorkspace).transactionally andThen
-          this.workspaceAttributeScratchQuery.map { r => (r.name, r.valueString) }.result.withPinnedSession
+          this.workspaceAttributeTempQuery.map { r => (r.name, r.valueString) }.result.withPinnedSession
       )
     }
 
@@ -500,7 +500,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None, None, deleted = false, None)
     val toSave = Seq(update, insert)
 
-    runAndWait(workspaceAttributeQuery.rewriteAttrsAction(toSave, existing, workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.rewriteAttrsAction(toSave, existing, workspaceAttributeTempQuery.insertScratchAttributes))
 
     assertExpectedRecords(toSave:_*)
   }
@@ -523,11 +523,11 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None, None, deleted = false, None)
 
     //test insert and update
-    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(insert), Seq(update), Seq(), workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(insert), Seq(update), Seq(), workspaceAttributeTempQuery.insertScratchAttributes))
     assertExpectedRecords(Seq(existing.head, update, insert):_*)
 
     //test delete
-    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(), Seq(), existing.map(_.id), workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(), Seq(), existing.map(_.id), workspaceAttributeTempQuery.insertScratchAttributes))
     assertExpectedRecords(Seq(insert):_*)
   }
 

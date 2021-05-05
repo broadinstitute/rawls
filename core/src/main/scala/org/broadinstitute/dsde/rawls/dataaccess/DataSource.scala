@@ -38,6 +38,34 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     sql"""call dropEntityAttributeTempTable""".as[Boolean]
   }
 
+  def createWorkspaceAttributeTempTable = {
+    sql"""call createWorkspaceAttributeTempTable()""".as[Boolean]
+  }
+
+  def dropWorkspaceAttributeTempTable = {
+    sql"""call dropWorkspaceAttributeTempTable""".as[Boolean]
+  }
+
+  def inTransactionWithWorkspaceAttrTempTable[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
+
+    val callerAction = f(dataAccess).transactionally.withTransactionIsolation(isolationLevel)
+
+    val callerActionWithTempTables = (for {
+      _ <- dropWorkspaceAttributeTempTable
+      _ <- createWorkspaceAttributeTempTable
+      origResult <- callerAction
+    } yield {
+      origResult
+    }).andFinally(dropWorkspaceAttributeTempTable)
+
+    database.run(callerActionWithTempTables.withPinnedSession).recover {
+      case t: Throwable =>
+        logger.error(s"Transaction with temporary tables failed. Message: ${t.getMessage}")
+        throw t
+    }
+  }
+
+
   // creates the ENTITY_ATTRIBUTE_TEMP for use by this transaction, executes the transaction, drops the temp table
   def inTransactionWithAttrTempTable[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
 
