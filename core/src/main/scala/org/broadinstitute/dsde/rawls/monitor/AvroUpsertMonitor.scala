@@ -258,11 +258,12 @@ class AvroUpsertMonitorActor(
             case Success(importUpsertResults) =>
               val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
               val baseMsg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
-              val msg = if (importUpsertResults.failures.isEmpty)
-                baseMsg
-              else
-                baseMsg + s" First 100 failures are: $failureMessages"
-              publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(msg))
+              if (importUpsertResults.failures.isEmpty)
+                publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, Option(baseMsg))
+              else {
+                val msg = baseMsg + s" First 100 failures are: $failureMessages"
+                publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(msg))
+              }
             case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
           }
         }
