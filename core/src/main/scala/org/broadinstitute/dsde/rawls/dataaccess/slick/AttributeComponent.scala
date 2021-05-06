@@ -346,16 +346,32 @@ trait AttributeComponent {
       // delete attributes which are in exists but not save
       val attributesToDelete = existingAttrMap.filterKeys(! toSaveAttrMap.keySet.contains(_))
 
-      // update attributes which:are in both to-save and currently-exists, but have different values.
+      // update attributes which are in both to-save and currently-exists, but have different values.
       // note that currently-existing attributes will have a populated id e.g. "1234", but to-save will have an id of "0"
-      // therefore, create a collection of unmarshaled existing attributes to use for comparison, ignoring ids
-      val existingUnmarshalled = existingAttributes.toList.map(unmarshalValue)
+      // therefore, use a comparison function that looks at everything except id
+      // note this does not compare transactionId for AttributeScratchRecords. We do not expect AttributeScratchRecords
+      // here, and transactionId will eventually be going away, so don't bother
+      // TODO: should this compare function move closer to the AttributeRecord class?
+      def equalRecords(left: RECORD, right: RECORD): Boolean = {
+        // compare everything except id
+        left.name == right.name &&
+        left.valueString == right.valueString &&
+        left.valueNumber == right.valueNumber &&
+        left.valueBoolean == right.valueBoolean &&
+        left.valueJson == right.valueJson &&
+        left.valueEntityRef == right.valueEntityRef &&
+        left.listIndex == right.listIndex &&
+        left.listLength == right.listLength &&
+        left.namespace == right.namespace &&
+        left.ownerId == right.ownerId &&
+        left.deleted == right.deleted &&
+        left.deletedDate == right.deletedDate
+      }
 
       val attributesToUpdate = toSaveAttrMap.filter {
         case (k, v) =>
-          // attributesToInsert.contains(k) ||        // if we just inserted the attribute, don't update it again
             existingKeys.contains(k) && // if the attribute doesn't already exist, don't attempt to update it
-            !existingUnmarshalled.contains(unmarshalValue(v)) // if the attribute exists and is unchanged, don't update it
+            !existingAttributes.exists(equalRecords(_, v)) // if the attribute exists and is unchanged, don't update it
       }
 
       // N.B. attributesToIgnore is only used for debugging/logging! TODO: delete this entire block when done debugging
