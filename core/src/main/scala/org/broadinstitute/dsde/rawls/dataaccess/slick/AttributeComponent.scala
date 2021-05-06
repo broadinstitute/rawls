@@ -338,14 +338,50 @@ trait AttributeComponent {
       val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
       val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
-      // update attributes which are in both to-save and currently-exists, insert attributes which are in save but not exists
-      val (attrsToUpdateMap, attrsToInsertMap) = toSaveAttrMap.partition { case (k, v) => existingAttrMap.keySet.contains(k) }
-      // delete attributes which currently exist but are not in the attributes to save
-      val attributesToDelete = existingAttrMap.filterKeys(! attrsToUpdateMap.keySet.contains(_)).values
+      val existingKeys = existingAttrMap.keySet
 
-      deleteAttributeRecordsById(attributesToDelete.map(_.id).toSeq) andThen
-        batchInsertAttributes(attrsToInsertMap.values.toSeq) andThen
-        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(attrsToUpdateMap.values.toSeq))
+      // insert attributes which are in save but not exists
+      val attributesToInsert = toSaveAttrMap.filterKeys(! existingKeys.contains(_))
+
+      // delete attributes which are in exists but not save
+      val attributesToDelete = existingAttrMap.filterKeys(! toSaveAttrMap.keySet.contains(_))
+
+      // update attributes which:are in both to-save and currently-exists, but have different values.
+      // note that currently-existing attributes will have a populated id e.g. "1234", but to-save will have an id of "0"
+      // therefore, create a collection of unmarshaled existing attributes to use for comparison, ignoring ids
+      val existingUnmarshalled = existingAttributes.toList.map(unmarshalValue)
+
+      val attributesToUpdate = toSaveAttrMap.filter {
+        case (k, v) =>
+          // attributesToInsert.contains(k) ||        // if we just inserted the attribute, don't update it again
+            existingKeys.contains(k) && // if the attribute doesn't already exist, don't attempt to update it
+            !existingUnmarshalled.contains(unmarshalValue(v)) // if the attribute exists and is unchanged, don't update it
+      }
+
+      // N.B. attributesToIgnore is only used for debugging/logging! TODO: delete this entire block when done debugging
+//      val attributesToIgnore = existingKeys -- attributesToInsert.keys -- attributesToUpdate.keys -- attributesToDelete.keys
+//
+//      System.err.println(s"********** CALCULATED attributesToInsert: ${attributesToInsert.keys.map(_.name).toList.sorted}")
+//      System.err.println(s"********** CALCULATED attributesToDelete: ${attributesToDelete.keys.map(_.name).toList.sorted}")
+//      System.err.println(s"********** CALCULATED attributesToUpdate: ${attributesToUpdate.keys.map(_.name).toList.sorted}")
+//      System.err.println(s"********** CALCULATED attributesToIgnore: ${attributesToIgnore.map(_.name).toList.sorted}")
+
+      for {
+        _ <- if (attributesToDelete.nonEmpty)
+                deleteAttributeRecordsById(attributesToDelete.values.map(_.id).toSeq)
+              else
+                DBIO.successful(0)
+        _ <- if (attributesToInsert.nonEmpty)
+                batchInsertAttributes(attributesToInsert.values.toSeq)
+              else
+                DBIO.successful(0)
+        updateResult <- if (attributesToUpdate.nonEmpty)
+                          AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(attributesToUpdate.values.toSeq))
+                        else
+                          DBIO.successful(0)
+      } yield {
+       updateResult
+      }
     }
 
     //noinspection SqlDialectInspection
