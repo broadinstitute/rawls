@@ -393,6 +393,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         // figure out the updates that need to occur to entities and workspaces
         updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressionMap)
 
+        // for debugging purposes
+        workspacesToUpdate = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
+        entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
+        _ = if (workspacesToUpdate.nonEmpty && entityUpdates.nonEmpty)
+              logger.info("handleOutputs writing to both workspace and entity attributes")
+            else if (workspacesToUpdate.nonEmpty)
+              logger.info("handleOutputs writing to workspace attributes only")
+            else if (entityUpdates.nonEmpty)
+              logger.info("handleOutputs writing to entity attributes only")
+            else
+              logger.debug("handleOutputs writing to neither workspace nor entity attributes; could be errors")
+
         // save everything to the db
         _ <- saveWorkspace(dataAccess, updatedEntitiesAndWorkspace)
         _ <- saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace)
