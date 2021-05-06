@@ -288,7 +288,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def unregisterBillingProjectWithOwnerInfo(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
     val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
     for {
-      _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, ownerUserInfo)
+      _ <- deleteGoogleProjectIfChild(projectName, ownerUserInfo)
       result <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
     } yield result
   }
