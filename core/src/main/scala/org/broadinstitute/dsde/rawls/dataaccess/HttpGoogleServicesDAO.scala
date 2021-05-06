@@ -975,7 +975,7 @@ class HttpGoogleServicesDAO(
     * @return true if google was called to update policies, false otherwise
     */
   override protected def updatePolicyBindings(googleProject: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
-    val cloudResManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
+    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential) // todo: gpalloc projects are unhappy when making policy changes with the CRM SA (which is the rawls SA)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
     for {
