@@ -356,7 +356,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     val updatedWorkspace = workspace.copy(attributes = Map(AttributeName.withDefaultNS("attributeString") -> AttributeString(UUID.randomUUID().toString)))
 
-    def saveWorkspace = DbResource.dataSource.inTransaction(d => d.workspaceQuery.save(workspace))
+    def saveWorkspace = DbResource.dataSource.inTransactionWithAttrTempTable(d => d.workspaceQuery.save(workspace))
 
     def updateWorkspace = {
       DbResource.dataSource.database.run(
