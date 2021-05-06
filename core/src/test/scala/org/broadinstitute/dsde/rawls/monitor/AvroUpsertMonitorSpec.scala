@@ -132,6 +132,18 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
   behavior of "AvroUpsertMonitor"
 
+  def upsertRange(upsertQuantity: Int): List[Int] = List.range(1, upsertQuantity + 1)
+  def createUpsertOpsList(upsertRange: List[Int]): List[String] = {
+    upsertRange map ( idx => s"""{"name": "avro-entity-$idx", "entityType": "test-type", "operations": [{"op": "AddUpdateAttribute", "attributeName": "avro-attribute", "addUpdateAttribute": "foo"}]}""" )
+  }
+  def makeOpsJsonString(opsList: List[String]): String = s"[${opsList.mkString(",")}]"
+
+  def makeOpsJsonString(upsertQuantity: Int): String = {
+    val range = upsertRange(upsertQuantity: Int)
+    val opsList = createUpsertOpsList(range)
+    makeOpsJsonString(opsList)
+  }
+
   List(1,2,20,250,2345,12345) foreach { upsertQuantity =>
     it should s"upsert $upsertQuantity entities" in withTestDataApiServices { services =>
       val timeout = 120000 milliseconds
@@ -142,14 +154,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       val mockImportServiceDAO =  setUp(services)
       mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
-      // create indexed range of ints
-      val upsertRange: List[Int] = List.range(1, upsertQuantity+1)
-
-
       // create upsert json file
-      val upsertOps = upsertRange map ( idx => s"""{"name": "avro-entity-$idx", "entityType": "test-type", "operations": [{"op": "AddUpdateAttribute", "attributeName": "avro-attribute", "addUpdateAttribute": "foo"}]}""" )
-
-      val contents = s"[${upsertOps.mkString(",")}]"
+      val contents = makeOpsJsonString(upsertQuantity)
 
       // Store upsert json file
       Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
@@ -169,7 +175,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
         eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
           val entitiesOfType = runAndWait(entityQuery.listActiveEntitiesOfType(context, entityType))
           assertResult(upsertQuantity) { entitiesOfType.size }
-          upsertRange foreach { idx =>
+          upsertRange(upsertQuantity) foreach { idx =>
             val name = s"avro-entity-$idx"
             val entity = Entity(name, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
             val actual = entitiesOfType.find(_.name == name)
@@ -325,32 +331,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     val mockImportServiceDAO =  setUp(services)
     mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
-    // create a valid json file
-    val contents =
-      s"""[
-         | {
-         |  "name": "avro-entity-succeeds",
-         |  "entityType": "test-type",
-         |  "operations": [
-         |                 {
-         |                  "op": "AddUpdateAttribute",
-         |                  "attributeName": "avro-attribute",
-         |                  "addUpdateAttribute": "foo"
-         |                 }
-         |                ]
-         | },
-         | {
-         |  "name":"avro-entity-fails",
-         |  "entityType": "test-type",
-         |  "operations": [
-         |                 {
-         |                  "op": "AddUpdateAttribute",
-         |                  "attributeName": "",
-         |                  "addUpdateAttribute": ""
-         |                 }
-         |                ]
-         | }
-         |]""".stripMargin
+    val successfulBatch = createUpsertOpsList(upsertRange(1000))
+    val failureBatch = s"""{"name": "avro-entity-failure", "entityType": "", "operations": [{"op": "AddUpdateAttribute", "attributeName": "avro-attribute", "addUpdateAttribute": "foo"}]}"""
+    val contents = makeOpsJsonString(successfulBatch :+ failureBatch)
 
     // Store upsert json file
     Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
@@ -366,29 +349,14 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString, 1))
     }
 
-    // Check in db if entities are there
-//    withWorkspaceContext(testData.workspace) { context =>
-//
-//      eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-//        val entitiesOfType = runAndWait(entityQuery.listActiveEntitiesOfType(context, entityType))
-//        assertResult(upsertQuantity) { entitiesOfType.size }
-//        upsertRange foreach { idx =>
-//          val name = s"avro-entity-$idx"
-//          val entity = Entity(name, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
-//          val actual = entitiesOfType.find(_.name == name)
-//          assertResult(Some(entity)) { actual }
-//        }
-//      }
-//
-//    }
-
     // upsert will fail; check that a pubsub message was published to set the import job to error.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
       val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
       assert(statusMessages.exists { msg =>
         msg.attributes.get("importId").contains(importId1.toString) &&
           msg.attributes.get("newStatus").contains("Error") &&
-          msg.attributes.get("action").contains("status")
+          msg.attributes.get("action").contains("status") &&
+          msg.attributes.get("errorMessage").get.contains("Successfully updated 1000 entities; 1 updates failed. First 100 failures are: Invalid input")
       })
     }
 

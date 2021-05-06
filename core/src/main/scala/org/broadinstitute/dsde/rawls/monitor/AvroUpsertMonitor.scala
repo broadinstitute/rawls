@@ -379,9 +379,9 @@ class AvroUpsertMonitorActor(
         case Success(entityList) => entityList.size
       }.sum
 
-      val failureReports:List[RawlsErrorReport] = upsertResults collect {
-        case Failure(regrets:RawlsExceptionWithErrorReport) => regrets.errorReport.causes
-      } flatten
+      val failureReports: List[RawlsErrorReport] = upsertResults collect {
+        case Failure(regrets:RawlsExceptionWithErrorReport) => regrets.errorReport
+      }
 
       // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
       // Cap the failure reports at 100.
