@@ -27,6 +27,7 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
       WorkspaceVersions.V2,
       GoogleProjectId("test_google_project"),
       None,
+      None,
       None
     )
 
@@ -65,6 +66,7 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
       false,
       WorkspaceVersions.V2,
       GoogleProjectId("test_google_project"),
+      None,
       None,
       None
     )

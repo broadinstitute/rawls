@@ -154,17 +154,17 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, groups)
 
   def makeWorkspaceWithUsers(project: RawlsBillingProject,
-                    name: String,
-                    workspaceId: String,
-                    bucketName: String,
-                    workflowCollectionName: Option[String],
-                    createdDate: DateTime,
-                    lastModified: DateTime,
-                    createdBy: String,
-                    attributes: AttributeMap,
-                    isLocked: Boolean) = {
+                             name: String,
+                             workspaceId: String,
+                             bucketName: String,
+                             workflowCollectionName: Option[String],
+                             createdDate: DateTime,
+                             lastModified: DateTime,
+                             createdBy: String,
+                             attributes: AttributeMap,
+                             isLocked: Boolean) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount, None)
   }
   def makeWorkspaceWithUsers(project: RawlsBillingProject,
                              name: String,
@@ -179,9 +179,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              workspaceVersion: WorkspaceVersion,
                              googleProjectId: GoogleProjectId,
                              googleProjectNumber: Option[GoogleProjectNumber],
-                             currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName]) = {
+                             currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
+                             billingAccountErrorMessage: Option[String]) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace, billingAccountErrorMessage)
   }
 
   class EmptyWorkspace() extends TestData {
@@ -215,7 +216,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
     val billingAccount = maybeBillingAccount
 
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount, None)
 
     override def save() = {
       DBIO.seq(
@@ -1029,8 +1030,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     val workspace2 = Workspace(wsName2.namespace, wsName2.name, UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     // TODO (CA-1235): Remove these after PPW Migration is complete
-    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None)
-    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None)
+    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None)
+    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None)
 
     override def save() = {
       DBIO.seq(
