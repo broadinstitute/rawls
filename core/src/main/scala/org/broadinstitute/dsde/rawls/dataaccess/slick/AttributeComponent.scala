@@ -329,9 +329,22 @@ trait AttributeComponent {
       recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
 
     def patchAttributesAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
-      deleteAttributeRecordsById(deleteIds.toSeq) andThen
-        batchInsertAttributes(inserts.toSeq) andThen
-        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+      for {
+        _ <- if (deleteIds.nonEmpty)
+                deleteAttributeRecordsById(deleteIds.toSeq)
+              else
+                DBIO.successful(0)
+        _ <- if (inserts.nonEmpty)
+                batchInsertAttributes(inserts.toSeq)
+              else
+                DBIO.successful(0)
+        updateResult <- if (updates.nonEmpty)
+                          AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+                        else
+                          DBIO.successful(0)
+      } yield {
+        updateResult
+      }
     }
 
     def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
@@ -381,23 +394,11 @@ trait AttributeComponent {
 //      System.err.println(s"********** CALCULATED attributesToDelete: ${attributesToDelete.keys.map(_.name).toList.sorted}")
 //      System.err.println(s"********** CALCULATED attributesToUpdate: ${attributesToUpdate.keys.map(_.name).toList.sorted}")
 //      System.err.println(s"********** CALCULATED attributesToIgnore: ${attributesToIgnore.map(_.name).toList.sorted}")
-
-      for {
-        _ <- if (attributesToDelete.nonEmpty)
-                deleteAttributeRecordsById(attributesToDelete.values.map(_.id).toSeq)
-              else
-                DBIO.successful(0)
-        _ <- if (attributesToInsert.nonEmpty)
-                batchInsertAttributes(attributesToInsert.values.toSeq)
-              else
-                DBIO.successful(0)
-        updateResult <- if (attributesToUpdate.nonEmpty)
-                          AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(attributesToUpdate.values.toSeq))
-                        else
-                          DBIO.successful(0)
-      } yield {
-       updateResult
-      }
+//
+      patchAttributesAction(attributesToInsert.values,
+        attributesToUpdate.values,
+        attributesToDelete.values.map(_.id),
+        insertFunction)
     }
 
     //noinspection SqlDialectInspection
