@@ -336,44 +336,6 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
-  it should "extra data in workspace attribute temp table should not mess things up" in withEmptyTestDatabase {
-    val workspaceId: UUID = UUID.randomUUID()
-    val workspace = Workspace(
-      "test_namespace",
-      "test_name",
-      workspaceId.toString,
-      "bucketname",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "me",
-      Map(
-        AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
-        AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
-      false)
-
-
-    val updatedWorkspace = workspace.copy(attributes = Map(AttributeName.withDefaultNS("attributeString") -> AttributeString(UUID.randomUUID().toString)))
-
-    def saveWorkspace = DbResource.dataSource.inTransactionWithAttrTempTable(d => d.workspaceQuery.save(workspace))
-
-    def updateWorkspace = {
-      DbResource.dataSource.database.run(
-        (this.workspaceAttributeTempQuery += WorkspaceAttributeTempRecord(0, workspaceId, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, None, false, None, "not a transaction id")) andThen
-          this.workspaceQuery.save(updatedWorkspace).transactionally andThen
-          this.workspaceAttributeTempQuery.map { r => (r.name, r.valueString) }.result.withPinnedSession
-      )
-    }
-
-    assertResult(Vector(("attributeString", Some("foo")))) {
-      Await.result(saveWorkspace flatMap { _ => updateWorkspace }, Duration.Inf)
-    }
-
-    assertWorkspaceResult(Option(updatedWorkspace)) {
-      runAndWait(this.workspaceQuery.findById(workspaceId.toString))
-    }
-  }
 
   List(8, 17, 32, 65, 128, 257) foreach { parallelism =>
     it should s"handle $parallelism simultaneous writes to their own entity attribute temp tables" in withEmptyTestDatabase {
