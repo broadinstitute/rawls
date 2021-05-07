@@ -825,7 +825,7 @@ class HttpGoogleServicesDAO(
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
 
-    val cloudResManager = getCloudResourceManager
+    val cloudResManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
     retryWhen500orGoogleError(() => {
       executeGoogleRequest(cloudResManager.projects().get(googleProject.value))
@@ -975,7 +975,7 @@ class HttpGoogleServicesDAO(
     * @return true if google was called to update policies, false otherwise
     */
   override protected def updatePolicyBindings(googleProject: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
-    val cloudResManager = getCloudResourceManager
+    val cloudResManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
     for {
@@ -1011,7 +1011,7 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Billing
     val billingServiceAccountCredential = getBillingServiceAccountCredential
 
-    val resMgr = getCloudResourceManager
+    val resMgr = getCloudResourceManagerWithCloudResourceManagerServiceAccount
     val billingManager = getCloudBillingManager(billingServiceAccountCredential)
 
     for {
@@ -1037,7 +1037,7 @@ class HttpGoogleServicesDAO(
     */
   override def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
-    val cloudResourceManager: CloudResourceManager = getCloudResourceManager
+    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
     executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProjectId.value, googleProjectWithUpdates)).map(project => project)
   }
@@ -1046,7 +1046,7 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Billing
     val billingServiceAccountCredential = getBillingServiceAccountCredential
     val billingManager = getCloudBillingManager(billingServiceAccountCredential)
-    val cloudResourceManager: CloudResourceManager = getCloudResourceManager
+    val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
     for {
       _ <- retryWhen500orGoogleError(() => {
@@ -1120,7 +1120,7 @@ class HttpGoogleServicesDAO(
     new Directory.Builder(httpTransport, jsonFactory, getGroupServiceAccountCredential).setApplicationName(appName).build()
   }
 
-  private def getCloudResourceManager = {
+  private def getCloudResourceManagerWithCloudResourceManagerServiceAccount = {
     val billingServiceAccountCredential = getBillingServiceAccountCredential
     val cloudResourceManager = getCloudResourceManager(billingServiceAccountCredential)
     cloudResourceManager
@@ -1263,7 +1263,7 @@ class HttpGoogleServicesDAO(
 
   override def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
-    val cloudResourceManager = getCloudResourceManager
+    val cloudResourceManager = getCloudResourceManagerWithCloudResourceManagerServiceAccount
 
     retryWhen500orGoogleError( () => {
       val existingProject = executeGoogleRequest(cloudResourceManager.projects().get(googleProject.value))
