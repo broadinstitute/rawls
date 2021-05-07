@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.coordination
 
 import akka.actor.{Actor, Props, Status}
 import org.broadinstitute.dsde.rawls.coordination.CoordinatedDataSourceActor.StartDeadlineException
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import slick.jdbc.TransactionIsolation
 
@@ -50,7 +50,7 @@ class CoordinatedDataSourceActor() extends Actor {
       run(startDeadline, waitTimeout) {
         // NOTE: We could feed the JDBC calls yet-another timeout-per-statement, but warning: the
         // java.sql.Statement.setQueryTimeout() implementation is different for each JDBC driver!
-        slickDataSource.inTransactionWithAttrTempTable(dataAccessFunction, isolationLevel)
+        slickDataSource.inTransactionWithAttrTempTable(dataAccessFunction, Set(AttributeTempTableType.Entity), isolationLevel)
       }
   }
 }

@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType
+
 import java.util.UUID
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -358,13 +360,13 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
       val entityType: String = "et"
 
-      def saveEntity(e: Entity): Future[Entity] = DbResource.dataSource.inTransactionWithAttrTempTable { d =>
+      def saveEntity(e: Entity): Future[Entity] = DbResource.dataSource.inTransactionWithAttrTempTable ({ d =>
         val targetWorkspace = if (isOdd(e.name.toInt))
           workspaceOdd
         else
           workspaceEven
         d.entityQuery.save(targetWorkspace, e)
-      }
+      }, Set(AttributeTempTableType.Entity))
 
       // create the entities-to-be-saved
       val entitiesToSave:Map[Int, Entity] = (1 to parallelism).map { idx =>

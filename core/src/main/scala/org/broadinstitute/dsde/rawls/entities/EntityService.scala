@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -68,7 +68,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-        dataSource.inTransactionWithAttrTempTable { dataAccess =>
+        dataSource.inTransactionWithAttrTempTable ({ dataAccess =>
           withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
             val updateAction = Try {
               val updatedEntity = applyOperationsToEntity(entity, operations)
@@ -81,7 +81,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
             }
             updateAction.map(RequestComplete(StatusCodes.OK, _))
           }
-        }
+        }, Set(AttributeTempTableType.Entity))
       }
     }
 

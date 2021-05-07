@@ -19,6 +19,10 @@ object DataSource {
   }
 }
 
+object AttributeTempTableType extends Enumeration {
+  val Workspace, Entity = Value
+}
+
 class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) extends LazyLogging {
   val dataAccess = new DataAccessComponent(databaseConfig.profile, databaseConfig.config.getInt("batchSize"))
 
@@ -30,11 +34,11 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
   }
 
-  def createTempTable = {
+  def createEntityAttributeTempTable = {
     sql"""call createEntityAttributeTempTable()""".as[Boolean]
   }
 
-  def dropTempTable = {
+  def dropEntityAttributeTempTable = {
     sql"""call dropEntityAttributeTempTable""".as[Boolean]
   }
 
@@ -46,20 +50,32 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     sql"""call dropWorkspaceAttributeTempTable""".as[Boolean]
   }
 
-  // creates the ENTITY_ATTRIBUTE_TEMP for use by this transaction, executes the transaction, drops the temp table
-  def inTransactionWithAttrTempTable[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
+  // creates the ENTITY_ATTRIBUTE_TEMP, WORSKPACE_ATTRIBUTE_TEMP, or both as specified by tempTableTypes  for use by this transaction, executes the transaction
+  def inTransactionWithAttrTempTable[T](f: (DataAccess) => ReadWriteAction[T], tempTableTypes: Set[AttributeTempTableType.Value], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
 
     val callerAction = f(dataAccess).transactionally.withTransactionIsolation(isolationLevel)
 
+    val entityTemp = tempTableTypes.contains(AttributeTempTableType.Entity)
+    val workspaceTemp = tempTableTypes.contains(AttributeTempTableType.Workspace)
+
     val callerActionWithTempTables = (for {
-      _ <- dropTempTable
-      _ <- dropWorkspaceAttributeTempTable
-      _ <- createTempTable
-      _ <- createWorkspaceAttributeTempTable
+      _ <- if (entityTemp) dropEntityAttributeTempTable else DBIO.successful()
+      _ <- if (workspaceTemp) dropWorkspaceAttributeTempTable else DBIO.successful()
+      _ <- if (entityTemp) createEntityAttributeTempTable else DBIO.successful()
+      _ <- if (workspaceTemp) createWorkspaceAttributeTempTable else DBIO.successful();
       origResult <- callerAction
     } yield {
       origResult
-    }).andFinally(dropTempTable)
+    }).andFinally({
+      if (entityTemp)
+        dropEntityAttributeTempTable
+      else
+        DBIO.successful()
+      if(workspaceTemp)
+        dropWorkspaceAttributeTempTable
+      else
+        DBIO.successful()
+    })
 
     database.run(callerActionWithTempTables.withPinnedSession).recover {
       case t: Throwable =>

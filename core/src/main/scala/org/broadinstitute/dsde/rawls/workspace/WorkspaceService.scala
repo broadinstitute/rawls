@@ -122,7 +122,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           withNewWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
             DBIO.successful(workspaceContext)
           }
-        }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
+        }, Set(AttributeTempTableType.Workspace), TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
       })
     })
 
@@ -383,7 +383,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           withLibraryPermissions(ctx, operations, userInfo, isCurator) {
             dataSource.inTransactionWithAttrTempTable({ dataAccess =>
               updateWorkspace(operations, dataAccess)(ctx.toWorkspaceName)
-            }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
+            }, Set(AttributeTempTableType.Workspace), TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
           }
         }
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
@@ -399,7 +399,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         ctx <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
         workspace <- dataSource.inTransactionWithAttrTempTable({ dataAccess =>
             updateWorkspace(operations, dataAccess)(ctx.toWorkspaceName)
-        }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
+        }, Set(AttributeTempTableType.Workspace), TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
       } yield {
         RequestComplete(StatusCodes.OK, WorkspaceDetails(workspace, authDomain))
@@ -572,7 +572,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   }
                 }
               }
-            }, TransactionIsolation.ReadCommitted)
+            }, Set(AttributeTempTableType.Workspace), TransactionIsolation.ReadCommitted)
           }
           // read committed to avoid deadlocks on workspace attr scratch table
         }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
