@@ -34,7 +34,6 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
   val defaultBillingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("test-bp")
   val defaultBillingAccountName: RawlsBillingAccountName = RawlsBillingAccountName("test-ba")
 
-
   override def beforeAll(): Unit = {
     super.beforeAll()
   }
@@ -45,8 +44,8 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
   }
 
   def createWorkspaceBillingAccountMonitor(dataSource: SlickDataSource,
-                                        mockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test"))
-                                       (implicit executionContext: ExecutionContext) = {
+                                           mockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test"))
+                                          (implicit executionContext: ExecutionContext) = {
     system.actorOf(WorkspaceBillingAccountMonitor.props(dataSource, mockGcsDAO, 1 second, 1 second))
   }
 
