@@ -403,7 +403,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             else if (entityUpdates.nonEmpty)
               logger.info("handleOutputs writing to entity attributes only")
             else
-              logger.debug("handleOutputs writing to neither workspace nor entity attributes; could be errors")
+              logger.info("handleOutputs writing to neither workspace nor entity attributes; could be errors")
 
         // save everything to the db
         _ <- saveWorkspace(dataAccess, updatedEntitiesAndWorkspace)
