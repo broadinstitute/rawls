@@ -7,7 +7,7 @@ import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.{trace, traceWithParent}
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span}
+import io.opencensus.trace.Span
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
@@ -406,18 +406,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressionMap)
 
           // for debugging purposes
-        workspacesToUpdate = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
-        entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
-        _ = if (workspacesToUpdate.nonEmpty && entityUpdates.nonEmpty)
-              logger.info("handleOutputs writing to both workspace and entity attributes")
-            else if (workspacesToUpdate.nonEmpty)
-              logger.info("handleOutputs writing to workspace attributes only")
-            else if (entityUpdates.nonEmpty)
-              logger.info("handleOutputs writing to entity attributes only")
-            else
-              logger.info("handleOutputs writing to neither workspace nor entity attributes; could be errors")
+          workspacesToUpdate = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
+          entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
+          _ = if (workspacesToUpdate.nonEmpty && entityUpdates.nonEmpty)
+                logger.info("handleOutputs writing to both workspace and entity attributes")
+              else if (workspacesToUpdate.nonEmpty)
+                logger.info("handleOutputs writing to workspace attributes only")
+              else if (entityUpdates.nonEmpty)
+                logger.info("handleOutputs writing to entity attributes only")
+              else
+                logger.info("handleOutputs writing to neither workspace nor entity attributes; could be errors")
 
-        // save everything to the db
+          // save everything to the db
           _ <- traceDBIOWithParent("SubmissionMonitorActor.handleOutputs.saveWorkspace", parentSpan) ( _ => saveWorkspace(dataAccess, updatedEntitiesAndWorkspace))
           _ <- traceDBIOWithParent("SubmissionMonitorActor.handleOutputs.saveEntities", parentSpan) ( _ => saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace))
           _ <- traceDBIOWithParent("SubmissionMonitorActor.handleOutputs.saveError", parentSpan) ( _ => saveErrors(updatedEntitiesAndWorkspace.collect { case Right(errors) => errors }, dataAccess))
