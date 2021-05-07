@@ -381,14 +381,6 @@ trait AttributeComponent {
             !existingAttributes.exists(equalRecords(_, v)) // if the attribute exists and is unchanged, don't update it
       }
 
-      // N.B. attributesToIgnore is only used for debugging/logging! TODO: delete this entire block when done debugging
-//      val attributesToIgnore = existingKeys -- attributesToInsert.keys -- attributesToUpdate.keys -- attributesToDelete.keys
-//
-//      System.err.println(s"********** CALCULATED attributesToInsert: ${attributesToInsert.keys.map(_.name).toList.sorted}")
-//      System.err.println(s"********** CALCULATED attributesToDelete: ${attributesToDelete.keys.map(_.name).toList.sorted}")
-//      System.err.println(s"********** CALCULATED attributesToUpdate: ${attributesToUpdate.keys.map(_.name).toList.sorted}")
-//      System.err.println(s"********** CALCULATED attributesToIgnore: ${attributesToIgnore.map(_.name).toList.sorted}")
-//
       patchAttributesAction(attributesToInsert.values,
         attributesToUpdate.values,
         attributesToDelete.values.map(_.id),
