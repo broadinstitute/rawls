@@ -5,7 +5,7 @@
         <renameColumn tableName="WORKSPACE" oldColumnName="GOOGLE_PROJECT" newColumnName="GOOGLE_PROJECT_ID" columnDataType="VARCHAR(254)" />
         <addColumn tableName="WORKSPACE">
             <column name="GOOGLE_PROJECT_NUMBER" type="VARCHAR(254)">
-                <constraints nullable="true" unique="true" />
+                <constraints nullable="true"/>
             </column>
         </addColumn>
         <sql>
