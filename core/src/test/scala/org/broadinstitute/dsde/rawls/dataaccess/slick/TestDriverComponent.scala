@@ -838,7 +838,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceToTestGrant,
       workspaceConfigCopyDestination,
       regionalWorkspace)
-    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
+    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save(_)))
 
     override def save() = {
       DBIO.seq(

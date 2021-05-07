@@ -6,10 +6,12 @@ import java.util.{Date, UUID}
 import cats.instances.int._
 import cats.instances.option._
 import cats.{Monoid, MonoidK}
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcProfile}
 
@@ -154,24 +156,25 @@ trait WorkspaceComponent {
       loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
     }
 
-    def save(workspace: Workspace): ReadWriteAction[Workspace] = {
+    def save(workspace: Workspace, parentSpan: Span = null): ReadWriteAction[Workspace] = {
       validateUserDefinedString(workspace.namespace)
       validateWorkspaceName(workspace.name)
       workspace.attributes.keys.foreach { attrName =>
         validateUserDefinedString(attrName.name)
         validateAttributeName(attrName, Attributable.workspaceEntityType)
       }
-
-      uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
-        case None =>
-          (workspaceQuery += marshalNewWorkspace(workspace)) andThen
-            rewriteAttributes(workspace) andThen
-            updateLastModified(UUID.fromString(workspace.workspaceId))
-        case Some(workspaceRecord) =>
-          rewriteAttributes(workspace) andThen
-            optimisticLockUpdate(workspaceRecord) andThen
-            updateLastModified(UUID.fromString(workspace.workspaceId))
-      } map { _ => workspace }
+      traceDBIOWithParent("WorkspaceComponent.saveWorkspace", parentSpan) ( _ =>
+        uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
+          case None =>
+            traceDBIOWithParent("new-workspace", parentSpan) ( _ => (workspaceQuery += marshalNewWorkspace(workspace))) andThen
+              traceDBIOWithParent("rewrite-workspace-attributes", parentSpan) ( _ => rewriteAttributes(workspace)) andThen
+              traceDBIOWithParent("update-last-modified", parentSpan) ( _ => updateLastModified(UUID.fromString(workspace.workspaceId)))
+          case Some(workspaceRecord) =>
+            traceDBIOWithParent("rewrite-workspace-attributes", parentSpan) ( _ => rewriteAttributes(workspace)) andThen
+              traceDBIOWithParent("optimistic-lock-update", parentSpan) ( _ => optimisticLockUpdate(workspaceRecord)) andThen
+              traceDBIOWithParent("update-last-modified", parentSpan) ( _ => updateLastModified(UUID.fromString(workspace.workspaceId)))
+        } map { _ => workspace }
+      )
     }
 
     private def rewriteAttributes(workspace: Workspace) = {

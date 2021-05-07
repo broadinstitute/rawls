@@ -4,9 +4,11 @@ import java.sql.Timestamp
 import java.util.{Date, UUID}
 
 import akka.http.scaladsl.model.StatusCodes
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
 import slick.jdbc.{GetResult, JdbcProfile}
 
@@ -542,29 +544,31 @@ trait EntityComponent {
     }
 
     //"patch" this entity by applying the upserts and the deletes to its attributes, then save. a little more database efficient than a "full" save, but requires the entity already exist.
-    def saveEntityPatch(workspaceContext: Workspace, entityRef: AttributeEntityReference, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
-      val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
-      if (upserts.isEmpty && deletes.isEmpty) {
-        DBIO.successful(()) //no-op
-      } else if (deleteIntersectUpsert.nonEmpty) {
-        DBIO.failed(new RawlsException(s"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert"))
-      } else {
-        getEntityRecords(workspaceContext.workspaceIdAsUUID, Set(entityRef)) flatMap { entityRecs =>
-          if (entityRecs.length != 1) {
-            throw new RawlsException(s"saveEntityPatch looked up $entityRef expecting 1 record, got ${entityRecs.length} instead")
-          }
+    def saveEntityPatch(workspaceContext: Workspace, entityRef: AttributeEntityReference, upserts: AttributeMap, deletes: Traversable[AttributeName], parentSpan: Span = null) = {
+      traceDBIOWithParent("EntityComponent.saveEntityPatch", parentSpan) { _ =>
+        val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
+        if (upserts.isEmpty && deletes.isEmpty) {
+          DBIO.successful(()) //no-op
+        } else if (deleteIntersectUpsert.nonEmpty) {
+          DBIO.failed(new RawlsException(s"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert"))
+        } else {
+          traceDBIOWithParent("get-entity-records", parentSpan) ( _ => getEntityRecords(workspaceContext.workspaceIdAsUUID, Set(entityRef))) flatMap { entityRecs =>
+            if (entityRecs.length != 1) {
+              throw new RawlsException(s"saveEntityPatch looked up $entityRef expecting 1 record, got ${entityRecs.length} instead")
+            }
 
-          val entityRecord = entityRecs.head
-          upserts.keys.foreach { attrName =>
-            validateUserDefinedString(attrName.name)
-            validateAttributeName(attrName, entityRecord.entityType)
-          }
+            val entityRecord = entityRecs.head
+            upserts.keys.foreach { attrName =>
+              validateUserDefinedString(attrName.name)
+              validateAttributeName(attrName, entityRecord.entityType)
+            }
 
-          for {
-            _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, deletes)
-            updatedEntities <- entityQuery.getEntities(Seq(entityRecord.id))
-            _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(entityRecs, updatedEntities.map(elem => elem._2))
-          } yield {}
+            for {
+              _ <- traceDBIOWithParent("apply-entity-patch", parentSpan) ( _ => applyEntityPatch(workspaceContext, entityRecord, upserts, deletes))
+              updatedEntities <- traceDBIOWithParent("get-entities", parentSpan) ( _ => entityQuery.getEntities(Seq(entityRecord.id)))
+              _ <- traceDBIOWithParent("entity-optimistic-lock-update", parentSpan) ( _ => entityQueryWithInlineAttributes.optimisticLockUpdate(entityRecs, updatedEntities.map(elem => elem._2)))
+            } yield {}
+          }
         }
       }
     }
@@ -756,7 +760,7 @@ trait EntityComponent {
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
     }
-    
+
     sealed trait RecursionDirection
     case object Up extends RecursionDirection
     case object Down extends RecursionDirection

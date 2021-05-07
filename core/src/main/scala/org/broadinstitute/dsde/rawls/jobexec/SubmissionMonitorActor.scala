@@ -418,9 +418,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
                 logger.info("handleOutputs writing to neither workspace nor entity attributes; could be errors")
 
           // save everything to the db
-          _ <- traceDBIOWithParent("SubmissionMonitorActor.handleOutputs.saveWorkspace", parentSpan) ( _ => saveWorkspace(dataAccess, updatedEntitiesAndWorkspace))
-          _ <- traceDBIOWithParent("SubmissionMonitorActor.handleOutputs.saveEntities", parentSpan) ( _ => saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace))
-          _ <- traceDBIOWithParent("SubmissionMonitorActor.handleOutputs.saveError", parentSpan) ( _ => saveErrors(updatedEntitiesAndWorkspace.collect { case Right(errors) => errors }, dataAccess))
+          _ <- saveWorkspace(dataAccess, updatedEntitiesAndWorkspace, parentSpan)
+          _ <- saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace, parentSpan)
+          _ <- saveErrors(updatedEntitiesAndWorkspace.collect { case Right(errors) => errors }, dataAccess, parentSpan)
         } yield ()
       }
     )
@@ -445,22 +445,26 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     dataAccess.entityQuery.getEntities(entityIds).map(_.toMap)
   }
 
-  def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
-    //note there is only 1 workspace (may be None if it is not updated) even though it may be updated multiple times so reduce it into 1 update
-    val workspaces = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
-    if (workspaces.isEmpty) DBIO.successful(0)
-    else dataAccess.workspaceQuery.save(workspaces.reduce((a, b) => a.copy(attributes = a.attributes ++ b.attributes)))
+  def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]], parentSpan: Span = null)(implicit executionContext: ExecutionContext) = {
+    traceDBIOWithParent("SubmissionMonitorActor.saveWorkspace", parentSpan) { _ =>
+      //note there is only 1 workspace (may be None if it is not updated) even though it may be updated multiple times so reduce it into 1 update
+      val workspaces = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
+      if (workspaces.isEmpty) DBIO.successful(0)
+      else dataAccess.workspaceQuery.save(workspaces.reduce((a, b) => a.copy(attributes = a.attributes ++ b.attributes)), parentSpan)
+    }
   }
 
-  def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]])(implicit executionContext: ExecutionContext) = {
-    val entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
-    if(entityUpdates.isEmpty) {
-       DBIO.successful(())
-    }
-    else {
-      DBIO.sequence(entityUpdates map { entityUpd =>
-        dataAccess.entityQuery.saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, Seq())
-      })
+  def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]], parentSpan: Span = null)(implicit executionContext: ExecutionContext) = {
+    traceDBIOWithParent("SubmissionMonitorActor.saveEntities", parentSpan) { _ =>
+      val entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
+      if (entityUpdates.isEmpty) {
+        DBIO.successful(())
+      }
+      else {
+        DBIO.sequence(entityUpdates map { entityUpd =>
+          dataAccess.entityQuery.saveEntityPatch(workspace, entityUpd.entityRef, entityUpd.upserts, Seq(), parentSpan)
+        })
+      }
     }
   }
 
@@ -514,11 +518,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     (entityAndUpsert, updatedWorkspace)
   }
 
-  def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess) = {
-    DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
-      dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
-        dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
-    })
+  def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess, parentSpan: Span = null)(implicit executionContext: ExecutionContext) = {
+    traceDBIOWithParent("SubmissionMonitorActor.saveError", parentSpan) ( _ =>
+      DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
+        traceDBIOWithParent("update-workflow-status", parentSpan) ( _ =>dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed)) andThen
+          traceDBIOWithParent("save-error-messages", parentSpan) ( _ =>dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id))
+    }))
   }
 
   def checkCurrentWorkflowStatusCounts(reschedule: Boolean)(implicit executionContext: ExecutionContext): Future[SaveCurrentWorkflowStatusCounts] = {
