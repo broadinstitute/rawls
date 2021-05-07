@@ -330,14 +330,8 @@ trait AttributeComponent {
 
     def patchAttributesAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
       for {
-        _ <- if (deleteIds.nonEmpty)
-                deleteAttributeRecordsById(deleteIds.toSeq)
-              else
-                DBIO.successful(0)
-        _ <- if (inserts.nonEmpty)
-                batchInsertAttributes(inserts.toSeq)
-              else
-                DBIO.successful(0)
+        _ <- if (deleteIds.nonEmpty) deleteAttributeRecordsById(deleteIds.toSeq) else DBIO.successful(0)
+        _ <- if (inserts.nonEmpty) batchInsertAttributes(inserts.toSeq) else DBIO.successful(0)
         updateResult <- if (updates.nonEmpty)
                           AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
                         else
