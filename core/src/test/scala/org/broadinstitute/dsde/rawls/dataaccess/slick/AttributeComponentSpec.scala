@@ -5,6 +5,9 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.joda.time.DateTime
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito._
 import spray.json.{JsObject, JsString}
 
 import java.util.concurrent.Executors
@@ -724,6 +727,193 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
           attributeTestFunction.run(attribute1, attribute2)
         }
     }
+  }
+
+  it should "skip inserts, updates, and deletes when rewriting entity attributes if nothing changed" in withEmptyTestDatabase {
+    // no need to save workspace or parent entity; this test should not write anything
+    val baseRec = EntityAttributeRecord(0, 1, "default", "name1", Some("strValue"), None, None, None, None, None, None, false, None)
+
+    val existingAttributes = Seq(
+      baseRec.copy(id = 1, name = "attr1", valueString = Some("value1")),
+      baseRec.copy(id = 2, name = "attr2", valueString = None, valueNumber = Some(2)),
+      baseRec.copy(id = 3, name = "attr3", valueString = None, valueBoolean = Some(true)))
+
+    val spiedAttrQuery = spy(entityAttributeQuery)
+
+    runAndWait(spiedAttrQuery.rewriteAttrsAction(existingAttributes, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
+
+    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
+
+    verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
+      updatesCaptor.capture(),
+      deletesCaptor.capture(),
+      any())
+
+    assert(insertsCaptor.getValue.isEmpty, "inserts should be empty")
+    assert(updatesCaptor.getValue.isEmpty, "updates should be empty")
+    assert(deletesCaptor.getValue.isEmpty, "deletes should be empty")
+  }
+
+  it should "skip inserts and deletes when rewriting entity attributes if only updating" in withEmptyTestDatabase {
+    // save workspace
+    runAndWait(workspaceQuery.save(workspace))
+    // save entity to use as parent
+    runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
+    // get id of saved entity
+    val existingRecs = runAndWait(entityQuery.findActiveEntityByType(workspace.workspaceIdAsUUID, "myType").result)
+    existingRecs should have size 1
+
+    val baseRec = EntityAttributeRecord(0, existingRecs.head.id, "default", "name1", Some("strValue"), None, None, None, None, None, None, false, None)
+
+    val existingAttributes = Seq(
+      baseRec.copy(id = 1, name = "attr1", valueString = Some("value1")),
+      baseRec.copy(id = 2, name = "attr2", valueString = None, valueNumber = Some(2)),
+      baseRec.copy(id = 3, name = "attr3", valueString = None, valueBoolean = Some(true)))
+
+    val updates = Seq(
+      baseRec.copy(id = 1, name = "attr1", valueString = Some("value1 UPDATED"))
+    )
+
+    val attributesToSave =  updates ++ existingAttributes.tail
+
+    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
+
+    val spiedAttrQuery = spy(entityAttributeQuery)
+
+    runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
+
+    verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
+      updatesCaptor.capture(),
+      deletesCaptor.capture(),
+      any())
+
+    assert(insertsCaptor.getValue.isEmpty, "insertsCaptor should be empty")
+    withClue("should have one update"){ assertSameElements(updates, updatesCaptor.getValue) }
+    assert(deletesCaptor.getValue.isEmpty, "deletes should be empty")
+  }
+
+  it should "skip updates and deletes when rewriting entity attributes if only inserting" in withEmptyTestDatabase {
+    // save workspace
+    runAndWait(workspaceQuery.save(workspace))
+    // save entity to use as parent
+    runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
+    // get id of saved entity
+    val existingRecs = runAndWait(entityQuery.findActiveEntityByType(workspace.workspaceIdAsUUID, "myType").result)
+    existingRecs should have size 1
+
+    val baseRec = EntityAttributeRecord(0, existingRecs.head.id, "default", "name1", Some("strValue"), None, None, None, None, None, None, false, None)
+
+    val existingAttributes = Seq(
+      baseRec.copy(id = 1, name = "attr1", valueString = Some("value1")),
+      baseRec.copy(id = 2, name = "attr2", valueString = None, valueNumber = Some(2)),
+      baseRec.copy(id = 3, name = "attr3", valueString = None, valueBoolean = Some(true)))
+
+    val inserts = Seq(
+      baseRec.copy(id = 4, name = "attr4", valueString = Some("this is a new attr"))
+    )
+
+    val attributesToSave =  inserts ++ existingAttributes
+
+    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
+
+    val spiedAttrQuery = spy(entityAttributeQuery)
+
+    runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
+
+    verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
+      updatesCaptor.capture(),
+      deletesCaptor.capture(),
+      any())
+
+    withClue("should have one insert"){ assertSameElements(inserts, insertsCaptor.getValue) }
+    assert(updatesCaptor.getValue.isEmpty, "updates should be empty")
+    assert(deletesCaptor.getValue.isEmpty, "deletes should be empty")
+  }
+
+  it should "skip inserts and updates when rewriting entity attributes if only deleting" in withEmptyTestDatabase {
+    // save workspace
+    runAndWait(workspaceQuery.save(workspace))
+    // save entity to use as parent
+    runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
+    // get id of saved entity
+    val existingRecs = runAndWait(entityQuery.findActiveEntityByType(workspace.workspaceIdAsUUID, "myType").result)
+    existingRecs should have size 1
+
+    val baseRec = EntityAttributeRecord(0, existingRecs.head.id, "default", "name1", Some("strValue"), None, None, None, None, None, None, false, None)
+
+    val existingAttributes = Seq(
+      baseRec.copy(id = 1, name = "attr1", valueString = Some("value1")),
+      baseRec.copy(id = 2, name = "attr2", valueString = None, valueNumber = Some(2)),
+      baseRec.copy(id = 3, name = "attr3", valueString = None, valueBoolean = Some(true)))
+
+    val attributesToSave =  existingAttributes.tail // <-- attr1 should be deleted
+
+    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
+
+    val spiedAttrQuery = spy(entityAttributeQuery)
+
+    runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
+
+    verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
+      updatesCaptor.capture(),
+      deletesCaptor.capture(),
+      any())
+
+    assert(insertsCaptor.getValue.isEmpty, "inserts should be empty")
+    assert(updatesCaptor.getValue.isEmpty, "updates should be empty")
+    withClue("should have one delete"){ assertSameElements(Seq(1), deletesCaptor.getValue) }
+  }
+
+  it should "combine inserts, updates, and deletes when rewriting entity attributes" in withEmptyTestDatabase {
+    // save workspace
+    runAndWait(workspaceQuery.save(workspace))
+    // save entity to use as parent
+    runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
+    // get id of saved entity
+    val existingRecs = runAndWait(entityQuery.findActiveEntityByType(workspace.workspaceIdAsUUID, "myType").result)
+    existingRecs should have size 1
+
+    val baseRec = EntityAttributeRecord(0, existingRecs.head.id, "default", "name1", Some("strValue"), None, None, None, None, None, None, false, None)
+
+    val existingAttributes = Seq(
+      baseRec.copy(id = 1, name = "attr1", valueString = Some("value1")),
+      baseRec.copy(id = 2, name = "attr2", valueString = None, valueNumber = Some(2)),
+      baseRec.copy(id = 3, name = "attr3", valueString = None, valueBoolean = Some(true)))
+
+    val updates = Seq(
+      baseRec.copy(id = 1, name = "attr1", valueString = Some("value1 UPDATED"))
+    )
+
+    val inserts = Seq(
+      baseRec.copy(id = 4, name = "attr4", valueString = Some("this is a new attr"))
+    )
+
+    val attributesToSave =  updates ++ inserts // <-- attr2 and attr3 should be deleted
+
+    val insertsCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
+    val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
+
+    val spiedAttrQuery = spy(entityAttributeQuery)
+
+    runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
+
+    verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
+      updatesCaptor.capture(),
+      deletesCaptor.capture(),
+      any())
+
+    withClue("should have one insert"){ assertSameElements(inserts, insertsCaptor.getValue) }
+    withClue("should have one update"){ assertSameElements(updates, updatesCaptor.getValue) }
+    withClue("should have two deletes"){ assertSameElements(Seq(2, 3), deletesCaptor.getValue) }
   }
 
 }
