@@ -356,7 +356,7 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-  /api/billing/v2/{projectId}/billing-account:
+  /api/billing/v2/{projectId}/billingAccount:
     put:
       tags:
         - billing_v2

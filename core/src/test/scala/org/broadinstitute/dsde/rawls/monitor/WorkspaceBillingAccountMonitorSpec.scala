@@ -160,7 +160,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName)).getOrElse(fail("project not found"))
         .invalidBillingAccount shouldBe false
-      
+
       runAndWait(workspaceQuery.createOrUpdate(v1Workspace))
       runAndWait(workspaceQuery.createOrUpdate(v2Workspace))
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
