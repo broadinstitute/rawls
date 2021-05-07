@@ -636,7 +636,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   it should "handleStatusResponses and fail workflows that have invalid output expressions" in {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
-      runAndWait {
+       runAndWait {
         withWorkspaceContext(testData.workspace) { context =>
           submissionQuery.create(context, testData.submissionUpdateEntityReservedOutput)
         }
