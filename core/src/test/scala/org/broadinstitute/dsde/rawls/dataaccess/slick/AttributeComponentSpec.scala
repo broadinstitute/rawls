@@ -526,11 +526,11 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None, None, deleted = false, None)
 
     //test insert and update
-    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(insert), Seq(update), Seq(), workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(insert), Seq(update), Seq(), workspaceAttributeScratchQuery.insertScratchAttributes, "unittest"))
     assertExpectedRecords(Seq(existing.head, update, insert):_*)
 
     //test delete
-    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(), Seq(), existing.map(_.id), workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(), Seq(), existing.map(_.id), workspaceAttributeScratchQuery.insertScratchAttributes, "unittest"))
     assertExpectedRecords(Seq(insert):_*)
   }
 
@@ -749,7 +749,8 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
       updatesCaptor.capture(),
       deletesCaptor.capture(),
-      any())
+      any(),
+      "unittest")
 
     assert(insertsCaptor.getValue.isEmpty, "inserts should be empty")
     assert(updatesCaptor.getValue.isEmpty, "updates should be empty")
@@ -789,7 +790,8 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
       updatesCaptor.capture(),
       deletesCaptor.capture(),
-      any())
+      any(),
+      "unittest")
 
     assert(insertsCaptor.getValue.isEmpty, "insertsCaptor should be empty")
     withClue("should have one update"){ assertSameElements(updates, updatesCaptor.getValue) }
@@ -829,7 +831,8 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
       updatesCaptor.capture(),
       deletesCaptor.capture(),
-      any())
+      any(),
+      "unittest")
 
     withClue("should have one insert"){ assertSameElements(inserts, insertsCaptor.getValue) }
     assert(updatesCaptor.getValue.isEmpty, "updates should be empty")
@@ -865,7 +868,8 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
       updatesCaptor.capture(),
       deletesCaptor.capture(),
-      any())
+      any(),
+      "unittest")
 
     assert(insertsCaptor.getValue.isEmpty, "inserts should be empty")
     assert(updatesCaptor.getValue.isEmpty, "updates should be empty")
@@ -909,7 +913,8 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     verify(spiedAttrQuery, times(1)).patchAttributesAction(insertsCaptor.capture(),
       updatesCaptor.capture(),
       deletesCaptor.capture(),
-      any())
+      any(),
+      "unittest")
 
     withClue("should have one insert"){ assertSameElements(inserts, insertsCaptor.getValue) }
     withClue("should have one update"){ assertSameElements(updates, updatesCaptor.getValue) }
