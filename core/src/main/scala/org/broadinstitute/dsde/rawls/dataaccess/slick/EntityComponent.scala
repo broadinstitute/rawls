@@ -455,6 +455,7 @@ trait EntityComponent {
       } yield entities
     }
 
+    // only called from saveEntityPatch
     private def applyEntityPatch(workspaceContext: Workspace, entityRecord: EntityRecord, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
       //yank the attribute list for this entity to determine what to do with upserts
       entityAttributeQuery.findByOwnerQuery(Seq(entityRecord.id)).map(attr => (attr.namespace, attr.name, attr.id)).result flatMap { attrCols =>
@@ -536,11 +537,12 @@ trait EntityComponent {
 
           val totalDeleteIds = deleteIds ++ extraDeleteIds
 
-          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, totalDeleteIds, entityAttributeTempQuery.insertScratchAttributes)
+          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, totalDeleteIds, entityAttributeTempQuery.insertScratchAttributes, "ecaep")
         }
       }
     }
 
+    // only called from SubmissionMonitorActor.saveEntities
     //"patch" this entity by applying the upserts and the deletes to its attributes, then save. a little more database efficient than a "full" save, but requires the entity already exist.
     def saveEntityPatch(workspaceContext: Workspace, entityRef: AttributeEntityReference, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
       val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
