@@ -4,7 +4,7 @@ import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import com.google.api.services.accesscontextmanager.v1beta.model.Operation
+import com.google.api.services.accesscontextmanager.v1.model.Operation
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.ServicePerimeterServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent

@@ -128,63 +128,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   import dataSource.dataAccess.driver.api._
 
-  def CreateWorkspace(workspace: WorkspaceRequest, parentSpan: Span = null) = createWorkspace(workspace, parentSpan)
-  def GetWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs, parentSpan: Span) = getWorkspace(workspaceName, params, parentSpan)
-  def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
-  def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
-  def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
-  def ListWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span) = listWorkspaces(params, parentSpan)
-  def ListAllWorkspaces = listAllWorkspaces()
-  def GetTags(query: Option[String]) = getTags(query)
-  def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
-  def CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest, parentSpan: Span = null) = cloneWorkspace(sourceWorkspace, destWorkspace, parentSpan)
-  def GetACL(workspaceName: WorkspaceName) = getACL(workspaceName)
-  def UpdateACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean) = updateACL(workspaceName, aclUpdates, inviteUsersNotFound)
-  def SendChangeNotifications(workspaceName: WorkspaceName) = sendChangeNotifications(workspaceName)
-  def GetCatalog(workspaceName: WorkspaceName) = getCatalog(workspaceName)
-  def UpdateCatalog(workspaceName: WorkspaceName, catalogUpdates: Seq[WorkspaceCatalog]) = updateCatalog(workspaceName, catalogUpdates)
-  def LockWorkspace(workspaceName: WorkspaceName) = lockWorkspace(workspaceName)
-  def UnlockWorkspace(workspaceName: WorkspaceName) = unlockWorkspace(workspaceName)
-  def CheckBucketReadAccess(workspaceName: WorkspaceName) = checkBucketReadAccess(workspaceName)
-  def CheckSamActionWithLock(workspaceName: WorkspaceName, requiredAction: SamResourceAction) = checkSamActionWithLock(workspaceName, requiredAction)
-  def GetBucketUsage(workspaceName: WorkspaceName) = getBucketUsage(workspaceName)
-  def GetBucketOptions(workspaceName: WorkspaceName) = getBucketOptions(workspaceName)
-  //def UpdateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions) = updateBucketOptions(workspaceName, bucketOptions)
-  def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
-  def EnableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName) = enableRequesterPaysForLinkedSAs(workspaceName)
-  def DisableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName) = disableRequesterPaysForLinkedSAs(workspaceName)
-
-  def CreateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration) = createMethodConfiguration(workspaceName, methodConfiguration)
-  def RenameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: MethodConfigurationName) = renameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)
-  def DeleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = deleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
-  def GetMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = getMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
-  def OverwriteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration: MethodConfiguration) = overwriteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newMethodConfiguration)
-  def UpdateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration: MethodConfiguration) = updateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newMethodConfiguration)
-  def CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) = copyMethodConfiguration(methodConfigNamePair)
-  def CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationImport) = copyMethodConfigurationFromMethodRepo(query)
-  def CopyMethodConfigurationToMethodRepo(query: MethodRepoConfigurationExport) = copyMethodConfigurationToMethodRepo(query)
-  def ListAgoraMethodConfigurations(workspaceName: WorkspaceName) = listAgoraMethodConfigurations(workspaceName)
-  def ListMethodConfigurations(workspaceName: WorkspaceName) = listMethodConfigurations(workspaceName)
-  def CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) = createMethodConfigurationTemplate(methodRepoMethod)
-  def GetMethodInputsOutputs(userInfo: UserInfo, methodRepoMethod: MethodRepoMethod ) = getMethodInputsOutputs(userInfo, methodRepoMethod)
-  def GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
-  def GetGenomicsOperationV2(workflowId: String, operationId: List[String]) = getGenomicsOperationV2(workflowId, operationId)
-
-  def ListSubmissions(workspaceName: WorkspaceName) = listSubmissions(workspaceName)
-  def CountSubmissions(workspaceName: WorkspaceName) = countSubmissions(workspaceName)
-  def CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) = createSubmission(workspaceName, submission)
-  def ValidateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) = validateSubmission(workspaceName, submission)
-  def GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = getSubmissionStatus(workspaceName, submissionId)
-  def AbortSubmission(workspaceName: WorkspaceName, submissionId: String) = abortSubmission(workspaceName, submissionId)
-  def GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowOutputs(workspaceName, submissionId, workflowId)
-  def GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String, metadataParams: MetadataParams) = workflowMetadata(workspaceName, submissionId, workflowId, metadataParams)
-  def GetWorkflowCost(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowCost(workspaceName, submissionId, workflowId)
-  def WorkflowQueueStatus = workflowQueueStatus()
-
-  def AdminListAllActiveSubmissions = asFCAdmin { listAllActiveSubmissions() }
-  def AdminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = adminAbortSubmission(workspaceName,submissionId)
-  def AdminWorkflowQueueStatusByUser = adminWorkflowQueueStatusByUser()
-
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
@@ -654,11 +597,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
         withBillingProjectContext(destWorkspaceRequest.namespace) { destBillingProject =>
           getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
+            // if bucket location does not exist in request, use the same location as source workspace. Otherwise use the one from request
             // if the source bucket is a regional bucket, retrieve the region as the destination bucket also needs to be created in the same region
-            val bucketLocationFuture: Future[Option[String]] = for {
+            val bucketLocationFuture: Future[Option[String]] = if(destWorkspaceRequest.bucketLocation.isEmpty) (for {
               sourceWorkspaceContext <- getWorkspaceContext(permCtx.toWorkspaceName)
             bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName, Option(GoogleProjectId(destWorkspaceRequest.namespace)))
-            } yield bucketLocation
+            } yield bucketLocation) else withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {Future(destWorkspaceRequest.bucketLocation)}
 
             bucketLocationFuture flatMap { bucketLocationOption =>
               for {
@@ -1765,9 +1709,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       RequestComplete(StatusCodes.Forbidden) }
   }
 
-  def listAllActiveSubmissions() = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.submissionQuery.listAllActiveSubmissions().map(RequestComplete(StatusCodes.OK, _))
+  def adminListAllActiveSubmissions() = {
+    asFCAdmin {
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.submissionQuery.listAllActiveSubmissions().map(RequestComplete(StatusCodes.OK, _))
+      }
     }
   }
 
@@ -1789,18 +1735,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def listWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue): Future[PerRequestMessage] = {
-    for {
-      workspaces <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listWithAttribute(attributeName, attributeValue)
+  def adminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue): Future[PerRequestMessage] = {
+    asFCAdmin {
+      for {
+        workspaces <- dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.listWithAttribute(attributeName, attributeValue)
+        }
+        results <- Future.traverse(workspaces) { workspace =>
+          loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo).map(WorkspaceDetails(workspace, _))
+        }
+      } yield {
+        RequestComplete(StatusCodes.OK, results)
       }
-      results <- Future.traverse(workspaces) { workspace =>
-        loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo).map(WorkspaceDetails(workspace, _))
-      }
-    } yield {
-      RequestComplete(StatusCodes.OK, results)
     }
-
   }
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
@@ -1837,7 +1784,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // check that the requested operation id actually exists in the workflow
       if (operationIds.toList.contains(operationIdString)) {
         val genomicsServiceRef = genomicsServiceConstructor(userInfo)
-        genomicsServiceRef.GetOperation(operationIdString)
+        genomicsServiceRef.getOperation(operationIdString)
       } else {
         Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"operation id ${operationIdString} not found in workflow $workflowId")))
       }
@@ -1929,6 +1876,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
+      _ <- traceWithParent("maybeMoveGoogleProjectToFolder", span)(_ => maybeMoveGoogleProjectToFolder(billingProject.servicePerimeter, googleProjectId))
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
       googleProjectLabels = gcsDAO.labelSafeMap(Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId), "")
       googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
@@ -1937,6 +1885,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
       _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail))
     } yield (googleProjectId, googleProjectNumber)
+  }
+
+  /**
+    * If there is a service perimeter, move the google project to the folder for the perimeter
+    * @param servicePerimeterName
+    * @param googleProjectId
+    * @return
+    */
+  private def maybeMoveGoogleProjectToFolder(servicePerimeterName: Option[ServicePerimeterName], googleProjectId: GoogleProjectId): Future[Unit] = {
+    servicePerimeterName match {
+      case Some(name) => userServiceConstructor(userInfo).moveGoogleProjectToServicePerimeterFolder(name, googleProjectId)
+      case None => Future.successful(())
+    }
   }
 
   private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[List[Boolean]] = {

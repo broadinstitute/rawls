@@ -67,7 +67,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val userService = getUserService(dataSource, servicePerimeterService = mockServicePerimeterService)
 
-      val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
+      val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
       val expected = RequestComplete(StatusCodes.NoContent)
       actual shouldEqual expected
       verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)
@@ -101,7 +101,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val userService = getUserService(dataSource, gcsDAO = mockGcsDAO, servicePerimeterService = mockServicePerimeterService)
 
-      val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
+      val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
       val expected = RequestComplete(StatusCodes.NoContent)
       actual shouldEqual expected
       verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)
@@ -123,7 +123,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val userService = getUserService(dataSource)
 
-      val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
+      val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
       assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
       actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
     }
@@ -137,7 +137,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val userService = getUserService(dataSource)
 
-      val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
+      val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
       assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
       actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
     }
@@ -155,7 +155,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val userService = getUserService(dataSource, mockSamDAO)
 
-      val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
+      val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
       assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
       actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }
@@ -173,7 +173,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val userService = getUserService(dataSource, mockSamDAO)
 
-      val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
+      val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
       assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
       actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.NotFound)
     }
@@ -201,7 +201,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockGcsDAO.deleteV1Project(project.googleProjectId)).thenReturn(Future.successful())
 
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
-      val actual = userService.DeleteBillingProject(defaultBillingProjectName).futureValue
+      val actual = userService.deleteBillingProject(defaultBillingProjectName).futureValue
 
       verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, userInfo)
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
@@ -238,7 +238,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.DeleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
     }
@@ -255,7 +255,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.DeleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }

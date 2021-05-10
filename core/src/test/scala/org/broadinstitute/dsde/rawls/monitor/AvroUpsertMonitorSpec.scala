@@ -96,11 +96,21 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   )
 
   def setUp(services: TestApiService) = {
-    // create the two topics
-    services.gpsDAO.createTopic(importReadPubSubTopic)
-    services.gpsDAO.createTopic(importWritePubSubTopic) map { _ =>
-      services.gpsDAO.createSubscription(importWritePubSubTopic, importWriteSubscriptionName)
-    }
+    // create the two topics and the subscription. These are futures so we need to wait for them
+    // to complete before allowing tests to run.
+    Await.result(
+      for {
+        readTopicCreate <- services.gpsDAO.createTopic(importReadPubSubTopic)
+        writeTopicCreate <- services.gpsDAO.createTopic(importWritePubSubTopic)
+        subscriptionCreate <- services.gpsDAO.createSubscription(importWritePubSubTopic, importWriteSubscriptionName)
+      } yield {
+        assert(readTopicCreate, "did not create read topic")
+        assert(writeTopicCreate, "did not create write topic")
+        assert(subscriptionCreate, "did not create write subscription")
+        readTopicCreate && writeTopicCreate && subscriptionCreate
+      },
+      Duration.apply(10, TimeUnit.SECONDS)
+    )
 
     val mockImportServiceDAO =  new MockImportServiceDAO()
 

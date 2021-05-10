@@ -7,7 +7,7 @@ object Dependencies {
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
-  val workbenchGoogle2V = "0.18-4631ebf"
+  val workbenchGoogle2V = "0.19-3a6194b"
 
   val cromwellVersion = "40-2754783"
 
@@ -43,6 +43,7 @@ object Dependencies {
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev7-" + googleV))
   val googleGenomics: ModuleID =              excludeGuavaJDK5("com.google.apis"        % "google-api-services-genomics"              % ("v2alpha1-rev61-" + googleV))
+  val googleLifeSciences: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-lifesciences"          % ("v2beta-rev20210314-" + "1.31.0"))
   val googleStorage: ModuleID =               excludeGuavaJDK5("com.google.apis"        % "google-api-services-storage"               % ("v1-rev157-" + "1.25.0"))
   val googleCloudResourceManager: ModuleID =  excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudresourcemanager"  % ("v1-rev7-" + googleV))
   val googleIam: ModuleID =                   excludeGuavaJDK5("com.google.apis"        % "google-api-services-iam"                   % ("v1-rev247-" + googleV))
@@ -106,12 +107,13 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.13.1"
 
-  val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
+  val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1-rev20210319-1.31.0"
 
   def excludeJakartaActivationApi(m: ModuleID): ModuleID = m.exclude("jakarta.activation", "jakarta.activation-api")
 
-  val workspaceManager = excludeJakartaActivationApi("bio.terra" % "workspace-manager-client" % "0.16.0-SNAPSHOT")
-  val dataRepo = excludeJakartaActivationApi("bio.terra" % "datarepo-client" % "1.0.44-SNAPSHOT")
+  val workspaceManager = excludeJakartaActivationApi("bio.terra" % "workspace-manager-client" % "0.19.0-SNAPSHOT")
+  val dataRepo = excludeJakartaActivationApi("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
+  val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
   val resourceBufferService = excludeJakartaActivationApi("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.0-M2"
@@ -148,6 +150,7 @@ object Dependencies {
 
     googleCloudBilling,
     googleGenomics,
+    googleLifeSciences,
     googleStorage,
     googleCloudResourceManager,
     googleIam,
@@ -231,6 +234,7 @@ object Dependencies {
     apacheCommonsIO,
     workspaceManager,
     dataRepo,
+    dataRepoJersey,
     antlrParser,
     resourceBufferService
   )

@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls
 import java.io.StringReader
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
@@ -26,6 +25,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceMa
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
+import org.broadinstitute.dsde.rawls.deltalayer.GcsDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -45,7 +45,8 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.util.ExecutionContexts
 import org.http4s.Uri
 import org.http4s.client.blaze.BlazeClientBuilder
@@ -358,7 +359,12 @@ object Boot extends IOApp with LazyLogging {
       val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
       // create the entity manager.
-      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO, appDependencies.bigQueryServiceFactory, DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")), conf.getBoolean("entityStatisticsCache.enabled"))
+      val deltaLayerWriter = new GcsDeltaLayerWriter(appDependencies.googleStorageService,
+        GcsBucketName(conf.getString("deltaLayer.deltaLayerSourceBucket")))
+      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
+        appDependencies.bigQueryServiceFactory, deltaLayerWriter,
+        DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
+        conf.getBoolean("entityStatisticsCache.enabled"))
 
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
       val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
@@ -405,7 +411,11 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         samDAO,
         workspaceManagerDAO,
-        conf.getString("dataRepo.terraInstanceName")
+        appDependencies.bigQueryServiceFactory,
+        conf.getString("dataRepo.terraInstanceName"),
+        gcsConfig.getString("pathToCredentialJson"),
+        WorkbenchEmail(clientEmail),
+        WorkbenchEmail(conf.getString("deltaLayer.deltaLayerStreamerEmail"))
       )
 
       val service = new RawlsApiServiceImpl(

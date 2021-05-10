@@ -21,6 +21,7 @@ import akka.http.scaladsl.server.RouteResult.Complete
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, LoggingMagnet}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
+import bio.terra.workspace.client.ApiException
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
@@ -43,6 +44,8 @@ object RawlsApiService extends LazyLogging {
       case rollback:MySQLTransactionRollbackException =>
         logger.error(s"ROLLBACK EXCEPTION, PROBABLE DEADLOCK: ${rollback.getMessage} [${rollback.getErrorCode} ${rollback.getSQLState}] ${rollback.getNextException}", rollback)
         complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
+      case wsmApiException: ApiException =>
+        complete(wsmApiException.getCode -> ErrorReport(wsmApiException).copy(stackTrace = Seq()))
       case e: Throwable =>
         // so we don't log the error twice when debug is enabled
         if (logger.underlying.isDebugEnabled) {
@@ -86,20 +89,12 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  // enable/disable snapshot routes based on a config flag
-  val dataRepoEnabled = Try(ConfigFactory.load().getBoolean("dataRepo.enabled")).toOption.getOrElse(false)
-  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ billingRoutesV2 ~ notificationsRoutes ~ servicePerimeterRoutes
-
-  val concatenatedRoutes = if (dataRepoEnabled) {
-    baseApiRoutes ~ snapshotRoutes
-  } else {
-    baseApiRoutes
-  }
+  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ billingRoutesV2 ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
   def apiRoutes =
     options(complete(OK)) ~
     withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
-      concatenatedRoutes
+      baseApiRoutes
     }
 
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {

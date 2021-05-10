@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.google
 
-import com.google.api.services.accesscontextmanager.v1beta.model.Operation
+import com.google.api.services.accesscontextmanager.v1.model.Operation
 import org.broadinstitute.dsde.rawls.model.ServicePerimeterName
 
 import scala.concurrent.Future

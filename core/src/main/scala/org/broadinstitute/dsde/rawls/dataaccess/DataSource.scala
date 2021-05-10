@@ -30,6 +30,34 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
   }
 
+  def createTempTable = {
+    sql"""call createEntityAttributeTempTable()""".as[Boolean]
+  }
+
+  def dropTempTable = {
+    sql"""call dropEntityAttributeTempTable""".as[Boolean]
+  }
+
+  // creates the ENTITY_ATTRIBUTE_TEMP for use by this transaction, executes the transaction, drops the temp table
+  def inTransactionWithAttrTempTable[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
+
+    val callerAction = f(dataAccess).transactionally.withTransactionIsolation(isolationLevel)
+
+    val callerActionWithTempTables = (for {
+      _ <- dropTempTable
+      _ <- createTempTable
+      origResult <- callerAction
+    } yield {
+      origResult
+    }).andFinally(dropTempTable)
+
+    database.run(callerActionWithTempTables.withPinnedSession).recover {
+      case t: Throwable =>
+        logger.error(s"Transaction with temporary tables failed. Message: ${t.getMessage}")
+        throw t
+    }
+  }
+
   def initWithLiquibase(liquibaseChangeLog: String, parameters: Map[String, AnyRef]) = {
     val dbConnection = database.source.createConnection()
     try {

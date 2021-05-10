@@ -885,16 +885,23 @@ class WorkspaceJsonSupport extends JsonSupport {
     val LINE_NUMBER = "lineNumber"
 
     def write(stackTraceElement: StackTraceElement) =
-      JsObject( CLASS_NAME -> JsString(stackTraceElement.getClassName),
-                METHOD_NAME -> JsString(stackTraceElement.getMethodName),
-                FILE_NAME -> JsString(stackTraceElement.getFileName),
-                LINE_NUMBER -> JsNumber(stackTraceElement.getLineNumber) )
+      JsObject( CLASS_NAME -> Option(stackTraceElement.getClassName).map(JsString(_)).getOrElse(JsNull),
+                METHOD_NAME -> Option(stackTraceElement.getMethodName).map(JsString(_)).getOrElse(JsNull),
+                FILE_NAME -> Option(stackTraceElement.getFileName).map(JsString(_)).getOrElse(JsNull),
+                LINE_NUMBER -> Option(stackTraceElement.getLineNumber).map(JsNumber(_)).getOrElse(JsNull) )
 
     def read(json: JsValue) =
       json.asJsObject.getFields(CLASS_NAME,METHOD_NAME,FILE_NAME,LINE_NUMBER) match {
         case Seq(JsString(className), JsString(methodName), JsString(fileName), JsNumber(lineNumber)) =>
-          new StackTraceElement(className,methodName,fileName,lineNumber.toInt)
-        case _ => throw new DeserializationException("unable to deserialize StackTraceElement")
+          new StackTraceElement(className, methodName, fileName, lineNumber.toInt)
+        case Seq(JsString(className), JsString(methodName), JsNull, JsNumber(lineNumber)) =>
+          // null in fileName indicates "Unknown Source" for the file
+          new StackTraceElement(className, methodName, null, lineNumber.toInt)
+        case _ =>
+          // it is technically possible for the write() method to serialize JsNull into
+          // className, methodName, and lineNumber - but those would indicate a very malformed
+          // stack trace; we don't want to deserialize those; error in that case is ok
+          throw new DeserializationException("unable to deserialize StackTraceElement")
       }
   }
 

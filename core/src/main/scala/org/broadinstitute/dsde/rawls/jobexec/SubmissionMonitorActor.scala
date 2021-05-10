@@ -313,7 +313,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     // and will be re-processed next time we call queryForWorkflowStatus().
     // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
     // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
-    datasource.inTransaction { dataAccess =>
+    datasource.inTransactionWithAttrTempTable { dataAccess =>
       handleOutputs(workflowsWithOutputs, dataAccess)
     } recoverWith {
       // If there is something fatally wrong handling outputs, mark the workflows as failed
@@ -392,6 +392,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
         // figure out the updates that need to occur to entities and workspaces
         updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressionMap)
+
+        // for debugging purposes
+        workspacesToUpdate = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
+        entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
+        _ = if (workspacesToUpdate.nonEmpty && entityUpdates.nonEmpty)
+              logger.info("handleOutputs writing to both workspace and entity attributes")
+            else if (workspacesToUpdate.nonEmpty)
+              logger.info("handleOutputs writing to workspace attributes only")
+            else if (entityUpdates.nonEmpty)
+              logger.info("handleOutputs writing to entity attributes only")
+            else
+              logger.info("handleOutputs writing to neither workspace nor entity attributes; could be errors")
 
         // save everything to the db
         _ <- saveWorkspace(dataAccess, updatedEntitiesAndWorkspace)

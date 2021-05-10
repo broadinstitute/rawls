@@ -25,23 +25,23 @@ trait BillingApiService extends UserInfoDirectives {
     pathPrefix("billing" / Segment) { projectId =>
       path("members") {
         get {
-          complete { userServiceConstructor(userInfo).GetBillingProjectMembers(RawlsBillingProjectName(projectId)) }
+          complete { userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId)) }
         }
       } ~
         // these routes are for adding/removing users from projects
         path(Segment / Segment) { (workbenchRole, userEmail) =>
           put {
-            complete { userServiceConstructor(userInfo).AddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))) }
+            complete { userServiceConstructor(userInfo).addUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))) }
           } ~
             delete {
-              complete { userServiceConstructor(userInfo).RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))) }
+              complete { userServiceConstructor(userInfo).removeUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))) }
             }
         }
     } ~
     path("billing") {
       post {
         entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
-          complete { userServiceConstructor(userInfo).CreateBillingProjectFull(createProjectRequest) }
+          complete { userServiceConstructor(userInfo).startBillingProjectCreation(createProjectRequest) }
         }
       }
     }

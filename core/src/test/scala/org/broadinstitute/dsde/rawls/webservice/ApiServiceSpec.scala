@@ -11,6 +11,7 @@ import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKitBase
+import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
@@ -22,13 +23,14 @@ import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
-import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, GoogleProjectNumber, RawlsUser, ServicePerimeterName}
+import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -38,9 +40,11 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
+import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -114,6 +118,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     def actorRefFactory = system
 
     override implicit val materializer = ActorMaterializer()
+    implicit val cs = IO.contextShift(global)
     override val workbenchMetricBaseName: String = "test"
     override val swaggerConfig: SwaggerConfig = SwaggerConfig("foo", "bar")
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
@@ -168,7 +173,11 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       slickDataSource,
       samDAO,
       workspaceManagerDAO,
-      mockServer.mockServerBaseUrl
+      bigQueryServiceFactory,
+      mockServer.mockServerBaseUrl,
+      "fakeCredentialPath",
+      WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com")
     )
 
     override val genomicsServiceConstructor = GenomicsService.constructor(
@@ -198,7 +207,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
-    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, new MockDeltaLayerWriter(), DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))

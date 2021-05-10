@@ -27,45 +27,45 @@ trait UserApiService extends UserInfoDirectives {
     path("user" / "refreshToken") {
       put {
         entity(as[UserRefreshToken]) { token =>
-          complete { userServiceConstructor(userInfo).SetRefreshToken(token) }
+          complete { userServiceConstructor(userInfo).setRefreshToken(token) }
         }
       }
     } ~
       path("user" / "refreshTokenDate") {
         get {
-          complete { userServiceConstructor(userInfo).GetRefreshTokenDate }
+          complete { userServiceConstructor(userInfo).getRefreshTokenDate() }
         }
       } ~
       pathPrefix("user" / "billing") {
         pathEnd {
           get {
-            complete { userServiceConstructor(userInfo).ListBillingProjects }
+            complete { userServiceConstructor(userInfo).listBillingProjects() }
           }
         } ~
         path(Segment) { projectName =>
           get {
-            complete { userServiceConstructor(userInfo).GetBillingProjectStatus(RawlsBillingProjectName(projectName)) }
+            complete { userServiceConstructor(userInfo).getBillingProjectStatus(RawlsBillingProjectName(projectName)) }
           }
         } ~
         path(Segment) { projectName =>
           delete {
-            complete { userServiceConstructor(userInfo).DeleteBillingProject(RawlsBillingProjectName(projectName)) }
+            complete { userServiceConstructor(userInfo).deleteBillingProject(RawlsBillingProjectName(projectName)) }
           }
         }
       } ~
       path("user" / "role" / "admin") {
         get {
-          complete { userServiceConstructor(userInfo).IsAdmin(userInfo.userEmail) }
+          complete { userServiceConstructor(userInfo).isAdmin(userInfo.userEmail) }
         }
       } ~
       path("user" / "role" / "curator") {
         get {
-          complete { userServiceConstructor(userInfo).IsLibraryCurator(userInfo.userEmail) }
+          complete { userServiceConstructor(userInfo).isLibraryCurator(userInfo.userEmail) }
         }
       } ~
       path("user" / "billingAccounts") {
         get {
-          complete { userServiceConstructor(userInfo).ListBillingAccounts }
+          complete { userServiceConstructor(userInfo).listBillingAccounts() }
         }
       }
   }

@@ -1,12 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.UUID
-
 import cats.effect._
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery.{BigQuery, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, TableResult}
+import com.google.cloud.bigquery.Acl.Entity
+import com.google.cloud.bigquery.Dataset.Builder
+import com.google.cloud.bigquery.{Acl, BigQuery, Dataset, DatasetId, DatasetInfo, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, TableResult}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
 import scala.collection.JavaConverters._
@@ -98,6 +100,10 @@ class MockBigQueryServiceFactory(blocker: Blocker, queryResponse: Either[Throwab
   override def getServiceForPet(petKey: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
   }
+
+  override def getServiceFromCredentialPath(credentialPath: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
+    Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
+  }
 }
 
 class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) extends GoogleBigQueryService[IO] {
@@ -110,4 +116,10 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
       case Right(results) => IO.pure(results)
     }
   }
+
+  override def createDataset(datasetName: String, labels: Map[String, String], aclBindings: Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]): IO[DatasetId] = {
+    IO.pure(DatasetInfo.newBuilder(datasetName).build().getDatasetId)
+  }
+
+  override def deleteDataset(datasetName: String): IO[Boolean] = IO.pure(true)
 }

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import java.sql.SQLException
 
-import com.google.api.services.accesscontextmanager.v1beta.model.Operation
+import com.google.api.services.accesscontextmanager.v1.model.Operation
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, TestDriverComponent}
