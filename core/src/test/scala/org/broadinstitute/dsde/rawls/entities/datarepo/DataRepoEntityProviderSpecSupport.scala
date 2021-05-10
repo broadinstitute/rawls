@@ -8,6 +8,7 @@ import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescript
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, GoogleProjectId, RawlsUserEmail, UserInfo, Workspace}
@@ -45,7 +46,7 @@ trait DataRepoEntityProviderSpecSupport {
                          entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName"))),
                          config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                         ): DataRepoEntityProvider = {
-    new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory, config)
+    new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory, new MockDeltaLayerWriter(), config)
   }
 
   def createTestBuilder(workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription())),
@@ -54,7 +55,7 @@ trait DataRepoEntityProviderSpecSupport {
                         bqServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
                         config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                        ): DataRepoEntityProviderBuilder = {
-    new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, config)
+    new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, new MockDeltaLayerWriter(), config)
   }
 
 

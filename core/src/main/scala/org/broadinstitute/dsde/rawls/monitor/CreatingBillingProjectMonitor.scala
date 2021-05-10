@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
-import com.google.api.services.accesscontextmanager.v1beta.model.Operation
+import com.google.api.services.accesscontextmanager.v1.model.Operation
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException

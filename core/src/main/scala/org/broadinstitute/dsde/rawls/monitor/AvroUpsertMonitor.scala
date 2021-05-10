@@ -256,7 +256,12 @@ class AvroUpsertMonitorActor(
           publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
           toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, workspace, attributes.userEmail)) map {
             case Success(importUpsertResults) =>
-              val msg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
+              val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
+              val baseMsg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
+              val msg = if (importUpsertResults.failures.isEmpty)
+                baseMsg
+              else
+                baseMsg + s" First 100 failures are: $failureMessages"
               publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, Option(msg))
             case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
           }
@@ -328,7 +333,7 @@ class AvroUpsertMonitorActor(
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
-          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = true)
+          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = true, None, None)
         } yield {
           upsertResults
         }
@@ -355,6 +360,12 @@ class AvroUpsertMonitorActor(
             attempt <- IO.fromFuture(IO(toFutureTry(performUpsertBatch(idx, chunk.toList))))
             _ <- sig.set(false)
           } yield {
+            attempt match {
+              case Failure(regrets:RawlsExceptionWithErrorReport) =>
+                val loggedErrors = stringMessageFromFailures(regrets.errorReport.causes.toList, 100)
+                logger.warn(s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors")
+              case _ => // noop; here for completeness of matching
+            }
             logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
             attempt
           }
@@ -371,23 +382,25 @@ class AvroUpsertMonitorActor(
         case Failure(regrets:RawlsExceptionWithErrorReport) => regrets.errorReport.causes
       } flatten
 
+      // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
+      // Cap the failure reports at 100.
+      val failureReportsForCaller = failureReports.take(100)
+      val additionalErrorString = if (failureReports.size > failureReportsForCaller.size) {
+        "; only the first 100 errors are shown."
+      } else {
+        "."
+      }
+
       // fail if nothing at all succeeded
       if (numSuccesses == 0) {
-        // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
-        // Cap the failure reports at 100.
-        val failureReportsForCaller = failureReports.take(100)
-        val additionalErrorString = if (failureReports.size > failureReportsForCaller.size) {
-          "; only the first 100 errors are shown."
-        } else {
-          "."
-        }
         throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest,
           s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString",
           failureReportsForCaller))
       }
 
       val elapsed = System.currentTimeMillis() - startTime
-      logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted, ${failureReports.size} failed.")
+      logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted," +
+        s" ${failureReports.size} failed$additionalErrorString Errors: ${failureReportsForCaller.map(_.message).mkString(", ")}")
 
       Future.successful(ImportUpsertResults(numSuccesses, failureReports))
 
@@ -401,6 +414,8 @@ class AvroUpsertMonitorActor(
     }
   }
 
+  private def stringMessageFromFailures(errorReports: List[RawlsErrorReport], maxFailures: Int = 100): String =
+    errorReports.take(maxFailures).map(_.message).mkString("; ")
 
   private def acknowledgeMessage(ackId: String) = {
     logger.info(s"acking message with ackId $ackId")

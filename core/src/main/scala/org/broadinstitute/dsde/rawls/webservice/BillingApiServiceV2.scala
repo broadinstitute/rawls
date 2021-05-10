@@ -27,12 +27,12 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
         pathEnd {
           get {
             complete {
-              userServiceConstructor(userInfo).GetBillingProject(RawlsBillingProjectName(projectId))
+              userServiceConstructor(userInfo).getBillingProject(RawlsBillingProjectName(projectId))
             }
           } ~
             delete {
               complete {
-                userServiceConstructor(userInfo).DeleteBillingProject(RawlsBillingProjectName(projectId))
+                userServiceConstructor(userInfo).deleteBillingProject(RawlsBillingProjectName(projectId))
               }
             }
         } ~
@@ -55,7 +55,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             pathEnd {
               get {
                 complete {
-                  userServiceConstructor(userInfo).GetBillingProjectMembers(RawlsBillingProjectName(projectId))
+                  userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId))
                 }
               }
             } ~
@@ -63,12 +63,12 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
               path(Segment / Segment) { (workbenchRole, userEmail) =>
                 put {
                   complete {
-                    userServiceConstructor(userInfo).AddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
+                    userServiceConstructor(userInfo).addUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
                   }
                 } ~
                   delete {
                     complete {
-                      userServiceConstructor(userInfo).RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
+                      userServiceConstructor(userInfo).removeUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
                     }
                   }
               }
@@ -76,12 +76,12 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
       } ~
       pathEnd {
         get {
-          complete { userServiceConstructor(userInfo).ListBillingProjectsV2 }
+          complete { userServiceConstructor(userInfo).listBillingProjectsV2() }
         } ~
         post {
           entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
             complete {
-              userServiceConstructor(userInfo).CreateBillingProjectFullV2(createProjectRequest)
+              userServiceConstructor(userInfo).createBillingProjectV2(createProjectRequest)
             }
           }
         }

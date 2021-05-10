@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddListMember, AddUpdateAttribute, AttributeUpdateOperation, CreateAttributeEntityReferenceList, CreateAttributeValueList, RemoveAttribute, RemoveListMember}
-import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeValue, AttributeValueEmptyList, AttributeValueList, ErrorReport, MethodConfiguration}
+import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeValue, AttributeValueEmptyList, AttributeValueList, Entity, ErrorReport, MethodConfiguration}
 import org.broadinstitute.dsde.rawls.workspace.{AttributeNotFoundException, AttributeUpdateOperationException}
 
 import scala.concurrent.Future
@@ -130,5 +130,18 @@ trait AttributeSupport {
           }
       }
     }
+  }
+
+ /**
+   * Applies the sequence of operations in order to the entity.
+   *
+   * @param entity to update
+   * @param operations sequence of operations
+   * @throws org.broadinstitute.dsde.rawls.workspace.AttributeNotFoundException when removing from a list attribute that does not exist
+   * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
+   * @return the updated entity
+   */
+  def applyOperationsToEntity(entity: Entity, operations: Seq[AttributeUpdateOperation]): Entity = {
+    entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
   }
 }

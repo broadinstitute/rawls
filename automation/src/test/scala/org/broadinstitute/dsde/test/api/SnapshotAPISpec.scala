@@ -299,7 +299,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
     logger.info(s"calling data repo at $dataRepoBaseUrl as user ${credentials.email} ... ")
     val drSnapshots = Try(dataRepoApi.enumerateSnapshots(
-      0, numSnapshots, "created_date", "desc", "")) match {
+      0, numSnapshots, "created_date", "desc", "", java.util.Collections.emptyList() )) match {
       case Success(s) => s
       case Failure(ex) =>
         logger.error(s"data repo call as user ${credentials.email} failed: ${ex.getMessage}", ex)

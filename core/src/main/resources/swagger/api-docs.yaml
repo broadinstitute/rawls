@@ -1425,24 +1425,9 @@ paths:
       summary: Paginated query for entities in a workspace
       operationId: entityQuery
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
         - name: page
           in: query
           description: Page number, 1-indexed (default 1)
@@ -1477,6 +1462,8 @@ paths:
           description: Filter terms
           schema:
             type: string
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:
         200:
           description: List of entities in workspace
@@ -1623,24 +1610,15 @@ paths:
         of that type and all attribute names used'
       operationId: entity_type_metadata
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: useCache
           in: query
-          description: True to read entity statistics from cache if cache is up to date, false to bypass cache (slower). Default is false.
+          description: True to read entity statistics from cache if cache is up to date, false to bypass cache (slower). Default is true.
           schema:
             type: boolean
-            default: false
+            default: true
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
       responses:
         200:
           description: Successful Request
@@ -1779,30 +1757,12 @@ paths:
       description: Get an entity
       operationId: get_entity
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
-        - name: entityName
-          in: path
-          description: Entity Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/entityNamePathParam'
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -1900,18 +1860,8 @@ paths:
       description: Delete entities
       operationId: delete_entities
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Set of entities to delete
         content:
@@ -3999,6 +3949,162 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/cloud-billing
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+    get:
+      tags:
+        - snapshots
+      summary: List snapshots
+      description: Enumerate references to snapshots in the Terra Data Repo
+      operationId: enumerateDataRepoSnapshot
+      parameters:
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+            set.
+          required: true
+          schema:
+            type: integer
+          example: 0
+        - name: limit
+          in: query
+          description: The number of items to return.
+          required: true
+          schema:
+            type: integer
+          example: 10
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotReferenceList'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    post:
+      tags:
+        - snapshots
+      summary: Create a snapshot
+      description: Add a reference to a snapshot in the Terra Data Repo
+      operationId: createDataRepoSnapshot
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/NamedDataRepoSnapshot'
+        required: true
+      responses:
+        201:
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotReference'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+      x-codegen-request-body-name: namedDataRepoSnapshot
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+      - $ref: '#/components/parameters/snapshotIdPathParam'
+    get:
+      tags:
+        - snapshots
+      summary: Get a snapshot
+      description: Get a reference to a snapshot in the Terra Data Repo
+      operationId: getDataRepoSnapshot
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotReference'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    patch:
+      summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
+      operationId: updateDataRepoSnapshot
+      tags:
+        - snapshots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDataReferenceRequestBody'
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - snapshots
+      summary: Delete a snapshot
+      description: Delete a workspace's reference to a snapshot in the Terra Data
+        Repo
+      operationId: deleteDataRepoSnapshot
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -4113,6 +4219,68 @@ components:
           type: string
           description: display name of billing account
       description: Details for a single billing account
+    DataRepoSnapshot:
+      description: A raw data repo snapshot reference from workspace manager.
+      type: object
+      required: [ instanceName, snapshot ]
+      properties:
+        instanceName:
+          description: The name of the Data Repo instance
+          type: string
+        snapshot:
+          description: The ID of the Data Repo snapshot
+          type: string
+    NamedDataRepoSnapshot:
+      type: object
+      required: [ snapshotId, name ]
+      properties:
+        snapshotId:
+          type: string
+          description: The ID of the snapshot in Terra Data Repo
+        name:
+          type: string
+          description: The name of the snapshot
+        description:
+          type: string
+          description: A description for the snapshot
+          default: ""
+      description: A Data Repo snapshot
+    DataRepoSnapshotReference:
+      type: object
+      required: [ referenceId, name, description, workspaceId, referenceType, reference, cloningInstructions ]
+      properties:
+        referenceId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        workspaceId:
+          type: string
+        referenceType:
+          type: string
+        reference:
+          $ref: '#/components/schemas/DataRepoSnapshot'
+        cloningInstructions:
+          type: string
+      description: A Data Reference definition from Workspace Manager
+    UpdateDataReferenceRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    DataRepoSnapshotReferenceList:
+      type: object
+      required: [ resources ]
+      properties:
+        resources:
+          type: array
+          description: A list of Data Reference definitions from Workspace Manager
+          items:
+            $ref: '#/components/schemas/DataRepoSnapshotReference'
+      description: A list of DataRepoSnapshotReferences
     ErrorReport:
       required:
         - causes
@@ -5320,6 +5488,10 @@ components:
           type: boolean
           description: Optional, false if not specified. If true, the workspace is created with a Billing Project owner but no workspace owner. Requires being a Billing Project owner.
           default: false
+        bucketLocation:
+          type: string
+          required: false
+          description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
       description: ""
     BucketUsageResponse:
       required:
@@ -5874,6 +6046,54 @@ components:
           items:
             type: string
       description: status of a subsystem Rawls depends on
+  parameters:
+    billingProjectQueryParam:
+      name: billingProject
+      in: query
+      description: Billing project to use for queries to the data reference
+      schema:
+        type: string
+    dataReferenceQueryParam:
+      name: dataReference
+      in: query
+      description: Data reference name to query for entity metadata
+      schema:
+        type: string
+    entityNamePathParam:
+      name: entityName
+      in: path
+      description: Entity Name
+      required: true
+      schema:
+        type: string
+    entityTypePathParam:
+      name: entityType
+      in: path
+      description: Entity Type
+      required: true
+      schema:
+        type: string
+    snapshotIdPathParam:
+      name: snapshotId
+      in: path
+      description: The snapshot's referenceId
+      required: true
+      schema:
+        type: string
+    workspaceNamespacePathParam:
+      name: workspaceNamespace
+      in: path
+      description: The workspace namespace
+      required: true
+      schema:
+        type: string
+    workspaceNamePathParam:
+      name: workspaceName
+      in: path
+      description: The workspace name
+      required: true
+      schema:
+        type: string
   securitySchemes:
     authorization:
       type: oauth2
@@ -5885,6 +6105,5 @@ components:
             email: email authorization
             profile: profile authorization
             https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
-
 security:
   - authorization: [openid, email, profile]

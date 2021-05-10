@@ -255,6 +255,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or500) { () => pipeline[String](userInfo) apply RequestBuilding.Get(url) }
   }
 
+  override def getPetServiceAccountToken(googleProject: GoogleProjectId, scopes: Set[String], userInfo: UserInfo): Future[String] = {
+    val url = samServiceURL + s"/api/google/v1/user/petServiceAccount/${googleProject.value}/token"
+    retry(when401or500) { () => pipeline[String](userInfo) apply RequestBuilding.Post(url, scopes) }
+  }
+
   private def getServiceAccountAccessToken = {
     val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
     if (expiresInSeconds < 60*5) {

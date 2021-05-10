@@ -5,8 +5,8 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.api.services.accesscontextmanager.v1beta.model.{Operation, ServicePerimeter, ServicePerimeterConfig}
-import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
+import com.google.api.services.accesscontextmanager.v1.model.{Operation, ServicePerimeter, ServicePerimeterConfig}
+import com.google.api.services.accesscontextmanager.v1.{AccessContextManager, AccessContextManagerScopes}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.ServicePerimeterName
 import org.broadinstitute.dsde.rawls.util.FutureSupport

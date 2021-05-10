@@ -57,16 +57,24 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
   }
 
   override def updateDataReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
-    val existingRef = references.getOrElse((workspaceId, referenceId), throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
-    references.update((workspaceId, referenceId), existingRef.name(
-      if (updateInfo.getName != null) updateInfo.getName else existingRef.getName
-    ).description(
-      if (updateInfo.getDescription != null) updateInfo.getDescription else existingRef.getDescription
-    ))
+    if (references.contains(workspaceId, referenceId)) {
+      val existingRef = references.get(workspaceId, referenceId).get
+      references.update((workspaceId, referenceId), existingRef.name(
+        if (updateInfo.getName != null) updateInfo.getName else existingRef.getName
+      ).description(
+        if (updateInfo.getDescription != null) updateInfo.getDescription else existingRef.getDescription
+      ))
+    }
   }
 
   override def deleteDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {
-    references.getOrElse((workspaceId, referenceId), throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
-    references -= ((workspaceId, referenceId))
+    if (references.contains(workspaceId, referenceId))
+      references -= ((workspaceId, referenceId))
   }
+
+  override def createBigQueryDatasetReference(workspaceId: UUID, metadata: DataReferenceRequestMetadata, dataset: GoogleBigQueryDatasetUid, accessToken: OAuth2BearerToken): BigQueryDatasetReference = new BigQueryDatasetReference
+
+  override def deleteBigQueryDatasetReference(workspaceId: UUID, resourceId: UUID, accessToken: OAuth2BearerToken): Unit = ()
+
+  override def getBigQueryDatasetReferenceByName(workspaceId: UUID, name: String, accessToken: OAuth2BearerToken): BigQueryDatasetReference = new BigQueryDatasetReference().metadata(new DataReferenceMetadata().referenceId(UUID.randomUUID())).dataset(new GoogleBigQueryDatasetUid)
 }

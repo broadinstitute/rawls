@@ -50,7 +50,7 @@ case class EntityAttributeRecord(id: Long,
                                  deleted: Boolean,
                                  deletedDate: Option[Timestamp]) extends AttributeRecord[Long]
 
-case class EntityAttributeScratchRecord(id: Long,
+case class EntityAttributeTempRecord(id: Long,
                                      ownerId: Long, // entity id
                                      namespace: String,
                                      name: String,
@@ -170,8 +170,8 @@ trait AttributeComponent {
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
   }
 
-  class EntityAttributeScratchTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeScratchRecord](tag, "ENTITY_ATTRIBUTE_SCRATCH") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <> (EntityAttributeScratchRecord.tupled, EntityAttributeScratchRecord.unapply)
+  class EntityAttributeTempTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeTempRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <> (EntityAttributeTempRecord.tupled, EntityAttributeTempRecord.unapply)
   }
 
   class WorkspaceAttributeScratchTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeScratchRecord](tag, "WORKSPACE_ATTRIBUTE_SCRATCH") {
@@ -195,7 +195,7 @@ trait AttributeComponent {
     }
   }
 
-  protected object entityAttributeScratchQuery extends AttributeScratchQuery[Long, EntityAttributeRecord, EntityAttributeScratchRecord, EntityAttributeScratchTable](new EntityAttributeScratchTable(_), EntityAttributeScratchRecord)
+  protected object entityAttributeTempQuery extends AttributeScratchQuery[Long, EntityAttributeRecord, EntityAttributeTempRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_), EntityAttributeTempRecord)
   protected object workspaceAttributeScratchQuery extends AttributeScratchQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeScratchRecord, WorkspaceAttributeScratchTable](new WorkspaceAttributeScratchTable(_), WorkspaceAttributeScratchRecord)
 
   /**
@@ -329,23 +329,62 @@ trait AttributeComponent {
       recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
 
     def patchAttributesAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
-      deleteAttributeRecordsById(deleteIds.toSeq) andThen
-        batchInsertAttributes(inserts.toSeq) andThen
-        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+      for {
+        _ <- if (deleteIds.nonEmpty) deleteAttributeRecordsById(deleteIds.toSeq) else DBIO.successful(0)
+        _ <- if (inserts.nonEmpty) batchInsertAttributes(inserts.toSeq) else DBIO.successful(0)
+        updateResult <- if (updates.nonEmpty)
+                          AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+                        else
+                          DBIO.successful(0)
+      } yield {
+        updateResult
+      }
     }
 
     def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
       val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
       val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
-      // update attributes which are in both to-save and currently-exists, insert attributes which are in save but not exists
-      val (attrsToUpdateMap, attrsToInsertMap) = toSaveAttrMap.partition { case (k, v) => existingAttrMap.keySet.contains(k) }
-      // delete attributes which currently exist but are not in the attributes to save
-      val attributesToDelete = existingAttrMap.filterKeys(! attrsToUpdateMap.keySet.contains(_)).values
+      val existingKeys = existingAttrMap.keySet
 
-      deleteAttributeRecordsById(attributesToDelete.map(_.id).toSeq) andThen
-        batchInsertAttributes(attrsToInsertMap.values.toSeq) andThen
-        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(attrsToUpdateMap.values.toSeq))
+      // insert attributes which are in save but not exists
+      val attributesToInsert = toSaveAttrMap.filterKeys(! existingKeys.contains(_))
+
+      // delete attributes which are in exists but not save
+      val attributesToDelete = existingAttrMap.filterKeys(! toSaveAttrMap.keySet.contains(_))
+
+      // update attributes which are in both to-save and currently-exists, but have different values.
+      // note that currently-existing attributes will have a populated id e.g. "1234", but to-save will have an id of "0"
+      // therefore, use a comparison function that looks at everything except id
+      // note this does not compare transactionId for AttributeScratchRecords. We do not expect AttributeScratchRecords
+      // here, and transactionId will eventually be going away, so don't bother
+      // TODO: should this compare function move closer to the AttributeRecord class?
+      def equalRecords(left: RECORD, right: RECORD): Boolean = {
+        // compare everything except id
+        left.name == right.name &&
+        left.valueString == right.valueString &&
+        left.valueNumber == right.valueNumber &&
+        left.valueBoolean == right.valueBoolean &&
+        left.valueJson == right.valueJson &&
+        left.valueEntityRef == right.valueEntityRef &&
+        left.listIndex == right.listIndex &&
+        left.listLength == right.listLength &&
+        left.namespace == right.namespace &&
+        left.ownerId == right.ownerId &&
+        left.deleted == right.deleted &&
+        left.deletedDate == right.deletedDate
+      }
+
+      val attributesToUpdate = toSaveAttrMap.filter {
+        case (k, v) =>
+            existingKeys.contains(k) && // if the attribute doesn't already exist, don't attempt to update it
+            !existingAttributes.exists(equalRecords(_, v)) // if the attribute exists and is unchanged, don't update it
+      }
+
+      patchAttributesAction(attributesToInsert.values,
+        attributesToUpdate.values,
+        attributesToDelete.values.map(_.id),
+        insertFunction)
     }
 
     //noinspection SqlDialectInspection
@@ -360,9 +399,11 @@ trait AttributeComponent {
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
       def updateInMasterAction(transactionId: String) = {
+          val tableSuffix = getTableSuffix(baseTableRow.tableName)
+
           sql"""
           update #${baseTableRow.tableName} a
-              join #${baseTableRow.tableName}_SCRATCH ta
+              join #${baseTableRow.tableName}_#${tableSuffix} ta
               on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
                   and ta.transaction_id = $transactionId
@@ -378,7 +419,11 @@ trait AttributeComponent {
       }
 
       def clearAttributeScratchTableAction(transactionId: String) = {
-        sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
+        val tableSuffix = getTableSuffix(baseTableRow.tableName)
+
+        if(tableSuffix == "SCRATCH")
+          sqlu"""delete from #${baseTableRow.tableName}_#${tableSuffix} where transaction_id = $transactionId"""
+        else DBIO.successful(0)
       }
 
       def updateAction(insertIntoScratchFunction: String => WriteAction[Int]) = {
@@ -465,5 +510,12 @@ trait AttributeComponent {
     }
 
     private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
+
+    private def getTableSuffix(tableName: String): String = {
+      if (tableName == "ENTITY_ATTRIBUTE")
+        "TEMP"
+      else
+        "SCRATCH"
+    }
   }
 }

@@ -23,14 +23,14 @@ trait SnapshotApiService extends UserInfoDirectives {
       post {
         entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
           complete {
-            snapshotServiceConstructor(userInfo).CreateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot).map(StatusCodes.Created -> _)
+            snapshotServiceConstructor(userInfo).createSnapshot(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot).map(StatusCodes.Created -> _)
           }
         }
       } ~
       get {
         parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
           complete {
-            snapshotServiceConstructor(userInfo).EnumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit).map(StatusCodes.OK -> _)
+            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit).map(StatusCodes.OK -> _)
           }
         }
       }
@@ -38,19 +38,19 @@ trait SnapshotApiService extends UserInfoDirectives {
     path("workspaces" / Segment / Segment / "snapshots" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
       get {
         complete {
-          snapshotServiceConstructor(userInfo).GetSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
+          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
         }
       } ~
       patch {
         entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
           complete {
-            snapshotServiceConstructor(userInfo).UpdateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
+            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
           }
         }
       } ~
       delete {
         complete {
-          snapshotServiceConstructor(userInfo).DeleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(_ => StatusCodes.NoContent)
+          snapshotServiceConstructor(userInfo).deleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(_ => StatusCodes.NoContent)
         }
       }
     }

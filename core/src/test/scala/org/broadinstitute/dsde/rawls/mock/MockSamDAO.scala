@@ -98,6 +98,8 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = Future.successful("""{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""")
 
+  override def getPetServiceAccountToken(googleProject: GoogleProjectId, scopes: Set[String], userInfo: UserInfo): Future[String] = Future.successful("fake-token")
+
   override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, userInfo: UserInfo): Future[Unit] = Future.unit
 
   override def getStatus(): Future[SubsystemStatus] = Future.successful(SubsystemStatus(true, None))

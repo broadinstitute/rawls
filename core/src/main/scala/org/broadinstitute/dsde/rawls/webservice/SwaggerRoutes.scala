@@ -23,19 +23,7 @@ trait SwaggerRoutes extends LazyLogging {
 
   val swaggerConfig: SwaggerConfig
 
-  // enable/disable snapshot routes based on a config flag
-  val useDataRepoSwagger = Try(ConfigFactory.load().getBoolean("dataRepo.enabled")).toOption.getOrElse(false)
-
-  val swaggerContents: String = if (useDataRepoSwagger) {
-    Try(mergeYamls("/swagger/api-docs.yaml", "/swagger/data-repo-only.yaml")) match {
-      case Success(merged) => merged
-      case Failure(ex) =>
-        logger.warn(s"Could not merge swagger yamls; defaulting to api-docs.yaml: ${ex.getMessage}", ex)
-        loadResource("/swagger/api-docs.yaml")
-    }
-  } else {
-    loadResource("/swagger/api-docs.yaml")
-  }
+  val swaggerContents: String = loadResource("/swagger/api-docs.yaml")
 
   val swaggerRoutes: server.Route = {
     path("") {
@@ -92,31 +80,6 @@ trait SwaggerRoutes extends LazyLogging {
   private def loadResource(filename: String) = {
     val source = scala.io.Source.fromInputStream(getClass.getResourceAsStream(filename))
     try source.mkString finally source.close()
-  }
-
-  /**
-   * read the contents of multiple yaml files and return the merged value as a String
-   * @param filenames
-   * @return
-   */
-  private def mergeYamls(filenames: String*): String = {
-
-    // for each file, read it from disk, parse as yaml and return as a JsonObject
-    val swaggerJsons = filenames.map { filename =>
-      val contents: String = loadResource(filename)
-      yaml.parser.parse(contents) match {
-        case Right(json) => json.asObject.getOrElse(JsonObject.empty)
-        case Left(parsingFailure) => throw new RawlsException(parsingFailure.message, parsingFailure.underlying)
-      }
-    }
-
-    // merge all jsons, preferring rightmost
-    val mergedJson: JsonObject = swaggerJsons.foldRight(JsonObject.empty) { (x, y) =>
-      x.deepMerge(y)
-    }
-
-    // translate back to yaml and print as string
-    Json.fromJsonObject(mergedJson).asYaml.spaces2
   }
 
 }

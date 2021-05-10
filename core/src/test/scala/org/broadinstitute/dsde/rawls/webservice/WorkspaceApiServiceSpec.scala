@@ -17,7 +17,9 @@ import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.model.headers._
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -153,6 +155,18 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   def withEmptyDatabaseAndApiServices[T](testCode: TestApiService =>  T): T = {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
+    }
+  }
+
+  def withApiServicesMockitoGcsDao[T](testCode: TestApiService => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource => {
+      val apiService = new TestApiService(dataSource, testData.userProjectOwner.userEmail.value, mock[MockGoogleServicesDAO](RETURNS_SMART_NULLS), new MockGooglePubSubDAO)
+      try {
+        testCode(apiService)
+      } finally {
+        apiService.cleanupSupervisor
+      }
+    }
     }
   }
 
@@ -1205,6 +1219,67 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(None) {
           header("Location")
         }
+      }
+  }
+
+
+  it should "clone workspace use different bucket location if bucketLocation is in request" in withApiServicesMockitoGcsDao { services =>
+    val newBucketLocation = Option("us-terra1");
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = newBucketLocation)
+    when(services.gcsDAO.setupWorkspace(
+      any[UserInfo],
+      ArgumentMatchers.eq(testData.workspace.googleProject),
+      any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
+      any[String],
+      any[Map[String, String]],
+      any[Span],
+      ArgumentMatchers.eq(newBucketLocation)))
+      .thenReturn(Future.successful(mock[GoogleWorkspaceInfo]))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          assert(copiedWorkspace.attributes == testData.workspace.attributes)
+
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
+            }
+          }
+          verify(services.gcsDAO).setupWorkspace(
+            any[UserInfo],
+            ArgumentMatchers.eq(testData.workspace.googleProject),
+            any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
+            any[String],
+            any[Map[String, String]],
+            any[Span],
+            ArgumentMatchers.eq(newBucketLocation))
+        }
+
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "return 400 if the cloned bucket location requested is in an invalid format" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("US"))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        val errorText = responseAs[ErrorReport].message
+        assert(status == StatusCodes.BadRequest)
+        assert(errorText.contains("Workspace bucket location must be a single (not multi-) region of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
       }
   }
 
