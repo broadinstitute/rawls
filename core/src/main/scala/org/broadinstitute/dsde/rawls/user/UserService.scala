@@ -641,25 +641,26 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
         _ <- moveGoogleProjectToServicePerimeterFolder(servicePerimeterName, billingProject.googleProjectId)
 
-      googleProjectNumber <- billingProject.googleProjectNumber match {
-        case Some(existingGoogleProjectNumber) => Future.successful(existingGoogleProjectNumber)
-        case None => gcsDAO.getGoogleProject(billingProject.googleProjectId).map(googleProject =>
-          gcsDAO.getGoogleProjectNumber(googleProject))
-      }
+        googleProjectNumber <- billingProject.googleProjectNumber match {
+          case Some(existingGoogleProjectNumber) => Future.successful(existingGoogleProjectNumber)
+          case None => gcsDAO.getGoogleProject(billingProject.googleProjectId).map(googleProject =>
+            gcsDAO.getGoogleProjectNumber(googleProject))
+        }
 
-      // all v2 workspaces in the specified Terra billing project will already have their own Google project number, but any v1 workspaces should store the Terra billing project's Google project number
-      workspaces <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listWithBillingProject(projectName)
-      }
-      v1Workspaces = workspaces.filterNot(_.googleProjectNumber.isDefined)
+        // all v2 workspaces in the specified Terra billing project will already have their own Google project number, but any v1 workspaces should store the Terra billing project's Google project number
+        workspaces <- dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.listWithBillingProject(projectName)
+        }
+        v1Workspaces = workspaces.filterNot(_.googleProjectNumber.isDefined)
 
-      _ <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.updateGoogleProjectNumber(v1Workspaces.map(_.workspaceIdAsUUID), googleProjectNumber)
-        dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
-      }
+        _ <- dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.updateGoogleProjectNumber(v1Workspaces.map(_.workspaceIdAsUUID), googleProjectNumber)
+          dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
+        }
 
-      _ <- servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName)
-    } yield RequestComplete(StatusCodes.NoContent)
+        _ <- servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName)
+      } yield RequestComplete(StatusCodes.NoContent)
+    }
   }
 
   def moveGoogleProjectToServicePerimeterFolder(servicePerimeterName: ServicePerimeterName, googleProjectId: GoogleProjectId): Future[Unit] = {
@@ -669,4 +670,3 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield ()
   }
 }
-

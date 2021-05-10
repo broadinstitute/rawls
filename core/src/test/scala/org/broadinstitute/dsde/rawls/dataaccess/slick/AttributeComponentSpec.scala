@@ -417,9 +417,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       withClue(s"should have prepped $parallelism entities to save"){entitiesToSave.size shouldBe (parallelism)}
 
       // save the workspaces
-      val savedWorkspaceOdd = runAndWait(workspaceQuery.save(workspaceOdd))
+      val savedWorkspaceOdd = runAndWait(workspaceQuery.createOrUpdate(workspaceOdd))
       withClue("workspace (odd) should have saved") {savedWorkspaceOdd.workspaceId shouldBe (workspaceIdOdd.toString)}
-      val savedWorkspaceEven = runAndWait(workspaceQuery.save(workspaceEven))
+      val savedWorkspaceEven = runAndWait(workspaceQuery.createOrUpdate(workspaceEven))
       withClue("workspace (even) should have saved") {savedWorkspaceEven.workspaceId shouldBe (workspaceIdEven.toString)}
 
       // in parallel, save entities to the workspace
@@ -676,7 +676,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   private case class AttributeTestFunction(description: String, run: (Attribute, Attribute) => Unit)
 
   private val attributeTestFunctions = List(
-    AttributeTestFunction("workspaceQuery.save()", runWorkspaceSaveNewTest),
+    AttributeTestFunction("workspaceQuery.createOrUpdate()", runWorkspaceSaveNewTest),
     AttributeTestFunction("entityQuery.save()", runEntitySaveNewTest),
     AttributeTestFunction("entityQuery.saveEntityPatch()", runEntityPatchNewTest),
   )
@@ -758,7 +758,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "skip inserts and deletes when rewriting entity attributes if only updating" in withEmptyTestDatabase {
     // save workspace
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     // save entity to use as parent
     runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
     // get id of saved entity
@@ -798,7 +798,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "skip updates and deletes when rewriting entity attributes if only inserting" in withEmptyTestDatabase {
     // save workspace
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     // save entity to use as parent
     runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
     // get id of saved entity
@@ -838,7 +838,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "skip inserts and updates when rewriting entity attributes if only deleting" in withEmptyTestDatabase {
     // save workspace
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     // save entity to use as parent
     runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
     // get id of saved entity
@@ -874,7 +874,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "combine inserts, updates, and deletes when rewriting entity attributes" in withEmptyTestDatabase {
     // save workspace
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     // save entity to use as parent
     runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
     // get id of saved entity

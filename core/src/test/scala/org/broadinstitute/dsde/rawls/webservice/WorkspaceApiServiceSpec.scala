@@ -1228,7 +1228,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = newBucketLocation)
     when(services.gcsDAO.setupWorkspace(
       any[UserInfo],
-      ArgumentMatchers.eq(testData.workspace.googleProject),
+      ArgumentMatchers.eq(testData.workspace.googleProjectId),
       any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
       any[String],
       any[Map[String, String]],
@@ -1257,7 +1257,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
           verify(services.gcsDAO).setupWorkspace(
             any[UserInfo],
-            ArgumentMatchers.eq(testData.workspace.googleProject),
+            ArgumentMatchers.eq(testData.workspace.googleProjectId),
             any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
             any[String],
             any[Map[String, String]],

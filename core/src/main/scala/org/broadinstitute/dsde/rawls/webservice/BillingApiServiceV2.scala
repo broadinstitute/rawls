@@ -40,12 +40,12 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             pathEnd {
               put {
                 entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
-                  complete( userServiceConstructor(userInfo).UpdateBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest) )
+                  complete( userServiceConstructor(userInfo).updateBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest) )
                 }
               } ~
                 delete {
                   complete {
-                    userServiceConstructor(userInfo).DeleteBillingAccount(RawlsBillingProjectName(projectId))
+                    userServiceConstructor(userInfo).deleteBillingAccount(RawlsBillingProjectName(projectId))
                   }
                 }
             }
