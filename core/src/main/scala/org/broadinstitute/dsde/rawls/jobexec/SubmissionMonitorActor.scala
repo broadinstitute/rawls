@@ -320,15 +320,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
       traceWithParent("attach-outputs", rootSpan) ( _ =>
         datasource.inTransactionWithAttrTempTable { dataAccess =>
-          handleOutputs(workflowsWithOutputs, dataAccess)
+          handleOutputs(workflowsWithOutputs, dataAccess, rootSpan)
         } recoverWith {
           // If there is something fatally wrong handling outputs, mark the workflows as failed
           case fatal: RawlsFatalExceptionWithErrorReport =>
             datasource.inTransaction { dataAccess =>
               traceDBIOWithParent("fatal-exception-attach-outputs", rootSpan) ( _ =>
                 DBIO.sequence(workflowsWithStatuses map { workflowRecord =>
-                  dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
-                    dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
+                  traceDBIOWithParent("update-workflow-status", rootSpan) ( _ => dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed)) andThen
+                    traceDBIOWithParent("update-workflow-messages", rootSpan) ( _ => dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id))
                 })
               )
             }
