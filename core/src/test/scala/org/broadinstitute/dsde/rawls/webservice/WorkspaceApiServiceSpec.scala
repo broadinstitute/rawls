@@ -17,6 +17,8 @@ import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.model.headers._
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
+import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
@@ -1226,9 +1228,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "clone workspace use different bucket location if bucketLocation is in request" in withApiServicesMockitoGcsDao { services =>
     val newBucketLocation = Option("us-terra1");
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = newBucketLocation)
+
+    // mock(ito) out the workspace creation
+    when(services.gcsDAO.testDMBillingAccountAccess(any[RawlsBillingAccountName])).thenReturn(Future.successful(true))
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), Option(any[RawlsBillingAccountName])))
+      .thenReturn(Future.successful(new ProjectBillingInfo().setBillingAccountName(testData.workspace.currentBillingAccountOnGoogleProject.map(_.value).getOrElse("")).setProjectId(testData.workspace.googleProjectId.value)))
+    when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
+    when(services.gcsDAO.labelSafeMap(any[Map[String, String]], any[String])).thenReturn(Map.empty[String, String])
+    when(services.gcsDAO.updateGoogleProject(any[GoogleProjectId], any[Project])).thenReturn(Future.successful(new Project()))
+    when(services.gcsDAO.removePolicyBindings(any[GoogleProjectId], any[Map[String, Set[String]]])).thenReturn(Future.successful(true))
+    when(services.gcsDAO.getGoogleProjectNumber(any[Project])).thenReturn(GoogleProjectNumber("GoogleProjectNumber"))
+
     when(services.gcsDAO.setupWorkspace(
       any[UserInfo],
-      ArgumentMatchers.eq(testData.workspace.googleProjectId),
+      ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
       any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
       any[String],
       any[Map[String, String]],
@@ -1257,7 +1270,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
           verify(services.gcsDAO).setupWorkspace(
             any[UserInfo],
-            ArgumentMatchers.eq(testData.workspace.googleProjectId),
+            ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
             any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
             any[String],
             any[Map[String, String]],
