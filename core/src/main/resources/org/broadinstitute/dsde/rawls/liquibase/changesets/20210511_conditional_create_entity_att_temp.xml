@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="create_entity_attr_temp_table">
+    <changeSet logicalFilePath="dummy" author="dhite" id="drop_create_entity_attr_temp_table">
+        <dropProcedure procedureName="createEntityAttributeTempTable" />
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="dhite" id="create_entity_attr_temp_table_conditionally">
         <createProcedure>
             CREATE PROCEDURE createEntityAttributeTempTable ()
             BEGIN
-            create temporary table ENTITY_ATTRIBUTE_TEMP (
+            create temporary table if not exists ENTITY_ATTRIBUTE_TEMP (
                 id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key,
                 namespace text NOT NULL,
                 name text NOT NULL,
@@ -26,13 +30,6 @@
         </createProcedure>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="drop_entity_attr_temp_table">
-        <createProcedure>
-            CREATE PROCEDURE dropEntityAttributeTempTable ()
-            BEGIN
-            drop temporary table if exists ENTITY_ATTRIBUTE_TEMP;
-            END
-        </createProcedure>
-    </changeSet>
+
 
 </databaseChangeLog>
