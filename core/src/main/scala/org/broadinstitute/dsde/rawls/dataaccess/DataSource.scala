@@ -58,24 +58,22 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     val entityTemp = tempTableTypes.contains(AttributeTempTableType.Entity)
     val workspaceTemp = tempTableTypes.contains(AttributeTempTableType.Workspace)
 
-    val callerActionWithTempTables = (for {
+    val callerActionWithTempTables = for {
       _ <- if (entityTemp) dropEntityAttributeTempTable else DBIO.successful()
       _ <- if (workspaceTemp) dropWorkspaceAttributeTempTable else DBIO.successful()
       _ <- if (entityTemp) createEntityAttributeTempTable else DBIO.successful()
-      _ <- if (workspaceTemp) createWorkspaceAttributeTempTable else DBIO.successful();
-      origResult <- callerAction
+      _ <- if (workspaceTemp) createWorkspaceAttributeTempTable else DBIO.successful()
+      origResult <- callerAction.asTry
+      _ <- if (entityTemp) dropEntityAttributeTempTable else DBIO.successful()
+      _ <- if (workspaceTemp) dropWorkspaceAttributeTempTable else DBIO.successful()
     } yield {
-      origResult
-    }).andFinally({
-      if (entityTemp)
-        dropEntityAttributeTempTable
-      else
-        DBIO.successful()
-      if(workspaceTemp)
-        dropWorkspaceAttributeTempTable
-      else
-        DBIO.successful()
-    })
+      origResult match {
+        case scala.util.Success(s) => s
+        case scala.util.Failure(ex) => throw ex
+      }
+    }
+
+
 
     database.run(callerActionWithTempTables.withPinnedSession).recover {
       case t: Throwable =>
