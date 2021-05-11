@@ -24,10 +24,10 @@ trait StringValidationUtils {
     }
   }
 
-  private lazy val workspaceNameRegex = "[A-z0-9 _-]+".r
+  private lazy val workspaceNameRegex = "[A-z0-9 _-]{1,254}".r
   def validateWorkspaceName(s: String): Unit = {
     if(! workspaceNameRegex.pattern.matcher(s).matches) {
-      val msg = s"Invalid input: $s. Input may only contain alphanumeric characters, underscores, dashes, and spaces."
+      val msg = s"Invalid input: $s. Input must be between 1 and 254 characters in length and may only contain alphanumeric characters, underscores, dashes, and spaces."
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
     }
   }
