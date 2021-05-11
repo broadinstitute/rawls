@@ -585,7 +585,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def updateBillingAccountInternal(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): Future[PerRequestMessage] = {
     for {
-      maybeBillingProject <- doDatabaseThings(projectName, billingAccount)
+      maybeBillingProject <- updateBillingAccountInDatabase(projectName, billingAccount)
       projectRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
         .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
     } yield {
@@ -594,14 +594,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   }
 
-  //todo: i don't know what to call this, soliciting recommendations -- updateBillingAccountInternalInternal (^2?)
-  private def doDatabaseThings(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): Future[Option[RawlsBillingProject]] = {
+  private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName, maybeBillingAccountName: Option[RawlsBillingAccountName]): Future[Option[RawlsBillingProject]] = {
     dataSource.inTransaction { dataAccess =>
       for {
-        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(projectName, billingAccount)
+        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, maybeBillingAccountName)
         // if any workspaces failed to be updated last time, clear out the error message so the monitor will pick them up and try to update them again
-        _ <- dataAccess.workspaceQuery.deleteWorkspaceBillingAccountErrorMessage(projectName)
-        maybeBillingProject <- dataAccess.rawlsBillingProjectQuery.load(projectName)
+        _ <- dataAccess.workspaceQuery.deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(billingProjectName)
+        maybeBillingProject <- dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
       } yield maybeBillingProject
     }
   }

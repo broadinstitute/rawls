@@ -47,10 +47,16 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
         case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
           dataSource.inTransaction( { dataAccess =>
             dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(newBillingAccount.get, isInvalid = true)
-          }).map(_ => throw e)
+          }).map { _ =>
+            logger.error(s"Rawls does not have permission to set the billing account on ${googleProjectId} to ${newBillingAccount.get}", e)
+            throw e
+          }
         case e =>
           dataSource.inTransaction { dataAccess =>
-            dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessage(googleProjectId, e.getMessage)
+            dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, e.getMessage)
+          }.map { _ =>
+            logger.error(s"Failure to set the billing account on ${googleProjectId} to ${newBillingAccount.get}", e)
+            throw e
           }
       }
       dbResult <- dataSource.inTransaction( { dataAccess =>

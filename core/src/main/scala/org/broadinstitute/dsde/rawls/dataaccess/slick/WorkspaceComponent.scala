@@ -328,11 +328,11 @@ trait WorkspaceComponent {
       findByGoogleProjectIdQuery(googleProjectId).map(_.currentBillingAccountOnGoogleProject).update(newBillingAccount.map(_.value))
     }
 
-    def updateWorkspaceBillingAccountErrorMessage(googleProjectId: GoogleProjectId, errorMessage: String): WriteAction[Int] = {
+    def updateWorkspaceBillingAccountErrorMessages(googleProjectId: GoogleProjectId, errorMessage: String): WriteAction[Int] = {
       findByGoogleProjectIdQuery(googleProjectId).map(_.billingAccountErrorMessage).update(Option(errorMessage))
     }
 
-    def deleteWorkspaceBillingAccountErrorMessage(namespace: RawlsBillingProjectName): WriteAction[Int] = {
+    def deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(namespace: RawlsBillingProjectName): WriteAction[Int] = {
       findByNamespaceQuery(namespace).map(_.billingAccountErrorMessage).update(None)
     }
 

@@ -136,6 +136,8 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
           .billingAccountErrorMessage shouldBe Option(failureMessage)
         runAndWait(workspaceQuery.findByName(v1Workspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
           .billingAccountErrorMessage shouldBe Option(failureMessage)
+        runAndWait(workspaceQuery.findByName(v2Workspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
+          .billingAccountErrorMessage shouldBe None
       }
       verify(failingGcsDAO, times(1)).updateGoogleProjectBillingAccount(secondV1Workspace.googleProjectId, Option(newBillingAccount))
 
@@ -169,6 +171,8 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       eventually (timeout = timeout(Span(10, Seconds))) {
         runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName)).getOrElse(fail("project not found"))
           .invalidBillingAccount shouldBe true
+        runAndWait(workspaceQuery.listWithBillingProject(billingProject.projectName))
+          .map(_.billingAccountErrorMessage shouldBe None)
       }
 
       system.stop(actor)
