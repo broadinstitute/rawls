@@ -5,7 +5,7 @@
         <createProcedure>
             CREATE PROCEDURE createWorkspaceAttributeTempTable ()
             BEGIN
-            create temporary table WORKSPACE_ATTRIBUTE_TEMP (
+            create temporary table if not exists WORKSPACE_ATTRIBUTE_TEMP (
                 id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key,
                 namespace text NOT NULL,
                 name text NOT NULL,
