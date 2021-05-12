@@ -328,12 +328,12 @@ trait AttributeComponent {
     def toPrimaryKeyMap(recs: Traversable[RECORD]) =
       recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
 
-    def patchAttributesAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
+    def patchAttributesAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int], callerTag: String) = {
       for {
         _ <- if (deleteIds.nonEmpty) deleteAttributeRecordsById(deleteIds.toSeq) else DBIO.successful(0)
         _ <- if (inserts.nonEmpty) batchInsertAttributes(inserts.toSeq) else DBIO.successful(0)
         updateResult <- if (updates.nonEmpty)
-                          AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+                          AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq), callerTag)
                         else
                           DBIO.successful(0)
       } yield {
@@ -384,7 +384,9 @@ trait AttributeComponent {
       patchAttributesAction(attributesToInsert.values,
         attributesToUpdate.values,
         attributesToDelete.values.map(_.id),
-        insertFunction)
+        insertFunction,
+        "acraa"
+      )
     }
 
     //noinspection SqlDialectInspection
@@ -398,23 +400,23 @@ trait AttributeComponent {
       // attributes.
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
-      def updateInMasterAction(transactionId: String) = {
+      def updateInMasterAction(transactionId: String, callerTag: String) = {
           val tableSuffix = getTableSuffix(baseTableRow.tableName)
 
           sql"""
-          update #${baseTableRow.tableName} a
+          update #${baseTableRow.tableName} #${callerTag}
               join #${baseTableRow.tableName}_#${tableSuffix} ta
-              on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
+              on (#${callerTag}.namespace, #${callerTag}.name, #${callerTag}.owner_id, ifnull(#${callerTag}.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
                   and ta.transaction_id = $transactionId
-          set a.value_string=ta.value_string,
-              a.value_number=ta.value_number,
-              a.value_boolean=ta.value_boolean,
-              a.value_json=ta.value_json,
-              a.value_entity_ref=ta.value_entity_ref,
-              a.list_index=ta.list_index,
-              a.list_length=ta.list_length,
-              a.deleted=ta.deleted
+          set #${callerTag}.value_string=ta.value_string,
+              #${callerTag}.value_number=ta.value_number,
+              #${callerTag}.value_boolean=ta.value_boolean,
+              #${callerTag}.value_json=ta.value_json,
+              #${callerTag}.value_entity_ref=ta.value_entity_ref,
+              #${callerTag}.list_index=ta.list_index,
+              #${callerTag}.list_length=ta.list_length,
+              #${callerTag}.deleted=ta.deleted
              """.as[Int]
       }
 
@@ -426,10 +428,10 @@ trait AttributeComponent {
         else DBIO.successful(0)
       }
 
-      def updateAction(insertIntoScratchFunction: String => WriteAction[Int]) = {
+      def updateAction(insertIntoScratchFunction: String => WriteAction[Int], callerTag: String) = {
         val transactionId = UUID.randomUUID().toString
         insertIntoScratchFunction(transactionId) andThen
-          updateInMasterAction(transactionId) andThen
+          updateInMasterAction(transactionId, callerTag) andThen
           clearAttributeScratchTableAction(transactionId)
       }
     }
