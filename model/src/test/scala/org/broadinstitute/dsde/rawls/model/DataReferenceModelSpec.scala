@@ -30,30 +30,30 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
 
     "JSON logic" - {
 
-      "DataReferenceDescriptionList, which contains DataReferenceDescription, which contains DataRepoSnapshot" in {
-        val referenceId = UUID.randomUUID()
-        val workspaceId = UUID.randomUUID()
-        assertResult {
-          s"""{"resources":[{"referenceId": "$referenceId","name":"test-ref","workspaceId":"$workspaceId","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"description":"test description","cloningInstructions":"$NOTHING"}]}""".parseJson
-        } {
-          new DataReferenceList().resources(ArrayBuffer(
-            new DataReferenceDescription()
-              .referenceId(referenceId)
-              .name("test-ref")
-              .description("test description")
-              .workspaceId(workspaceId)
-              .referenceType(DATA_REPO_SNAPSHOT)
-              .reference(new DataRepoSnapshot().instanceName("test-instance").snapshot("test-snapshot"))
-              .cloningInstructions(NOTHING)
-          ).asJava).toJson
-        }
-      }
+//      "DataReferenceDescriptionList, which contains DataReferenceDescription, which contains DataRepoSnapshot" in {
+//        val referenceId = UUID.randomUUID()
+//        val workspaceId = UUID.randomUUID()
+//        assertResult {
+//          s"""{"resources":[{"referenceId": "$referenceId","name":"test-ref","workspaceId":"$workspaceId","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"description":"test description","cloningInstructions":"$NOTHING"}]}""".parseJson
+//        } {
+//          new DataReferenceList().resources(ArrayBuffer(
+//            new DataReferenceDescription()
+//              .referenceId(referenceId)
+//              .name("test-ref")
+//              .description("test description")
+//              .workspaceId(workspaceId)
+//              .referenceType(DATA_REPO_SNAPSHOT)
+//              .reference(new DataRepoSnapshot().instanceName("test-instance").snapshot("test-snapshot"))
+//              .cloningInstructions(NOTHING)
+//          ).asJava).toJson
+//        }
+//      }
 
-      "DataReferenceDescription with bad UUID's should fail" in {
-        assertThrows[DeserializationException] {
-          s"""{"referenceId": "abcd","name":"test-ref","workspaceId":"abcd","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"cloningInstructions":"$NOTHING"}""".parseJson.convertTo[DataReferenceDescription]
-        }
-      }
+//      "DataReferenceDescription with bad UUID's should fail" in {
+//        assertThrows[DeserializationException] {
+//          s"""{"referenceId": "abcd","name":"test-ref","workspaceId":"abcd","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"cloningInstructions":"$NOTHING"}""".parseJson.convertTo[DataReferenceDescription]
+//        }
+//      }
 
       "UpdateDataReferenceRequestBody should work when updating name and description" in {
         assertResult { s"""{"name":"foo","description":"bar"}""".parseJson } {
