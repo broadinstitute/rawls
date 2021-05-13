@@ -35,7 +35,8 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
       dataReferenceName <- requestArguments.dataReference.toRight(new DataEntityException("data reference must be defined for this provider")).toTry
 
       // get snapshot UUID from data reference name
-      snapshotId <- Try(lookupSnapshotForName(dataReferenceName, requestArguments))
+      dataReference <- Try(lookupSnapshotForName(dataReferenceName, requestArguments))
+      snapshotId = UUID.fromString(dataReference.getReference.getSnapshot)
 
       // contact TDR to describe the snapshot
       snapshotModel <- Try(dataRepoDAO.getSnapshot(snapshotId, requestArguments.userInfo.accessToken)).recoverWith {
@@ -59,10 +60,10 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
           logger.warn(finalErrMessage, forbidden)
           Failure(new DataEntityException(code = StatusCodes.Forbidden, message = finalErrMessage))
       }
-    } yield new DataRepoEntityProvider(snapshotModel, requestArguments, samDAO, bqServiceFactory, deltaLayerWriter, config)
+    } yield new DataRepoEntityProvider(snapshotModel, dataReference, requestArguments, samDAO, bqServiceFactory, deltaLayerWriter, config)
   }
 
-  private[datarepo] def lookupSnapshotForName(dataReferenceName: DataReferenceName, requestArguments: EntityRequestArguments): UUID = {
+  private[datarepo] def lookupSnapshotForName(dataReferenceName: DataReferenceName, requestArguments: EntityRequestArguments): DataReferenceDescription = {
     // contact WSM to retrieve the data reference specified in the request
     val dataRefTry = Try(workspaceManagerDAO.getDataRepoSnapshotReferenceByName(UUID.fromString(requestArguments.workspace.workspaceId),
       dataReferenceName,
@@ -76,6 +77,8 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
 
     // trigger any exceptions
     val dataRef = dataRefTry.get
+
+    // ultimately this method will return dataRef, but we'll validate its contents before returning it
 
     // verify it's a TDR snapshot. should be a noop, since getDataReferenceByName enforces this.
     if (ResourceType.DATA_REPO_SNAPSHOT != dataRef.getMetadata.getResourceType) {
@@ -93,10 +96,12 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
 
     // verify snapshotId value is a UUID
     Try(UUID.fromString(dataReference.getSnapshot)) match {
-      case Success(uuid) => uuid
+      case Success(uuid) => // success; noop
       case Failure(ex) =>
         logger.error(s"invalid UUID for snapshotId in reference: ${dataReference.getSnapshot}")
         throw new DataEntityException(s"Reference value for $dataReferenceName contains an unexpected snapshot value", ex)
     }
+
+    dataRef
   }
 }

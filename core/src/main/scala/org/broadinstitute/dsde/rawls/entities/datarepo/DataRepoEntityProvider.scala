@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
+import bio.terra.workspace.model.DataReferenceDescription
 import cats.effect.{ContextShift, IO}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.Field.Mode
@@ -18,18 +19,21 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, U
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeUpdateOperations, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, DeltaInsert, Destination, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.joda.time.DateTime
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
 
+import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: EntityRequestArguments,
+class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataReferenceDescription,
+                             requestArguments: EntityRequestArguments,
                              samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory,
                              deltaLayerWriter: DeltaLayerWriter,
                              config: DataRepoEntityProviderConfig)
@@ -409,6 +413,27 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, requestArguments: Ent
   override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
-    throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
+    // TODO: validate incoming EntityUpdateDefinitions (disallow deletes, etc)
+    // TODO: translate incoming EntityUpdateDefinitions into key-value writes, including destination BQ datatypes
+    // TODO: determine destination BQDL dataset, based on snapshot reference
+    // SnapshotService.generateDatasetName: "deltalayer_" + datasetReferenceId.toString.replace('-', '_')
+
+    // create DeltaInsert object
+    val dest = Destination(workspaceId = requestArguments.workspace.workspaceIdAsUUID,
+                           referenceId = dataReference.getReferenceId)
+    val ins = DeltaInsert(version = "v0",
+                          insertId = UUID.randomUUID(),
+                          insertTimestamp = new DateTime(),
+                          insertingUser = requestArguments.userInfo.userSubjectId,
+                          destination = dest,
+                          inserts = entityUpdates)
+
+    // TODO: should this be async, so we respond to the user quicker?
+    deltaLayerWriter.writeFile(ins)
+
+    // TODO: what should this return? Can we look up the changed entities and return them? What does the local
+    // provider return?
+    Future.successful(Seq.empty[Entity])
+  }
 }
