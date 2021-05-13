@@ -354,10 +354,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
       val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
       assert(statusMessages.exists { msg =>
-        msg.attributes.get("importId").contains(importId1.toString) &&
-          msg.attributes.get("newStatus").contains("Error") &&
-          msg.attributes.get("action").contains("status") &&
-          msg.attributes.get("errorMessage").get.contains("Successfully updated 1000 entities; 1 updates failed. First 100 failures are: Invalid input")
+        msg.attributes("importId").contains(importId1.toString) &&
+          msg.attributes("newStatus").contains("Error") &&
+          msg.attributes("action").contains("status") &&
+          msg.attributes("errorMessage").contains("Successfully updated 1000 entities; 1 updates failed. First 100 failures are: Invalid input")
       })
     }
 
@@ -401,10 +401,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
       val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
       assert(statusMessages.exists { msg =>
-        msg.attributes.get("importId").contains(importId1.toString) &&
-          msg.attributes.get("newStatus").contains("Error") &&
-          msg.attributes.get("action").contains("status") &&
-          msg.attributes.get("errorMessage").get.contains("Successfully updated 1000 entities; 1 updates failed. First 100 failures are: test-type this-entity-does-not-exist not found")
+        msg.attributes("importId").contains(importId1.toString) &&
+          msg.attributes("newStatus").contains("Error") &&
+          msg.attributes("action").contains("status") &&
+          msg.attributes("errorMessage").contains("Successfully updated 1000 entities; 1 updates failed. First 100 failures are: test-type this-entity-does-not-exist not found")
       })
     }
   }
