@@ -44,7 +44,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val referenceId = snapshotRef.getMetadata.getResourceId
       val datasetName = generateDatasetName(referenceId)
 
-      val datasetLabels = Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_id" -> snapshot.snapshotId)
+      val datasetLabels = Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_id" -> snapshot.snapshotId.toString)
 
       // create BQ dataset, get workspace policies from Sam, and add those Sam policies to the dataset IAM
       val createDatasetIO = for {

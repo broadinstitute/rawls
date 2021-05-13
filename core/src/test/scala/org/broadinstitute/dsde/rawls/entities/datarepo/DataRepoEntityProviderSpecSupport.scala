@@ -4,7 +4,7 @@ import java.util.UUID
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, SnapshotModel, TableModel}
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataRepoSnapshot, ReferenceTypeEnum}
+import bio.terra.workspace.model.{CloningInstructionsEnum, CloudPlatform, DataReferenceDescription, DataRepoSnapshot, DataRepoSnapshotAttributes, DataRepoSnapshotResource, ReferenceTypeEnum, ResourceMetadata, ResourceType}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
@@ -49,7 +49,7 @@ trait DataRepoEntityProviderSpecSupport {
     new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory, new MockDeltaLayerWriter(), config)
   }
 
-  def createTestBuilder(workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription())),
+  def createTestBuilder(workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource())),
                         dataRepoDAO: SpecDataRepoDAO = new SpecDataRepoDAO(Right(createSnapshotModel())),
                         samDAO: SamDAO = new MockSamDAO(slickDataSource),
                         bqServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
@@ -62,30 +62,32 @@ trait DataRepoEntityProviderSpecSupport {
   /* A "factory" method to create DataReferenceDescription objects, with defaults.
    * Allows callers to only specify the arguments they want to override.
    */
-  def createDataRefDescription(name: String = "refName",
-                               referenceType: ReferenceTypeEnum = ReferenceTypeEnum.DATA_REPO_SNAPSHOT,
-                               referenceId: UUID = refId,
-                               cloningInstructionsEnum: CloningInstructionsEnum = CloningInstructionsEnum.NOTHING,
-                               credentialId: String = "",
-                               workspaceId: UUID = wsId,
-                               refInstanceName: String = dataRepoInstanceName,
-                               refSnapshot: String = snapshot,
-                               reference: Option[DataRepoSnapshot] = None
-                              ): DataReferenceDescription = {
+  def createDataRepoSnapshotResource(name: String = "refName",
+                                     resourceId: UUID = refId,
+                                     resourceType: ResourceType = ResourceType.DATA_REPO_SNAPSHOT,
+                                     cloningInstructionsEnum: CloningInstructionsEnum = CloningInstructionsEnum.NOTHING,
+                                     workspaceId: UUID = wsId,
+                                     refInstanceName: String = dataRepoInstanceName,
+                                     refSnapshot: String = snapshot,
+                                    ): DataRepoSnapshotResource = {
 
-    val dataRepoReference = reference match {
-      case Some(s) => s
-      case None => new DataRepoSnapshot().instanceName(refInstanceName).snapshot(refSnapshot)
-    }
 
-    new DataReferenceDescription()
+    val metadata = new ResourceMetadata()
       .name(name)
-      .referenceType(referenceType)
-      .referenceId(referenceId)
+      .resourceId(resourceId)
+      .resourceType(resourceType)
       .cloningInstructions(cloningInstructionsEnum)
-      .credentialId(credentialId)
-      .reference(dataRepoReference)
+      .cloudPlatform(CloudPlatform.GCP)
       .workspaceId(workspaceId)
+
+
+    val attributes = new DataRepoSnapshotAttributes()
+      .instanceName(refInstanceName)
+      .snapshot(refSnapshot)
+
+    new DataRepoSnapshotResource()
+      .metadata(metadata)
+      .attributes(attributes)
   }
 
   val defaultTables: List[TableModel] = List(
@@ -108,15 +110,15 @@ trait DataRepoEntityProviderSpecSupport {
       .relationships(relationships.asJava)
 
   /**
-   * Mock for WorkspaceManagerDAO that allows the caller to specify behavior for the getDataReferenceByName method.
+   * Mock for WorkspaceManagerDAO that allows the caller to specify behavior for the getDataRepoSnapshotReferenceByName method.
    */
-  class SpecWorkspaceManagerDAO(refByNameResponse:Either[Throwable, DataReferenceDescription]) extends MockWorkspaceManagerDAO {
-    override def getDataReferenceByName(workspaceId: UUID, refType: ReferenceTypeEnum, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataReferenceDescription =
+  class SpecWorkspaceManagerDAO(refByNameResponse:Either[Throwable, DataRepoSnapshotResource]) extends MockWorkspaceManagerDAO {
+    override def getDataRepoSnapshotReferenceByName(workspaceId: UUID, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataRepoSnapshotResource =
       refByNameResponse match {
         case Left(t) => throw t
         case Right(ref) =>
           // N.B. we don't attempt to replicate the workspace manager's functionality of comparing the workspace id,
-          // refName, refType, and so on. We just return what the unit test asked us to return. It is workspace manager's
+          // refName, and so on. We just return what the unit test asked us to return. It is workspace manager's
           // responsibility to ensure its lookup logic is correct.
           ref
       }

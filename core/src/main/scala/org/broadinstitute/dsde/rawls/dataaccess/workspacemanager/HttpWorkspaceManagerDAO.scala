@@ -45,11 +45,11 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(accessToken).deleteWorkspace(workspaceId)
   }
 
-  override def createDataRepoSnapshotReference(workspaceId: UUID, snapshotId: String, name: DataReferenceName, description: Option[DataReferenceDescriptionField], instanceName: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
-    val snapshot = new DataRepoSnapshotAttributes().instanceName(instanceName).snapshot(snapshotId)
-    val metadata = new ReferenceResourceCommonFields().name(name.value).cloningInstructions(CloningInstructionsEnum.NOTHING)
-    description.map(d => metadata.description(d.value))
-    val request = new CreateDataRepoSnapshotReferenceRequestBody().snapshot(snapshot).metadata(metadata)
+  override def createDataRepoSnapshotReference(workspaceId: UUID, snapshotId: UUID, name: DataReferenceName, description: Option[DataReferenceDescriptionField], instanceName: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
+    val snapshot = new DataRepoSnapshotAttributes().instanceName(instanceName).snapshot(snapshotId.toString)
+    val commonFields = new ReferenceResourceCommonFields().name(name.value).cloningInstructions(CloningInstructionsEnum.NOTHING)
+    description.map(d => commonFields.description(d.value))
+    val request = new CreateDataRepoSnapshotReferenceRequestBody().snapshot(snapshot).metadata(commonFields)
     getReferencedGcpResourceApi(accessToken).createDataRepoSnapshotReference(request, workspaceId)
   }
 
@@ -61,8 +61,8 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getReferencedGcpResourceApi(accessToken).deleteDataRepoSnapshotReference(workspaceId, referenceId)
   }
 
-  override def getDataRepoSnapshotReference(workspaceId: UUID, snapshotId: UUID, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
-    getReferencedGcpResourceApi(accessToken).getDataRepoSnapshotReference(workspaceId, snapshotId)
+  override def getDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
+    getReferencedGcpResourceApi(accessToken).getDataRepoSnapshotReference(workspaceId, referenceId)
   }
 
   override def getDataRepoSnapshotReferenceByName(workspaceId: UUID, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {

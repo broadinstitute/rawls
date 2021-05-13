@@ -1121,14 +1121,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
 
     val dataReferenceName = DataReferenceName("dataref")
-    val dataReferenceDescription = "description"
+    val dataReferenceDescription = DataReferenceDescriptionField("description")
 
     val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
 
     withDataAndService({ workspaceService =>
-      val metadata = new ReferenceResourceCommonFields().name(dataReferenceName.value).description(dataReferenceDescription).cloningInstructions(CloningInstructionsEnum.NOTHING)
-      val attributes = new DataRepoSnapshotAttributes().snapshot(snapshotUUID.toString).instanceName(dataRepoDAO.getInstanceName)
-      workspaceService.workspaceManagerDAO.createDataRepoSnapshotReference(minimalTestData.workspace.workspaceIdAsUUID, metadata, attributes, userInfo.accessToken )
+      workspaceService.workspaceManagerDAO.createDataRepoSnapshotReference(minimalTestData.workspace.workspaceIdAsUUID, snapshotUUID, dataReferenceName, Option(dataReferenceDescription), dataRepoDAO.getInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken )
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
       test(workspaceService, methodConfig, snapshotUUID)
     }, withMinimalTestDatabase[Any], bigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)), dataRepoDAO = dataRepoDAO)

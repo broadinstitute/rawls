@@ -13,7 +13,7 @@ trait WorkspaceManagerDAO {
   def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription
   def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace
   def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit
-  def createDataRepoSnapshotReference(workspaceId: UUID, snapshotId: String, name: DataReferenceName, description: Option[DataReferenceDescriptionField], instanceName: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataRepoSnapshotResource
+  def createDataRepoSnapshotReference(workspaceId: UUID, snapshotId: UUID, name: DataReferenceName, description: Option[DataReferenceDescriptionField], instanceName: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataRepoSnapshotResource
   def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit
   def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit
   def getDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): DataRepoSnapshotResource

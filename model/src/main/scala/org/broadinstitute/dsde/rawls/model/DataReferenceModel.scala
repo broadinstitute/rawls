@@ -11,7 +11,7 @@ import scala.collection.JavaConverters._
 
 case class DataReferenceName(value: String) extends ValueObject
 case class DataReferenceDescriptionField(value: String = "") extends ValueObject
-case class NamedDataRepoSnapshot(name: DataReferenceName, description: Option[DataReferenceDescriptionField], snapshotId: String)
+case class NamedDataRepoSnapshot(name: DataReferenceName, description: Option[DataReferenceDescriptionField], snapshotId: UUID)
 
 object DataReferenceModelJsonSupport extends JsonSupport {
   def stringOrNull(in: Any): JsValue = Option(in) match {
@@ -65,7 +65,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     )
 
     override def read(json: JsValue): DataRepoSnapshotAttributes = {
-      json.asJsObject.getFields() match {
+      json.asJsObject.getFields(INSTANCE_NAME, SNAPSHOT) match {
         case Seq(JsString(instanceName), JsString(snapshot)) =>
           new DataRepoSnapshotAttributes()
             .instanceName(instanceName)
@@ -76,9 +76,8 @@ object DataReferenceModelJsonSupport extends JsonSupport {
 
   // Only handling supported fields for now, resourceDescription and credentialId aren't used currently
   implicit object DataRepoSnapshotResourceFormat extends RootJsonFormat[DataRepoSnapshotResource] {
-    val METADATA = "referenceId"
-    val ATTRIBUTES = "name"
-
+    val METADATA = "metadata"
+    val ATTRIBUTES = "attributes"
 
     override def write(resource: DataRepoSnapshotResource) = JsObject(
       METADATA -> ResourceMetadataFormat.write(resource.getMetadata),
@@ -86,11 +85,13 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     )
 
     override def read(json: JsValue): DataRepoSnapshotResource = {
-      json.asJsObject.getFields() match {
+      val fields = json.asJsObject.getFields(METADATA, ATTRIBUTES)
+      fields match {
         case Seq(metadata @ JsObject(_), attributes @ JsObject(_)) =>
-          new DataRepoSnapshotResource()
+          val res = new DataRepoSnapshotResource()
             .metadata(metadata.convertTo[ResourceMetadata])
             .attributes(attributes.convertTo[DataRepoSnapshotAttributes])
+          res
         case _ => throw DeserializationException("DataRepoSnapshotResource expected")
       }
     }
@@ -155,7 +156,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     )
 
     override def read(json: JsValue): ResourceDescription = {
-      json.asJsObject.getFields() match {
+      json.asJsObject.getFields(METADATA, RESOURCE_ATTRIBUTES) match {
         case Seq(metadata, resourceAttributes) =>
           new ResourceDescription()
             .metadata(metadata.convertTo[ResourceMetadata])
