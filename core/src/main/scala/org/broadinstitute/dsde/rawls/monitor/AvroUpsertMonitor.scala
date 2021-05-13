@@ -379,9 +379,13 @@ class AvroUpsertMonitorActor(
         case Success(entityList) => entityList.size
       }.sum
 
+      // if the failure has underlying causes, use those; else use the parent failure.
+      // unresolved entity references only have useful error messages in the underlying causes, not the parent failure
+      // therefore to deliver the best messages to the user we need to handle both cases
       val failureReports: List[RawlsErrorReport] = upsertResults collect {
-        case Failure(regrets:RawlsExceptionWithErrorReport) => regrets.errorReport
-      }
+        case Failure(regrets:RawlsExceptionWithErrorReport) if regrets.errorReport.causes.nonEmpty => regrets.errorReport.causes
+        case Failure(regrets:RawlsExceptionWithErrorReport) => Seq(regrets.errorReport)
+      } flatten
 
       // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
       // Cap the failure reports at 100.

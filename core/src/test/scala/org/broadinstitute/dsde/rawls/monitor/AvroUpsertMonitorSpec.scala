@@ -9,7 +9,7 @@ import cats.effect.IO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, Entity, ImportStatuses}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, AttributeString, Entity, ImportStatuses, TypedAttributeListSerializer}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
 import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
@@ -19,6 +19,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.BeforeAndAfterAll
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 
 import scala.concurrent.ExecutionContext.global
@@ -360,6 +361,52 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       })
     }
 
+  }
+
+  it should "bubble up useful error message if upserts result in partial failure" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+    val importId1 = UUID.randomUUID()
+
+    // add the imports and their statuses to the mock importserviceDAO
+    val mockImportServiceDAO =  setUp(services)
+    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+    val successfulBatch = createUpsertOpsList(upsertRange(1000))
+
+    // failure creates an entity that refers to a non-existent entity
+    val ref = AttributeEntityReference("test-type", "this-entity-does-not-exist")
+    val op: AttributeUpdateOperation = AddUpdateAttribute(AttributeName.withDefaultNS("intentionallyBadReference"), ref)
+    import spray.json._
+    import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperationFormat
+    implicit val attributeFormat: AttributeFormat = new AttributeFormat with TypedAttributeListSerializer
+    val opJsonString = op.toJson.compactPrint
+    val failureBatch = s"""{"name": "avro-entity-failure", "entityType": "failme", "operations": [$opJsonString]}"""
+    val contents = makeOpsJsonString(successfulBatch :+ failureBatch)
+
+    // Store upsert json file
+    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Make sure the file saved properly
+    Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Publish message on the request topic
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, testAttributes(importId1))))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString, 1))
+    }
+
+    // upsert will fail; check that a pubsub message was published to set the import job to error.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+      assert(statusMessages.exists { msg =>
+        msg.attributes.get("importId").contains(importId1.toString) &&
+          msg.attributes.get("newStatus").contains("Error") &&
+          msg.attributes.get("action").contains("status") &&
+          msg.attributes.get("errorMessage").get.contains("Successfully updated 1000 entities; 1 updates failed. First 100 failures are: test-type this-entity-does-not-exist not found")
+      })
+    }
   }
 
 }
