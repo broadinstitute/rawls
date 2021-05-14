@@ -429,11 +429,14 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
                           destination = dest,
                           inserts = entityUpdates)
 
-    // TODO: should this be async, so we respond to the user quicker?
+    // consider making this async, so we respond to the user quicker. For now, leave as synchronous
+    // so we return any errors
     deltaLayerWriter.writeFile(ins)
 
-    // TODO: what should this return? Can we look up the changed entities and return them? What does the local
-    // provider return?
+    // This method signature claims to return Traversable[Entity] - and we leave it that way for compatibility -
+    // but note that in practice we don't return any entities. That's good - we don't have access to the
+    // updated entities yet because they will be updated asynchronously by the code that reads the file
+    // we just wrote.
     Future.successful(Seq.empty[Entity])
   }
 }
