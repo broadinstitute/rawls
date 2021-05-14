@@ -67,10 +67,23 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   behavior of "DataRepoEntityProviderBuilder.lookupSnapshotForName()"
 
-  it should "return snapshot id in the golden path" in {
-    val builder = createTestBuilder()
-    val actual = builder.lookupSnapshotForName(DataReferenceName("foo"), defaultEntityRequestArguments)
-    assertResult(UUID.fromString(snapshot)) { actual }
+  it should "return DataReferenceDescription id in the golden path" in {
+    // modify the DataReferenceDescription used by this test to ensure the test
+    // isn't mistakenly passing by using defaults where it shouldn't
+    val randomName = scala.util.Random.alphanumeric.take(16).mkString
+
+    val expected = createDataRefDescription(
+      name = randomName,
+      refSnapshot = UUID.randomUUID().toString)
+
+    val builder = createTestBuilder(
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(expected))
+    )
+
+    // NB see comment in SpecWorkspaceManagerDAO; the name we use for lookup is ignored
+    val actual = builder.lookupSnapshotForName(DataReferenceName(randomName), defaultEntityRequestArguments)
+
+    assertResult(expected) { actual }
   }
 
   it should "bubble up error if workspace manager errors" in  {
