@@ -18,6 +18,7 @@ tags:
   - name: notifications
   - name: servicePerimeters
   - name: snapshots
+  - name: snapshots_v2
   - name: status
   - name: submissions
   - name: users
@@ -4027,6 +4028,164 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/snapshots:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: List snapshots
+      description: Enumerate references to snapshots in the Terra Data Repo
+      operationId: enumerateDataRepoSnapshot_v2
+      parameters:
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+            set.
+          required: true
+          schema:
+            type: integer
+          example: 0
+        - name: limit
+          in: query
+          description: The number of items to return.
+          required: true
+          schema:
+            type: integer
+          example: 10
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResourceList'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    post:
+      tags:
+        - snapshots_v2
+      summary: Create a snapshot
+      description: Add a reference to a snapshot in the Terra Data Repo
+      operationId: createDataRepoSnapshot_v2
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/NamedDataRepoSnapshot'
+        required: true
+      responses:
+        201:
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+      x-codegen-request-body-name: namedDataRepoSnapshot
+  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+      - $ref: '#/components/parameters/snapshotIdPathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: Get a snapshot
+      description: Get a reference to a snapshot in the Terra Data Repo
+      operationId: getDataRepoSnapshot_v2
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    patch:
+      summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
+      operationId: updateDataRepoSnapshot_v2
+      tags:
+        - snapshots_v2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDataReferenceRequestBody'
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - snapshots_v2
+      summary: Delete a snapshot
+      description: Delete a workspace's reference to a snapshot in the Terra Data
+        Repo
+      operationId: deleteDataRepoSnapshot_v2
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -4203,6 +4362,68 @@ components:
           items:
             $ref: '#/components/schemas/DataRepoSnapshotReference'
       description: A list of DataRepoSnapshotReferences
+    ResourceMetadata:
+      type: object
+      required: [ workspaceId, resourceId, name, description, resourceType, stewardshipType, cloudPlatform, cloningIntructions ]
+      properties:
+        workspaceId:
+          type: string
+        resourceId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        resourceType:
+          type: string
+        stewardshipType:
+          type: string
+        cloudPlatform:
+          type: string
+        cloningInstructions:
+          type: string
+     # Add controlled?
+    DataRepoSnapshotAttributes:
+      type: object
+      required: [ instanceName, snapshot ]
+      properties:
+        instanceName:
+          type: string
+        snapshot:
+          type: string
+    DataRepoSnapshotResource:
+      type: object
+      required: [ metadata, attributes ]
+      properties:
+        metadata:
+          $ref: '#/components/schemas/ResourceMetadata'
+        attributes:
+          $ref: '#/components/schemas/DataRepoSnapshotAttributes'
+    ResourceAttributesUnion:
+      type: object
+      required: [ gcpDataRepoSnapshot ]
+      properties:
+        gcpDataRepoSnapshot:
+          $ref: '#/components/schemas/DataRepoSnapshotAttributes'
+    ResourceDescription:
+      type: object
+      required: [ metadata, resourceAttributes ]
+      properties:
+        metadata:
+          $ref: '#/components/schemas/ResourceMetadata'
+        resourceAttributes:
+          $ref: '#/components/schemas/ResourceAttributesUnion'
+      description: resource description
+    DataRepoSnapshotResourceList:
+      type: object
+      required: [ resources ]
+      properties:
+        resources:
+          type: array
+          description: A list of snapshot Data Resource definitions from Workspace Manager
+          items:
+            $ref: '#/components/schemas/ResourceDescription'
+      description: List of snapshot resources
     ErrorReport:
       required:
         - causes

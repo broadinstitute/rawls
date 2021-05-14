@@ -167,6 +167,6 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
   private[snapshot] def generateDatasetName(datasetReferenceId: UUID) = {
     "deltalayer_" + datasetReferenceId.toString.replace('-', '_')
-}
+  }
 
 }
