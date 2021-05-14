@@ -7,6 +7,7 @@ import TestExecutionContext.testExecutionContext
 import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, DeltaInsert, Destination, RawlsUserSubjectId}
+import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
 import org.joda.time.DateTime
 import org.scalatest.concurrent.Eventually
@@ -56,7 +57,24 @@ class GcsDeltaLayerWriterSpec extends AnyFlatSpec with Eventually with Matchers 
 
   it should "bubble up errors during write" is (pending)
 
-  it should "calculate the desired file path to which we will write" is (pending)
+  it should "calculate the desired file path to which we will write" in {
+    // workspace/${workspaceId}/reference/${referenceId}/insert/${insertId}.json
+    val insertId = UUID.randomUUID()
+    val workspaceId = UUID.randomUUID()
+    val referenceId = UUID.randomUUID()
+
+    val dest = Destination(workspaceId, referenceId)
+    val attrUpdates: Seq[AttributeUpdateOperation] = Seq(AddUpdateAttribute(AttributeName.withDefaultNS("attrName"), AttributeString("attrValue")))
+    val entityUpdates: Seq[EntityUpdateDefinition] = Seq(EntityUpdateDefinition("name", "type", attrUpdates))
+    val testInsert = DeltaInsert("vTest", insertId, new DateTime(), RawlsUserSubjectId("1234"), dest, entityUpdates)
+
+    val expected = GcsBlobName(s"workspace/${workspaceId}/reference/${referenceId}/insert/${insertId}.json")
+
+    val actual = deltaLayerWriter.filePath(testInsert)
+
+    actual shouldBe expected
+
+  }
 
   it should "serialize DeltaInsert correctly" is (pending) // NB not worth testing until model class is stable
 
