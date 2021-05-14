@@ -26,7 +26,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     val RESOURCE_ID = "resourceId"
     val NAME = "name"
     val DESCRIPTION = "description"
-    val RESOURCE_TYPE = "referenceType"
+    val RESOURCE_TYPE = "resourceType"
     val STEWARDSHIP_TYPE = "stewardshipType"
     val CLONING_INSTRUCTIONS = "cloningInstructions"
 
@@ -74,7 +74,6 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     }
   }
 
-  // Only handling supported fields for now, resourceDescription and credentialId aren't used currently
   implicit object DataRepoSnapshotResourceFormat extends RootJsonFormat[DataRepoSnapshotResource] {
     val METADATA = "metadata"
     val ATTRIBUTES = "attributes"
