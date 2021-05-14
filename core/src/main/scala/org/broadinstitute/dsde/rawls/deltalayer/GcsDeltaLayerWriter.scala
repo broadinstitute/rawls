@@ -26,17 +26,16 @@ class GcsDeltaLayerWriter(val storageService: GoogleStorageService[IO],
   override def writeFile(writeObject: DeltaInsert): Unit = {
 
     val destinationPath = filePath(writeObject)
-
-    // set traceId equal to insertId for easy correlation
-    val writePipe = storageService.streamUploadBlob(sourceBucket, destinationPath,
-      overwrite = false,
-      traceId = Some(TraceId(writeObject.insertId)))
-
     val fileContents = serializeFile(writeObject)
 
-    retryWithRecoverWhen500orGoogleError(() =>
+    retryWithRecoverWhen500orGoogleError(() => {
+      // set traceId equal to insertId for easy correlation
+      val writePipe = storageService.streamUploadBlob(sourceBucket, destinationPath,
+        overwrite = false,
+        traceId = Some(TraceId(writeObject.insertId)))
+
       text.utf8Encode(Stream.emit(fileContents)).through(writePipe).compile.drain.unsafeRunSync()
-    ) {
+    }) {
       // are there any special error-handling cases we should include? Maybe 409 in case we've written the
       // file multiple times?
       case t: HttpResponseException =>

@@ -5,16 +5,25 @@ import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.scalatest.flatspec.AnyFlatSpec
 import TestExecutionContext.testExecutionContext
 import akka.actor.ActorSystem
+import cats.effect.concurrent.Semaphore
+import cats.effect.{Blocker, IO}
+import com.google.cloud.storage.Storage.BlobWriteOption
+import com.google.cloud.storage.{BlobInfo, Storage, StorageException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, DeltaInsert, Destination, RawlsUserSubjectId}
-import org.broadinstitute.dsde.workbench.google2.GcsBlobName
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageInterpreterSpec.{cs, logger, timer}
+import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageInterpreter}
 import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
 import org.joda.time.DateTime
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Seconds, Span}
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.util.UUID
+import scala.concurrent.ExecutionContext.global
 
 class GcsDeltaLayerWriterSpec extends AnyFlatSpec with Eventually with Matchers {
 
@@ -55,7 +64,34 @@ class GcsDeltaLayerWriterSpec extends AnyFlatSpec with Eventually with Matchers 
     }
   }
 
-  it should "bubble up errors during write" is (pending)
+  it should "bubble up errors during write" in {
+
+    // under the covers, Storage.writer is the Google library method that gets called. So, mock that
+    // and force it to throw
+    val mockedException = new StorageException(418, "intentional unit test failure")
+    val throwingStorageHelper = mock[Storage]
+    when(throwingStorageHelper.writer(any[BlobInfo], any[BlobWriteOption]))
+      .thenThrow(mockedException)
+
+    val blocker = Blocker.liftExecutionContext(global)
+    val semaphore = Semaphore[IO](1).unsafeRunSync
+    val throwingStorageInterpreter = GoogleStorageInterpreter[IO](throwingStorageHelper, blocker, Some(semaphore))
+    val throwingWriter = new GcsDeltaLayerWriter(throwingStorageInterpreter, bucket, "metricsPrefix")
+
+    // create the object to be written
+    val dest = Destination(UUID.randomUUID(), UUID.randomUUID())
+    val attrUpdates: Seq[AttributeUpdateOperation] = Seq(AddUpdateAttribute(AttributeName.withDefaultNS("attrName"), AttributeString("attrValue")))
+    val entityUpdates: Seq[EntityUpdateDefinition] = Seq(EntityUpdateDefinition("name", "type", attrUpdates))
+    val testInsert = DeltaInsert("vTest", UUID.randomUUID(), new DateTime(), RawlsUserSubjectId("1234"), dest, entityUpdates)
+
+    // write the object via the Delta Layer writer we have configured to run into an exception
+    val caught = intercept[Exception] {
+       throwingWriter.writeFile(testInsert)
+    }
+
+    caught shouldBe mockedException
+
+  }
 
   it should "calculate the desired file path to which we will write" in {
     // workspace/${workspaceId}/reference/${referenceId}/insert/${insertId}.json
