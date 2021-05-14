@@ -46,9 +46,8 @@ trait DataRepoEntityProviderSpecSupport {
                          entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName"))),
                          config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                         ): DataRepoEntityProvider = {
-    // TODO: shouldn't use an empty DataReferenceDescription here
-    val ref = new DataReferenceDescription()
-    new DataRepoEntityProvider(snapshotModel, ref, entityRequestArguments, samDAO, bqFactory, new MockDeltaLayerWriter(), config)
+    // we may find that tests need to override the DataReferenceDescription provided by createDataRefDescription() on the next line
+    new DataRepoEntityProvider(snapshotModel, createDataRefDescription(), entityRequestArguments, samDAO, bqFactory, new MockDeltaLayerWriter(), config)
   }
 
   def createTestBuilder(workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource())),
