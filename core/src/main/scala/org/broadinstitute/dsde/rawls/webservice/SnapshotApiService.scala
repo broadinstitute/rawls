@@ -99,7 +99,7 @@ trait SnapshotApiService extends UserInfoDirectives {
       }
     }
   }
-  
+
   // -------  REMOVE WHEN GETTING RID OF V1 SNAPSHOT ENDPOINTS -------
 
   private def dataRepoSnapshotResourceToDataReferenceDescription(resource: DataRepoSnapshotResource): DataReferenceDescription = {
