@@ -46,7 +46,7 @@ trait DataRepoEntityProviderSpecSupport {
                          entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName"))),
                          config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                         ): DataRepoEntityProvider = {
-    // FIXME
+    // TODO: shouldn't use an empty DataReferenceDescription here
     val ref = new DataReferenceDescription()
     new DataRepoEntityProvider(snapshotModel, ref, entityRequestArguments, samDAO, bqFactory, new MockDeltaLayerWriter(), config)
   }

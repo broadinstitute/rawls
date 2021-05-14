@@ -22,7 +22,7 @@ class GcsDeltaLayerWriter(val storageService: GoogleStorageService[IO],
   private[deltalayer] def serializeFile(writeObject: DeltaInsert): String = {
     val updateJson = writeObject.inserts.toJson.prettyPrint
 
-    // TODO: this should use real JsonFormat classes! For now, since the model is in such flux, just hand-roll
+    // TODO AS-770: use real JsonFormat classes! For now, since the model is in such flux, just hand-roll
     // the json
     s"""{
        |  "insertId": "${writeObject.insertId}",
@@ -36,7 +36,7 @@ class GcsDeltaLayerWriter(val storageService: GoogleStorageService[IO],
   }
 
   override def writeFile(writeObject: DeltaInsert): Unit = {
-    // TODO: set overwrite value and traceId value
+    // TODO: set overwrite value if desired and traceId value for tracing
     val writePipe = storageService.streamUploadBlob(sourceBucket, filePath(writeObject))
     val fileContents = serializeFile(writeObject)
     // TODO: retries and error-handling

@@ -414,12 +414,12 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
-    // TODO: validate incoming EntityUpdateDefinitions (disallow deletes, etc)
-    // TODO: translate incoming EntityUpdateDefinitions into key-value writes, including destination BQ datatypes
-    // TODO: determine destination BQDL dataset, based on snapshot reference
-    // SnapshotService.generateDatasetName: "deltalayer_" + datasetReferenceId.toString.replace('-', '_')
+    // TODO AS-770: validate incoming EntityUpdateDefinitions (disallow deletes, etc)
+    // TODO AS-770: translate incoming EntityUpdateDefinitions into key-value writes, including destination BQ datatypes
+    // TODO AS-770: determine destination BQDL dataset, based on snapshot reference. Currently in SnapshotService.generateDatasetName
 
     // create DeltaInsert object
+    // TODO AS-770: populate with everything we need, including model versioning
     val dest = Destination(workspaceId = requestArguments.workspace.workspaceIdAsUUID,
                            referenceId = dataReference.getReferenceId)
     val ins = DeltaInsert(version = "v0",
