@@ -41,6 +41,10 @@ class GcsDeltaLayerWriter(val storageService: GoogleStorageService[IO],
       // file multiple times?
       case t: HttpResponseException =>
         logger.warn(s"encountered error [${t.getStatusMessage}] with status code [${t.getStatusCode}] when writing delta file [${sourceBucket.value}/${destinationPath.value}]")
+        throw t
+      case e: Exception =>
+        logger.warn(s"encountered error [${e.getMessage}] when writing delta file [${sourceBucket.value}/${destinationPath.value}]")
+        throw e
     }
   }
 
