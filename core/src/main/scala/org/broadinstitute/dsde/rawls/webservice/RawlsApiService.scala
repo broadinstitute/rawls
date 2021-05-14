@@ -89,7 +89,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ billingRoutesV2 ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
+  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
   def apiRoutes =
     options(complete(OK)) ~

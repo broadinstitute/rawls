@@ -110,6 +110,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       gcsDAO,
       notificationDAO,
       samDAO,
+      MockBigQueryServiceFactory.ioFactory(),
+      "/fake/Credential/Path/credentials.json",
       "requesterPaysRole",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))

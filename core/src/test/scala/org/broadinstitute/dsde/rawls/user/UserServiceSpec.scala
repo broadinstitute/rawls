@@ -3,13 +3,12 @@ package org.broadinstitute.dsde.rawls.user
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockBigQueryServiceFactory, MockGoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
@@ -47,6 +46,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       gcsDAO,
       null,
       samDAO,
+      MockBigQueryServiceFactory.ioFactory(),
+      "/fake/Credential/Path/credentials.json",
       "",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       null
@@ -233,4 +234,13 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }
   }
+
+  it should "set the spend configuration of a billing project"
+  it should "clear the spend configuration of a billing project"
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset does not exist or can't be accessed"
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the table does not exist or can't be accessed"
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the billing project does not have a billing account associated with it"
+
+
+
 }

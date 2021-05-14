@@ -228,7 +228,7 @@ class HttpGoogleServicesDAO(
         // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
         // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
         _ <- googleStorageService.overrideIamPolicy(GcsBucketName(bucketName), roleToIdentities,
-          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardRetryPredicate, RetryPredicates.whenStatusCode(400)))
+          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardGoogleRetryPredicate, RetryPredicates.whenStatusCode(400)))
       } yield ()
     }
 
@@ -683,6 +683,34 @@ class HttpGoogleServicesDAO(
     listBillingAccounts(billingSvcCred) map { accountList =>
       accountList.map(acct => RawlsBillingAccount(RawlsBillingAccountName(acct.getName), true, acct.getDisplayName))
     }
+  }
+
+  override def getProjectBillingAccount(projectName: RawlsBillingProjectName, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+    implicit val service = GoogleInstrumentedService.Billing
+
+    val projectNameFormatted = s"projects/${projectName.value}"
+
+    val credential = getUserCredential(userInfo)
+    val fetcher = getCloudBillingManager(credential).projects().getBillingInfo(projectNameFormatted)
+
+    retryWhen500orGoogleError(() => {
+      blocking {
+        executeGoogleRequest(fetcher)
+      }
+    }).map(billingInfo => Option(billingInfo.getBillingAccountName))
+  }
+
+  override def getParentBillingAccount(billingProjectId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+    implicit val service = GoogleInstrumentedService.Billing
+
+    val credential = getBillingServiceAccountCredential
+    val fetcher = getCloudBillingManager(credential).billingAccounts().get(billingProjectId)
+
+    retryWhen500orGoogleError(() => {
+      blocking {
+        executeGoogleRequest(fetcher)
+      }
+    }).map(billingInfo => Option(billingInfo.getMasterBillingAccount))
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {

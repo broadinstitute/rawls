@@ -391,6 +391,69 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/billing/v2/{projectId}/spendReportConfiguration:
+    put:
+      tags:
+        - billing_v2
+      summary: set the spend configuration for the project
+      description: set the spend configuration for the project
+      operationId: setSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Project ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: project spend configuration information
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/SpendReportConfiguration'
+      responses:
+        204:
+          description: No Content
+        403:
+          description: You must be a project owner to alter the spend configuration of the project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - billing_v2
+      summary: clear the spend configuration for the project
+      description: clear the spend configuration for the project
+      operationId: clearSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Project ID
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: No Content
+        403:
+          description: You must be a project owner to alter the spend configuration of the project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/billing/v2/{projectId}/members/{workbenchRole}/{email}:
     put:
       tags:
@@ -5757,6 +5820,15 @@ components:
             this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
             Caller must have the add_project action for this service perimeter in
             Sam.
+      description: ""
+    SpendReportConfiguration:
+      required:
+        - datasetName
+      type: object
+      properties:
+        datasetName:
+          type: string
+          description: the name of the BigQuery dataset containing project spend data
       description: ""
     RawlsBillingProjectMembership:
       required:

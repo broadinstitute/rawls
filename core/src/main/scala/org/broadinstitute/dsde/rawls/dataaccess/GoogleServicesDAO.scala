@@ -123,6 +123,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
 
+  def getProjectBillingAccount(projectName: RawlsBillingProjectName, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
+
+  def getParentBillingAccount(billingProjectId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
+
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
 
   def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]

@@ -42,6 +42,15 @@ trait StringValidationUtils {
     }
   }
 
+  //See https://cloud.google.com/bigquery/docs/datasets#dataset-naming
+  private lazy val bigQueryDatasetNameRegex = "[A-z0-9_]{1,1024}".r
+  def validateBigQueryDatasetName(s: String): Unit = {
+    if(! bigQueryDatasetNameRegex.pattern.matcher(s).matches) {
+      val msg = s"Invalid name for dataset. Input must be between 1 and 1024 characters in length and may only contain alphanumeric characters and underscores."
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
+    }
+  }
+
   def validateMaxStringLength(s: String, maxLength: Int): Unit = {
     if(s.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: $s. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
   }
