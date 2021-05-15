@@ -4,7 +4,6 @@ import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
-import cats.data.NonEmptyList
 import cats.effect.{ContextShift, IO}
 import com.google.cloud.bigquery.Acl
 import com.google.cloud.bigquery.Acl.Entity
@@ -57,7 +56,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       createDatasetIO.unsafeToFuture().recover {
         case t: Throwable =>
           //fire and forget this undo, we've made our best effort to fix things at this point
-          IO.pure(workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID,referenceId, userInfo.accessToken)).unsafeToFuture()
+          IO.pure(workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, referenceId, userInfo.accessToken)).unsafeToFuture()
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
       }.flatMap { _ =>
 
@@ -79,10 +78,10 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
-  def getSnapshot(workspaceName: WorkspaceName, resourceId: String): Future[DataRepoSnapshotResource] = {
-    val resourceUuid = validateSnapshotId(resourceId)
+  def getSnapshot(workspaceName: WorkspaceName, referenceId: String): Future[DataRepoSnapshotResource] = {
+    val referenceUuid = validateSnapshotId(referenceId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
-      val ref = workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, resourceUuid, userInfo.accessToken)
+      val ref = workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, referenceUuid, userInfo.accessToken)
       Future.successful(ref)
     }
   }

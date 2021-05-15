@@ -4,7 +4,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import bio.terra.workspace.model.{DataReferenceDescription, DataReferenceList, DataRepoSnapshot, DataRepoSnapshotResource, ReferenceTypeEnum, ResourceDescription, ResourceList, ResourceMetadata, UpdateDataReferenceRequestBody}
+import bio.terra.workspace.model.{DataReferenceDescription, DataReferenceList, DataRepoSnapshot, DataRepoSnapshotResource, ReferenceTypeEnum, ResourceList, UpdateDataReferenceRequestBody}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
@@ -54,6 +54,7 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       }
     } ~
+    // ---- SNAPSHOT V1 ----
     path("workspaces" / Segment / Segment / "snapshots") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>

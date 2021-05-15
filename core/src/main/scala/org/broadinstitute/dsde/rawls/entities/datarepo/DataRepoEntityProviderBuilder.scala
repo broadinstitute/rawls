@@ -15,8 +15,7 @@ import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport}
+import org.broadinstitute.dsde.rawls.model.DataReferenceName
 
 import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._

@@ -2,17 +2,14 @@ package org.broadinstitute.dsde.rawls.snapshot
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceMetadata, DataReferenceRequestMetadata, DataRepoSnapshot, DataRepoSnapshotAttributes, DataRepoSnapshotResource, GcpBigQueryDatasetAttributes, GcpBigQueryDatasetResource, ReferenceResourceCommonFields, ReferenceTypeEnum, ResourceMetadata}
-import cats.effect.{IO, Resource}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshotAttributes, DataRepoSnapshotResource, GcpBigQueryDatasetAttributes, GcpBigQueryDatasetResource, ReferenceResourceCommonFields, ResourceMetadata}
+import cats.effect.IO
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, doThrow, times, verify, when}
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, SamPolicy, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo}
-import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, times, verify, when}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, GoogleProjectId, NamedDataRepoSnapshot, SamPolicy, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.mockito.ArgumentMatchers

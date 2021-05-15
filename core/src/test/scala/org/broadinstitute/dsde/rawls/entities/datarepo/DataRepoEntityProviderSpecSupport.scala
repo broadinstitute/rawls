@@ -4,7 +4,7 @@ import java.util.UUID
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, SnapshotModel, TableModel}
-import bio.terra.workspace.model.{CloningInstructionsEnum, CloudPlatform, DataReferenceDescription, DataRepoSnapshot, DataRepoSnapshotAttributes, DataRepoSnapshotResource, ReferenceTypeEnum, ResourceMetadata, ResourceType}
+import bio.terra.workspace.model.{CloningInstructionsEnum, CloudPlatform, DataRepoSnapshotAttributes, DataRepoSnapshotResource, ResourceMetadata, ResourceType}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
@@ -59,7 +59,7 @@ trait DataRepoEntityProviderSpecSupport {
   }
 
 
-  /* A "factory" method to create DataReferenceDescription objects, with defaults.
+  /* A "factory" method to create DataRepoSnapshotResource objects, with defaults.
    * Allows callers to only specify the arguments they want to override.
    */
   def createDataRepoSnapshotResource(name: String = "refName",
@@ -140,7 +140,6 @@ trait DataRepoEntityProviderSpecSupport {
 
   /**
    * Mock for DataRepoDAO that allows the caller to specify behavior for the getSnapshot and getBaseURL methods.
-   *  method.
    */
   class SpecSamDAO(dataSource: SlickDataSource = slickDataSource,
                    petKeyForUserResponse: Either[Throwable, String]) extends MockSamDAO(dataSource) {
