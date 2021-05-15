@@ -4,7 +4,7 @@ import java.util.UUID
 
 import bio.terra.workspace.model.CloningInstructionsEnum.NOTHING
 import bio.terra.workspace.model.ReferenceTypeEnum.DATA_REPO_SNAPSHOT
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, DataRepoSnapshotAttributes, DataRepoSnapshotResource, GcpBigQueryDatasetAttributes, ResourceAttributesUnion, ResourceDescription, ResourceList, ResourceMetadata, ResourceType, StewardshipType, UpdateDataReferenceRequestBody}
+import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, DataRepoSnapshotAttributes, DataRepoSnapshotResource, ResourceAttributesUnion, ResourceDescription, ResourceList, ResourceMetadata, ResourceType, StewardshipType, UpdateDataReferenceRequestBody}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import spray.json._
 
@@ -61,19 +61,19 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
         val snapshotId = UUID.randomUUID()
         assertResult {
           s"""{
-              "attributes": {
-                             "instanceName": "test-instance",
-                             "snapshot": "$snapshotId"
-              },
-              "metadata": {
-                            "workspaceId": "$workspaceId",
-                            "resourceId": "$resourceId",
-                            "name": "testReference",
-                            "description": "hello",
-                            "resourceType": "DATA_REPO_SNAPSHOT",
-                            "stewardshipType": "REFERENCED",
-                            "cloningInstructions": "COPY_NOTHING"
-              }
+                "attributes": {
+                  "instanceName": "test-instance",
+                  "snapshot": "$snapshotId"
+                },
+                "metadata": {
+                  "workspaceId": "$workspaceId",
+                  "resourceId": "$resourceId",
+                  "name": "testReference",
+                  "description": "hello",
+                  "resourceType": "DATA_REPO_SNAPSHOT",
+                  "stewardshipType": "REFERENCED",
+                  "cloningInstructions": "COPY_NOTHING"
+                }
              }
           """.parseJson
         } {
@@ -105,23 +105,24 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
           s"""
              {
                "resources": [
-                             {
-                               "metadata": {
-                                             "cloningInstructions":"COPY_NOTHING",
-                                             "description":"im a lil snapshot",
-                                             "name":"snapshot1",
-                                             "resourceId":"$snapshotResourceId",
-                                             "resourceType":"DATA_REPO_SNAPSHOT",
-                                             "stewardshipType":"REFERENCED",
-                                             "workspaceId":"$workspaceId"
-                                            },
-                               "resourceAttributes": { "gcpDataRepoSnapshot": {
-                                                                                "instanceName":"test-instance",
-                                                                                "snapshot":"$snapshotId"
-                                                                               }
-                                                     }
-                             }
-                            ]
+                 {
+                   "metadata": {
+                     "cloningInstructions":"COPY_NOTHING",
+                     "description":"im a lil snapshot",
+                     "name":"snapshot1",
+                     "resourceId":"$snapshotResourceId",
+                     "resourceType":"DATA_REPO_SNAPSHOT",
+                     "stewardshipType":"REFERENCED",
+                     "workspaceId":"$workspaceId"
+                   },
+                   "resourceAttributes": {
+                     "gcpDataRepoSnapshot": {
+                        "instanceName":"test-instance",
+                        "snapshot":"$snapshotId"
+                     }
+                   }
+                 }
+               ]
              }
              """.parseJson
         } {

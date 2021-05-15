@@ -4382,7 +4382,6 @@ components:
           type: string
         cloningInstructions:
           type: string
-     # Add controlled?
     DataRepoSnapshotAttributes:
       type: object
       required: [ instanceName, snapshot ]
@@ -4390,6 +4389,7 @@ components:
         instanceName:
           type: string
         snapshot:
+          description: The snapshot id
           type: string
     DataRepoSnapshotResource:
       type: object

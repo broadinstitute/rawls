@@ -19,7 +19,7 @@ trait SnapshotApiService extends UserInfoDirectives {
   val snapshotServiceConstructor: UserInfo => SnapshotService
 
   val snapshotRoutes: server.Route = requireUserInfo() { userInfo =>
-    path("workspaces" / "v2" / Segment / Segment / "snapshots") { (workspaceNamespace, workspaceName) =>
+    path("workspaces" /  Segment / Segment / "v2" / "snapshots") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
           complete {
@@ -27,36 +27,33 @@ trait SnapshotApiService extends UserInfoDirectives {
           }
         }
       } ~
-        get {
-          parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
-            complete {
-              snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit).map(StatusCodes.OK -> _)
-            }
+      get {
+        parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
+          complete {
+            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit).map(StatusCodes.OK -> _)
           }
         }
+      }
     } ~
-    path("workspaces" / "v2" / Segment / Segment / "snapshots" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
+    path("workspaces" / Segment / Segment / "v2" / "snapshots" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
       get {
         complete {
           snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
         }
       } ~
-        patch {
-          entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
-            complete {
-              snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
-            }
-          }
-        } ~
-        delete {
+      patch {
+        entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
           complete {
-            snapshotServiceConstructor(userInfo).deleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(_ => StatusCodes.NoContent)
+            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
           }
         }
-    }
-
-    // -------  V1 SNAPSHOT ENDPOINTS -------
-
+      } ~
+      delete {
+        complete {
+          snapshotServiceConstructor(userInfo).deleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(_ => StatusCodes.NoContent)
+        }
+      }
+    } ~
     path("workspaces" / Segment / Segment / "snapshots") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>

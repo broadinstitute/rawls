@@ -79,10 +79,10 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
-  def getSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotResource] = {
-    val snapshotUuid = validateSnapshotId(snapshotId)
+  def getSnapshot(workspaceName: WorkspaceName, resourceId: String): Future[DataRepoSnapshotResource] = {
+    val resourceUuid = validateSnapshotId(resourceId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
-      val ref = workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
+      val ref = workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, resourceUuid, userInfo.accessToken)
       Future.successful(ref)
     }
   }
