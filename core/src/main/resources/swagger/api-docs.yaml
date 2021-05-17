@@ -3877,6 +3877,7 @@ paths:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
       - $ref: '#/components/parameters/workspaceNamePathParam'
     get:
+      deprecated: true
       tags:
         - snapshots
       summary: List snapshots
@@ -3918,6 +3919,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
     post:
+      deprecated: true
       tags:
         - snapshots
       summary: Create a snapshot
@@ -3956,6 +3958,7 @@ paths:
       - $ref: '#/components/parameters/workspaceNamePathParam'
       - $ref: '#/components/parameters/snapshotIdPathParam'
     get:
+      deprecated: true
       tags:
         - snapshots
       summary: Get a snapshot
@@ -3981,6 +3984,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
     patch:
+      deprecated: true
       summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
       operationId: updateDataRepoSnapshot
       tags:
@@ -4007,6 +4011,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
     delete:
+      deprecated: true
       tags:
         - snapshots
       summary: Delete a snapshot
