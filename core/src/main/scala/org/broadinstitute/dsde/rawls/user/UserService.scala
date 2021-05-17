@@ -469,6 +469,22 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield result
   }
 
+  def updateBillingAccount(projectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[Unit] = {
+    for {
+      hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, userInfo)
+      _ = if (!hasAccess) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
+      }
+      result <- gcsDAO.setProjectBillingAccount(projectName, Option(updateAccountRequest.billingAccount), userInfo)
+    } yield result
+  }
+
+  def deleteBillingAccount(projectName: RawlsBillingProjectName): Future[Unit] = {
+    for {
+      result <- gcsDAO.setProjectBillingAccount(projectName, None, userInfo)
+    } yield result
+  }
+
   def createBillingProjectV2(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
       _ <- validateCreateProjectRequest(createProjectRequest)
