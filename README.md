@@ -12,6 +12,7 @@
 
 ## Getting started
 
+
 ```sh
 git clone git@github.com:broadinstitute/rawls.git
 brew install git-secrets # if not already installed
