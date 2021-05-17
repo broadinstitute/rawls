@@ -5,15 +5,12 @@ import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.scalatest.flatspec.AnyFlatSpec
 import TestExecutionContext.testExecutionContext
 import akka.actor.ActorSystem
-import cats.effect.concurrent.Semaphore
-import cats.effect.{Blocker, IO}
 import com.google.cloud.storage.Storage.BlobWriteOption
 import com.google.cloud.storage.contrib.nio.testing.LocalStorageHelper
 import com.google.cloud.storage.{BlobInfo, Storage, StorageException}
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, DeltaInsert, Destination, RawlsUserSubjectId}
-import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageInterpreter}
+import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.when
@@ -26,7 +23,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import java.util.UUID
 import scala.util.Try
 
-class GcsDeltaLayerWriterSpec extends AnyFlatSpec with Eventually with Matchers {
+class GcsDeltaLayerWriterSpec extends AnyFlatSpec with GcsStorageTestSupport with Eventually with Matchers {
 
   implicit val actorSystem: ActorSystem = ActorSystem("GcsDeltaLayerWriterSpec")
 
@@ -117,19 +114,5 @@ class GcsDeltaLayerWriterSpec extends AnyFlatSpec with Eventually with Matchers 
   }
 
   it should "serialize DeltaInsert correctly" is (pending) // NB not worth testing until model class is stable
-
-  def getGcsWriter(bucket: GcsBucketName, storage: Option[Storage] = None): GcsDeltaLayerWriter = {
-    implicit val cs = IO.contextShift(testExecutionContext)
-    implicit val timer = IO.timer(testExecutionContext)
-    implicit val logger = Slf4jLogger.getLogger[IO]
-
-    val db = storage.getOrElse(LocalStorageHelper.getOptions().getService())
-    val blocker = Blocker.liftExecutionContext(testExecutionContext)
-    val semaphore = Semaphore[IO](1).unsafeRunSync
-
-    val localStorage = GoogleStorageInterpreter[IO](db, blocker, Some(semaphore))
-
-    new GcsDeltaLayerWriter(localStorage, bucket, "metricsPrefix")
-  }
 
 }

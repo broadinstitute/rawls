@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.{StatusCodes, Uri}
 import cats.effect.IO
 import com.google.api.client.http.HttpResponseException
+import com.google.cloud.storage.StorageException
 import fs2._
 import org.broadinstitute.dsde.rawls.google.GoogleUtilities
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, GoogleInstrumentedService}
@@ -43,11 +44,10 @@ class GcsDeltaLayerWriter(val storageService: GoogleStorageService[IO],
       Uri.apply(s"gs://${sourceBucket.value}/${destinationPath.value}")
 
     }) {
-      case t: HttpResponseException =>
-        // are there any special error-handling cases we should include? Maybe 409 in case we've written the
-        // file multiple times?
-        logger.warn(s"encountered error [${t.getStatusMessage}] with status code [${t.getStatusCode}] when writing delta file [${sourceBucket.value}/${destinationPath.value}]")
-        throw t
+      // additional logging, rethrow original error
+      case se: StorageException =>
+        logger.warn(s"encountered storage error [${se.getMessage}] with status code [${se.getCode}] when writing delta file [${sourceBucket.value}/${destinationPath.value}]")
+        throw se
       case t: Throwable =>
         logger.warn(s"encountered error [${t.getMessage}] when writing delta file [${sourceBucket.value}/${destinationPath.value}]")
         throw t

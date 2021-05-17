@@ -6,6 +6,7 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerException
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -204,7 +205,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Traversable[Entity]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
-      for {
+      (for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         entities       <- if (upsert) {
                             entityProvider.batchUpsertEntities(entityUpdates)
@@ -213,6 +214,9 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
                           }
       } yield {
         entities
+      }) recover {
+        case dle: DeltaLayerException =>
+          throw new RawlsExceptionWithErrorReport(ErrorReport(dle.code, dle.getMessage, dle))
       }
     }
 

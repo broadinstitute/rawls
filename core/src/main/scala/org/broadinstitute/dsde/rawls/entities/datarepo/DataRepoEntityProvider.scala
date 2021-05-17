@@ -7,10 +7,11 @@ import cats.effect.{ContextShift, IO}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, QueryParameterValue, TableResult}
+import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
-import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerWriter
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayerException, DeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base._
@@ -433,6 +434,12 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     // so we return any errors
     deltaLayerWriter.writeFile(ins) map { _ =>
       Seq.empty[Entity]
+    } recover {
+      case se: StorageException =>
+        val throwCode = StatusCodes.getForKey(se.getCode).getOrElse(StatusCodes.InternalServerError)
+        throw new DeltaLayerException(s"StorageException in Delta Layer: ${se.getMessage}", se, throwCode)
+      case t: Throwable =>
+        throw new DeltaLayerException(s"Error in Delta Layer: ${t.getClass.getName}: ${t.getMessage}", t)
     }
     // This method signature claims to return Traversable[Entity] - and we leave it that way for compatibility -
     // but note that in practice we don't return any entities. That's good - we don't have access to the
