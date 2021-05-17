@@ -414,8 +414,20 @@ paths:
       responses:
         204:
           description: No Content
+        400:
+          description: Either the project does not have an active billing account, the specified dataset does not exist, or the specified table does not exist
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
         403:
           description: You must be a project owner to alter the spend configuration of the project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: The specified project could not be found
           content:
             'application/json':
               schema:
