@@ -343,7 +343,6 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     }
   }
 
-
   it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the table does not exist or can't be accessed" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = RawlsBillingProject(RawlsBillingProjectName("project_without_table"), CreationStatuses.Ready, None, None)
@@ -401,7 +400,5 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
     }
   }
-
-
 
 }
