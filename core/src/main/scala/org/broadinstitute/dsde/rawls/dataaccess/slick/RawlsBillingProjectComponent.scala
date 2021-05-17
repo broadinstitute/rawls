@@ -146,13 +146,12 @@ trait RawlsBillingProjectComponent {
       rawlsBillingProjectOperationQuery.filter(x => x.projectName.inSetBind(projectNames.map(_.value)) && x.operationName === operationName).result
     }
 
-    //TODO: marshaling updates
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
       RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message, billingProject.cromwellBackend.map(_.value), billingProject.servicePerimeter.map(_.value), billingProject.googleProjectNumber.map(_.value), billingProject.invalidBillingAccount, None, None)
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber), projectRecord.invalidBillingAccount)
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber), projectRecord.invalidBillingAccount, projectRecord.spendReportDataset, projectRecord.spendReportTable)
     }
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {
