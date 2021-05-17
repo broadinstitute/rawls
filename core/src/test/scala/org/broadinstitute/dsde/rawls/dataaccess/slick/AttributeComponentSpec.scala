@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType
 
 import java.util.UUID
@@ -336,104 +335,6 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     intercept[RawlsException] {
       workspaceAttributeQuery.unmarshalAttributes(attributeRecs)
-    }
-  }
-
-  List(8, 17, 32, 65, 128, 257) foreach { parallelism =>
-    it should s"handle $parallelism simultaneous writes to their own ws attribute temp tables" in withEmptyTestDatabase {
-      var threadIds: TrieMap[String, Long] = TrieMap.empty
-
-      // we test saving entities across two workspaces, which we'll call "odd" and "even"
-      val workspaceIdOdd: UUID = UUID.randomUUID()
-      val workspaceIdEven: UUID = UUID.randomUUID()
-
-      val workspaceOdd = Workspace(
-        "test_namespace", "workspaceOdd", workspaceIdOdd.toString, "bucketname", Some("workflow-collection"),
-        currentTime(), currentTime(), "me", Map.empty, false)
-      val workspaceEven = Workspace(
-        "test_namespace", "workspaceEven", workspaceIdEven.toString, "bucketname", Some("workflow-collection"),
-        currentTime(), currentTime(), "me", Map.empty, false)
-
-      def isOdd(i: Int) = i % 2 == 1
-
-      def isEven(i: Int) = !isOdd(i)
-
-      def saveWsAttributes(attrs: Map[AttributeName, Attribute], idx: Int): Future[Workspace] = this.synchronized {
-        DbResource.dataSource.inTransactionWithAttrTempTable({ d =>
-          val targetWorkspace: Workspace = if (isOdd(idx))
-            runAndWait(d.workspaceQuery.findById(workspaceOdd.workspaceId)).get
-          else
-            runAndWait(d.workspaceQuery.findById(workspaceEven.workspaceId)).get
-
-          d.workspaceQuery.save(targetWorkspace.copy(attributes = attrs))
-        }, Set(AttributeTempTableType.Workspace))
-      }
-
-
-      // create the entities-to-be-saved
-      val entitiesToSave: Map[Int, Map[AttributeName, Attribute]] = (1 to parallelism).map { idx =>
-        (idx, Map(AttributeName.withDefaultNS("uuid_attr") -> AttributeString(UUID.randomUUID().toString),
-          AttributeName.withDefaultNS("random_string") -> AttributeString(RandomStringUtils.random(parallelism))))
-      }.toMap
-      withClue(s"should have prepped $parallelism entities to save") {
-        entitiesToSave.size shouldBe (parallelism)
-      }
-
-      // save the workspaces
-      val savedWorkspaceOdd = runAndWait(workspaceQuery.save(workspaceOdd))
-      withClue("workspace (odd) should have saved") {
-        savedWorkspaceOdd.workspaceId shouldBe (workspaceIdOdd.toString)
-      }
-      val savedWorkspaceEven = runAndWait(workspaceQuery.save(workspaceEven))
-      withClue("workspace (even) should have saved") {
-        savedWorkspaceEven.workspaceId shouldBe (workspaceIdEven.toString)
-      }
-
-      // set up multithreaded context, but saveWsAttributes needs to only allow one thread at a time
-      implicit val executionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(parallelism))
-
-      val saveQueries = entitiesToSave map { case (k, v) => saveWsAttributes(v, k) }
-      val parallelSaves = scala.concurrent.Future.traverse(saveQueries) { f =>
-        f.map {
-          f.map { ws =>
-            threadIds += (s"${ws.name}" -> Thread.currentThread().getId)
-            ws
-          }
-          Success(_)
-        }.recover { case e => Failure(e) }(executionContext)
-      }
-      val saveAttempts = Await.result(parallelSaves, Duration.Inf)
-
-      val saveFailures = saveAttempts.collect { case Failure(ex) => ex }
-      val savedEntities = saveAttempts.collect { case Success(e) => e }
-
-      withClue("should not have any failures during save") {
-        saveFailures shouldBe empty
-      }
-      withClue(s"should have completed exactly $parallelism workspace saves") {
-        saveFailures shouldBe empty
-      }
-
-      val expectedCountOdd = Math.ceil(parallelism.toDouble / 2d)
-      val expectedCountEven = Math.floor(parallelism.toDouble / 2d)
-
-      val evenVersionCount = Await.result(DbResource.dataSource.database.run(workspaceQuery.findByIdQuery(workspaceIdEven).result.map {
-        _.head
-      }), Duration.Inf).recordVersion
-      val oddVersionCount = Await.result(DbResource.dataSource.database.run(workspaceQuery.findByIdQuery(workspaceIdOdd).result.map {
-        _.head
-      }), Duration.Inf).recordVersion
-
-
-      withClue(s"We should save the odd workspace $expectedCountOdd times") {
-        oddVersionCount shouldBe expectedCountOdd
-      }
-      withClue(s"We should save the even workspace $expectedCountEven times") {
-        evenVersionCount shouldBe expectedCountEven
-      }
-
-      //multiple unique thread ids--this assertion is failing periodically, what does that mean?
-//      assert(threadIds.values.toSet.size > 1)
     }
   }
 
