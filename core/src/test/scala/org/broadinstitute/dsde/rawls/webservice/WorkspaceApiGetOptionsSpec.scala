@@ -14,10 +14,10 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-
 import spray.json._
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 /** Tests for the get-workspace API, focused on the user's ability to specify which fields
   * should be calculated and returned in the WorkspaceResponse.
@@ -67,7 +67,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     val workspace2Name = WorkspaceName(billingProject.projectName.value, "emptyattrs")
 
     val workspace1Id = UUID.randomUUID().toString
-    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", Some(workspace1Id), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x"), AttributeName.withDefaultNS("description") -> AttributeString("my description")), false, WorkspaceVersions.V2, billingProject.googleProjectId, Option(GoogleProjectNumber(UUID.randomUUID().toString)), Some(RawlsBillingAccountName("billing-account")))
+    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", Some(workspace1Id), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x"), AttributeName.withDefaultNS("description") -> AttributeString("my description")), false, WorkspaceVersions.V2, billingProject.googleProjectId, Option(GoogleProjectNumber(UUID.randomUUID().toString)), Some(RawlsBillingAccountName("billing-account")), None)
 
     val workspace2Id = UUID.randomUUID().toString
     val workspace2 = makeWorkspaceWithUsers(billingProject, workspace2Name.name, workspace2Id, "bucket2", Some(workspace2Id), testDate, testDate, "testUser", Map(), false)
@@ -155,6 +155,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   // no includes, no excludes
   "WorkspaceApi" should "include all options when getting a workspace if no params specified" in withTestWorkspacesApiServices { services =>
+    implicit val timeout: Duration = 10.seconds
     Get(testWorkspaces.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -291,10 +292,13 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  // find all the members of the WorkspaceDetails case class; check that each of them is returned inside the workspace object
+  // find all the members of the WorkspaceDetails case class; check that each of them is returned inside the workspace object as long as it is defined
   import scala.reflect.runtime.universe._
+  val rm = runtimeMirror(getClass.getClassLoader)
+  val workspaceDetailsMirror = rm.reflect(WorkspaceDetails(testWorkspaces.workspace, Set.empty))
+
   val workspaceDetailsMembers:List[String] = typeOf[WorkspaceDetails].members.collect {
-    case m: MethodSymbol if m.isCaseAccessor => m.name.toString
+    case m: MethodSymbol if m.isCaseAccessor && !workspaceDetailsMirror.reflectMethod(m).apply().equals(None) => m.name.toString
   }.toList
   workspaceDetailsMembers.foreach { workspaceKey =>
     it should s"include $workspaceKey subkey of workspace when specifying the top-level key" in withTestWorkspacesApiServices { services =>

@@ -136,7 +136,8 @@ case class Workspace(
                       workspaceVersion: WorkspaceVersion,
                       googleProjectId: GoogleProjectId,
                       googleProjectNumber: Option[GoogleProjectNumber],
-                      currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName]
+                      currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
+                      billingAccountErrorMessage: Option[String]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -162,7 +163,7 @@ object Workspace {
     val randomString = java.util.UUID.randomUUID().toString
     val googleProjectId = GoogleProjectId(randomString)
     val googleProjectNumber = GoogleProjectNumber(randomString)
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None)
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None)
   }
 }
 
@@ -551,8 +552,9 @@ case class WorkspaceDetails(namespace: String,
                             workspaceVersion: WorkspaceVersion,
                             googleProjectId: GoogleProjectId,
                             googleProjectNumber: Option[GoogleProjectNumber],
-                            billingAccount: Option[RawlsBillingAccountName]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount)
+                            billingAccount: Option[RawlsBillingAccountName],
+                            billingAccountErrorMessage: Option[String]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount, billingAccountErrorMessage) // todo: do we just add the error message on here? what does that mean for the api?
 }
 
 
@@ -624,7 +626,8 @@ object WorkspaceDetails {
       workspace.workspaceVersion,
       workspace.googleProjectId,
       workspace.googleProjectNumber,
-      workspace.currentBillingAccountOnGoogleProject
+      workspace.currentBillingAccountOnGoogleProject,
+      workspace.billingAccountErrorMessage
     )
   }
 }
@@ -849,7 +852,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat15(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat16(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

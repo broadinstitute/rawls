@@ -558,12 +558,12 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  "PUT /billing/v2/{projectName}/billing-account" should "update the billing account" in withEmptyDatabaseAndApiServices { services =>
+  "PUT /billing/v2/{projectName}/billingAccount" should "update the billing account" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
       SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.owner
     )))
-    Put(s"/billing/v2/${project.projectName.value}/billing-account", UpdateRawlsBillingAccountRequest(services.gcsDAO.accessibleBillingAccountName)) ~>
+    Put(s"/billing/v2/${project.projectName.value}/billingAccount", UpdateRawlsBillingAccountRequest(services.gcsDAO.accessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -578,7 +578,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
       SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.owner
     )))
-    Put(s"/billing/v2/${project.projectName.value}/billing-account", UpdateRawlsBillingAccountRequest(services.gcsDAO.inaccessibleBillingAccountName)) ~>
+    Put(s"/billing/v2/${project.projectName.value}/billingAccount", UpdateRawlsBillingAccountRequest(services.gcsDAO.inaccessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
@@ -587,12 +587,12 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  "DELETE /billing/v2/{projectName}/billing-account" should "clear the billing account field" in withEmptyDatabaseAndApiServices { services =>
+  "DELETE /billing/v2/{projectName}/billingAccount" should "clear the billing account field" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
     when(services.samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(
       SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.owner
     )))
-    Delete(s"/billing/v2/${project.projectName.value}/billing-account") ~>
+    Delete(s"/billing/v2/${project.projectName.value}/billingAccount") ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {

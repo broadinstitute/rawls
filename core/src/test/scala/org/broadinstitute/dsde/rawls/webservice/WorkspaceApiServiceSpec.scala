@@ -692,7 +692,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       WorkspaceVersions.V1,
       GoogleProjectId("googleprojectid"),
       Option(GoogleProjectNumber("googleProjectNumber")),
-      Option(RawlsBillingAccountName("fakeBillingAcct"))
+      Option(RawlsBillingAccountName("fakeBillingAcct")),
+      None
     )
 
     runAndWait(

@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
-    <changeSet logicalFilePath="dummy" author="gpolumbo" id="GOOGLE_PROJECT_ON_WORKSPACE">
-        <renameColumn tableName="WORKSPACE" oldColumnName="GOOGLE_PROJECT" newColumnName="GOOGLE_PROJECT_ID" columnDataType="VARCHAR(254)" />
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="WORKSPACE_BILLING_ACCOUNT_ERROR_MESSAGE">
         <addColumn tableName="WORKSPACE">
-            <column name="GOOGLE_PROJECT_NUMBER" type="VARCHAR(254)">
+            <column name="BILLING_ACCOUNT_ERROR_MESSAGE" type="TEXT">
                 <constraints nullable="true"/>
             </column>
         </addColumn>
-        <sql>
-            UPDATE WORKSPACE ws SET GOOGLE_PROJECT_NUMBER = (SELECT GOOGLE_PROJECT_NUMBER FROM BILLING_PROJECT bp WHERE bp.NAME = ws.NAMESPACE);
-        </sql>
     </changeSet>
+
 </databaseChangeLog>

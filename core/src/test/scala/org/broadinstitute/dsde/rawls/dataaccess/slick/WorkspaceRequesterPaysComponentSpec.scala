@@ -23,6 +23,7 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       WorkspaceVersions.V1,
       GoogleProjectId("google_project_id"),
       None,
+      None,
       None
     )
 

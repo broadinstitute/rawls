@@ -574,16 +574,24 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def updateBillingAccountInternal(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): Future[PerRequestMessage] = {
     for {
-      maybeBillingProject <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.updateBillingAccount(projectName, billingAccount)
-          .flatMap(_ => dataAccess.rawlsBillingProjectQuery.load(projectName))
-      }
+      maybeBillingProject <- updateBillingAccountInDatabase(projectName, billingAccount)
       projectRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
         .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
     } yield {
       constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject, projectRoles)
     }
 
+  }
+
+  private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName, maybeBillingAccountName: Option[RawlsBillingAccountName]): Future[Option[RawlsBillingProject]] = {
+    dataSource.inTransaction { dataAccess =>
+      for {
+        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, maybeBillingAccountName)
+        // if any workspaces failed to be updated last time, clear out the error message so the monitor will pick them up and try to update them again
+        _ <- dataAccess.workspaceQuery.deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(billingProjectName)
+        maybeBillingProject <- dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
+      } yield maybeBillingProject
+    }
   }
 
   private def constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject: Option[RawlsBillingProject], projectRoles: Set[ProjectRole]) = {

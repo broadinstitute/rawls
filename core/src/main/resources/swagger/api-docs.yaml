@@ -356,7 +356,7 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-  /api/billing/v2/{projectId}/billing-account:
+  /api/billing/v2/{projectId}/billingAccount:
     put:
       tags:
         - billing_v2
@@ -5353,7 +5353,6 @@ components:
         - namespace
         - workspaceId
         - googleProjectId
-        - googleProjectNumber
         - workspaceVersion
       type: object
       properties:
@@ -5410,6 +5409,9 @@ components:
         currentBillingAccountOnGoogleProject:
           type: string
           description: The current billing account being charged for activity within this workspace. For desired billing account, look to the billing account specified on this workspace's billing project
+        billingAccountErrorMessage:
+          type: string
+          description: Error message received during most recent attempt to update the current billing account on workspace's Google project. Empty if update was successful.
       description: ""
     WorkspaceSubmissionStats:
       required:

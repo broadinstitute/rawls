@@ -36,7 +36,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
               }
             }
         } ~
-          pathPrefix("billing-account") {
+          pathPrefix("billingAccount") {
             pathEnd {
               put {
                 entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
