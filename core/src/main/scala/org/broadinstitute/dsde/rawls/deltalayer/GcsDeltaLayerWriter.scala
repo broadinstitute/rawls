@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.Uri
 import cats.effect.IO
 import com.google.api.client.http.HttpResponseException
 import fs2._
@@ -13,7 +14,7 @@ import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 class GcsDeltaLayerWriter(val storageService: GoogleStorageService[IO],
                           val sourceBucket: GcsBucketName,
@@ -23,27 +24,33 @@ class GcsDeltaLayerWriter(val storageService: GoogleStorageService[IO],
 
   implicit val service: GoogleInstrumentedService.Value = GoogleInstrumentedService.Storage
 
-  override def writeFile(writeObject: DeltaInsert): Unit = {
+  override def writeFile(writeObject: DeltaInsert): Future[Uri] = {
 
     val destinationPath = filePath(writeObject)
     val fileContents = serializeFile(writeObject)
 
     retryWithRecoverWhen500orGoogleError(() => {
+      // create the destination pipe to which we will write the file
       // set traceId equal to insertId for easy correlation
       val writePipe = storageService.streamUploadBlob(sourceBucket, destinationPath,
-        overwrite = false,
         traceId = Some(TraceId(writeObject.insertId)))
 
-      text.utf8Encode(Stream.emit(fileContents)).through(writePipe).compile.drain.unsafeRunSync()
+      // stream the file contents to the destination GcsBlob pipe
+      text.utf8Encode(Stream.emit(fileContents)).through(writePipe)
+        .compile.drain.unsafeRunSync()
+
+      // return Uri to the file we just wrote
+      Uri.apply(s"gs://${sourceBucket.value}/${destinationPath.value}")
+
     }) {
-      // are there any special error-handling cases we should include? Maybe 409 in case we've written the
-      // file multiple times?
       case t: HttpResponseException =>
+        // are there any special error-handling cases we should include? Maybe 409 in case we've written the
+        // file multiple times?
         logger.warn(s"encountered error [${t.getStatusMessage}] with status code [${t.getStatusCode}] when writing delta file [${sourceBucket.value}/${destinationPath.value}]")
         throw t
-      case e: Exception =>
-        logger.warn(s"encountered error [${e.getMessage}] when writing delta file [${sourceBucket.value}/${destinationPath.value}]")
-        throw e
+      case t: Throwable =>
+        logger.warn(s"encountered error [${t.getMessage}] when writing delta file [${sourceBucket.value}/${destinationPath.value}]")
+        throw t
     }
   }
 

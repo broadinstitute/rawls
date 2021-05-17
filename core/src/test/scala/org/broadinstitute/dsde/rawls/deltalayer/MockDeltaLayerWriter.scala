@@ -1,7 +1,10 @@
 package org.broadinstitute.dsde.rawls.deltalayer
+import akka.http.scaladsl.model.Uri
 import org.broadinstitute.dsde.rawls.model.DeltaInsert
+
+import scala.concurrent.Future
 
 class MockDeltaLayerWriter extends DeltaLayerWriter {
   // TODO: flesh out for unit tests, ideally using a mocked Google storage service
-  override def writeFile(writeObject: DeltaInsert): Unit = ???
+  override def writeFile(writeObject: DeltaInsert): Future[Uri] = ???
 }
