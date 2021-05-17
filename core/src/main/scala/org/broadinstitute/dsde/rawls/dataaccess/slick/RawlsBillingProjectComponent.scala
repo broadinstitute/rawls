@@ -124,6 +124,9 @@ trait RawlsBillingProjectComponent {
     }
 
     def setBillingProjectExport(projectName: RawlsBillingProjectName, datasetName: Option[String], tableName: Option[String]): WriteAction[Int] = {
+      println("hello")
+      println(datasetName)
+      println(tableName)
       rawlsBillingProjectQuery
         .filter(_.projectName === projectName.value)
         .map(bp => (bp.spendReportDataset, bp.spendReportTable))

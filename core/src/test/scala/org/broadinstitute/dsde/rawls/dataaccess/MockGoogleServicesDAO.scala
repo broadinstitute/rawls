@@ -246,7 +246,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     }
   }
 
-  override def getProjectBillingAccount(projectName: RawlsBillingProjectName, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = Future.successful(None)
+  override def getProjectBillingAccount(projectName: RawlsBillingProjectName, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = Future.successful(Some("some-billing-account"))
 
-  override def getParentBillingAccount(billingProjectId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = Future.successful(None)
+  override def getParentBillingAccount(billingProjectId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = Future.successful(Some("some-parent-billing-account"))
 }

@@ -23,6 +23,8 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalaFutures {
+  import driver.api._
+
   val defaultServicePerimeterName: ServicePerimeterName = ServicePerimeterName("accessPolicies/policyName/servicePerimeters/servicePerimeterName")
   val urlEncodedDefaultServicePerimeterName: String = URLEncoder.encode(defaultServicePerimeterName.value, UTF_8.name)
   val defaultGoogleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("42")
@@ -235,8 +237,94 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     }
   }
 
-  it should "set the spend configuration of a billing project"
-  it should "clear the spend configuration of a billing project"
+  it should "set the spend configuration of a billing project when the user has permission" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "test_dataset"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      Await.result(userService.setProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf) shouldEqual 1
+
+      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(_.spendReportDataset).result)
+
+      spendReportDatasetName shouldEqual spendReportDatasetInDb.head.get
+    }
+  }
+
+  it should "not set the spend configuration of a billing project when the user doesn't have permission" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "test_dataset"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.setProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+      }
+
+      //assert that the entire action was forbidden
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
+
+      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(_.spendReportDataset).result)
+
+      //assert that no change was made to the spend configuration
+      spendReportDatasetInDb.head shouldEqual None
+    }
+  }
+
+  it should "clear the spend configuration of a billing project" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "test_dataset"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      Await.result(userService.clearProjectSpendConfiguration(billingProject.projectName), Duration.Inf) shouldEqual 1
+
+      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(_.spendReportDataset).result)
+
+      spendReportDatasetInDb.head shouldEqual None
+    }
+  }
+
+  it should "not clear the spend configuration of a billing project when the user doesn't have permission" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "should_not_clear_dataset"
+      val spendReportTableName = "should_not_clear_table"
+
+      //first, directly set the spend configuration in the DB outside of the user's permissions, so we can assert that it wasn't cleared
+      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.setBillingProjectExport(billingProject.projectName, Some(spendReportDatasetName), Some(spendReportTableName)))
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.clearProjectSpendConfiguration(billingProject.projectName), Duration.Inf)
+      }
+
+      //assert that the entire action was forbidden
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
+
+      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
+
+      //assert that no change was made to the spend configuration
+      spendReportDatasetInDb.head shouldEqual (Some(spendReportDatasetName), Some(spendReportTableName))
+    }
+  }
+
   it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset does not exist or can't be accessed"
   it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the table does not exist or can't be accessed"
   it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the billing project does not have a billing account associated with it"
