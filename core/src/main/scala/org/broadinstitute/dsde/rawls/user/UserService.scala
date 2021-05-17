@@ -311,7 +311,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       for {
         //Get the dataset to validate that it exists and that we have permission to see it
-        _ <- bqService.use(_.getDataset(datasetName)).unsafeToFuture()
+        _ <- bqService.use(_.getDataset(datasetName)).unsafeToFuture().map {
+          case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The dataset $datasetName could not be found."))
+          case dataset => dataset
+        }
 
         //The billing account ID in the DB can't be trusted, so we'll get it directly from the source of truth
         billingAccountIdOpt <- gcsDAO.getProjectBillingAccount(projectName, userInfo)

@@ -246,7 +246,23 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     }
   }
 
-  override def getProjectBillingAccount(projectName: RawlsBillingProjectName, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = Future.successful(Some("some-billing-account"))
+  override def getProjectBillingAccount(projectName: RawlsBillingProjectName, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+    val billingAccount = projectName.value match {
+      case "project_without_table" => Some("billing_account_for_project_without_table")
+      case "project_without_billing_account" => None
+      case _ => Some("some-billing-account")
+    }
 
-  override def getParentBillingAccount(billingProjectId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = Future.successful(Some("some-parent-billing-account"))
+    Future.successful(billingAccount)
+  }
+
+  override def getParentBillingAccount(billingProjectId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+    val billingAccount = billingProjectId match {
+      case "billing_account_for_project_without_table" => Some("table_does_not_exist")
+      case "project_without_parent_billing_account" => None
+      case _ => Some("some-parent-billing-account")
+    }
+
+    Future.successful(billingAccount)
+  }
 }
