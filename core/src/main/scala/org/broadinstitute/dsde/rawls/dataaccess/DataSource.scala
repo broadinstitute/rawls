@@ -73,11 +73,9 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
       }
     }
 
-
-
     database.run(callerActionWithTempTables.withPinnedSession).recover {
       case t: Throwable =>
-        logger.error(s"Transaction with temporary tables failed. Message: ${t.getMessage}")
+        logger.error(s"Transaction with temporary tables failed for (${tempTableTypes.mkString(",")}). Message: ${t.getMessage}")
         throw t
     }
   }
