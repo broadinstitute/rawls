@@ -568,7 +568,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     withWorkspaceContext(testData.workspace) { context =>
       val count = 20
-      runMultipleAndWait(count)(idx => entityQuery.save(context, makeEntity(idx)))
+      (1 to count) foreach { idx =>
+        runAndWait(entityQuery.save(context, makeEntity(idx)))
+      }
 
       // did we update the record versions and populate its all_attribute_values?
       val entityWithAllAttrs = runAndWait(entityQueryWithInlineAttributes.findEntityByName(testData.workspace.workspaceIdAsUUID, "Sample", "some-sample").result)
@@ -576,7 +578,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       entityWithAllAttrs.head.recordVersion shouldBe count
       entityWithAllAttrs.head.allAttributeValues should not be empty
       entityWithAllAttrs.head.allAttributeValues.get should not be empty
-      entityWithAllAttrs.head.allAttributeValues.get should not include ("index-0") // we should have updated to newer values
+      entityWithAllAttrs.head.allAttributeValues.get should include ("index-20") // we should have updated to the newest value
     }
   }
 
