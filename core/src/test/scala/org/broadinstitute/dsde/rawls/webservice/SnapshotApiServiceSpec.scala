@@ -126,7 +126,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when creating a reference to a snapshot in a workspace that doesn't exist" in withTestDataApiServices { services =>
-    Post("/workspaces/foo/bar/v2/snapshots", defaultNamedSnapshotJson) ~>
+    Post("/workspaces/foo/bar/snapshots/v2", defaultNamedSnapshotJson) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -175,7 +175,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when getting a reference to a snapshot in a workspace that doesn't exist" in withTestDataApiServices { services =>
-    Get(s"/workspaces/foo/bar/v2/snapshots/${UUID.randomUUID().toString}") ~>
+    Get(s"/workspaces/foo/bar/snapshots/v2/${UUID.randomUUID().toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -267,7 +267,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when a user lists references in a workspace that doesn't exist" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
-    Get("/workspaces/test/value/v2/snapshots?offset=0&limit=10") ~>
+    Get("/workspaces/test/value/snapshots/v2?offset=0&limit=10") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -279,7 +279,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "return 200 and empty list when a user lists all snapshots in a workspace that exists in Rawls but not Workspace Manager" in withTestDataApiServices { services =>
     // We hijack the "workspaceTerminatedSubmissions" workspace in the shared testData to represent
     // a workspace that exists in Rawls but returns 404 from Workspace Manager.
-    Get(s"${testData.workspaceTerminatedSubmissions.path}/v2/snapshots?offset=0&limit=10") ~>
+    Get(s"${testData.workspaceTerminatedSubmissions.path}/snapshots/v2?offset=0&limit=10") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
         val response = responseAs[ResourceList]
@@ -293,7 +293,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   it should "bubble up non-404 errors from Workspace Manager" in withTestDataApiServices { services =>
     // We hijack the "workspaceSubmittedSubmission" workspace in the shared testData to represent
     // a workspace that throws a 418 error.
-    Get(s"${testData.workspaceSubmittedSubmission.path}/v2/snapshots?offset=0&limit=10") ~>
+    Get(s"${testData.workspaceSubmittedSubmission.path}/snapshots/v2?offset=0&limit=10") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
         assertResult(StatusCodes.ImATeapot) {
