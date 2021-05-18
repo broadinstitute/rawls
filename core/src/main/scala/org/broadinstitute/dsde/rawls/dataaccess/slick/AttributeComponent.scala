@@ -341,7 +341,7 @@ trait AttributeComponent {
       }
     }
 
-    def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
+    def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]): ReadWriteAction[Set[OWNER_ID]] = {
       val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
       val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
@@ -381,10 +381,18 @@ trait AttributeComponent {
             !existingAttributes.exists(equalRecords(_, v)) // if the attribute exists and is unchanged, don't update it
       }
 
+      // collect the parent entities that have writes, so we know which entity rows to re-calculate
+      val ownersWithWrites: Set[OWNER_ID] = (attributesToInsert.values.map(_.ownerId) ++
+        attributesToUpdate.values.map(_.ownerId) ++
+        attributesToDelete.values.map(_.ownerId))
+        .toSet
+
+      // perform the inserts/updates/deletes
       patchAttributesAction(attributesToInsert.values,
         attributesToUpdate.values,
         attributesToDelete.values.map(_.id),
         insertFunction)
+        .map(_ => ownersWithWrites)
     }
 
     //noinspection SqlDialectInspection
