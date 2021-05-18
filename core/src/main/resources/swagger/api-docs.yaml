@@ -4034,7 +4034,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
 
-  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/snapshots:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/v2/snapshots:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
       - $ref: '#/components/parameters/workspaceNamePathParam'
@@ -4112,7 +4112,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       x-codegen-request-body-name: namedDataRepoSnapshot
-  /api/workspaces/v2/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/v2/snapshots/{snapshotId}:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
       - $ref: '#/components/parameters/workspaceNamePathParam'
