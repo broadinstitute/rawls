@@ -121,6 +121,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
             .resourceType(ResourceType.fromValue(resourceType))
             .stewardshipType(StewardshipType.fromValue(stewardshipType))
             .cloningInstructions(CloningInstructionsEnum.fromValue(cloningInstructions))
+        case _ => throw DeserializationException("ResourceMetadata expected")
       }
     }
   }
@@ -140,6 +141,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
           new DataRepoSnapshotAttributes()
             .instanceName(instanceName)
             .snapshot(snapshot)
+        case _ => throw DeserializationException("DataRepoSnapshotAttributes expected")
       }
     }
   }

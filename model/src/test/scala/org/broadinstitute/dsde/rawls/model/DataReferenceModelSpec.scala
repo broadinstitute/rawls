@@ -184,6 +184,57 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
         }
       }
 
+      "DataRepoSnapshotAttributes should fail with nulls" in {
+        val snapshotId = UUID.randomUUID()
+        assertThrows[DeserializationException] {
+          s"""{"instanceName": null, "snapshot": "$snapshotId"}""".parseJson.convertTo[DataRepoSnapshotAttributes]
+        }
+
+        assertThrows[DeserializationException] {
+          s"""{"instanceName": "fake-instance", "snapshot": null}""".parseJson.convertTo[DataRepoSnapshotAttributes]
+        }
+      }
+
+      "ResourceMetadata should fail with nulls" in {
+        val workspaceId = UUID.randomUUID()
+        val resourceId = UUID.randomUUID()
+        assertThrows[DeserializationException] {
+          s"""{ "workspaceId": "$workspaceId",
+                "resourceId": "resourceId",
+                "name": null,
+                "description": "this is my snapshot",
+                "resourceType": "DATA_REPO_SNAPSHOT",
+                "resourceId": "$resourceId",
+                "stewardshipType": "REFERENCED",
+                "cloningInstructions": "COPY_NOTHING"
+             }""".parseJson.convertTo[ResourceMetadata]
+        }
+      }
+
+      "ResourceMetadata should succeed with nulls on fields we are not translating" in {
+        val workspaceId = UUID.randomUUID()
+        val resourceId = UUID.randomUUID()
+        assertResult { s"""{ "workspaceId": "$workspaceId",
+                             "resourceId": "resourceId",
+                             "name": "mysnapshot",
+                             "description": "this is my snapshot",
+                             "resourceType": "DATA_REPO_SNAPSHOT",
+                             "resourceId": "$resourceId",
+                             "stewardshipType": "REFERENCED",
+                             "cloudPlatform": null,
+                             "cloningInstructions": "COPY_NOTHING" } """.parseJson.convertTo[ResourceMetadata]
+        } {
+          new ResourceMetadata()
+            .name("mysnapshot")
+            .description("this is my snapshot")
+            .resourceId(resourceId)
+            .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
+            .stewardshipType(StewardshipType.REFERENCED)
+            .workspaceId(workspaceId)
+            .cloningInstructions(CloningInstructionsEnum.NOTHING)
+        }
+      }
+
       "UpdateDataReferenceRequestBody should work when updating name and description" in {
         assertResult { s"""{"name":"foo","description":"bar"}""".parseJson } {
           new UpdateDataReferenceRequestBody().name("foo").description("bar").toJson
