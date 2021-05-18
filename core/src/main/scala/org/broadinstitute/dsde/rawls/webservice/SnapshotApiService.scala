@@ -19,7 +19,7 @@ trait SnapshotApiService extends UserInfoDirectives {
   val snapshotServiceConstructor: UserInfo => SnapshotService
 
   val snapshotRoutes: server.Route = requireUserInfo() { userInfo =>
-    path("workspaces" /  Segment / Segment / "v2" / "snapshots") { (workspaceNamespace, workspaceName) =>
+    path("workspaces" /  Segment / Segment / "snapshots" / "v2") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
           complete {
@@ -35,7 +35,7 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       }
     } ~
-    path("workspaces" / Segment / Segment / "v2" / "snapshots" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
+    path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
       get {
         complete {
           snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
