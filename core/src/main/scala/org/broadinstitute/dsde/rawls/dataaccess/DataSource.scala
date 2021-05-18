@@ -51,7 +51,7 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
   }
 
   // creates the ENTITY_ATTRIBUTE_TEMP, WORSKPACE_ATTRIBUTE_TEMP, or both as specified by tempTableTypes  for use by this transaction, executes the transaction
-  def inTransactionWithAttrTempTable[T](f: (DataAccess) => ReadWriteAction[T], tempTableTypes: Set[AttributeTempTableType.Value], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
+  def inTransactionWithAttrTempTable[T](tempTableTypes: Set[AttributeTempTableType.Value])(f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
 
     val callerAction = f(dataAccess).transactionally.withTransactionIsolation(isolationLevel)
 

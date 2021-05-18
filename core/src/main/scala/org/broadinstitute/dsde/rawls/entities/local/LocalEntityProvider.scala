@@ -64,12 +64,12 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   }
 
   override def createEntity(entity: Entity): Future[Entity] = {
-    dataSource.inTransactionWithAttrTempTable ({ dataAccess =>
+    dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity)) { dataAccess =>
       dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspace.toWorkspaceName}")))
         case None => dataAccess.entityQuery.save(workspaceContext, entity)
       }
-    }, Set(AttributeTempTableType.Entity))
+    }
   }
 
   // EntityApiServiceSpec has good test coverage for this api
@@ -168,7 +168,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     } yield operation.name
 
     withAttributeNamespaceCheck(namesToCheck) {
-      dataSource.inTransactionWithAttrTempTable ({ dataAccess =>
+      dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity)){ dataAccess =>
         val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
           val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
           entityUpdates.map { entityUpdate =>
@@ -199,7 +199,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
         }
 
         saveAction
-      }, Set(AttributeTempTableType.Entity))
+      }
     }
   }
 

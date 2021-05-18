@@ -40,7 +40,7 @@ class UncoordinatedDataSourceAccess(override val slickDataSource: SlickDataSourc
   override def inTransactionWithAttrTempTable[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
                                           isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
                                          ): Future[A] = {
-    slickDataSource.inTransactionWithAttrTempTable(dataAccessFunction, Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace), isolationLevel)
+    slickDataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace))(dataAccessFunction, isolationLevel)
   }
 }
 

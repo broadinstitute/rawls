@@ -360,13 +360,13 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
       val entityType: String = "et"
 
-      def saveEntity(e: Entity): Future[Entity] = DbResource.dataSource.inTransactionWithAttrTempTable ({ d =>
+      def saveEntity(e: Entity): Future[Entity] = DbResource.dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity)){ d =>
         val targetWorkspace = if (isOdd(e.name.toInt))
           workspaceOdd
         else
           workspaceEven
         d.entityQuery.save(targetWorkspace, e)
-      }, Set(AttributeTempTableType.Entity))
+      }
 
       // create the entities-to-be-saved
       val entitiesToSave:Map[Int, Entity] = (1 to parallelism).map { idx =>

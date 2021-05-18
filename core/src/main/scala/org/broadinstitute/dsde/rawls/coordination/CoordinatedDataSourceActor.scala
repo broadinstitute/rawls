@@ -50,7 +50,7 @@ class CoordinatedDataSourceActor() extends Actor {
       run(startDeadline, waitTimeout) {
         // NOTE: We could feed the JDBC calls yet-another timeout-per-statement, but warning: the
         // java.sql.Statement.setQueryTimeout() implementation is different for each JDBC driver!
-        slickDataSource.inTransactionWithAttrTempTable(dataAccessFunction, Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace), isolationLevel)
+        slickDataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace))(dataAccessFunction, isolationLevel)
       }
   }
 }

@@ -82,8 +82,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   // this is used by many tests to set up fixture data, which includes saving entities, therefore it needs
   // the temp table.
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
-    Await.result(DbResource.dataSource.inTransactionWithAttrTempTable ({ _ => action.asInstanceOf[ReadWriteAction[R]] },
-      Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace)), duration)
+    Await.result(DbResource.dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace))
+    { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
   }
 
   protected def runMultipleAndWait[R](count: Int, duration: Duration = 1 minutes)(actionGenerator: Int => DBIOAction[R, _ <: NoStream, _ <: Effect]): R = {
