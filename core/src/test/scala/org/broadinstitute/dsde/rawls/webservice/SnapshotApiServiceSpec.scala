@@ -20,7 +20,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class SnapshotApiServiceSpec extends ApiServiceSpec {
 
   val baseSnapshotsPath = s"${testData.wsName.path}/snapshots"
-  val v2BaseSnapshotsPath = s"${testData.wsName.path}/v2/snapshots"
+  val v2BaseSnapshotsPath = s"${testData.wsName.path}/snapshots/v2"
 
   val defaultNamedSnapshotJson = httpJson(NamedDataRepoSnapshot(
     name = DataReferenceName("foo"),
