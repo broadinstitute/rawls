@@ -8,4 +8,4 @@ Added:
 - Support 2.13
 
 SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "0.1-e55b488f-SNAP"`
-todo: don't forget to update this when we merge v2_workspaces
+TODO: update this when we merge v2_workspaces - https://broadworkbench.atlassian.net/browse/CA-1362
