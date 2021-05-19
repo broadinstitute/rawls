@@ -200,7 +200,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
 
     for {
-      regionOption <- googleServicesDAO.getRegionForRegionalBucket(bucketName, None)
+      regionOption <- googleServicesDAO.getRegionForRegionalBucket(bucketName, Option(GoogleProjectId(googleProjectId)))
       runtimeOptions <- {
         regionOption match {
           case Some(region) => googleServicesDAO.getComputeZonesForRegion(GoogleProjectId(googleProjectId), region).map(updateRuntimeOptions)

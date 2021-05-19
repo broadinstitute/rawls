@@ -447,6 +447,62 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           }(ownerAuthToken)
         }
       }
+
+      "to launch workflows on requester pays workspaces if they have can-compute permission" in {
+        implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+
+        implicit val ownerToken: AuthToken = ownerAuthToken
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("writer-can-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(true)))) { workspaceName =>
+            // Enable requester pays on the original workspace and wait for the change to propagate
+            val bucketName = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(ownerToken)).workspace.bucketName
+            googleStorageDAO.setRequesterPays(GcsBucketName(bucketName), true).futureValue
+            eventually {
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(ownerToken)).bucketOptions should contain(WorkspaceBucketOptions(true))
+            }
+
+            Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
+
+            withMethod("writer-method-succeeds", MethodData.SimpleMethod) { methodName =>
+              val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
+              Rawls.methodConfigs.createMethodConfigInWorkspace(projectName, workspaceName,
+                method, method.methodNamespace, method.methodName, 1,
+                SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)(ownerAuthToken)
+
+              Orchestration.methods.setMethodPermissions(
+                method.methodNamespace,
+                method.methodName,
+                method.snapshotId,
+                studentA.email,
+                "OWNER"
+              )(ownerAuthToken)
+
+              val submissionId = Rawls.submissions.launchWorkflow(
+                billingProject = projectName,
+                workspaceName = workspaceName,
+                methodConfigurationNamespace = method.methodNamespace,
+                methodConfigurationName = method.methodName,
+                entityType = method.rootEntityType,
+                entityName = "participant1",
+                expression = "this",
+                useCallCache = false,
+                deleteIntermediateOutputFiles = false
+              )(studentAToken)
+
+              Submission.waitUntilSubmissionComplete(projectName, workspaceName, submissionId)
+
+              val expectedStatus = "Done"
+              val actualStatus = Submission.getSubmissionStatus(projectName, workspaceName, submissionId)
+              withClue(s"Submission $projectName/$workspaceName/$submissionId status should be $expectedStatus") {
+                actualStatus shouldBe expectedStatus
+              }
+            }(ownerAuthToken)
+          }(ownerAuthToken)
+        }
+      }
+
+
     }
 
     "should not allow writers" - {
