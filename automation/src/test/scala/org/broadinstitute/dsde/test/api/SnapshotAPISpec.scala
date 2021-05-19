@@ -258,13 +258,13 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
   // ==================== Rawls helpers ====================
   private def listSnapshotReferences(projectName: String, workspaceName: String, offset: Int = 0, limit: Int = 10)(implicit authToken: AuthToken) = {
     val targetRawlsUrl  = Uri(Rawls.url)
-      .withPath(Path(s"/api/workspaces/$projectName/$workspaceName/snapshots"))
+      .withPath(Path(s"/api/workspaces/$projectName/$workspaceName/snapshots/v2"))
       .withQuery(Query(Map("offset" -> offset.toString, "limit" ->  limit.toString)))
     Rawls.getRequest(uri = targetRawlsUrl.toString)
   }
 
   private def createSnapshotReference(projectName: String, workspaceName: String, snapshotId: String, snapshotName: String)(implicit authToken: AuthToken) = {
-    val targetRawlsUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/snapshots"))
+    val targetRawlsUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/snapshots/v2"))
     val payload = Map("snapshotId" -> snapshotId, "name" -> snapshotName)
     Rawls.postRequest(
       uri = targetRawlsUrl.toString(),

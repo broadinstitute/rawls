@@ -58,7 +58,7 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   it should "bubble up lookupSnapshotForName error" in {
     val builder = createTestBuilder(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(referenceType = null)))
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource(resourceType = null)))
     )
 
     val ex = intercept[DataEntityException] { builder.build(defaultEntityRequestArguments).get }
@@ -83,7 +83,7 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   it should "error if workspace manager returns a non-snapshot reference type" in {
     val builder = createTestBuilder(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(referenceType = null)))
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource(resourceType = null)))
     )
 
     val ex = intercept[DataEntityException] { builder.lookupSnapshotForName(DataReferenceName("foo"), defaultEntityRequestArguments) }
@@ -92,7 +92,7 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   it should "error if workspace manager reference json `instanceName` value does not match DataRepoDAO's base url" in {
     val builder = createTestBuilder(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refInstanceName = "this is wrong")))
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource(refInstanceName = "this is wrong")))
     )
 
     val ex = intercept[DataEntityException] { builder.lookupSnapshotForName(DataReferenceName("foo"), defaultEntityRequestArguments) }
@@ -101,7 +101,7 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   it should "error if workspace manager reference json `snapshot` value is not a valid UUID" in {
     val builder = createTestBuilder(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refSnapshot = "this is not a uuid")))
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource(refSnapshot = "this is not a uuid")))
     )
 
     val ex = intercept[DataEntityException] { builder.lookupSnapshotForName(DataReferenceName("foo"), defaultEntityRequestArguments) }

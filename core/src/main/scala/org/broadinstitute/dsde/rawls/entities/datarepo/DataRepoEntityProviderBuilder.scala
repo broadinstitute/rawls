@@ -1,10 +1,11 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import java.util.UUID
+
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.client.{ApiException => DatarepoApiException}
 import bio.terra.workspace.client.{ApiException => WorkspaceApiException}
-import bio.terra.workspace.model.ReferenceTypeEnum
+import bio.terra.workspace.model.{ReferenceTypeEnum, ResourceType}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -14,8 +15,7 @@ import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport}
+import org.broadinstitute.dsde.rawls.model.DataReferenceName
 
 import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
@@ -64,8 +64,7 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
 
   private[datarepo] def lookupSnapshotForName(dataReferenceName: DataReferenceName, requestArguments: EntityRequestArguments): UUID = {
     // contact WSM to retrieve the data reference specified in the request
-    val dataRefTry = Try(workspaceManagerDAO.getDataReferenceByName(UUID.fromString(requestArguments.workspace.workspaceId),
-      ReferenceTypeEnum.DATA_REPO_SNAPSHOT,
+    val dataRefTry = Try(workspaceManagerDAO.getDataRepoSnapshotReferenceByName(UUID.fromString(requestArguments.workspace.workspaceId),
       dataReferenceName,
       requestArguments.userInfo.accessToken)).recoverWith {
 
@@ -79,11 +78,11 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
     val dataRef = dataRefTry.get
 
     // verify it's a TDR snapshot. should be a noop, since getDataReferenceByName enforces this.
-    if (ReferenceTypeEnum.DATA_REPO_SNAPSHOT != dataRef.getReferenceType) {
+    if (ResourceType.DATA_REPO_SNAPSHOT != dataRef.getMetadata.getResourceType) {
       throw new DataEntityException(s"Reference type value for $dataReferenceName is not of type ${ReferenceTypeEnum.DATA_REPO_SNAPSHOT.getValue}")
     }
 
-    val dataReference = dataRef.getReference
+    val dataReference = dataRef.getAttributes
 
     // verify the instance matches our target instance
     // TODO: AS-321 is this the right place to validate this? We could add a "validateInstanceURL" method to the DAO itself, for instance
