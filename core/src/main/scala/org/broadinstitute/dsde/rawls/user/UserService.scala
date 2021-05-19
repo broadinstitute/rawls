@@ -332,7 +332,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         res <- if(table.isDefined) {
                 //Isolate the db txn so we're not running any REST calls inside of it
                 dataSource.inTransaction { dataAccess =>
-                  dataAccess.rawlsBillingProjectQuery.setBillingProjectExport(projectName, Option(datasetName), Option(tableName))
+                  dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(projectName, Option(datasetName), Option(tableName))
                 }
               } else throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The billing export table ${tableName} in dataset ${datasetName} could not be found."))
       } yield {
@@ -344,7 +344,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def clearProjectSpendConfiguration(projectName: RawlsBillingProjectName): Future[Int] = {
     requireProjectAction(projectName, SamBillingProjectActions.alterSpendReportConfiguration) {
       dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.clearBillingProjectExport(projectName)
+        dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(projectName)
       }
     }
   }

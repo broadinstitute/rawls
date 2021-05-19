@@ -123,15 +123,15 @@ trait RawlsBillingProjectComponent {
       }.toMap)
     }
 
-    def setBillingProjectExport(projectName: RawlsBillingProjectName, datasetName: Option[String], tableName: Option[String]): WriteAction[Int] = {
+    def setBillingProjectSpendConfiguration(projectName: RawlsBillingProjectName, datasetName: Option[String], tableName: Option[String]): WriteAction[Int] = {
       rawlsBillingProjectQuery
         .filter(_.projectName === projectName.value)
         .map(bp => (bp.spendReportDataset, bp.spendReportTable))
         .update(datasetName, tableName)
     }
 
-    def clearBillingProjectExport(projectName: RawlsBillingProjectName): WriteAction[Int] = {
-      setBillingProjectExport(projectName, None, None)
+    def clearBillingProjectSpendConfiguration(projectName: RawlsBillingProjectName): WriteAction[Int] = {
+      setBillingProjectSpendConfiguration(projectName, None, None)
     }
 
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] = {

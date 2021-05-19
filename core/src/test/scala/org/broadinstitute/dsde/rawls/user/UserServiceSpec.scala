@@ -304,7 +304,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val spendReportTableName = "should_not_clear_table"
 
       //first, directly set the spend configuration in the DB outside of the user's permissions, so we can assert that it wasn't cleared
-      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.setBillingProjectExport(billingProject.projectName, Some(spendReportDatasetName), Some(spendReportTableName)))
+      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(billingProject.projectName, Some(spendReportDatasetName), Some(spendReportTableName)))
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
