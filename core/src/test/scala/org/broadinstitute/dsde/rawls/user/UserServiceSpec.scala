@@ -249,9 +249,9 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf) shouldEqual 1
 
-      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(_.spendReportDataset).result)
+      val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
 
-      spendReportDatasetName shouldEqual spendReportDatasetInDb.head.get
+      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName), Some("gcp_billing_export_v1_some-parent-billing-account"))
     }
   }
 
@@ -272,10 +272,10 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       //assert that the entire action was forbidden
       actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
 
-      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(_.spendReportDataset).result)
+      val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
 
       //assert that no change was made to the spend configuration
-      spendReportDatasetInDb.head shouldEqual None
+      spendReportConfigInDb.head shouldEqual (None, None)
     }
   }
 
@@ -291,9 +291,9 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       Await.result(userService.clearBillingProjectSpendConfiguration(billingProject.projectName), Duration.Inf) shouldEqual 1
 
-      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(_.spendReportDataset).result)
+      val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
 
-      spendReportDatasetInDb.head shouldEqual None
+      spendReportConfigInDb.head shouldEqual (None, None)
     }
   }
 
@@ -318,10 +318,10 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       //assert that the entire action was forbidden
       actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
 
-      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
+      val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
 
       //assert that no change was made to the spend configuration
-      spendReportDatasetInDb.head shouldEqual (Some(spendReportDatasetName), Some(spendReportTableName))
+      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName), Some(spendReportTableName))
     }
   }
 
