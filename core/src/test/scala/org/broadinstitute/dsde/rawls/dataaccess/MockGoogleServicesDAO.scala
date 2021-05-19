@@ -256,8 +256,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(billingAccount)
   }
 
-  override def getParentBillingAccount(billingProjectId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
-    val billingAccount = billingProjectId match {
+  override def getRootBillingAccount(billingAccountId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+    val billingAccount = billingAccountId match {
       case "billing_account_for_project_without_table" => Some("table_does_not_exist")
       case "project_without_parent_billing_account" => None
       case _ => Some("some-parent-billing-account")

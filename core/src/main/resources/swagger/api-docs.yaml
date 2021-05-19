@@ -395,18 +395,18 @@ paths:
     put:
       tags:
         - billing_v2
-      summary: set the spend configuration for the project
-      description: set the spend configuration for the project
+      summary: set the spend configuration for the billing project
+      description: set the spend configuration for the billing project
       operationId: setSpendReportConfiguration
       parameters:
         - name: projectId
           in: path
-          description: Project ID
+          description: Billing Project ID
           required: true
           schema:
             type: string
       requestBody:
-        description: project spend configuration information
+        description: billing project spend configuration information
         content:
           'application/json':
             schema:
@@ -415,19 +415,19 @@ paths:
         204:
           description: No Content
         400:
-          description: Either the project does not have an active billing account, the specified dataset does not exist, or the specified table does not exist
+          description: Either the billing project does not have an active billing account, the specified dataset does not exist, or the specified table does not exist
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
-          description: You must be a project owner to alter the spend configuration of the project
+          description: You must be a billing project owner to alter the spend configuration of the billing project
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: The specified project could not be found
+          description: The specified billing project could not be found
           content:
             'application/json':
               schema:
@@ -441,8 +441,8 @@ paths:
     delete:
       tags:
         - billing_v2
-      summary: clear the spend configuration for the project
-      description: clear the spend configuration for the project
+      summary: clear the spend configuration for the billing project
+      description: clear the spend configuration for the billing project
       operationId: clearSpendReportConfiguration
       parameters:
         - name: projectId
@@ -455,7 +455,7 @@ paths:
         204:
           description: No Content
         403:
-          description: You must be a project owner to alter the spend configuration of the project
+          description: You must be a project owner to alter the spend configuration of the billing project
           content:
             'application/json':
               schema:

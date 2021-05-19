@@ -700,11 +700,11 @@ class HttpGoogleServicesDAO(
     }).map(billingInfo => Option(billingInfo.getBillingAccountName))
   }
 
-  override def getParentBillingAccount(billingProjectId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+  override def getRootBillingAccount(billingAccountId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
     implicit val service = GoogleInstrumentedService.Billing
 
     val credential = getBillingServiceAccountCredential
-    val fetcher = getCloudBillingManager(credential).billingAccounts().get(billingProjectId)
+    val fetcher = getCloudBillingManager(credential).billingAccounts().get(billingAccountId)
 
     retryWhen500orGoogleError(() => {
       blocking {

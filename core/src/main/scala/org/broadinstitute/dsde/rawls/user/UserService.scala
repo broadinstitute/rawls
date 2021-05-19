@@ -320,13 +320,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         billingAccountIdOpt <- gcsDAO.getProjectBillingAccount(projectName, userInfo)
 
         //Get the parent billing account for the projects billing account
-        parentBillingAccountId <- billingAccountIdOpt match {
-                                    case Some(billingAccountId) => gcsDAO.getParentBillingAccount(billingAccountId, userInfo).map(_.getOrElse(billingAccountId))
+        rootBillingAccountId <- billingAccountIdOpt match {
+                                    case Some(billingAccountId) => gcsDAO.getRootBillingAccount(billingAccountId, userInfo).map(_.getOrElse(billingAccountId))
                                     case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The billing project ${projectName.value} is not linked to an active billing account."))
                                   }
 
         //Get the table and validate that it exists and that we have permission to see it
-        tableName = s"gcp_billing_export_v1_${parentBillingAccountId.stripPrefix("billingAccounts/")}"
+        tableName = s"gcp_billing_export_v1_${rootBillingAccountId.stripPrefix("billingAccounts/")}"
         table <- bqService.use(_.getTable(datasetName, tableName)).unsafeToFuture()
 
         res <- if(table.isDefined) {
@@ -334,7 +334,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                 dataSource.inTransaction { dataAccess =>
                   dataAccess.rawlsBillingProjectQuery.setBillingProjectExport(projectName, Option(datasetName), Option(tableName))
                 }
-              } else throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The billing export table gcp_billing_export_v1_${parentBillingAccountId} in dataset ${datasetName} could not be found."))
+              } else throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The billing export table ${tableName} in dataset ${datasetName} could not be found."))
       } yield {
         res
       }
