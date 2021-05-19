@@ -72,7 +72,7 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
     // isn't mistakenly passing by using defaults where it shouldn't
     val randomName = scala.util.Random.alphanumeric.take(16).mkString
 
-    val expected = createDataRefDescription(
+    val expected = createDataRepoSnapshotResource(
       name = randomName,
       refSnapshot = UUID.randomUUID().toString)
 

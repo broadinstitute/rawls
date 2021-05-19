@@ -87,7 +87,7 @@ class EntityApiServiceDeltaLayerSpec extends ApiServiceSpec with GcsStorageTestS
     val defaultNamedSnapshotJson = httpJson(NamedDataRepoSnapshot(
       name = DataReferenceName("testsnap"),
       description = Some(DataReferenceDescriptionField("desc")),
-      snapshotId = UUID.randomUUID().toString
+      snapshotId = UUID.randomUUID()
     ))
     Post(s"${testData.workspace.path}/snapshots", defaultNamedSnapshotJson) ~>
       sealRoute(services.snapshotRoutes) ~>
@@ -124,7 +124,7 @@ class EntityApiServiceDeltaLayerSpec extends ApiServiceSpec with GcsStorageTestS
     val defaultNamedSnapshotJson = httpJson(NamedDataRepoSnapshot(
       name = DataReferenceName("testsnap"),
       description = Some(DataReferenceDescriptionField("desc")),
-      snapshotId = UUID.randomUUID().toString
+      snapshotId = UUID.randomUUID()
     ))
     Post(s"${testData.workspace.path}/snapshots", defaultNamedSnapshotJson) ~>
       sealRoute(services.snapshotRoutes) ~>

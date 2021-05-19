@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
-import bio.terra.workspace.model.DataReferenceDescription
+import bio.terra.workspace.model.DataRepoSnapshotResource
 import cats.effect.{ContextShift, IO}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.Field.Mode
@@ -33,7 +33,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataReferenceDescription,
+class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRepoSnapshotResource,
                              requestArguments: EntityRequestArguments,
                              samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory,
                              deltaLayerWriter: DeltaLayerWriter,
@@ -422,7 +422,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     // create DeltaInsert object
     // TODO AS-770: populate with everything we need, including model versioning
     val dest = Destination(workspaceId = requestArguments.workspace.workspaceIdAsUUID,
-                           referenceId = dataReference.getReferenceId)
+                           referenceId = dataReference.getMetadata.getResourceId)
     val ins = DeltaInsert(version = "v0",
                           insertId = UUID.randomUUID(),
                           insertTimestamp = new DateTime(),

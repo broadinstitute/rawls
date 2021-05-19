@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.client.{ApiException => DatarepoApiException}
 import bio.terra.workspace.client.{ApiException => WorkspaceApiException}
-import bio.terra.workspace.model.{ReferenceTypeEnum, ResourceType}
+import bio.terra.workspace.model.{DataRepoSnapshotResource, ReferenceTypeEnum, ResourceType}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -36,7 +35,7 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
 
       // get snapshot UUID from data reference name
       dataReference <- Try(lookupSnapshotForName(dataReferenceName, requestArguments))
-      snapshotId = UUID.fromString(dataReference.getReference.getSnapshot)
+      snapshotId = UUID.fromString(dataReference.getAttributes.getSnapshot)
 
       // contact TDR to describe the snapshot
       snapshotModel <- Try(dataRepoDAO.getSnapshot(snapshotId, requestArguments.userInfo.accessToken)).recoverWith {
@@ -63,7 +62,7 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
     } yield new DataRepoEntityProvider(snapshotModel, dataReference, requestArguments, samDAO, bqServiceFactory, deltaLayerWriter, config)
   }
 
-  private[datarepo] def lookupSnapshotForName(dataReferenceName: DataReferenceName, requestArguments: EntityRequestArguments): DataReferenceDescription = {
+  private[datarepo] def lookupSnapshotForName(dataReferenceName: DataReferenceName, requestArguments: EntityRequestArguments): DataRepoSnapshotResource = {
     // contact WSM to retrieve the data reference specified in the request
     val dataRefTry = Try(workspaceManagerDAO.getDataRepoSnapshotReferenceByName(UUID.fromString(requestArguments.workspace.workspaceId),
       dataReferenceName,
