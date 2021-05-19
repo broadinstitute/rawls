@@ -413,7 +413,7 @@ paths:
               $ref: '#/components/schemas/SpendReportConfiguration'
       responses:
         204:
-          description: No Content
+          description: Successfully updated spend configuration
         400:
           description: Either the billing project does not have an active billing account, the specified dataset does not exist, or the specified table does not exist
           content:
@@ -453,7 +453,7 @@ paths:
             type: string
       responses:
         204:
-          description: No Content
+          description: Successfully cleared spend configuration
         403:
           description: You must be a project owner to alter the spend configuration of the billing project
           content:
