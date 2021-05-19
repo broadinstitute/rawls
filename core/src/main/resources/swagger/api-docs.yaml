@@ -447,7 +447,7 @@ paths:
       parameters:
         - name: projectId
           in: path
-          description: Project ID
+          description: Billing Project ID
           required: true
           schema:
             type: string
@@ -455,7 +455,7 @@ paths:
         204:
           description: Successfully cleared spend configuration
         403:
-          description: You must be a project owner to alter the spend configuration of the billing project
+          description: You must be a billing project owner to alter the spend configuration of the billing project
           content:
             'application/json':
               schema:
