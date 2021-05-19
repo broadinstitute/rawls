@@ -316,7 +316,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         notificationDAO,
         samDAO,
         MockBigQueryServiceFactory.ioFactory(),
-        "/fake/Credential/Path/credentials.json",
+        testConf.getString("gcs.pathToCredentialJson"),
         "requesterPaysRole",
         DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
         ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))

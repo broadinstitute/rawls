@@ -158,7 +158,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       notificationDAO,
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
-      "/fake/Credential/Path/credentials.json",
+      testConf.getString("gcs.pathToCredentialJson"),
       "requesterPaysRole",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
