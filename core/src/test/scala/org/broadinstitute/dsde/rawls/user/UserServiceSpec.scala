@@ -247,7 +247,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val userService = getUserService(dataSource, mockSamDAO)
 
-      Await.result(userService.setProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf) shouldEqual 1
+      Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf) shouldEqual 1
 
       val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(_.spendReportDataset).result)
 
@@ -266,7 +266,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
       }
 
       //assert that the entire action was forbidden
@@ -289,7 +289,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val userService = getUserService(dataSource, mockSamDAO)
 
-      Await.result(userService.clearProjectSpendConfiguration(billingProject.projectName), Duration.Inf) shouldEqual 1
+      Await.result(userService.clearBillingProjectSpendConfiguration(billingProject.projectName), Duration.Inf) shouldEqual 1
 
       val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(_.spendReportDataset).result)
 
@@ -312,7 +312,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.clearProjectSpendConfiguration(billingProject.projectName), Duration.Inf)
+        Await.result(userService.clearBillingProjectSpendConfiguration(billingProject.projectName), Duration.Inf)
       }
 
       //assert that the entire action was forbidden
@@ -336,7 +336,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
@@ -356,7 +356,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
@@ -376,7 +376,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
@@ -394,7 +394,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest

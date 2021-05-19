@@ -42,13 +42,13 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             put {
               entity(as[BillingProjectSpendConfiguration]) { spendConfiguration =>
                 complete {
-                  userServiceConstructor(userInfo).setProjectSpendConfiguration(RawlsBillingProjectName(projectId), spendConfiguration.datasetName).map(_ => StatusCodes.NoContent)
+                  userServiceConstructor(userInfo).setBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId), spendConfiguration.datasetName).map(_ => StatusCodes.NoContent)
                 }
               }
             } ~
             delete {
               complete {
-                userServiceConstructor(userInfo).clearProjectSpendConfiguration(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
+                userServiceConstructor(userInfo).clearBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
               }
             }
           }

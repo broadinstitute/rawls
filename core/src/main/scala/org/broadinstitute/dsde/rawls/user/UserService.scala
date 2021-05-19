@@ -302,7 +302,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def setProjectSpendConfiguration(projectName: RawlsBillingProjectName, datasetName: String): Future[Int] = {
+  def setBillingProjectSpendConfiguration(projectName: RawlsBillingProjectName, datasetName: String): Future[Int] = {
 
     validateBigQueryDatasetName(datasetName)
 
@@ -341,7 +341,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def clearProjectSpendConfiguration(projectName: RawlsBillingProjectName): Future[Int] = {
+  def clearBillingProjectSpendConfiguration(projectName: RawlsBillingProjectName): Future[Int] = {
     requireProjectAction(projectName, SamBillingProjectActions.alterSpendReportConfiguration) {
       dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(projectName)
