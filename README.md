@@ -72,7 +72,12 @@ Supported Scala versions: 2.12, 2.13
 
 Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory. You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
 - [Jenkins runs `publishSnapshot.sh` on every dev build](https://fc-jenkins.dsp-techops.broadinstitute.org/job/rawls-build/), but that makes "unofficial" `-SNAP` versions.
-- Note that you need `ARTIFACTORY_USERNAME` and `ARTIFACTORY_PASSWORD` in your env for either of these to work.
+
+To publish a temporary or test version, use `publishSnapshot.sh` like so:
+
+```sh
+VAULT_TOKEN=$(cat ~/.vault-token) ARTIFACTORY_USERNAME=dsdejenkins ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins) core/src/bin/publishSnapshot.sh
+```
 
 To publish an official release, you can run the following command:
 

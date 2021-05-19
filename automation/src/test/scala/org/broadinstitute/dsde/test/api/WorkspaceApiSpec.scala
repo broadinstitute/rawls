@@ -108,7 +108,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
       "to delete the google project (from Resource Buffer) in a v2 workspaces (in a v2 billing project) when deleting the workspace" in {
         val owner: Credentials = UserPool.chooseProjectOwner
         implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
-        val billingProjectName = uuidWithPrefix("WorkspaceApiSpec_deleteWorkspaceUsingResourceBuffer")
+        val billingProjectName = s"WorkspaceApi_v2Delete_${makeRandomId()}"
         Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
         val workspaceName = prependUUID("rbs-delete-workspace")
 
@@ -145,7 +145,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
         exception.fields("statusCode").convertTo[Int] should equal(400)
         exception.fields("message").convertTo[String] should startWith("Workspace creation failed. Error trying to create bucket ")
-        exception.fields("message").convertTo[String] should endWith(s" in Google project `${p.projectName}` in region `${invalidRegion}`.")
+        exception.fields("message").convertTo[String] should endWith regex(s" in Google project (.+) in region `${invalidRegion}`.".r)
       }
 
       "to add readers with can-share access" in {

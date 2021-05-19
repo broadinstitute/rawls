@@ -1915,7 +1915,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     )
 
     // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
-    policyGroupsToRoles.toList.traverse {case (email, roles) => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
+    policyGroupsToRoles.toList.traverse {case (email, roles) =>
+      googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)} // addIamRoles logic includes retries
   }
 
   /**
@@ -2040,7 +2041,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
           // the limit of 2000
           Future.successful(())
-        } else if (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined) {
+        } else if (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined || policyName == SamWorkspacePolicyNames.canCompute) {
           // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
           // granted bucket access (and thus need a google group)
           traceWithParent(s"syncPolicy-${policyName}", s1)(_ => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName))
@@ -2116,10 +2117,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email)))
               resource <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
               policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
-              (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
-                  setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
-              savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
-                  createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
               _ <- DBIO.from({
                 // declare these next two Futures so they start in parallel
                 val createWorkflowCollectionFuture = traceWithParent("createWorkflowCollectionForWorkspace", parentSpan)(span => (createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, span)))
@@ -2128,9 +2125,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   _ <- createWorkflowCollectionFuture
                   _ <- syncPoliciesFuture
                 } yield()})
+              (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
+                setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
+              savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
+                createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
               // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
               _ <- traceDBIOWithParent("createResourceFull (google project)", parentSpan)(_ => DBIO.from(
-                  samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
+                  samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, Set.empty, userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
 
               //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
               //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it

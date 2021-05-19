@@ -263,7 +263,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     asFCAdmin {
       val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
       for {
-        _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, ownerUserInfo)
+        _ <- deleteGoogleProjectIfChild(projectName, ownerUserInfo)
         result <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
       } yield result
     }
@@ -355,7 +355,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def adminRegisterBillingProject(xfer: RawlsBillingProjectTransfer): Future[PerRequestMessage] = {
     asFCAdmin {
       val billingProjectName = RawlsBillingProjectName(xfer.project)
-      val project = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None)
+      val project = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, Option(RawlsBillingAccountName("billingAccounts/00293C-5DEA2D-6887E7")), None)
       val ownerUserInfo = UserInfo(RawlsUserEmail(xfer.newOwnerEmail), OAuth2BearerToken(xfer.newOwnerToken), 3600, RawlsUserSubjectId("0"))
 
 

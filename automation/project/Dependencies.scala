@@ -5,9 +5,9 @@ object Dependencies {
 
   val akkaV         = "2.6.8"
   val akkaHttpV     = "10.2.0"
-  val jacksonV      = "2.11.3"
+  val jacksonV      = "2.12.3"
 
-  val serviceTestV = "0.18-23f5ae7"
+  val serviceTestV = "0.18-ecf1e1da-SNAP"
   val workbenchGoogleV = "0.21-3f3c0e4"
   val workbenchGoogle2V = "0.18-4631ebf"
   val workbenchModelV  = "0.14-65bba14"
@@ -36,6 +36,8 @@ object Dependencies {
     "com.fasterxml.jackson.core" % "jackson-databind" % jacksonV,
     "com.fasterxml.jackson.core" % "jackson-core" % jacksonV,
     "com.fasterxml.jackson.module" % ("jackson-module-scala_" + scalaV) % jacksonV,
+    "ch.qos.logback" % "logback-classic" % "1.2.3",
+    "net.logstash.logback" % "logstash-logback-encoder" % "6.6",
     "com.google.apis" % "google-api-services-oauth2" % "v1-rev112-1.20.0" excludeAll (
       ExclusionRule("com.google.guava", "guava-jdk5"),
       ExclusionRule("org.apache.httpcomponents", "httpclient")
@@ -52,7 +54,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % "test",
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % "test",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-14278f08f"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-e55b488f-SNAP"
       exclude("com.typesafe.scala-logging", "scala-logging_2.11")
       exclude("com.typesafe.akka", "akka-stream_2.11")
       exclude("bio.terra", "workspace-manager-client"),
