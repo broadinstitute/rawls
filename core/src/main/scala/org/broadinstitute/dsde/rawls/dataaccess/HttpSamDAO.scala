@@ -118,7 +118,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]] = {
-    val url = samServiceURL + "/register/user/v2/info"
+    val url = samServiceURL + "/register/user/v2/self/info"
     retry(when401or500) { () =>
       pipeline[Option[RawlsUser]](userInfo) apply RequestBuilding.Get(url) recover {
         case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
