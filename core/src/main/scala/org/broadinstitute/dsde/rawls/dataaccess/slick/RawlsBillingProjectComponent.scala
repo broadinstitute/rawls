@@ -147,7 +147,7 @@ trait RawlsBillingProjectComponent {
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
-      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message, billingProject.cromwellBackend.map(_.value), billingProject.servicePerimeter.map(_.value), billingProject.googleProjectNumber.map(_.value), billingProject.invalidBillingAccount, None, None)
+      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message, billingProject.cromwellBackend.map(_.value), billingProject.servicePerimeter.map(_.value), billingProject.googleProjectNumber.map(_.value), billingProject.invalidBillingAccount, billingProject.spendReportDataset, billingProject.spendReportTable)
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject = {
