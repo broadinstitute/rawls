@@ -49,7 +49,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       null,
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
-      "/fake/Credential/Path/credentials.json",
+      testConf.getString("gcs.pathToCredentialJson"),
       "",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       null
