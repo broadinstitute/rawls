@@ -124,7 +124,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
 
-  def getBillingAccountNameForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
+  def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
 

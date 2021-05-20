@@ -247,7 +247,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     }
   }
 
-  override def getBillingAccountNameForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+  override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
     val billingAccount = googleProject.value match {
       case "project_without_table" => Some("billing_account_for_project_without_table")
       case "project_without_billing_account" => None

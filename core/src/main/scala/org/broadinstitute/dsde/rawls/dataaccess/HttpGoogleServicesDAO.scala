@@ -685,7 +685,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getBillingAccountNameForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+  override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
     implicit val service = GoogleInstrumentedService.Billing
 
     val projectNameFormatted = s"projects/${googleProject.value}"
@@ -697,7 +697,7 @@ class HttpGoogleServicesDAO(
       blocking {
         executeGoogleRequest(fetcher)
       }
-    }).map(billingInfo => Option(billingInfo.getBillingAccountName))
+    }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {

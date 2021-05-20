@@ -318,13 +318,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
         //The billing account ID in the DB can't be trusted, so we'll get it directly from the source of truth
         //TODO: don't just re-wrap this in a GoogleProject
-        billingAccountId <- gcsDAO.getBillingAccountNameForGoogleProject(GoogleProject(projectName.value), userInfo).map {
+        billingAccountId <- gcsDAO.getBillingAccountIdForGoogleProject(GoogleProject(projectName.value), userInfo).map {
             case Some(billingAccountId) => billingAccountId
             case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The billing project ${projectName.value} is not linked to an active billing account."))
         }
 
         //Get the table and validate that it exists and that we have permission to see it
-        tableName = s"gcp_billing_export_v1_${billingAccountId.stripPrefix("billingAccounts/")}"
+        tableName = s"gcp_billing_export_v1_${billingAccountId}"
         table <- bqService.use(_.getTable(datasetName, tableName)).unsafeToFuture()
 
         res <- if(table.isDefined) {
