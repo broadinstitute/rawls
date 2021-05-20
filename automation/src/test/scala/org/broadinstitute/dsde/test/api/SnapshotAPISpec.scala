@@ -98,7 +98,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           secondResources.head.getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
           secondResources(1).getMetadata.getName shouldBe "secondSnapshot"
           secondResources(1).getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe anotherDataRepoSnapshotId
-          secondResources(1).getMetadata.getResourceType shouldBe ReferenceTypeEnum.DATA_REPO_SNAPSHOT
+          secondResources(1).getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
         }
       }
     }
