@@ -46,7 +46,8 @@ trait DataRepoEntityProviderSpecSupport {
                          entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName"))),
                          config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                         ): DataRepoEntityProvider = {
-    new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory, new MockDeltaLayerWriter(), config)
+    // we may find that tests need to override the DataReferenceDescription provided by createDataRepoSnapshotResource() on the next line
+    new DataRepoEntityProvider(snapshotModel, createDataRepoSnapshotResource(), entityRequestArguments, samDAO, bqFactory, new MockDeltaLayerWriter(), config)
   }
 
   def createTestBuilder(workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource())),
@@ -128,7 +129,7 @@ trait DataRepoEntityProviderSpecSupport {
    * Mock for DataRepoDAO that allows the caller to specify behavior for the getSnapshot and getBaseURL methods.
    *  method.
    */
-  class SpecDataRepoDAO(getSnapshotResponse:Either[Throwable, SnapshotModel], baseURL: String = dataRepoInstanceName) extends MockDataRepoDAO {
+  class SpecDataRepoDAO(getSnapshotResponse:Either[Throwable, SnapshotModel], baseURL: String = dataRepoInstanceName) extends MockDataRepoDAO(baseURL) {
 
     override def getInstanceName: String = baseURL
 
