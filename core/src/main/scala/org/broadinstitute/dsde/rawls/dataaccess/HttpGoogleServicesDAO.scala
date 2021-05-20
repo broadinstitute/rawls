@@ -690,10 +690,10 @@ class HttpGoogleServicesDAO(
   override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
     implicit val service = GoogleInstrumentedService.Billing
 
-    val projectNameFormatted = s"projects/${googleProject.value}"
+    val fullGoogleProjectName = s"projects/${googleProject.value}"
 
     val credential = getUserCredential(userInfo)
-    val fetcher = getCloudBillingManager(credential).projects().getBillingInfo(projectNameFormatted)
+    val fetcher = getCloudBillingManager(credential).projects().getBillingInfo(fullGoogleProjectName)
 
     retryWhen500orGoogleError(() => {
       blocking {

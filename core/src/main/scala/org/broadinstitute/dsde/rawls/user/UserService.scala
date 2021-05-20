@@ -302,12 +302,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def setBillingProjectSpendConfiguration(projectName: RawlsBillingProjectName, datasetName: String): Future[Int] = {
+  def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, datasetName: String): Future[Int] = {
 
     validateBigQueryDatasetName(datasetName)
 
-    requireProjectAction(projectName, SamBillingProjectActions.alterSpendReportConfiguration) {
-      val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(projectName.value))
+    requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
+      val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(billingProjectName.value))
 
       for {
         //Get the dataset to validate that it exists and that we have permission to see it
@@ -318,9 +318,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
         //The billing account ID in the DB can't be trusted, so we'll get it directly from the source of truth
         //TODO: don't just re-wrap this in a GoogleProject
-        billingAccountId <- gcsDAO.getBillingAccountIdForGoogleProject(GoogleProject(projectName.value), userInfo).map {
+        billingAccountId <- gcsDAO.getBillingAccountIdForGoogleProject(GoogleProject(billingProjectName.value), userInfo).map {
             case Some(billingAccountId) => billingAccountId
-            case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The billing project ${projectName.value} is not linked to an active billing account."))
+            case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The Google project associated with billing project ${billingProjectName.value} is not linked to an active billing account."))
         }
 
         //Get the table and validate that it exists and that we have permission to see it
@@ -330,7 +330,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         res <- if(table.isDefined) {
                 //Isolate the db txn so we're not running any REST calls inside of it
                 dataSource.inTransaction { dataAccess =>
-                  dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(projectName, Option(datasetName), Option(tableName))
+                  dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(billingProjectName, Option(datasetName), Option(tableName))
                 }
               } else throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The billing export table ${tableName} in dataset ${datasetName} could not be found."))
       } yield {
@@ -339,10 +339,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def clearBillingProjectSpendConfiguration(projectName: RawlsBillingProjectName): Future[Int] = {
-    requireProjectAction(projectName, SamBillingProjectActions.alterSpendReportConfiguration) {
+  def clearBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): Future[Int] = {
+    requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
       dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(projectName)
+        dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName)
       }
     }
   }
