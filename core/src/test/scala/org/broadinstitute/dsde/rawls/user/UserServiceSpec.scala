@@ -251,7 +251,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
 
-      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName), Some("gcp_billing_export_v1_some-parent-billing-account"))
+      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName), Some("gcp_billing_export_v1_some-billing-account"))
     }
   }
 

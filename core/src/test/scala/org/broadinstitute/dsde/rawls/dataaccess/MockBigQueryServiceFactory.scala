@@ -124,7 +124,7 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
   override def deleteDataset(datasetName: String): IO[Boolean] = IO.pure(true)
 
   override def getTable(datasetName: String, tableName: String): IO[Option[Table]] = {
-    if(tableName.equals("gcp_billing_export_v1_table_does_not_exist")) IO.none
+    if(tableName.equals("gcp_billing_export_v1_billing_account_for_project_without_table")) IO.none
     else IO.pure(Some(null))
     // Note that this Some(null) is intentional. We just need the method
     // to succeed, and no code actually looks at the contents of this option.
