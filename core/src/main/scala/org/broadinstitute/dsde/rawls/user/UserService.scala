@@ -304,10 +304,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, datasetName: String): Future[Int] = {
 
+    //Note that this assumes that the mapping between a Google Project and a Billing Project is 1:1.
+    //This will not be the case once PPW goes live. See Jira ticket CA-1363 for details.
+    val googleProjectName = GoogleProject(billingProjectName.value)
+
     validateBigQueryDatasetName(datasetName)
 
     requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
-      val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(billingProjectName.value))
+      val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, googleProjectName)
 
       for {
         //Get the dataset to validate that it exists and that we have permission to see it
@@ -317,8 +321,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         }
 
         //The billing account ID in the DB can't be trusted, so we'll get it directly from the source of truth
-        //TODO: don't just re-wrap this in a GoogleProject
-        billingAccountId <- gcsDAO.getBillingAccountIdForGoogleProject(GoogleProject(billingProjectName.value), userInfo).map {
+        billingAccountId <- gcsDAO.getBillingAccountIdForGoogleProject(googleProjectName, userInfo).map {
             case Some(billingAccountId) => billingAccountId
             case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The Google project associated with billing project ${billingProjectName.value} is not linked to an active billing account."))
         }
