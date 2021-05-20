@@ -273,7 +273,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             // may need to wait for Cromwell to start processing workflows
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(20, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             // Get workflow ID from submission details
@@ -372,7 +372,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             // may need to wait for Cromwell to start processing workflows
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(20, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             // Get workflow ID from submission details
