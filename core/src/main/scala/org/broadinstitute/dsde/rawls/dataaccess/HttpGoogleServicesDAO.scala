@@ -685,6 +685,8 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  //Note that these APIs only allow for returning the fully qualified name i.e. billingAccounts/01010-01010-01010
+  //This will return just the ID of the billing account by stripping off the `billingAccounts/` prefix
   override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
     implicit val service = GoogleInstrumentedService.Billing
 
