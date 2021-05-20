@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import spray.json.JsObject
 
@@ -123,9 +124,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
 
-  def getProjectBillingAccount(projectName: RawlsBillingProjectName, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
-
-  def getRootBillingAccount(billingAccountId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
+  def getBillingAccountNameForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
 

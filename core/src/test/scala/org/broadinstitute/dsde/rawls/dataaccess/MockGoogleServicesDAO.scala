@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogle
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import spray.json._
 
@@ -246,8 +247,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     }
   }
 
-  override def getProjectBillingAccount(projectName: RawlsBillingProjectName, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
-    val billingAccount = projectName.value match {
+  override def getBillingAccountNameForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+    val billingAccount = googleProject.value match {
       case "project_without_table" => Some("billing_account_for_project_without_table")
       case "project_without_billing_account" => None
       case _ => Some("some-billing-account")
@@ -256,13 +257,4 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(billingAccount)
   }
 
-  override def getRootBillingAccount(billingAccountId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
-    val billingAccount = billingAccountId match {
-      case "billing_account_for_project_without_table" => Some("table_does_not_exist")
-      case "project_without_parent_billing_account" => None
-      case _ => Some("some-parent-billing-account")
-    }
-
-    Future.successful(billingAccount)
-  }
 }

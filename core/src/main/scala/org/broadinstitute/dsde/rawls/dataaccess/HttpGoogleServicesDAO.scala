@@ -685,10 +685,10 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getProjectBillingAccount(projectName: RawlsBillingProjectName, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+  override def getBillingAccountNameForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
     implicit val service = GoogleInstrumentedService.Billing
 
-    val projectNameFormatted = s"projects/${projectName.value}"
+    val projectNameFormatted = s"projects/${googleProject.value}"
 
     val credential = getUserCredential(userInfo)
     val fetcher = getCloudBillingManager(credential).projects().getBillingInfo(projectNameFormatted)
@@ -698,19 +698,6 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(fetcher)
       }
     }).map(billingInfo => Option(billingInfo.getBillingAccountName))
-  }
-
-  override def getRootBillingAccount(billingAccountId: String, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
-    implicit val service = GoogleInstrumentedService.Billing
-
-    val credential = getBillingServiceAccountCredential
-    val fetcher = getCloudBillingManager(credential).billingAccounts().get(billingAccountId)
-
-    retryWhen500orGoogleError(() => {
-      blocking {
-        executeGoogleRequest(fetcher)
-      }
-    }).map(billingInfo => Option(billingInfo.getMasterBillingAccount))
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
