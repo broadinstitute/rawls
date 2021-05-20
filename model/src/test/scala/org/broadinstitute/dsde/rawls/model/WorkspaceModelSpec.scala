@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
-
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
 import org.scalatest.freespec.AnyFreeSpec
@@ -419,4 +419,48 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     }
   }
 
+  "Attribute counter" - {
+    "should recursively count attributes" in {
+      val map1 = Map(
+        AttributeName("namespace1", "name1") -> AttributeString("value1")
+      )
+      val map2: AttributeMap = Map.empty
+      val map3 = Map(
+        AttributeName("namespace1", "name1") -> AttributeValueEmptyList
+      )
+      val map4 = Map(
+        AttributeName("namespace1", "name1") -> AttributeValueList(
+          Seq(
+            AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)
+          )
+        )
+      )
+      val map5 = Map(
+        AttributeName("namespace1", "name1") -> AttributeString("value1"),
+        AttributeName("namespace2", "name2") -> AttributeString("value2")
+      )
+
+      // https://broadworkbench.atlassian.net/browse/BW-689?focusedCommentId=47211
+      val map6 = Map(
+        AttributeName("default", "read_counts") ->
+          AttributeValueList(
+            Vector(
+              AttributeString("gs://my-workflow/shard-0/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-1/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-2/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-3/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-4/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-5/cacheCopy/some_file.tsv")
+            )
+          )
+      )
+
+      Attributable.attributeCount(map1) shouldBe 1
+      Attributable.attributeCount(map2) shouldBe 0
+      Attributable.attributeCount(map3) shouldBe 0
+      Attributable.attributeCount(map4) shouldBe 3
+      Attributable.attributeCount(map5) shouldBe 2
+      Attributable.attributeCount(map6) shouldBe 6
+    }
+  }
 }

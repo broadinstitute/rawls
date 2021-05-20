@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
-
 import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
@@ -15,7 +14,7 @@ import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputE
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, attributeCount}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -473,10 +472,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
         val (optEntityUpdates, optWs) = updates
         optEntityUpdates foreach { update: WorkflowEntityUpdate =>
-          logger.debug(s"Updating ${update.upserts.size} attributes for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. First 100: ${update.upserts.take(100)}")
+          logger.debug(s"Updating ${attributeCount(update.upserts)} attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. First 100: ${update.upserts.take(100)}")
         }
         optWs foreach { workspace: Workspace =>
-          logger.debug(s"Updating ${workspace.attributes.size} workspace attributes in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. First 100: ${workspace.attributes.take(100)}")
+          logger.debug(s"Updating ${attributeCount(workspace.attributes)} attribute values for workspace in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. First 100: ${workspace.attributes.take(100)}")
         }
 
         Left(updates)
