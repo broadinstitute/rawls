@@ -341,7 +341,17 @@ trait AttributeComponent {
       }
     }
 
-    def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
+    /**
+     * Compares a collection of pre-existing attributes to a collection of attributes requested to save by a user,
+     * finds the differences, saves the differences, and then returns the ids of the parent (entity|workspace) objects
+     * that were affected.
+     *
+     * @param attributesToSave collection of attributes to be written
+     * @param existingAttributes collection of pre-existing attributes to compare against
+     * @param insertFunction function to use when writing attributes to the db (allows rewriteAttrsAction to be generic)
+     * @return the ids of the parent (entity|workspace) objects that had attribute inserts/updates/deletes
+     */
+    def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]): ReadWriteAction[Set[OWNER_ID]] = {
       val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
       val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
@@ -381,10 +391,18 @@ trait AttributeComponent {
             !existingAttributes.exists(equalRecords(_, v)) // if the attribute exists and is unchanged, don't update it
       }
 
+      // collect the parent objects (e.g. entity, workspace) that have writes, so we know which object rows to re-calculate
+      val ownersWithWrites: Set[OWNER_ID] = (attributesToInsert.values.map(_.ownerId) ++
+        attributesToUpdate.values.map(_.ownerId) ++
+        attributesToDelete.values.map(_.ownerId))
+        .toSet
+
+      // perform the inserts/updates/deletes
       patchAttributesAction(attributesToInsert.values,
         attributesToUpdate.values,
         attributesToDelete.values.map(_.id),
         insertFunction)
+        .map(_ => ownersWithWrites)
     }
 
     //noinspection SqlDialectInspection
