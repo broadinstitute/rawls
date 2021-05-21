@@ -11,7 +11,7 @@ import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
-import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayerException, DeltaLayerWriter}
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayerException, DeltaLayerTranslator, DeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base._
@@ -416,6 +416,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
 
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
     // TODO AS-770: validate incoming EntityUpdateDefinitions (disallow deletes, etc)
+    val updates = DeltaLayerTranslator.validateEntityUpdates(entityUpdates)
+
+
     // TODO AS-770: translate incoming EntityUpdateDefinitions into key-value writes, including destination BQ datatypes
     // TODO AS-770: determine destination BQDL dataset, based on snapshot reference. Currently in SnapshotService.generateDatasetName
 
@@ -428,7 +431,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
                           insertTimestamp = new DateTime(),
                           insertingUser = requestArguments.userInfo.userSubjectId,
                           destination = dest,
-                          inserts = entityUpdates)
+                          inserts = updates)
 
     // consider making this async, so we respond to the user quicker. For now, leave as synchronous
     // so we return any errors
