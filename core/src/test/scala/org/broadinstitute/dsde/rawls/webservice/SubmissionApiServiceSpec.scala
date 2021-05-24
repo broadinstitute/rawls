@@ -956,7 +956,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         check {
           val response = responseAs[String]
           status should be(StatusCodes.BadRequest)
-          response should be("The request content was malformed:\nExpected JsNumber, but got oh gosh, I don't know... maybe seven?")
+          response should be("The request content was malformed:\nExpected Float as JsNumber, but got \"oh gosh, I don't know... maybe seven?\"")
         }
     }
   }
