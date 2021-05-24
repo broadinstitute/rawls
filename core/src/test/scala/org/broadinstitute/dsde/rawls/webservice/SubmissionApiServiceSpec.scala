@@ -955,9 +955,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         sealRoute(services.submissionRoutes) ~>
         check {
           val response = responseAs[String]
-          status should be(StatusCodes.Created)
-          val requestMemoryRetryMultiplier = getResponseField(response, "memoryRetryMultiplier")
-          requestMemoryRetryMultiplier should be(Option(JsNumber(1.0f)))
+          status should be(StatusCodes.BadRequest)
+          response should be("The request content was malformed:\nExpected JsNumber, but got oh gosh, I don't know... maybe seven?")
         }
     }
   }
