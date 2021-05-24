@@ -220,6 +220,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                         useCallCache: Boolean,
                         deleteIntermediateOutputFiles: Boolean,
                         useReferenceDisks: Boolean,
+                        memoryRetryMultiplier: Float,
                         workflowFailureMode: Option[WorkflowFailureMode],
                         runtimeOptions: Option[JsValue]
                        ): ExecutionServiceWorkflowOptions = {
@@ -240,6 +241,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       useCallCache,
       deleteIntermediateOutputFiles,
       useReferenceDisks,
+      memoryRetryMultiplier,
       billingProject.cromwellBackend.getOrElse(defaultBackend),
       workflowFailureMode,
       google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
@@ -358,6 +360,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         useCallCache = submissionRec.useCallCache,
         deleteIntermediateOutputFiles = submissionRec.deleteIntermediateOutputFiles,
         useReferenceDisks = submissionRec.useReferenceDisks,
+        memoryRetryMultiplier = submissionRec.memoryRetryMultiplier,
         workflowFailureMode = WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode),
         runtimeOptions = updatedRuntimeOptions
       )

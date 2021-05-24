@@ -24,7 +24,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
        |"expression": null,
        |"workflowFailureMode": null,
        |"deleteIntermediateOutputFiles": false,
-       |"useReferenceDisks": true
+       |"useReferenceDisks": true,
+       |"memoryRetryMultiplier": 3.141
        |}""".stripMargin.parseJson.asJsObject
 
     SubmissionRequestFormat.read(inputJSON) shouldEqual {
@@ -37,7 +38,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         expression = None,
         workflowFailureMode = None,
         deleteIntermediateOutputFiles = false,
-        useReferenceDisks = true
+        useReferenceDisks = true,
+        memoryRetryMultiplier = 3.141f
       )
     }
   }
@@ -145,6 +147,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       read_from_cache = true,
       delete_intermediate_output_files = true,
       use_reference_disks = true,
+      memory_retry_multiplier = 2.718f,
       backend = CromwellBackend("PAPIv2"),
       workflow_failure_mode = Some(WorkflowFailureModes.ContinueWhilePossible)
     )
@@ -162,6 +165,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "read_from_cache": true,
         |  "delete_intermediate_output_files": true,
         |  "use_reference_disks": true,
+        |  "memory_retry_multiplier": 2.718,
         |  "backend": "PAPIv2",
         |  "workflow_failure_mode": "ContinueWhilePossible"
         |}
@@ -187,6 +191,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "read_from_cache": true,
         |  "delete_intermediate_output_files": true,
         |  "use_reference_disks": true,
+        |  "memory_retry_multiplier": 2.718,
         |  "backend": "PAPIv2"
         |}
       """.stripMargin.parseJson

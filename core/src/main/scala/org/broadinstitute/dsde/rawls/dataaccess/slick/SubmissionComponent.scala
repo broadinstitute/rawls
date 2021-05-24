@@ -28,6 +28,7 @@ case class SubmissionRecord(id: UUID,
                             useCallCache: Boolean,
                             deleteIntermediateOutputFiles: Boolean,
                             useReferenceDisks: Boolean,
+                            memoryRetryMultiplier: Float,
                             workflowFailureMode: Option[String],
                             entityStoreId: Option[String],
                             rootEntityType: Option[String]
@@ -63,6 +64,7 @@ trait SubmissionComponent {
     def useCallCache = column[Boolean]("USE_CALL_CACHE")
     def deleteIntermediateOutputFiles = column[Boolean]("DELETE_INTERMEDIATE_OUTPUT_FILES")
     def useReferenceDisks = column[Boolean]("USE_REFERENCE_DISKS")
+    def memoryRetryMultiplier = column[Float]("MEMORY_RETRY_MULTIPLIER")
     def workflowFailureMode = column[Option[String]]("WORKFLOW_FAILURE_MODE", O.Length(32))
     def entityStoreId = column[Option[String]]("ENTITY_STORE_ID")
     def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")
@@ -78,6 +80,7 @@ trait SubmissionComponent {
       useCallCache,
       deleteIntermediateOutputFiles,
       useReferenceDisks,
+      memoryRetryMultiplier,
       workflowFailureMode,
       entityStoreId,
       rootEntityType
@@ -402,6 +405,7 @@ trait SubmissionComponent {
         submission.useCallCache,
         submission.deleteIntermediateOutputFiles,
         submission.useReferenceDisks,
+        submission.memoryRetryMultiplier,
         submission.workflowFailureMode.map(_.toString),
         submission.externalEntityInfo.map(_.dataStoreId),
         submission.externalEntityInfo.map(_.rootEntityType)
@@ -421,6 +425,7 @@ trait SubmissionComponent {
         submissionRec.useCallCache,
         submissionRec.deleteIntermediateOutputFiles,
         submissionRec.useReferenceDisks,
+        submissionRec.memoryRetryMultiplier,
         WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode),
         externalEntityInfo = for {
           entityStoreId <- submissionRec.entityStoreId
