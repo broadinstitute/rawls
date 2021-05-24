@@ -220,7 +220,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                         useCallCache: Boolean,
                         deleteIntermediateOutputFiles: Boolean,
                         useReferenceDisks: Boolean,
-                        memoryRetryMultiplier: Float,
+                        memoryRetryMultiplier: Double,
                         workflowFailureMode: Option[WorkflowFailureMode],
                         runtimeOptions: Option[JsValue]
                        ): ExecutionServiceWorkflowOptions = {

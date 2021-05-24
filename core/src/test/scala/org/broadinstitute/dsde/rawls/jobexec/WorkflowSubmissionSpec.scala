@@ -255,7 +255,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             read_from_cache = false,
             delete_intermediate_output_files = false,
             use_reference_disks = false,
-            memory_retry_multiplier = 1.0f,
+            memory_retry_multiplier = 1.0,
             backend = CromwellBackend("PAPIv2"),
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")
           ))) {

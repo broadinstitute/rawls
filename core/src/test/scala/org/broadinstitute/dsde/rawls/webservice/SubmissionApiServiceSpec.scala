@@ -906,9 +906,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   private val validMemoryRetryMultiplierCases = Table(
     ("description", "memoryRetryMultiplierOption", "memoryRetryMultiplierResult"),
-    ("allow submission with memoryRetryMultiplier unset", None, 1.0f),
-    ("allow submission with memoryRetryMultiplier set to the default", Option(1.0), 1.0f),
-    ("allow submission with memoryRetryMultiplier set to something different", Option(1.618), 1.618f),
+    ("allow submission with memoryRetryMultiplier unset", None, 1.0),
+    ("allow submission with memoryRetryMultiplier set to the default", Option(1.0), 1.0),
+    ("allow submission with memoryRetryMultiplier set to something different", Option(1.618), 1.618),
   )
 
   forAll(validMemoryRetryMultiplierCases) {
@@ -956,7 +956,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         check {
           val response = responseAs[String]
           status should be(StatusCodes.BadRequest)
-          response should be("The request content was malformed:\nExpected Float as JsNumber, but got \"oh gosh, I don't know... maybe seven?\"")
+          response should be("The request content was malformed:\nExpected Double as JsNumber, but got \"oh gosh, I don't know... maybe seven?\"")
         }
     }
   }

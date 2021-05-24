@@ -3,7 +3,7 @@
 
     <changeSet id="add_memory_retry" author="cjllanwarne" logicalFilePath="dummy">
         <addColumn tableName="SUBMISSION">
-            <column name="MEMORY_RETRY_MULTIPLIER" type="FLOAT" defaultValue="1"/>
+            <column name="MEMORY_RETRY_MULTIPLIER" type="DOUBLE" defaultValue="1"/>
         </addColumn>
     </changeSet>
 

@@ -128,7 +128,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            useCallCache: Boolean = false,
                            deleteIntermediateOutputFiles: Boolean = false,
                            useReferenceDisks: Boolean = false,
-                           memoryRetryMultiplier: Float = 1.0f,
+                           memoryRetryMultiplier: Double = 1.0,
                            workflowFailureMode: Option[WorkflowFailureMode] = None,
                            individualWorkflowCost: Option[Float] = None,
                            externalEntityInfo: Option[ExternalEntityInfo] = None

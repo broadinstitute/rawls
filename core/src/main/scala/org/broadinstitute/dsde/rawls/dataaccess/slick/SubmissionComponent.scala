@@ -28,7 +28,7 @@ case class SubmissionRecord(id: UUID,
                             useCallCache: Boolean,
                             deleteIntermediateOutputFiles: Boolean,
                             useReferenceDisks: Boolean,
-                            memoryRetryMultiplier: Float,
+                            memoryRetryMultiplier: Double,
                             workflowFailureMode: Option[String],
                             entityStoreId: Option[String],
                             rootEntityType: Option[String]
@@ -64,7 +64,7 @@ trait SubmissionComponent {
     def useCallCache = column[Boolean]("USE_CALL_CACHE")
     def deleteIntermediateOutputFiles = column[Boolean]("DELETE_INTERMEDIATE_OUTPUT_FILES")
     def useReferenceDisks = column[Boolean]("USE_REFERENCE_DISKS")
-    def memoryRetryMultiplier = column[Float]("MEMORY_RETRY_MULTIPLIER")
+    def memoryRetryMultiplier = column[Double]("MEMORY_RETRY_MULTIPLIER")
     def workflowFailureMode = column[Option[String]]("WORKFLOW_FAILURE_MODE", O.Length(32))
     def entityStoreId = column[Option[String]]("ENTITY_STORE_ID")
     def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")

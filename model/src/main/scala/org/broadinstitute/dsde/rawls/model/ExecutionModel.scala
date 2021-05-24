@@ -29,7 +29,7 @@ case class SubmissionRequest(
   useCallCache: Boolean,
   deleteIntermediateOutputFiles: Boolean,
   useReferenceDisks: Boolean = false,
-  memoryRetryMultiplier: Float = 1.0f,
+  memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[String] = None
 )
 
@@ -79,7 +79,7 @@ case class ExecutionServiceWorkflowOptions(
   read_from_cache: Boolean,
   delete_intermediate_output_files: Boolean,
   use_reference_disks: Boolean,
-  memory_retry_multiplier: Float,
+  memory_retry_multiplier: Double,
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
   google_labels: Map[String, String] = Map.empty
@@ -134,7 +134,7 @@ case class Submission(
   useCallCache: Boolean,
   deleteIntermediateOutputFiles: Boolean,
   useReferenceDisks: Boolean = false,
-  memoryRetryMultiplier: Float = 1.0f,
+  memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None
@@ -364,7 +364,7 @@ class ExecutionJsonSupport extends JsonSupport {
         useCallCache = fields("useCallCache").convertTo[Boolean],
         deleteIntermediateOutputFiles = fields.get("deleteIntermediateOutputFiles").fold(false)(_.convertTo[Boolean]),
         useReferenceDisks = fields.get("useReferenceDisks").fold(false)(_.convertTo[Boolean]),
-        memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0f)(_.convertTo[Float]),
+        memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
