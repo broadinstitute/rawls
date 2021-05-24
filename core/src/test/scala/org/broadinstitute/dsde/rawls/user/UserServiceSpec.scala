@@ -3,13 +3,12 @@ package org.broadinstitute.dsde.rawls.user
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockBigQueryServiceFactory, MockGoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
@@ -24,6 +23,8 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
 class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalaFutures {
+  import driver.api._
+
   val defaultServicePerimeterName: ServicePerimeterName = ServicePerimeterName("accessPolicies/policyName/servicePerimeters/servicePerimeterName")
   val urlEncodedDefaultServicePerimeterName: String = URLEncoder.encode(defaultServicePerimeterName.value, UTF_8.name)
   val defaultGoogleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("42")
@@ -47,6 +48,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       gcsDAO,
       null,
       samDAO,
+      MockBigQueryServiceFactory.ioFactory(),
+      testConf.getString("gcs.pathToCredentialJson"),
       "",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       null
@@ -233,4 +236,169 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }
   }
+
+  it should "set the spend configuration of a billing project when the user has permission" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "test_dataset"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf) shouldEqual 1
+
+      val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
+
+      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName), Some("gcp_billing_export_v1_some-billing-account"))
+    }
+  }
+
+  it should "not set the spend configuration of a billing project when the user doesn't have permission" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "test_dataset"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+      }
+
+      //assert that the entire action was forbidden
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
+
+      val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
+
+      //assert that no change was made to the spend configuration
+      spendReportConfigInDb.head shouldEqual (None, None)
+    }
+  }
+
+  it should "clear the spend configuration of a billing project" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "test_dataset"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      Await.result(userService.clearBillingProjectSpendConfiguration(billingProject.projectName), Duration.Inf) shouldEqual 1
+
+      val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
+
+      spendReportConfigInDb.head shouldEqual (None, None)
+    }
+  }
+
+  it should "not clear the spend configuration of a billing project when the user doesn't have permission" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "should_not_clear_dataset"
+      val spendReportTableName = "should_not_clear_table"
+
+      //first, directly set the spend configuration in the DB outside of the user's permissions, so we can assert that it wasn't cleared
+      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(billingProject.projectName, Some(spendReportDatasetName), Some(spendReportTableName)))
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.clearBillingProjectSpendConfiguration(billingProject.projectName), Duration.Inf)
+      }
+
+      //assert that the entire action was forbidden
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
+
+      val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
+
+      //assert that no change was made to the spend configuration
+      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName), Some(spendReportTableName))
+    }
+  }
+
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset does not exist or can't be accessed" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "dataset_does_not_exist"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+      }
+
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
+    }
+  }
+
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the table does not exist or can't be accessed" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = RawlsBillingProject(RawlsBillingProjectName("project_without_table"), CreationStatuses.Ready, None, None)
+      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
+
+      val spendReportDatasetName = "some_dataset"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+      }
+
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
+    }
+  }
+
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the billing project does not have a billing account associated with it" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = RawlsBillingProject(RawlsBillingProjectName("project_without_billing_account"), CreationStatuses.Ready, None, None)
+      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
+
+      val spendReportDatasetName = "some_dataset"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+      }
+
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
+    }
+  }
+
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset has an invalid name" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "test-dataset"
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+      }
+
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
+    }
+  }
+
 }

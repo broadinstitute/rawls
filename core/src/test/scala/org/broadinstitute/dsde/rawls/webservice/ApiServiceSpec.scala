@@ -157,6 +157,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       gcsDAO,
       notificationDAO,
       samDAO,
+      MockBigQueryServiceFactory.ioFactory(),
+      testConf.getString("gcs.pathToCredentialJson"),
       "requesterPaysRole",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
@@ -241,7 +243,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     // for metrics testing
     val sealedInstrumentedRoutes: Route = instrumentRequest {
-      sealRoute(adminRoutes ~ billingRoutes ~ billingRoutesV2 ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
+      sealRoute(adminRoutes ~ billingRoutesV2 ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
         submissionRoutes ~ userRoutes ~ workspaceRoutes)
     }
   }

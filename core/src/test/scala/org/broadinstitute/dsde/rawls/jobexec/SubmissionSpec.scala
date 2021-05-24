@@ -315,6 +315,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         gcsDAO,
         notificationDAO,
         samDAO,
+        MockBigQueryServiceFactory.ioFactory(),
+        testConf.getString("gcs.pathToCredentialJson"),
         "requesterPaysRole",
         DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
         ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
