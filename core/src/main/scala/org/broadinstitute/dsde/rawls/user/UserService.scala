@@ -461,6 +461,33 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  //todo: rename some things and be explicit about what types of projects these are right now
+  //add detials to the CA jira ticket to reconcile with PPW
+  def updateBillingAccount(projectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[Unit] = {
+    //probably swap this for an owner role check
+    requireProjectAction(projectName, SamBillingProjectActions.alterSpendReportConfiguration) {
+      for {
+        hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, userInfo)
+        _ = if (!hasAccess) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
+        }
+        result <- gcsDAO.setProjectBillingAccount(projectName, Option(updateAccountRequest.billingAccount), userInfo)
+        _ <- dataSource.inTransaction { dataSource => dataSource.rawlsBillingProjectQuery.clearBillingProjectExport(projectName) }
+      } yield result
+    }
+  }
+
+  def deleteBillingAccount(projectName: RawlsBillingProjectName): Future[Unit] = {
+    //probably swap this for an owner role check
+    requireProjectAction(projectName, SamBillingProjectActions.alterSpendReportConfiguration) {
+      for {
+        //todo break this out into common?
+        result <- gcsDAO.setProjectBillingAccount(projectName, None, userInfo)
+        _ <- dataSource.inTransaction { dataSource => dataSource.rawlsBillingProjectQuery.clearBillingProjectExport(projectName) }
+      } yield result
+    }
+  }
+
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
       _ <- validateCreateProjectRequest(createProjectRequest)

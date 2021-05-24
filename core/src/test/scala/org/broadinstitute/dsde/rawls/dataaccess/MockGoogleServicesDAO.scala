@@ -257,4 +257,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(billingAccount)
   }
 
+  override def setProjectBillingAccount(projectName: RawlsBillingProjectName, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
+    Future.unit
+  }
+
 }

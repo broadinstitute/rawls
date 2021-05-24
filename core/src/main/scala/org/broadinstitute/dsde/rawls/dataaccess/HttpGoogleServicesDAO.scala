@@ -702,6 +702,25 @@ class HttpGoogleServicesDAO(
     }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
   }
 
+  override def setProjectBillingAccount(projectName: RawlsBillingProjectName, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Billing
+
+    val projectNameFormatted = s"projects/${projectName.value}"
+
+    val credential = getUserCredential(userInfo)
+    val billingAccountInfo = new ProjectBillingInfo()
+
+    billingAccountName.foreach(name => billingAccountInfo.setBillingAccountName(name.value))
+
+    val setter = getCloudBillingManager(credential).projects().updateBillingInfo(projectNameFormatted, billingAccountInfo)
+
+    retryWhen500orGoogleError(() => {
+      blocking {
+        executeGoogleRequest(setter)
+      }
+    })
+  }
+
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
