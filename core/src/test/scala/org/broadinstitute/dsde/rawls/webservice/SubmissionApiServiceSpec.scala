@@ -907,8 +907,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   private val validMemoryRetryMultiplierCases = Table(
     ("description", "memoryRetryMultiplierOption", "memoryRetryMultiplierResult"),
     ("allow submission with memoryRetryMultiplier unset", None, 1.0f),
-    ("allow submission with useReferenceDisks false", Option(1.0), 1.0f),
-    ("allow submission with useReferenceDisks true", Option(1.618), 1.618f),
+    ("allow submission with memoryRetryMultiplier set to the default", Option(1.0), 1.0f),
+    ("allow submission with memoryRetryMultiplier set to something different", Option(1.618), 1.618f),
   )
 
   forAll(validMemoryRetryMultiplierCases) {

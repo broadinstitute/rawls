@@ -165,7 +165,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "read_from_cache": true,
         |  "delete_intermediate_output_files": true,
         |  "use_reference_disks": true,
-        |  "memory_retry_multiplier": 2.718,
+        |  "memory_retry_multiplier": 2.7179999351501465,
         |  "backend": "PAPIv2",
         |  "workflow_failure_mode": "ContinueWhilePossible"
         |}
@@ -191,7 +191,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "read_from_cache": true,
         |  "delete_intermediate_output_files": true,
         |  "use_reference_disks": true,
-        |  "memory_retry_multiplier": 2.718,
+        |  "memory_retry_multiplier": 2.7179999351501465,
         |  "backend": "PAPIv2"
         |}
       """.stripMargin.parseJson
