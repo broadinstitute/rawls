@@ -143,7 +143,7 @@ paths:
         required: true
       responses:
         204:
-          description: No Content
+          description: Billing account successfully updated
         400:
           description: Billing account not found
           content:
@@ -177,7 +177,7 @@ paths:
             type: string
       responses:
         200:
-          description: No Content
+          description: Billing account successfully removed
         404:
           description: Project Not Found
           content:
