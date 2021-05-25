@@ -151,7 +151,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Project Not Found
+          description: Billing Project Not Found
           content:
             'application/json':
               schema:
@@ -179,7 +179,7 @@ paths:
         200:
           description: Billing account successfully removed
         404:
-          description: Project Not Found
+          description: Billing project Not Found
           content:
             'application/json':
               schema:

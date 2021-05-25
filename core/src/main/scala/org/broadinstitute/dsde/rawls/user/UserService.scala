@@ -462,8 +462,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def updateBillingProjectBillingAccount(billingProjectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[Unit] = {
-    //probably swap this for an owner role check
-    requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
+    requireProjectAction(billingProjectName, SamBillingProjectActions.updateBillingAccount) {
       for {
         hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, userInfo)
         _ = if (!hasAccess) {
@@ -475,8 +474,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def deleteBillingAccount(billingProjectName: RawlsBillingProjectName): Future[Unit] = {
-    //probably swap this for an owner role check
-    requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
+    requireProjectAction(billingProjectName, SamBillingProjectActions.updateBillingAccount) {
       setBillingProjectBillingAccountInternal(billingProjectName, None)
     }
   }
