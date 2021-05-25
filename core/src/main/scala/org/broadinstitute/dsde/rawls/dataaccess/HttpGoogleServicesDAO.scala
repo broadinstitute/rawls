@@ -702,10 +702,10 @@ class HttpGoogleServicesDAO(
     }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
   }
 
-  override def setProjectBillingAccount(projectName: RawlsBillingProjectName, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
+  override def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Billing
 
-    val projectNameFormatted = s"projects/${projectName.value}"
+    val projectNameFormatted = s"projects/${googleProjectName.value}"
 
     val credential = getUserCredential(userInfo)
     val billingAccountInfo = new ProjectBillingInfo()

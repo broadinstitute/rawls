@@ -58,7 +58,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             put {
               entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
                 complete{
-                  userServiceConstructor(userInfo).updateBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest).map(_ => StatusCodes.NoContent)
+                  userServiceConstructor(userInfo).updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest).map(_ => StatusCodes.NoContent)
                 }
               }
             } ~

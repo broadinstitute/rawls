@@ -461,31 +461,36 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  //todo: rename some things and be explicit about what types of projects these are right now
-  //add detials to the CA jira ticket to reconcile with PPW
-  def updateBillingAccount(projectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[Unit] = {
+  def updateBillingProjectBillingAccount(billingProjectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[Unit] = {
     //probably swap this for an owner role check
-    requireProjectAction(projectName, SamBillingProjectActions.alterSpendReportConfiguration) {
+    requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
       for {
         hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, userInfo)
         _ = if (!hasAccess) {
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
         }
-        result <- gcsDAO.setProjectBillingAccount(projectName, Option(updateAccountRequest.billingAccount), userInfo)
-        _ <- dataSource.inTransaction { dataSource => dataSource.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(projectName) }
+        result <- setBillingProjectBillingAccountInternal(billingProjectName, Option(updateAccountRequest.billingAccount))
       } yield result
     }
   }
 
-  def deleteBillingAccount(projectName: RawlsBillingProjectName): Future[Unit] = {
+  def deleteBillingAccount(billingProjectName: RawlsBillingProjectName): Future[Unit] = {
     //probably swap this for an owner role check
-    requireProjectAction(projectName, SamBillingProjectActions.alterSpendReportConfiguration) {
-      for {
-        //todo break this out into common?
-        result <- gcsDAO.setProjectBillingAccount(projectName, None, userInfo)
-        _ <- dataSource.inTransaction { dataSource => dataSource.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(projectName) }
-      } yield result
+    requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
+      setBillingProjectBillingAccountInternal(billingProjectName, None)
     }
+  }
+
+  private def setBillingProjectBillingAccountInternal(billingProjectName: RawlsBillingProjectName, billingAccountName: Option[RawlsBillingAccountName]): Future[Unit] = {
+
+    //Note that this assumes that the mapping between a Google Project and a Billing Project is 1:1.
+    //This will not be the case once PPW goes live. See Jira ticket CA-1363 for details.
+    val googleProjectName = GoogleProject(billingProjectName.value)
+
+    for {
+      result <- gcsDAO.setGoogleProjectBillingAccount(googleProjectName, billingAccountName, userInfo)
+      _ <- dataSource.inTransaction { dataSource => dataSource.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName) }
+    } yield result
   }
 
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {

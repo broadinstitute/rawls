@@ -413,19 +413,19 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
       when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
 
-      Await.result(userService.updateBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual ()
+      Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual ()
 
       val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
 
       //assert that the spend report configuration has been fully cleared
       spendReportDatasetInDb.head shouldEqual (None, None)
 
-      verify(mockGcsDAO, times(1)).setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(1)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
     }
   }
 
@@ -437,7 +437,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
 
@@ -448,7 +448,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       //assert that the spend report configuration has been fully cleared
       spendReportDatasetInDb.head shouldEqual (None, None)
 
-      verify(mockGcsDAO, times(1)).setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(1)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])
     }
   }
 
@@ -462,18 +462,18 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
       when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.updateBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual()
+        Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual()
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
 
-      verify(mockGcsDAO, times(0)).setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
     }
   }
 
@@ -487,18 +487,18 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
       when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(false))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.updateBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual()
+        Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual()
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
 
-      verify(mockGcsDAO, times(0)).setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
     }
   }
 
@@ -512,7 +512,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
       when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
@@ -523,7 +523,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
 
-      verify(mockGcsDAO, times(0)).setProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
     }
   }
 
