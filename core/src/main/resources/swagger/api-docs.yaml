@@ -142,7 +142,7 @@ paths:
               $ref: '#/components/schemas/UpdateRawlsBillingAccountRequest'
         required: true
       responses:
-        204:
+        200:
           description: Billing account successfully updated
         400:
           description: Billing account not found
