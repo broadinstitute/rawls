@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockBigQuery
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.scalatest.BeforeAndAfterAll
@@ -403,17 +404,18 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     }
   }
 
-  it should "update the billing account for a project" in {
+  it should "update the billing account for a billing project" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("new-billing-account")
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
       when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
@@ -425,19 +427,20 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       //assert that the spend report configuration has been fully cleared
       spendReportDatasetInDb.head shouldEqual (None, None)
 
-      verify(mockGcsDAO, times(1)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(1)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
     }
   }
 
-  it should "remove the billing account for a project" in {
+  it should "remove the billing account for a billing project" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
 
@@ -448,21 +451,22 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       //assert that the spend report configuration has been fully cleared
       spendReportDatasetInDb.head shouldEqual (None, None)
 
-      verify(mockGcsDAO, times(1)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(1)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])
     }
   }
 
-  it should "not update the billing account for a project if the user does not have access to the project" in {
+  it should "not update the billing account for a billing project if the user does not have access to the billing project" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("new-billing-account")
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
       when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
@@ -473,21 +477,22 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
 
-      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
     }
   }
 
-  it should "not update the billing account for a project if the user does not have access to the billing account" in {
+  it should "not update the billing account for a billing project if the user does not have access to the billing account" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("new-billing-account")
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
       when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(false))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
@@ -498,21 +503,21 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
 
-      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
     }
   }
 
-  it should "not remove the billing account for a project if the user does not have access to the project" in {
+  it should "not remove the billing account for a billing project if the user does not have access to the billing project" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("new-billing-account")
-      val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
       when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
@@ -523,7 +528,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
 
-      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(billingProject.projectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
     }
   }
 
