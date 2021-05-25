@@ -487,6 +487,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     for {
       result <- gcsDAO.setGoogleProjectBillingAccount(googleProjectName, billingAccountName, userInfo)
+      //Since the billing account has been updated, any existing spend configuration is now out of date
       _ <- dataSource.inTransaction { dataSource => dataSource.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName) }
     } yield result
   }
