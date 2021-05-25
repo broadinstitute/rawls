@@ -412,7 +412,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
@@ -437,7 +437,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
@@ -463,7 +463,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(false))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
@@ -489,7 +489,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
@@ -514,7 +514,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(false))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
