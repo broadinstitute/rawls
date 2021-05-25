@@ -39,7 +39,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         workflowFailureMode = None,
         deleteIntermediateOutputFiles = false,
         useReferenceDisks = true,
-        memoryRetryMultiplier = 3.141f
+        memoryRetryMultiplier = 3.141
       )
     }
   }
