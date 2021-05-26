@@ -99,7 +99,7 @@ class EntityApiServiceDeltaLayerSpec extends ApiServiceSpec with GcsStorageTestS
         // get the id of the reference we just created
         val refId = responseAs[DataReferenceDescription].getReferenceId
         // issue batchUpsert against snapshot reference
-        val update1 = EntityUpdateDefinition("newSample", "Sample", Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo"))))
+        val update1 = EntityUpdateDefinition(UUID.randomUUID().toString, "Sample", Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo"))))
         Post(s"${testData.workspace.path}/entities/batchUpsert?dataReference=testsnap", httpJson(Seq(update1))) ~>
           sealRoute(services.entityRoutes) ~>
           // assert 204 returned from batchUpsert
@@ -134,7 +134,7 @@ class EntityApiServiceDeltaLayerSpec extends ApiServiceSpec with GcsStorageTestS
           status
         }
         // issue batchUpsert against snapshot reference
-        val update1 = EntityUpdateDefinition("newSample", "Sample", Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo"))))
+        val update1 = EntityUpdateDefinition(UUID.randomUUID().toString, "Sample", Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo"))))
         Post(s"${testData.workspace.path}/entities/batchUpsert?dataReference=testsnap", httpJson(Seq(update1))) ~>
           sealRoute(services.entityRoutes) ~>
           // the underlying throwingStorage storage impl will throw an error; that error should be propagated up

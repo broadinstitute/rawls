@@ -7,7 +7,7 @@ import com.google.cloud.storage.StorageException
 import fs2._
 import org.broadinstitute.dsde.rawls.google.GoogleUtilities
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, GoogleInstrumentedService}
-import org.broadinstitute.dsde.rawls.model.DeltaInsert
+import org.broadinstitute.dsde.rawls.model.deltalayer.v1.DeltaInsert
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.TraceId
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
@@ -56,22 +56,22 @@ class GcsDeltaLayerWriter(val storageService: GoogleStorageService[IO],
   // calculate the GCS path to which we should save the file
   private[deltalayer] def filePath(writeObject: DeltaInsert): GcsBlobName = {
     // workspace/${workspaceId}/reference/${referenceId}/insert/${insertId}.json
-    GcsBlobName(s"workspace/${writeObject.destination.workspaceId}/reference/${writeObject.destination.referenceId}/insert/${writeObject.insertId}.json")
+    GcsBlobName(s"workspace/${writeObject.destination.workspaceId}/reference/${writeObject.source.referenceId}/insert/${writeObject.insertId}.json")
   }
 
   // generate the string representation (json) of the file
   private[deltalayer] def serializeFile(writeObject: DeltaInsert): String = {
-    val updateJson = writeObject.inserts.toJson.prettyPrint
+    // val updateJson = JsString(writeObject.inserts.toString())
 
     // TODO AS-770: use real JsonFormat classes! For now, since the model is in such flux, just hand-roll
     // the json
     s"""{
        |  "insertId": "${writeObject.insertId}",
        |  "workspaceId": "${writeObject.destination.workspaceId}",
-       |  "referenceId": "${writeObject.destination.referenceId}",
+       |  "referenceId": "${writeObject.source.referenceId}",
        |  "insertTimestamp": "${writeObject.insertTimestamp.toString}",
-       |  "insertingUser": "${writeObject.insertingUser.value}",
-       |  "inserts": $updateJson
+       |  "insertingUser": "${writeObject.source.insertingUser.value}",
+       |  "inserts": "hello"
        |}
        |""".stripMargin.parseJson.prettyPrint
   }

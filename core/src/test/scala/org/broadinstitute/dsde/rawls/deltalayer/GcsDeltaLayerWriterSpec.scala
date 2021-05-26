@@ -9,7 +9,9 @@ import com.google.cloud.storage.Storage.BlobWriteOption
 import com.google.cloud.storage.contrib.nio.testing.LocalStorageHelper
 import com.google.cloud.storage.{BlobInfo, Storage, StorageException}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, DeltaInsert, Destination, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.deltalayer.v1
+import org.broadinstitute.dsde.rawls.model.deltalayer.v1.{DeltaInsert, DeltaRow, InsertDestination, InsertSource}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, GoogleProjectId, RawlsUserSubjectId}
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.any
@@ -19,7 +21,9 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatestplus.mockito.MockitoSugar.mock
+import spray.json.JsString
 
+import java.time.Instant
 import java.util.UUID
 import scala.util.Try
 
@@ -37,10 +41,10 @@ class GcsDeltaLayerWriterSpec extends AnyFlatSpec with GcsStorageTestSupport wit
     val deltaLayerWriter = getGcsWriter(bucket, Some(storage))
 
     // create the object to be written
-    val dest = Destination(UUID.randomUUID(), UUID.randomUUID())
-    val attrUpdates: Seq[AttributeUpdateOperation] = Seq(AddUpdateAttribute(AttributeName.withDefaultNS("attrName"), AttributeString("attrValue")))
-    val entityUpdates: Seq[EntityUpdateDefinition] = Seq(EntityUpdateDefinition("name", "type", attrUpdates))
-    val testInsert = DeltaInsert("vTest", UUID.randomUUID(), new DateTime(), RawlsUserSubjectId("1234"), dest, entityUpdates)
+    val source = InsertSource(UUID.randomUUID(), RawlsUserSubjectId("1234"))
+    val dest = InsertDestination(UUID.randomUUID(), "", GoogleProjectId(""), None)
+    val attrUpdates = Seq(DeltaRow(UUID.randomUUID(), "attrName", JsString("attrValue")))
+    val testInsert = DeltaInsert(UUID.randomUUID(), Instant.now(), source, dest, attrUpdates)
 
     // calculate expected file path and contents
     val expectedPath = deltaLayerWriter.filePath(testInsert)
@@ -75,10 +79,10 @@ class GcsDeltaLayerWriterSpec extends AnyFlatSpec with GcsStorageTestSupport wit
     val throwingWriter = getGcsWriter(bucket, Some(throwingStorageHelper))
 
     // create the object to be written
-    val dest = Destination(UUID.randomUUID(), UUID.randomUUID())
-    val attrUpdates: Seq[AttributeUpdateOperation] = Seq(AddUpdateAttribute(AttributeName.withDefaultNS("attrName"), AttributeString("attrValue")))
-    val entityUpdates: Seq[EntityUpdateDefinition] = Seq(EntityUpdateDefinition("name", "type", attrUpdates))
-    val testInsert = DeltaInsert("vTest", UUID.randomUUID(), new DateTime(), RawlsUserSubjectId("1234"), dest, entityUpdates)
+    val source = InsertSource(UUID.randomUUID(), RawlsUserSubjectId("1234"))
+    val dest = InsertDestination(UUID.randomUUID(), "", GoogleProjectId(""), None)
+    val attrUpdates = Seq(DeltaRow(UUID.randomUUID(), "attrName", JsString("attrValue")))
+    val testInsert = DeltaInsert(UUID.randomUUID(), Instant.now(), source, dest, attrUpdates)
 
     // write the object via the Delta Layer writer we have configured to run into an exception
     val caught = recoverToExceptionIf[StorageException] {
@@ -100,10 +104,10 @@ class GcsDeltaLayerWriterSpec extends AnyFlatSpec with GcsStorageTestSupport wit
     val workspaceId = UUID.randomUUID()
     val referenceId = UUID.randomUUID()
 
-    val dest = Destination(workspaceId, referenceId)
-    val attrUpdates: Seq[AttributeUpdateOperation] = Seq(AddUpdateAttribute(AttributeName.withDefaultNS("attrName"), AttributeString("attrValue")))
-    val entityUpdates: Seq[EntityUpdateDefinition] = Seq(EntityUpdateDefinition("name", "type", attrUpdates))
-    val testInsert = DeltaInsert("vTest", insertId, new DateTime(), RawlsUserSubjectId("1234"), dest, entityUpdates)
+    val source = InsertSource(referenceId, RawlsUserSubjectId("1234"))
+    val dest = InsertDestination(workspaceId, "", GoogleProjectId(""), None)
+    val attrUpdates = Seq(DeltaRow(UUID.randomUUID(), "attrName", JsString("attrValue")))
+    val testInsert = DeltaInsert(insertId, Instant.now(), source, dest, attrUpdates)
 
     val expected = GcsBlobName(s"workspace/${workspaceId}/reference/${referenceId}/insert/${insertId}.json")
 

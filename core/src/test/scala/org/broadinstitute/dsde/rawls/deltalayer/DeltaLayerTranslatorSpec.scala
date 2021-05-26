@@ -103,6 +103,16 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
     DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
   }
 
+  it should "reject updates if they contain AttributeNull" is (pending)
 
+  it should "reject updates if they contain AttributeValueRawJson" is (pending)
+
+  it should "reject updates if they contain AttributeEntityReference" is (pending)
+
+  it should "reject updates if they contain AttributeList" is (pending)
+
+  it should "allow updates if they contain any of AttributeString, AttributeNumber, AttributeBoolean"
+
+  it should "reject updates if they contain entity names - aka datarepo_row_id - with an invalid UUID" is (pending)
 
 }
