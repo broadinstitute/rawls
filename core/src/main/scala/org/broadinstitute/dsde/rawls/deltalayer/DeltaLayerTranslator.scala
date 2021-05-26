@@ -82,6 +82,14 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
     entityUpdates
   }
 
+  /**
+   * Transforms the Rawls user-visible model classes into the models we will write
+   * into Delta Layer insert files. Calls validateEntityUpdates before performing
+   * transformations
+   *
+   * @param entityUpdates the updates to translate
+   * @return the collection of DeltaRow objects to write to a Delta Layer insert file
+   */
   def translateEntityUpdates(entityUpdates: Seq[EntityUpdateDefinition]): Seq[DeltaRow] = {
 
     val validUpdates = validateEntityUpdates(entityUpdates)
@@ -90,7 +98,7 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
       // we expect all calls to use datarepo_row_id as entity name
       val datarepoRowId = Try(UUID.fromString(update.name)) match {
         case Success(id) => id
-        case Failure(ex) => throw new DeltaLayerException(ERR_INVALID_ENTITYNAME, code = BadRequest)
+        case Failure(_) => throw new DeltaLayerException(ERR_INVALID_ENTITYNAME, code = BadRequest)
       }
       update.operations map { op =>
         // strip "default." from attr name
