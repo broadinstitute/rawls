@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeNumber}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueList, AttributeValueRawJson}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition, RemoveAttribute}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import java.util.UUID
 
 class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
 
@@ -22,7 +24,7 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
 
   it should "reject updates if the collection of EntityUpdateDefinitions has no AttributeUpdateOperations" in {
     val updates = (1 to 10) map { idx =>
-      EntityUpdateDefinition(s"name-$idx", "some-type", Seq.empty[AttributeUpdateOperation])
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type", Seq.empty[AttributeUpdateOperation])
     }
     val caught = intercept[DeltaLayerException] {
       DeltaLayerTranslator.validateEntityUpdates(updates)
@@ -40,7 +42,7 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
         } else
           AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-$opIdx"), AttributeNumber(opIdx))
       }
-      EntityUpdateDefinition(s"name-$updateIdx", "some-type", ops)
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type", ops)
     }
 
     val caught = intercept[DeltaLayerException] {
@@ -57,7 +59,7 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
       val ops = (1 to numOpsPerUpdate) map { opIdx =>
         AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-$opIdx"), AttributeNumber(opIdx))
       }
-      EntityUpdateDefinition(s"name-$updateIdx", "some-type", ops)
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type", ops)
     }
 
     DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
@@ -70,7 +72,7 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
       val ops = (1 to numOpsPerUpdate) map { opIdx =>
         AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-$opIdx"), AttributeNumber(opIdx))
       }
-      EntityUpdateDefinition(s"name-$updateIdx", "some-type", ops)
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type", ops)
     }
 
     DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
@@ -83,7 +85,7 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
       val ops = (1 to numOpsPerUpdate) map { opIdx =>
         AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-$opIdx"), AttributeNumber(opIdx))
       }
-      EntityUpdateDefinition(s"name-$updateIdx", "some-type", ops)
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type", ops)
     }
 
     DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
@@ -97,22 +99,80 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
       val ops = (1 to numOpsPerUpdate) map { opIdx =>
         AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-$opIdx"), AttributeNumber(opIdx))
       }
-      EntityUpdateDefinition(s"name-$updateIdx", "some-type", ops)
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type", ops)
     }
 
     DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
   }
 
-  it should "reject updates if they contain AttributeNull" is (pending)
+  val unsupportedValueTypes = Seq(AttributeNull,
+    AttributeValueRawJson("""{"foo":["bar","baz"]}"""),
+    AttributeEntityReference("someType", "someName"),
+    AttributeValueList(Seq(AttributeString("foo"), AttributeString("bar"))))
 
-  it should "reject updates if they contain AttributeValueRawJson" is (pending)
+  unsupportedValueTypes foreach { badType =>
+    val badTypeName = badType.getClass.getSimpleName
 
-  it should "reject updates if they contain AttributeEntityReference" is (pending)
+    it should s"reject updates if they contain $badTypeName" in {
+      val updates = (1 to 10) map { updateIdx =>
+        val ops = (1 to 5) map { opIdx =>
+          // toss in one offender at update 3 / operation 2
+          if (updateIdx == 3 && opIdx == 2) {
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-$opIdx"), badType)
+          } else
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-$opIdx"), AttributeNumber(opIdx))
+        }
+        EntityUpdateDefinition(UUID.randomUUID().toString, "some-type", ops)
+      }
 
-  it should "reject updates if they contain AttributeList" is (pending)
+      val caught = intercept[DeltaLayerException] {
+        DeltaLayerTranslator.validateEntityUpdates(updates)
+      }
 
-  it should "allow updates if they contain any of AttributeString, AttributeNumber, AttributeBoolean"
+      caught.code shouldBe StatusCodes.BadRequest
+    }
+  }
 
-  it should "reject updates if they contain entity names - aka datarepo_row_id - with an invalid UUID" is (pending)
+  it should "allow updates if they contain any of AttributeString, AttributeNumber, AttributeBoolean" in {
+    val updates = Seq(
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeNumber(1)),
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-2"), AttributeBoolean(false)))),
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-3"), AttributeString("hi")),
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-4"), AttributeBoolean(true)))),
+      EntityUpdateDefinition(UUID.randomUUID().toString, "another-type",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-4"), AttributeNumber(2)),
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-3"), AttributeNumber(3)))),
+      EntityUpdateDefinition(UUID.randomUUID().toString, "a-third-type",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-2"), AttributeString("hey")),
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeString("hello")))),
+    )
+
+    DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
+  }
+
+  it should "reject updates if they contain entity names - aka datarepo_row_id - with an invalid UUID" in {
+    val updates = Seq(
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeNumber(1)))),
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeString("hi")))),
+      EntityUpdateDefinition("i-am-not-a-valid-uuid", "some-type", // <-- invalid UUID!
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeNumber(1)))),
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+        Seq(AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeString("hi")))),
+    )
+
+    val caught = intercept[DeltaLayerException] {
+      DeltaLayerTranslator.validateEntityUpdates(updates)
+    }
+
+    caught.code shouldBe StatusCodes.BadRequest
+  }
 
 }
