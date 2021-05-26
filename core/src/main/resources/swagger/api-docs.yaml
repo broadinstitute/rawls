@@ -4739,7 +4739,7 @@ components:
             for more information.
         memoryRetryMultiplier:
           type: number
-          description: If a task fails due to running out of memory and the task has `maxRetries` in its runtime attributes,
+          description: If a task fails due to running out of memory and the `stderr` of the task contains one of error keys that is set in Cromwell config along with `maxRetries` in its runtime attributes,
             then it will be retried with its memory multiplied by this amount.  See [Cromwell docs](https://cromwell.readthedocs.io/en/develop/cromwell_features/RetryWithMoreMemory/#retry-with-more-memory)
             for more information.
           default: 1.0
