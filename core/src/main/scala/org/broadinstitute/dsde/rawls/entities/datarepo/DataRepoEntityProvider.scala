@@ -11,7 +11,7 @@ import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
-import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayerException, DeltaLayerTranslator, DeltaLayerWriter}
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, DeltaLayerException, DeltaLayerTranslator, DeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base._
@@ -419,8 +419,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     // translate to delta layer row objects. This method includes validation.
     val inserts = DeltaLayerTranslator.translateEntityUpdates(entityUpdates)
 
-    // TODO AS-770: determine destination BQDL dataset and project, based on snapshot reference. Currently in SnapshotService.generateDatasetName
-    val bqDataset = "???"
+    // determine destination BQ dataset, based on snapshot reference.
+    val bqDataset = DeltaLayer.generateDatasetName(dataReference.getMetadata.getResourceId)
 
     // create DeltaInsert object
     val insertId = UUID.randomUUID()

@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, times, verify, when}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, GoogleProjectId, NamedDataRepoSnapshot, SamPolicy, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -17,8 +18,8 @@ import org.mockito.ArgumentMatchers.any
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import org.scalatestplus.mockito.MockitoSugar
-import java.util.UUID
 
+import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration.Duration
@@ -271,7 +272,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         fakeDeltaLayerStreamerEmail
       )(userInfo)
 
-      val deltaLayerDatasetName = snapshotService.generateDatasetName(snapshotDataReferenceId)
+      val deltaLayerDatasetName = DeltaLayer.generateDatasetName(snapshotDataReferenceId)
 
       val snapshotUUID = UUID.randomUUID()
 
