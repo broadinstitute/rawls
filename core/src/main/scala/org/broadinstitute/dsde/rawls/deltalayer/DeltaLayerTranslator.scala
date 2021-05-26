@@ -83,12 +83,14 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
   }
 
   def translateEntityUpdates(entityUpdates: Seq[EntityUpdateDefinition]): Seq[DeltaRow] = {
-    entityUpdates.flatMap { update =>
+
+    val validUpdates = validateEntityUpdates(entityUpdates)
+
+    validUpdates.flatMap { update =>
       // we expect all calls to use datarepo_row_id as entity name
       val datarepoRowId = Try(UUID.fromString(update.name)) match {
         case Success(id) => id
-        case Failure(ex) => throw new DeltaLayerException(s"Invalid datarepo_row_id specified in update request: ${ex.getMessage}",
-          code = BadRequest)
+        case Failure(ex) => throw new DeltaLayerException(ERR_INVALID_ENTITYNAME, code = BadRequest)
       }
       update.operations map { op =>
         // strip "default." from attr name
@@ -104,7 +106,6 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
       }
     }
   }
-
 
 
 }

@@ -1,7 +1,11 @@
 package org.broadinstitute.dsde.rawls.model.deltalayer.v1
 
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUserSubjectId}
-import spray.json.JsValue
+import org.broadinstitute.dsde.rawls.model.{AttributeFormat, GoogleProjectId, JsonSupport, PlainArrayAttributeListSerializer, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserSubjectIdFormat
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.GoogleProjectIdFormat
+import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
+import spray.json.DefaultJsonProtocol._
+import spray.json._
 
 import java.time.Instant
 import java.util.UUID
@@ -23,3 +27,17 @@ case class InsertSource(referenceId: UUID,
 case class DeltaRow(datarepoRowId: UUID,
                     name: String,
                     value: JsValue)
+
+object DeltaLayerJsonSupport extends DeltaLayerJsonSupport
+
+// extend JsonSupport in order to reuse its UUIDFormat
+class DeltaLayerJsonSupport extends JsonSupport {
+
+  implicit override val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
+
+  implicit val deltaRowFormat = jsonFormat3(DeltaRow)
+  implicit val insertSourceFormat = jsonFormat2(InsertSource)
+  implicit val insertDestinationFormat = jsonFormat4(InsertDestination)
+  implicit val deltaInsertFormat = jsonFormat5(DeltaInsert)
+
+}

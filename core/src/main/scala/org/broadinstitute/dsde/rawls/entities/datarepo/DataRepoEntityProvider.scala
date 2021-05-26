@@ -416,10 +416,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
-    // validate incoming EntityUpdateDefinitions (disallow deletes, etc)
-    val updates = DeltaLayerTranslator.validateEntityUpdates(entityUpdates)
-    // translate to delta layer row objects
-    val inserts = DeltaLayerTranslator.translateEntityUpdates(updates)
+    // translate to delta layer row objects. This method includes validation.
+    val inserts = DeltaLayerTranslator.translateEntityUpdates(entityUpdates)
 
     // TODO AS-770: determine destination BQDL dataset and project, based on snapshot reference. Currently in SnapshotService.generateDatasetName
     val bqDataset = "???"

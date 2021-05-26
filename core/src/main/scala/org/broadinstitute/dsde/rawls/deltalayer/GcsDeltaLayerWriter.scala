@@ -61,19 +61,8 @@ class GcsDeltaLayerWriter(val storageService: GoogleStorageService[IO],
 
   // generate the string representation (json) of the file
   private[deltalayer] def serializeFile(writeObject: DeltaInsert): String = {
-    // val updateJson = JsString(writeObject.inserts.toString())
-
-    // TODO AS-770: use real JsonFormat classes! For now, since the model is in such flux, just hand-roll
-    // the json
-    s"""{
-       |  "insertId": "${writeObject.insertId}",
-       |  "workspaceId": "${writeObject.destination.workspaceId}",
-       |  "referenceId": "${writeObject.source.referenceId}",
-       |  "insertTimestamp": "${writeObject.insertTimestamp.toString}",
-       |  "insertingUser": "${writeObject.source.insertingUser.value}",
-       |  "inserts": "hello"
-       |}
-       |""".stripMargin.parseJson.prettyPrint
+    import org.broadinstitute.dsde.rawls.model.deltalayer.v1.DeltaLayerJsonSupport._
+    writeObject.toJson.prettyPrint
   }
 
 }
