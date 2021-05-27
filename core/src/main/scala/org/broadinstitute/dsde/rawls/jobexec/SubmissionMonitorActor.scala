@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputE
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, attributeCount}
+import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, attributeCount, safePrint}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -317,12 +317,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     } recoverWith {
       // If there is something fatally wrong handling outputs, mark the workflows as failed
       case fatal: RawlsFatalExceptionWithErrorReport =>
-        datasource.inTransaction { dataAccess =>
-          DBIO.sequence(workflowsWithStatuses map { workflowRecord =>
-            dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
-              dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
-          })
-        }
+        failWorkflowsWithReason(workflowsWithStatuses, fatal)
     } flatMap { _ =>
       // NEW TXN! Update statuses for workflows and submission.
       datasource.inTransaction { dataAccess =>
@@ -351,6 +346,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           }
         }
       }
+    }
+  }
+
+  private def failWorkflowsWithReason(workflowsWithStatuses: Seq[WorkflowRecord], reason: Exception) = {
+    datasource.inTransaction { dataAccess =>
+      DBIO.sequence(workflowsWithStatuses map { workflowRecord =>
+        dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
+          dataAccess.workflowQuery.saveMessages(Seq(AttributeString(reason.toString)), workflowRecord.id)
+      })
     }
   }
 
@@ -472,10 +476,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
         val (optEntityUpdates, optWs) = updates
         optEntityUpdates foreach { update: WorkflowEntityUpdate =>
-          logger.debug(s"Updating ${attributeCount(update.upserts)} attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. First 100: ${update.upserts.take(100)}")
+          logger.debug(s"Updating ${attributeCount(update.upserts)} attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}")
         }
         optWs foreach { workspace: Workspace =>
-          logger.debug(s"Updating ${attributeCount(workspace.attributes)} attribute values for workspace in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. First 100: ${workspace.attributes.take(100)}")
+          logger.debug(s"Updating ${attributeCount(workspace.attributes)} attribute values for workspace in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}")
         }
 
         Left(updates)

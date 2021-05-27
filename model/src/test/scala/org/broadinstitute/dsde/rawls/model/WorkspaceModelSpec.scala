@@ -463,4 +463,75 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       Attributable.attributeCount(map6) shouldBe 6
     }
   }
+
+  "Safe printer" - {
+    "should safely print attributes" in {
+      val map1 = Map(
+        AttributeName("namespace1", "name1") -> AttributeString("value1")
+      )
+      val map2: AttributeMap = Map.empty
+      val map3 = Map(
+        AttributeName("namespace1", "name1") -> AttributeValueEmptyList
+      )
+      val map4 = Map(
+        AttributeName("namespace1", "name1") -> AttributeValueList(
+          Seq(
+            AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)
+          )
+        )
+      )
+      val map5 = Map(
+        AttributeName("namespace1", "name1") -> AttributeString("value1"),
+        AttributeName("namespace2", "name2") -> AttributeString("value2")
+      )
+      val map6 = Map(
+        AttributeName("default", "read_counts") ->
+          AttributeValueList(
+            Vector(
+              AttributeString("gs://my-workflow/shard-0/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-1/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-2/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-3/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-4/cacheCopy/some_file.tsv"),
+              AttributeString("gs://my-workflow/shard-5/cacheCopy/some_file.tsv")
+            )
+          )
+        )
+
+      val map7 = Map(
+        AttributeName("default", "read_counts") -> AttributeEntityReference("type", "name"))
+
+      val map8 = Map(
+        AttributeName("default", "read_counts") -> AttributeEntityReferenceList(Seq(AttributeEntityReference("type", "name1"), AttributeEntityReference("type", "name2")))
+      )
+
+      // We forbid nested lists. `AttributeValueList` requires its contents to be an `AttributeValue` and not another `AttributeValueList`
+      // Does not compile:
+      // val map7 = Map(
+      //   AttributeName("default", "read_counts") ->
+      //     AttributeValueList(
+      //       Vector(
+      //         AttributeValueList(
+      //           Vector(
+      //             AttributeString("gs://my-workflow/shard-0/cacheCopy/some_file.tsv"),
+      //             AttributeString("gs://my-workflow/shard-1/cacheCopy/some_file.tsv"),
+      //             AttributeString("gs://my-workflow/shard-2/cacheCopy/some_file.tsv"),
+      //             AttributeString("gs://my-workflow/shard-3/cacheCopy/some_file.tsv"),
+      //             AttributeString("gs://my-workflow/shard-4/cacheCopy/some_file.tsv"),
+      //             AttributeString("gs://my-workflow/shard-5/cacheCopy/some_file.tsv")
+      //         )
+      //       )
+      //     )
+      // )
+
+      Attributable.safePrint(map1) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1))"
+      Attributable.safePrint(map2) shouldBe "[First 10 items] Map()"
+      Attributable.safePrint(map3) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> List())"
+      Attributable.safePrint(map4) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> List(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)))"
+      Attributable.safePrint(map5) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1), AttributeName(namespace2,name2) -> AttributeString(value2))"
+      Attributable.safePrint(map6, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> Vector(AttributeString(gs://my-workflow/shard-0/cacheCopy/some_file.tsv), AttributeString(gs://my-workflow/shard-1/cacheCopy/some_file.tsv)))"
+      Attributable.safePrint(map7, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> AttributeEntityReference(type,name))"
+      Attributable.safePrint(map8, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> List(AttributeEntityReference(type,name1), AttributeEntityReference(type,name2)))"
+    }
+  }
 }
