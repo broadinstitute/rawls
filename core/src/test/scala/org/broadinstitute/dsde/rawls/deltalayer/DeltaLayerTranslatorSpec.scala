@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueList, AttributeValueRawJson}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition, RemoveAttribute}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -107,8 +107,7 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
 
   val unsupportedValueTypes = Seq(AttributeNull,
     AttributeValueRawJson("""{"foo":["bar","baz"]}"""),
-    AttributeEntityReference("someType", "someName"),
-    AttributeValueList(Seq(AttributeString("foo"), AttributeString("bar"))))
+    AttributeEntityReference("someType", "someName"))
 
   unsupportedValueTypes foreach { badType =>
     val badTypeName = badType.getClass.getSimpleName
@@ -150,10 +149,116 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
       EntityUpdateDefinition(UUID.randomUUID().toString, "a-third-type",
         Seq(
           AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-2"), AttributeString("hey")),
-          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeString("hello")))),
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeString("hello"))))
     )
 
     DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
+  }
+
+  it should "allow updates if they contain AttributeLists, if the lists have only supported types" in {
+    val updates = Seq(
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-scalar"), AttributeNumber(1)),
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-list"), AttributeValueList(Seq(
+            AttributeString("list item 1"),
+            AttributeNumber(123),
+            AttributeBoolean(true)))))),
+      EntityUpdateDefinition(UUID.randomUUID().toString, "another-type",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeBoolean(false)),
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-2"), AttributeValueList(Seq(
+            AttributeString("a string"),
+            AttributeNumber(456),
+            AttributeBoolean(false))))))
+    )
+
+    DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
+  }
+
+  it should "allow updates if they contain AttributeValueEmptyList" in {
+    val updates = Seq(
+      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-scalar"), AttributeNumber(1)),
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-list"), AttributeValueList(Seq(
+            AttributeString("list item 1"),
+            AttributeNumber(123),
+            AttributeBoolean(true)))))),
+      EntityUpdateDefinition(UUID.randomUUID().toString, "another-type",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeBoolean(false)),
+          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-2"), AttributeValueEmptyList)))
+    )
+
+    DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
+  }
+
+  val unsupportedLists = Seq(
+    AttributeEntityReferenceEmptyList,
+    AttributeEntityReferenceList(Seq(
+      AttributeEntityReference("someType", "someName"),
+      AttributeEntityReference("someType", "anotherName"),
+    ))
+  )
+
+  unsupportedLists foreach { badList =>
+    val badTypeName = badList.getClass.getSimpleName
+
+    it should s"reject updates if they contain AttributeLists, if the list is a $badTypeName" in {
+      val updates = Seq(
+        EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+          Seq(
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-scalar"), AttributeNumber(1)),
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-list"), AttributeValueList(Seq(
+              AttributeString("list item 1"),
+              AttributeNumber(123),
+              AttributeBoolean(true)))))),
+        EntityUpdateDefinition(UUID.randomUUID().toString, "another-type",
+          Seq(
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeBoolean(false)),
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-2"), badList)))
+      )
+
+      val caught = intercept[DeltaLayerException] {
+        DeltaLayerTranslator.validateEntityUpdates(updates)
+      }
+
+      caught.code shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  val unsupportedListElements = Seq(
+      AttributeNull,
+      AttributeValueRawJson("""{"foo":["bar","baz"]}"""))
+
+  unsupportedListElements foreach { badType =>
+    val badTypeName = badType.getClass.getSimpleName
+
+    it should s"reject updates if they contain AttributeValueLists, if the list contains an $badTypeName" in {
+      val updates = Seq(
+        EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+          Seq(
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-scalar"), AttributeNumber(1)),
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-list"), AttributeValueList(Seq(
+              AttributeString("list item 1"),
+              AttributeNumber(123),
+              AttributeBoolean(true)))))),
+        EntityUpdateDefinition(UUID.randomUUID().toString, "another-type",
+          Seq(
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeBoolean(false)),
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-2"), AttributeValueList(Seq(
+              AttributeString("list item 1"),
+              badType, // <-- unsupported element
+              AttributeBoolean(true))))))
+      )
+
+      val caught = intercept[DeltaLayerException] {
+        DeltaLayerTranslator.validateEntityUpdates(updates)
+      }
+
+      caught.code shouldBe StatusCodes.BadRequest
+    }
   }
 
   it should "reject updates if they contain entity names - aka datarepo_row_id - with an invalid UUID" in {
