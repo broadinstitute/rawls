@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.deltalayer
 
 import akka.http.scaladsl.model.StatusCodes.{BadRequest, InternalServerError}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeFormat, AttributeName, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, JsonSupport, PlainArrayAttributeListSerializer}
+import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeFormat, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, JsonSupport, PlainArrayAttributeListSerializer}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.deltalayer.v1.DeltaRow
@@ -55,7 +55,6 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
       throw new DeltaLayerException(ERR_EMPTY_OPERATIONS, code = BadRequest)
 
     // validate that all upsert values are string/boolean/number only
-    // TODO: add support for nulls
     val allValues = allOps.collect {
       case a:AddUpdateAttribute => a.addUpdateAttribute
     }
@@ -86,6 +85,7 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
     case AttributeBoolean(_) => true
     case AttributeNumber(_) => true
     case AttributeString(_) => true
+    case AttributeNull => true
     case AttributeValueEmptyList => true
     case AttributeValueList(elems) => elems forall isSupportedDataType
     case _ =>

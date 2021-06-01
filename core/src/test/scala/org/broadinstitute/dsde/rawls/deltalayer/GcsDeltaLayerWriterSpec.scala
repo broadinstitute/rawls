@@ -117,6 +117,4 @@ class GcsDeltaLayerWriterSpec extends AnyFlatSpec with GcsStorageTestSupport wit
 
   }
 
-  it should "serialize DeltaInsert correctly" is (pending) // NB not worth testing until model class is stable
-
 }

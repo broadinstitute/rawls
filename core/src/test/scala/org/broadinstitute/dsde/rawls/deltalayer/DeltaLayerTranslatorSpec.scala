@@ -105,7 +105,7 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
     DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
   }
 
-  val unsupportedValueTypes = Seq(AttributeNull,
+  val unsupportedValueTypes = Seq(
     AttributeValueRawJson("""{"foo":["bar","baz"]}"""),
     AttributeEntityReference("someType", "someName"))
 
@@ -132,30 +132,31 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
     }
   }
 
-  it should "allow updates if they contain any of AttributeString, AttributeNumber, AttributeBoolean" in {
-    val updates = Seq(
-      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
-        Seq(
-          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeNumber(1)),
-          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-2"), AttributeBoolean(false)))),
-      EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
-        Seq(
-          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-3"), AttributeString("hi")),
-          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-4"), AttributeBoolean(true)))),
-      EntityUpdateDefinition(UUID.randomUUID().toString, "another-type",
-        Seq(
-          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-4"), AttributeNumber(2)),
-          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-3"), AttributeNumber(3)))),
-      EntityUpdateDefinition(UUID.randomUUID().toString, "a-third-type",
-        Seq(
-          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-2"), AttributeString("hey")),
-          AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), AttributeString("hello"))))
-    )
+  val supportedTypes = Seq(
+    AttributeString("hi"),
+    AttributeNumber(1),
+    AttributeBoolean(true),
+    AttributeNull
+  )
 
-    DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
+  supportedTypes foreach { goodType =>
+    val goodTypeName = goodType.getClass.getSimpleName
+
+    it should s"allow updates if they contain $goodType" in {
+      val updates = Seq(
+        EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
+          Seq(
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"attr-1"), goodType))),
+        EntityUpdateDefinition(UUID.randomUUID().toString, "another-type",
+          Seq(
+            AddUpdateAttribute(AttributeName.withDefaultNS(s"another-attr"), goodType)))
+      )
+
+      DeltaLayerTranslator.validateEntityUpdates(updates) shouldBe updates
+    }
   }
 
-  it should "allow updates if they contain AttributeLists, if the lists have only supported types" in {
+  it should "allow updates if they contain AttributeValueList, if the lists have only supported types" in {
     val updates = Seq(
       EntityUpdateDefinition(UUID.randomUUID().toString, "some-type",
         Seq(
@@ -229,7 +230,6 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
   }
 
   val unsupportedListElements = Seq(
-      AttributeNull,
       AttributeValueRawJson("""{"foo":["bar","baz"]}"""))
 
   unsupportedListElements foreach { badType =>
