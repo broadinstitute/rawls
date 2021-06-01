@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson}
+import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition, RemoveAttribute}
+import org.broadinstitute.dsde.rawls.model.deltalayer.v1.DeltaRow
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsString, JsValue}
 
 import java.util.UUID
 
@@ -279,5 +281,36 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
 
     caught.code shouldBe StatusCodes.BadRequest
   }
+
+  val translations: Map[Attribute, JsValue] = Map(
+    AttributeString("hello") -> JsString("hello"),
+    AttributeNumber(123) -> JsNumber(123),
+    AttributeBoolean(true) -> JsBoolean(true),
+    AttributeNull -> JsNull,
+    AttributeValueEmptyList -> JsArray.empty,
+    AttributeValueList(Seq(AttributeString("hi"), AttributeNumber(456), AttributeNull, AttributeBoolean(false))) ->
+      JsArray(JsString("hi"), JsNumber(456), JsNull, JsBoolean(false))
+  )
+
+  translations foreach {
+    case (input, output) =>
+      val inputName = input.getClass.getSimpleName
+      val outputName = output.getClass.getSimpleName
+
+      it should s"translate $inputName into DeltaRow with $outputName properly" in {
+        val rowId = UUID.randomUUID()
+        val updates = Seq(
+          EntityUpdateDefinition(rowId.toString, "some-type",
+            Seq(AddUpdateAttribute(AttributeName.withDefaultNS("attr-name"), input)))
+        )
+
+        val actual = DeltaLayerTranslator.translateEntityUpdates(updates)
+        val expected = Seq(DeltaRow(rowId, "attr-name", output))
+
+        actual shouldBe expected
+      }
+  }
+
+
 
 }
