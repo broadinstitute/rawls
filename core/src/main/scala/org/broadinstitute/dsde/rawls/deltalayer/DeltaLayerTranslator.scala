@@ -82,11 +82,7 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
    * @return whether or not Delta Layer supports this Attribute's type
    */
   private def isSupportedDataType(attr: Attribute): Boolean = attr match {
-    case AttributeBoolean(_) => true
-    case AttributeNumber(_) => true
-    case AttributeString(_) => true
-    case AttributeNull => true
-    case AttributeValueEmptyList => true
+    case AttributeBoolean(_) | AttributeNumber(_) | AttributeString(_) | AttributeNull | AttributeValueEmptyList => true
     case AttributeValueList(elems) => elems forall isSupportedDataType
     case _ =>
       // AttributeNull, AttributeValueRawJson, AttributeEntityReference,
