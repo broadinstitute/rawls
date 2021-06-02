@@ -110,11 +110,8 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
         case Failure(_) => throw new DeltaLayerException(ERR_INVALID_ENTITYNAME, code = BadRequest)
       }
       update.operations map { op =>
-        // strip "default." from attr name
-        val name = op.name.namespace match {
-          case AttributeName.defaultNamespace => op.name.name
-          case _ => toDelimitedName(op.name)
-        }
+        // strip "default:" from attr name
+        val name = toDelimitedName(op.name)
         val value = op match {
           case aua:AddUpdateAttribute => attributeFormat.writeAttribute(aua.addUpdateAttribute)
           case _ => throw new DeltaLayerException(ERR_INVALID_OPERATION, code = BadRequest)

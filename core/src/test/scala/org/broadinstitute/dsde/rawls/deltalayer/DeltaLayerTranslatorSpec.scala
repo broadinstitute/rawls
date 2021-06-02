@@ -311,6 +311,27 @@ class DeltaLayerTranslatorSpec extends AnyFlatSpec with Matchers {
       }
   }
 
+  it should "omit default attribute namespaces but keep other namespaces when translating" in {
+    val rowId = UUID.randomUUID()
+
+    val updates = Seq(
+      EntityUpdateDefinition(rowId.toString, "some-type",
+        Seq(
+          AddUpdateAttribute(AttributeName.withDefaultNS("defaultattr"), AttributeString("hello")),
+          AddUpdateAttribute(AttributeName.withLibraryNS("libraryattr"), AttributeString("hi")),
+          AddUpdateAttribute(AttributeName.withTagsNS(), AttributeString("imatag")),
+        )))
+
+    val actual = DeltaLayerTranslator.translateEntityUpdates(updates)
+    val expected = Seq(
+      DeltaRow(rowId, "defaultattr", JsString("hello")),
+      DeltaRow(rowId, s"${AttributeName.libraryNamespace}:libraryattr", JsString("hi")),
+      DeltaRow(rowId, s"${AttributeName.tagsNamespace}:tags", JsString("imatag")),
+    )
+
+    actual shouldBe expected
+  }
+
 
 
 }
