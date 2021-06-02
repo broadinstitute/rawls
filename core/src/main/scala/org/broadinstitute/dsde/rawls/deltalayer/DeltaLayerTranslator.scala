@@ -35,34 +35,35 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
     if (uuidAttempts.exists(_.isFailure))
       throw new DeltaLayerException(ERR_INVALID_ENTITYNAME, code = BadRequest)
 
-    // verify that all operations are AddUpdateAttribute only
+    // grab all the operations out of the EntityUpdateDefinitions
     val allOps: Seq[AttributeUpdateOperation] = entityUpdates flatMap { upd => upd.operations }
-
     if (allOps.isEmpty)
       throw new DeltaLayerException(ERR_EMPTY_OPERATIONS, code = BadRequest)
 
-    val (upserts, others) = allOps.partition {
-      case _:AddUpdateAttribute => true
-      case _ => false
+    // transform the operations: if the op is an AddUpdateAttribute, extract its Attribute;
+    // if it is any other operation, return None
+    val maybeAttributes: Seq[Option[Attribute]] = allOps.map {
+      case a:AddUpdateAttribute => Option(a.addUpdateAttribute)
+      case _ => None
     }
 
-    if (others.nonEmpty)
+    // throw if we found anything other than AddUpdateAttribute in the operations
+    if (maybeAttributes.exists(_.isEmpty))
       // in the future, may want to provide more info such as entity type/name and illegal operation
       throw new DeltaLayerException(ERR_INVALID_OPERATION, code = BadRequest)
 
-    if (upserts.isEmpty)
+    // flatten to remove the Options
+    val allValues: Seq[Attribute] = maybeAttributes.flatten
+
+    // validate nonEmpty/expected size of allValues
+    if (allValues.isEmpty)
       // how did we reach here? This should be impossible
       throw new DeltaLayerException(ERR_EMPTY_OPERATIONS, code = BadRequest)
-
-    // validate that all upsert values are string/boolean/number only
-    val allValues = allOps.collect {
-      case a:AddUpdateAttribute => a.addUpdateAttribute
-    }
-
     if (allValues.size != allOps.size)
       throw new DeltaLayerException("Unexpected error: count of update values did not match count of update operations",
         code = InternalServerError)
 
+    // validate that all upsert values are string/boolean/number only
     val (supportedTypes, unsupportedTypes) = allValues partition isSupportedDataType
 
     if (unsupportedTypes.nonEmpty)
