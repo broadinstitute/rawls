@@ -4737,6 +4737,12 @@ components:
           description: Whether or not to delete intermediate output files when the
             workflow completes. See [Cromwell docs](https://cromwell.readthedocs.io/en/stable/wf_options/Google#google-pipelines-api-workflow-options)
             for more information.
+        memoryRetryMultiplier:
+          type: number
+          description: If a task fails due to running out of memory and the `stderr` of the task contains one of error keys that is set in Cromwell config along with `maxRetries` in its runtime attributes,
+            then it will be retried with its memory multiplied by this amount.  See [Cromwell docs](https://cromwell.readthedocs.io/en/develop/cromwell_features/RetryWithMoreMemory/#retry-with-more-memory)
+            for more information.
+          default: 1.0
         workflowFailureMode:
           type: string
           description: What happens after a task fails. Choose from ContinueWhilePossible
