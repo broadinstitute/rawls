@@ -96,7 +96,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
   val subTestData = new SubmissionTestData()
 
   class SubmissionTestData() extends TestData {
-    val wsName = WorkspaceName("myNamespacexxx", "myWorkspace")
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespacexxx"), CreationStatuses.Ready, None, None)
+    val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val user = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user))
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
@@ -259,6 +260,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
     override def save() = {
       DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
