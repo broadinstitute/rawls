@@ -115,7 +115,9 @@ object DeltaLayerTranslator extends JsonSupport with LazyLogging {
         val name = toDelimitedName(op.name)
         val value = op match {
           case aua:AddUpdateAttribute => attributeFormat.writeAttribute(aua.addUpdateAttribute)
-          case _ => throw new DeltaLayerException(ERR_INVALID_OPERATION, code = BadRequest)
+          case _ =>
+            // this error case is covered by validateEntityUpdates, but we need it here for exhaustive matching
+            throw new DeltaLayerException(ERR_INVALID_OPERATION, code = BadRequest)
         }
         DeltaRow(datarepoRowId, name, value)
       }
