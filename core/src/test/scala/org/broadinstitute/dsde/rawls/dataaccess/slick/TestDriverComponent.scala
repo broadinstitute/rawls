@@ -372,7 +372,27 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Some("Sample"),
       None,
       Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("output")),
+      Map("o1" -> AttributeString("boutput")),
+      agoraMethod
+    )
+
+    val agoraMethodConfigMaxWorkspaceAttributes = MethodConfiguration(
+      "ns",
+      "testConfigMaxWorkspaceAttributes",
+      Some("Sample"),
+      None,
+      Map("i1" -> AttributeString("input")),
+      Map("o1" -> AttributeString("workspace.long_attributes")),
+      agoraMethod
+    )
+
+    val agoraMethodConfigMaxEntityAttributes = MethodConfiguration(
+      "ns",
+      "testConfigMaxEntityAttributes",
+      Some("Sample"),
+      None,
+      Map("i1" -> AttributeString("input")),
+      Map("o1" -> AttributeString("this.long_attributes")),
       agoraMethod
     )
 
@@ -395,7 +415,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Some("Sample"),
       None,
       Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("output")),
+      Map("o1" -> AttributeString("doutput")),
       dockstoreMethod
     )
 
@@ -405,6 +425,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Sample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
     val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+
+    val methodConfigWorkspaceMaxAttributes = MethodConfiguration("ns", "testConfigMaxWorkspaceAttributes", Some("Sample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigEntityMaxAttributes = MethodConfiguration("ns", "testConfigMaxEntityAttributes", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+
     val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.library:foo")), AgoraMethod("ns-config", "meth1", 1))
     val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", Some("Sample"), None, Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), AgoraMethod("ns-config", "meth1", 1))
 
@@ -501,6 +525,24 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val submissionUpdateEntityReservedOutput = createTestSubmission(
       workspace = workspace,
       methodConfig = methodConfigEntityUpdateReservedOutput,
+      submissionEntity = indiv1,
+      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
+      workflowEntities = Seq(indiv1),
+      inputResolutions = Map(indiv1 -> inputResolutions),
+    )
+
+    val submissionMaxWorkspaceAttributes = createTestSubmission(
+      workspace = workspace,
+      methodConfig = methodConfigWorkspaceMaxAttributes,
+      submissionEntity = indiv1,
+      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
+      workflowEntities = Seq(indiv1),
+      inputResolutions = Map(indiv1 -> inputResolutions),
+    )
+
+    val submissionMaxEntityAttributes = createTestSubmission(
+      workspace = workspace,
+      methodConfig = methodConfigEntityMaxAttributes,
       submissionEntity = indiv1,
       rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
       workflowEntities = Seq(indiv1),
@@ -854,6 +896,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
                 methodConfigurationQuery.create(context, agoraMethodConfig),
+                methodConfigurationQuery.create(context, agoraMethodConfigMaxWorkspaceAttributes),
+                methodConfigurationQuery.create(context, agoraMethodConfigMaxEntityAttributes),
                 methodConfigurationQuery.create(context, dockstoreMethodConfig),
                 methodConfigurationQuery.create(context, goodAndBadMethodConfig),
                 methodConfigurationQuery.create(context, methodConfig2),
@@ -1123,7 +1167,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Some("Sample"),
       None,
       Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("output")),
+      Map("o1" -> AttributeString("aoutput")),
       AgoraMethod("ns-config", "meth1", 1)
     )
 
@@ -1132,6 +1176,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Spample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
     val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+
+    val methodConfigMaxAttributeWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigMaxAttributeEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Spample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
 
     val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
     val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))

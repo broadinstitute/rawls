@@ -694,6 +694,189 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  it should "fail workflows that exceed the configured workspace attribute maximum" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+
+    runAndWait {
+      withWorkspaceContext(testData.workspace) { context =>
+        submissionQuery.create(context, testData.submissionMaxWorkspaceAttributes)
+      }
+    }
+
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionMaxWorkspaceAttributes, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionMaxWorkspaceAttributes.submissionId)))
+
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(
+      AttributeValueList(
+        Vector(
+          AttributeString("entry 1"),
+          AttributeString("entry 2"),
+          AttributeString("entry 3"),
+          AttributeString("entry 4"),
+          AttributeString("entry 5"),
+          AttributeString("entry 6"),
+          AttributeString("entry 7"),
+          AttributeString("entry 8"),
+          AttributeString("entry 9"),
+          AttributeString("entry 10"),
+          AttributeString("entry 11")
+    ))))))), this))
+
+    val workflowRecord = runAndWait(
+      workflowQuery.findWorkflowByExternalIdAndSubmissionId(
+        testData.submissionMaxWorkspaceAttributes.workflows.head.workflowId.get,
+        UUID.fromString(testData.submissionMaxWorkspaceAttributes.submissionId)).result).head
+
+    val errorMessage =
+      "ErrorReport(" +
+        "rawls," +
+        "Cannot save outputs to workflow because workflow's attribute count of 11 exceeds Terra maximum of 10." +
+        "Some(400 Bad Request)," +
+        "List()," +
+        "List()," +
+        "None" +
+        ")"
+    assertResult(Seq(AttributeString(errorMessage))) {
+      runAndWait(
+        workflowQuery.loadWorkflowMessages(workflowRecord.id)
+      )
+    }
+
+  }
+
+  it should "fail workflows that exceed the configured entity attribute maximum" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+
+    runAndWait {
+      withWorkspaceContext(testData.workspace) { context =>
+        submissionQuery.create(context, testData.submissionMaxEntityAttributes)
+      }
+    }
+
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionMaxEntityAttributes, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionMaxEntityAttributes.submissionId)))
+
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(
+      AttributeValueList(
+        Vector(
+          AttributeString("entry 1"),
+          AttributeString("entry 2"),
+          AttributeString("entry 3"),
+          AttributeString("entry 4"),
+          AttributeString("entry 5"),
+          AttributeString("entry 6"),
+          AttributeString("entry 7"),
+          AttributeString("entry 8"),
+          AttributeString("entry 9"),
+          AttributeString("entry 10"),
+          AttributeString("entry 11")
+        ))))))), this))
+
+    val workflowRecord = runAndWait(
+      workflowQuery.findWorkflowByExternalIdAndSubmissionId(
+        testData.submissionMaxWorkspaceAttributes.workflows.head.workflowId.get,
+        UUID.fromString(testData.submissionMaxWorkspaceAttributes.submissionId)).result).head
+
+    val errorMessage =
+      "ErrorReport(" +
+        "rawls," +
+        "Cannot save outputs to entity because workflow's attribute count of 11 exceeds Terra maximum of 10." +
+        "Some(400 Bad Request)," +
+        "List()," +
+        "List()," +
+        "None" +
+        ")"
+    assertResult(Seq(AttributeString(errorMessage))) {
+      runAndWait(
+        workflowQuery.loadWorkflowMessages(workflowRecord.id)
+      )
+    }
+
+    //    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("abc"), AttributeString("def"))))))) {
+    //      testData.submissionUpdateEntity.workflows.map { wf =>
+    //        runAndWait(entityQuery.get(testData.workspace, wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+    //      }
+    //    }
+  }
+
+//  private val longOutputs = ExecutionServiceOutputs("foo",
+//    Map("output" -> Left(AttributeString("hello world!")), "output2" -> Left(AttributeString("hello world.")), "output3" -> Left(AttributeString("hello workspace.")), "extra" -> Left(AttributeString("hello world!"))))
+//
+//
+//  it should "aaa attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+//    val entityId = 0.toLong
+//    val entity = Entity("e", "t", Map.empty)
+//    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None, None), outputs))
+//    val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
+//    val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz", "output3" -> "workspace.garble")
+//
+//    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+//
+//    assertResult(Seq(Left(Some(
+//      WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
+//      Option(testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName.withDefaultNS("garble") -> AttributeString("hello workspace."))))))) {
+//      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+//    }
+//  }
+
+//  it should "fail workflows that exceed the configured attribute maximum" in {
+//    withDefaultTestDatabase { dataSource: SlickDataSource =>
+//      runAndWait {
+//        withWorkspaceContext(testData.workspace) { context =>
+//          submissionQuery.create(context, testData.submissionUpdateEntityReservedOutput)
+//        }
+//      }
+//
+//      def getWorkflowRec: WorkflowRecord = {
+//        runAndWait(
+//          workflowQuery.findWorkflowByExternalIdAndSubmissionId(
+//            testData.submissionUpdateEntityReservedOutput.workflows.head.workflowId.get,
+//            UUID.fromString(testData.submissionUpdateEntityReservedOutput.submissionId)).result).head
+//      }
+//
+//      def getWorkflowMessages(workflowRecord: WorkflowRecord): Seq[AttributeString] = {
+//        runAndWait(
+//          workflowQuery.loadWorkflowMessages(workflowRecord.id)
+//        )
+//      }
+//
+//      val workflowRecBefore = getWorkflowRec
+//      val monitor = createSubmissionMonitor(
+//        dataSource = dataSource,
+//        samDAO = mockSamDAO,
+//        googleServicesDAO = mockGoogleServicesDAO,
+//        submission = testData.submissionUpdateEntityReservedOutput,
+//        wsName = testData.wsName,
+//        execSvcDAO = new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+//      )
+//
+//      val outputs = Map("o1" -> Left(AttributeString("result")))
+//      val executionServiceOutputs = ExecutionServiceOutputs(workflowRecBefore.externalId.get, outputs)
+//      val executionServiceStatusResponse =
+//        ExecutionServiceStatusResponse(Seq(Try(Option(workflowRecBefore -> Option(executionServiceOutputs)))))
+//
+//      Await.result(monitor.handleStatusResponses(executionServiceStatusResponse), Duration.Inf)
+//
+//      val workflowRecAfterBad = getWorkflowRec
+//      assert(workflowRecAfterBad.status == WorkflowStatuses.Failed.toString)
+//
+//      val errorMessage =
+//        "ErrorReport(" +
+//          "rawls," +
+//          "Attribute name individual_id is reserved and cannot be overwritten," +
+//          "Some(400 Bad Request)," +
+//          "List()," +
+//          "List()," +
+//          "None" +
+//          ")"
+//      assertResult(Seq(AttributeString(errorMessage))) {
+//        getWorkflowMessages(workflowRecAfterBad)
+//      }
+//
+//      assertResult(SubmissionStatuses.Done) {
+//        runAndWait(submissionQuery.get(testData.workspace, testData.submissionUpdateEntityReservedOutput.submissionId)).get.status
+//      }
+//    }
+//  }
+
   it should "handleStatusResponses and fail workflows that are missing outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     runAndWait {
       withWorkspaceContext(testData.workspace) { context =>
@@ -846,7 +1029,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO, trackDetailedSubmissionMetrics: Boolean = true): TestActorRef[SubmissionMonitorActor] = {
-    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics, 2000)
+    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics, 10)
     TestActorRef[SubmissionMonitorActor](SubmissionMonitorActor.props(
       wsName,
       UUID.fromString(submission.submissionId),
@@ -861,7 +1044,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   def createSubmissionMonitor(dataSource: SlickDataSource, samDAO: SamDAO, googleServicesDAO: GoogleServicesDAO, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO): SubmissionMonitor = {
-    val config = SubmissionMonitorConfig(1 minutes, true, 2000)
+    val config = SubmissionMonitorConfig(1 minutes, true, 10)
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),

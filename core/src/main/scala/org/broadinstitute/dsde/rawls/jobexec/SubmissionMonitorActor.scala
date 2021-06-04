@@ -479,13 +479,13 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           val cnt = attributeCount(update.upserts)
           logger.debug(s"Updating $cnt attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}")
           if (cnt > config.attributeUpdatesPerWorkflow)
-            throw new RawlsFatalExceptionWithErrorReport(ErrorReport(s"Cannot save outputs to entity because workflow's attribute count $cnt exceeds Terra maximum ${config.attributeUpdatesPerWorkflow}."))
+            throw new RawlsFatalExceptionWithErrorReport(ErrorReport(s"Cannot save outputs to entity because workflow's attribute count of $cnt exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))
         }
         optWs foreach { workspace: Workspace =>
           val cnt = attributeCount(workspace.attributes)
           logger.debug(s"Updating $cnt attribute values for workspace in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}")
           if (cnt > config.attributeUpdatesPerWorkflow)
-            throw new RawlsFatalExceptionWithErrorReport(ErrorReport(s"Cannot save outputs to workspace because workflow's attribute count $cnt exceeds Terra maximum ${config.attributeUpdatesPerWorkflow}."))
+            throw new RawlsFatalExceptionWithErrorReport(ErrorReport(s"Cannot save outputs to workspace because workflow's attribute count of $cnt exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))
         }
 
         Left(updates)
