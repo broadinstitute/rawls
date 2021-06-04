@@ -11,7 +11,7 @@ import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
-import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayerException, DeltaLayerWriter}
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, DeltaLayerException, DeltaLayerTranslator, DeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base._
@@ -20,13 +20,14 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, U
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, DeltaInsert, Destination, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.deltalayer.v1.{DeltaInsert, InsertDestination, InsertSource}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import org.joda.time.DateTime
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
 
+import java.time.Instant
 import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -415,24 +416,22 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
-    // TODO AS-770: validate incoming EntityUpdateDefinitions (disallow deletes, etc)
-    // TODO AS-770: translate incoming EntityUpdateDefinitions into key-value writes, including destination BQ datatypes
-    // TODO AS-770: determine destination BQDL dataset, based on snapshot reference. Currently in SnapshotService.generateDatasetName
+    // translate to delta layer row objects. This method includes validation.
+    val inserts = DeltaLayerTranslator.translateEntityUpdates(entityUpdates)
+
+    // determine destination BQ dataset, based on snapshot reference.
+    val bqDataset = DeltaLayer.generateDatasetName(dataReference.getMetadata.getResourceId)
 
     // create DeltaInsert object
-    // TODO AS-770: populate with everything we need, including model versioning
-    val dest = Destination(workspaceId = requestArguments.workspace.workspaceIdAsUUID,
-                           referenceId = dataReference.getMetadata.getResourceId)
-    val ins = DeltaInsert(version = "v0",
-                          insertId = UUID.randomUUID(),
-                          insertTimestamp = new DateTime(),
-                          insertingUser = requestArguments.userInfo.userSubjectId,
-                          destination = dest,
-                          inserts = entityUpdates)
+    val insertId = UUID.randomUUID()
+    val source = InsertSource(dataReference.getMetadata.getResourceId, requestArguments.userInfo.userSubjectId)
+    val destination = InsertDestination(requestArguments.workspace.workspaceIdAsUUID, bqDataset,
+      requestArguments.workspace.googleProject, requestArguments.billingProject)
+    val deltaInsert = DeltaInsert(insertId, Instant.now(), source, destination, inserts)
 
     // consider making this async, so we respond to the user quicker. For now, leave as synchronous
     // so we return any errors
-    deltaLayerWriter.writeFile(ins) map { _ =>
+    deltaLayerWriter.writeFile(deltaInsert) map { _ =>
       Seq.empty[Entity]
     } recover {
       case se: StorageException =>
