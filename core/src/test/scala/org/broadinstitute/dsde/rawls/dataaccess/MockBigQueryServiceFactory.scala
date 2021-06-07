@@ -104,6 +104,10 @@ class MockBigQueryServiceFactory(blocker: Blocker, queryResponse: Either[Throwab
   override def getServiceFromCredentialPath(credentialPath: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
   }
+
+  override def getServiceFromJson(json: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
+    Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
+  }
 }
 
 class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) extends GoogleBigQueryService[IO] {
