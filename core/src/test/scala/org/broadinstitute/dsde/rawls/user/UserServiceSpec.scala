@@ -244,13 +244,15 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = "test_dataset"
+      val spendReportGoogleProject = "some_other_google_project"
+      val spendReportConfiguration = BillingProjectSpendConfiguration(spendReportGoogleProject, spendReportDatasetName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO)
 
-      Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf) shouldEqual 1
+      Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportConfiguration), Duration.Inf) shouldEqual 1
 
       val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
 
@@ -262,6 +264,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = "test_dataset"
+      val spendReportGoogleProject = "some_other_google_project"
+      val spendReportConfiguration = BillingProjectSpendConfiguration(spendReportGoogleProject, spendReportDatasetName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
@@ -269,7 +273,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportConfiguration), Duration.Inf)
       }
 
       //assert that the entire action was forbidden
@@ -305,9 +309,10 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = "should_not_clear_dataset"
       val spendReportTableName = "should_not_clear_table"
+      val spendReportGoogleProject = "some_other_google_project"
 
       //first, directly set the spend configuration in the DB outside of the user's permissions, so we can assert that it wasn't cleared
-      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(billingProject.projectName, Some(spendReportDatasetName), Some(spendReportTableName)))
+      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(billingProject.projectName, Some(spendReportDatasetName), Some(spendReportTableName), Some(spendReportGoogleProject)))
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
@@ -332,6 +337,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = "dataset_does_not_exist"
+      val spendReportGoogleProject = "some_other_google_project"
+      val spendReportConfiguration = BillingProjectSpendConfiguration(spendReportGoogleProject, spendReportDatasetName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
@@ -339,7 +346,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportConfiguration), Duration.Inf)
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
@@ -352,6 +359,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
 
       val spendReportDatasetName = "some_dataset"
+      val spendReportGoogleProject = "some_other_google_project"
+      val spendReportConfiguration = BillingProjectSpendConfiguration(spendReportGoogleProject, spendReportDatasetName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
@@ -359,7 +368,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportConfiguration), Duration.Inf)
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
@@ -372,6 +381,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
 
       val spendReportDatasetName = "some_dataset"
+      val spendReportGoogleProject = "some_other_google_project"
+      val spendReportConfiguration = BillingProjectSpendConfiguration(spendReportGoogleProject, spendReportDatasetName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
@@ -379,7 +390,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportConfiguration), Duration.Inf)
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
@@ -390,6 +401,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
       val spendReportDatasetName = "test-dataset"
+      val spendReportGoogleProject = "some_other_google_project"
+      val spendReportConfiguration = BillingProjectSpendConfiguration(spendReportGoogleProject, spendReportDatasetName)
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
@@ -397,7 +410,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportDatasetName), Duration.Inf)
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportConfiguration), Duration.Inf)
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
