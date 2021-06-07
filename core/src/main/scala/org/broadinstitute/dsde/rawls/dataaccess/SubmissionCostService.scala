@@ -21,8 +21,8 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
 
   val stringParamType = new QueryParameterType().setType("STRING")
 
-  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], workspaceNamespace: String, submissionDate: DateTime, terminalStatusDate: Option[DateTime], tableNameP: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
-    val tableName = tableNameP.getOrElse(defaultTableName)
+  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], workspaceNamespace: String, submissionDate: DateTime, terminalStatusDate: Option[DateTime], tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
+    val tableName = tableNameOpt.getOrElse(defaultTableName)
 
     if( workflowIds.isEmpty ) {
       Future.successful(Map.empty[String, Float])

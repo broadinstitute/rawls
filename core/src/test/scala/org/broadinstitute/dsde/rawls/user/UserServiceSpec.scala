@@ -571,4 +571,24 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     }
   }
 
+  it should "throw a RawlsExceptionWithErrorReport when setting the spend configuration if the dataset google project has an invalid name" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val spendReportDatasetName = "test-dataset"
+      val spendReportGoogleProject = "bad%"
+      val spendReportConfiguration = BillingProjectSpendConfiguration(spendReportGoogleProject, spendReportDatasetName)
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.setBillingProjectSpendConfiguration(billingProject.projectName, spendReportConfiguration), Duration.Inf)
+      }
+
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
+    }
+  }
+
 }
