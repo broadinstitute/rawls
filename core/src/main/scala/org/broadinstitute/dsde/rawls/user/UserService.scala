@@ -31,8 +31,8 @@ import scala.util.{Failure, Success}
 object UserService {
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, pathToCredentialJson: String, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, bqServiceFactory, pathToCredentialJson, requesterPaysRole, dmConfig, projectTemplate)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, bigQueryCredentialJson: String, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -58,7 +58,7 @@ object UserService {
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, pathToCredentialJson: String, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, bigQueryCredentialJson: String, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
@@ -311,14 +311,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     val datasetName = spendReportConfiguration.datasetName
     val datasetGoogleProject = spendReportConfiguration.datasetGoogleProject
 
-    println(datasetName)
-    println(datasetGoogleProject)
-
     validateBigQueryDatasetName(datasetName)
     validateBillingProjectName(datasetGoogleProject)
 
     requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
-      val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(billingProjectName.value))
+      val bqService = bqServiceFactory.getServiceFromJson(bigQueryCredentialJson, GoogleProject(billingProjectName.value))
 
       for {
         //Get the dataset to validate that it exists and that we have permission to see it
