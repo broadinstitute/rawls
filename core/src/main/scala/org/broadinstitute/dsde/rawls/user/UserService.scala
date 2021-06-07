@@ -334,6 +334,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         }
 
         //Get the table and validate that it exists and that we have permission to see it
+        //Note that the table name replaces all dashes in the billing account ID with underscores
         tableName = s"gcp_billing_export_v1_${billingAccountId.replace("-", "_")}"
         table <- bqService.use(_.getTable(GoogleProject(datasetGoogleProject), datasetName, tableName)).unsafeToFuture()
 
