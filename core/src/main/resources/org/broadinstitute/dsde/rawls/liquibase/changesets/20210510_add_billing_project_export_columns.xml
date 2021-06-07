@@ -13,4 +13,10 @@
         </addColumn>
     </changeSet>
 
+    <changeSet id="add_billing_project_export_google_project_column" author="mbemis" logicalFilePath="dummy">
+        <addColumn tableName="BILLING_PROJECT">
+            <column name="SPEND_REPORT_DATASET_GOOGLE_PROJECT" type="VARCHAR(1024)"/>
+        </addColumn>
+    </changeSet>
+
 </databaseChangeLog>

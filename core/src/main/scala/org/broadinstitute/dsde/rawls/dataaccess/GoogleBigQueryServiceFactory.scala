@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.nio.charset.Charset
-
 import cats.effect.{Blocker, ContextShift, IO, Timer}
+import com.google.auth.Credentials
 import com.google.auth.oauth2.ServiceAccountCredentials
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.StructuredLogger
@@ -34,5 +34,10 @@ class GoogleBigQueryServiceFactory(blocker: Blocker)(implicit executionContext: 
   def getServiceFromCredentialPath(credentialPath: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
     GoogleBigQueryService.resource[IO](credentialPath, projectId, blocker)
   }
+
+//  def getServiceFromJson(json: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
+//    val x = ServiceAccountCredentials.fromJson(json.asJs)
+//    GoogleBigQueryService.resource[IO](x, blocker, projectId)
+//  }
 
 }

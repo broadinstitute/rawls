@@ -44,7 +44,7 @@ object ManagedGroup {
 case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) extends Managed
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String], cromwellBackend: Option[CromwellBackend] = None, servicePerimeter: Option[ServicePerimeterName] = None, googleProjectNumber: Option[GoogleProjectNumber] = None, invalidBillingAccount: Boolean = false, spendReportDataset: Option[String] = None, spendReportTable: Option[String] = None) {
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String], cromwellBackend: Option[CromwellBackend] = None, servicePerimeter: Option[ServicePerimeterName] = None, googleProjectNumber: Option[GoogleProjectNumber] = None, invalidBillingAccount: Boolean = false, spendReportDataset: Option[String] = None, spendReportTable: Option[String] = None, spendReportDatasetGoogleProject: Option[String] = None) {
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
 }
@@ -105,7 +105,7 @@ case class CreateRawlsBillingProjectFullRequest(
   privateIpGoogleAccess: Option[Boolean],
   servicePerimeter: Option[ServicePerimeterName])
 
-case class BillingProjectSpendConfiguration(datasetName: String)
+case class BillingProjectSpendConfiguration(datasetGoogleProject: String, datasetName: String)
 
 case class UpdateRawlsBillingAccountRequest(billingAccount: RawlsBillingAccountName)
 
@@ -148,7 +148,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat10(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat11(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
@@ -167,7 +167,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
-  implicit val BillingProjectSpendConfigurationFormat = jsonFormat1(BillingProjectSpendConfiguration)
+  implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
 
   implicit val UpdateRawlsBillingAccountRequestFormat = jsonFormat1(UpdateRawlsBillingAccountRequest)
 

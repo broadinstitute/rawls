@@ -302,20 +302,27 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, datasetName: String): Future[Int] = {
+  def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, spendReportConfiguration: BillingProjectSpendConfiguration): Future[Int] = {
 
     //Note that this assumes that the mapping between a Google Project and a Billing Project is 1:1.
     //This will not be the case once PPW goes live. See Jira ticket CA-1363 for details.
     val googleProjectName = GoogleProject(billingProjectName.value)
 
+    val datasetName = spendReportConfiguration.datasetName
+    val datasetGoogleProject = spendReportConfiguration.datasetGoogleProject
+
+    println(datasetName)
+    println(datasetGoogleProject)
+
     validateBigQueryDatasetName(datasetName)
+    validateBillingProjectName(datasetGoogleProject)
 
     requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
-      val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, googleProjectName)
+      val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(billingProjectName.value))
 
       for {
         //Get the dataset to validate that it exists and that we have permission to see it
-        _ <- bqService.use(_.getDataset(datasetName)).unsafeToFuture().map {
+        _ <- bqService.use(_.getDataset(GoogleProject(datasetGoogleProject), datasetName)).unsafeToFuture().map {
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The dataset $datasetName could not be found."))
           case dataset => dataset
         }
@@ -327,13 +334,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         }
 
         //Get the table and validate that it exists and that we have permission to see it
-        tableName = s"gcp_billing_export_v1_${billingAccountId}"
-        table <- bqService.use(_.getTable(datasetName, tableName)).unsafeToFuture()
+        tableName = s"gcp_billing_export_v1_${billingAccountId.replace("-", "_")}"
+        table <- bqService.use(_.getTable(GoogleProject(datasetGoogleProject), datasetName, tableName)).unsafeToFuture()
 
         res <- if(table.isDefined) {
                 //Isolate the db txn so we're not running any REST calls inside of it
                 dataSource.inTransaction { dataAccess =>
-                  dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(billingProjectName, Option(datasetName), Option(tableName))
+                  dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(billingProjectName, Option(datasetName), Option(tableName), Option(datasetGoogleProject))
                 }
               } else throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The billing export table ${tableName} in dataset ${datasetName} could not be found."))
       } yield {
