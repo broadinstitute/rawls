@@ -329,23 +329,80 @@ trait AttributeComponent {
       recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
 
     def patchAttributesAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
-      deleteAttributeRecordsById(deleteIds.toSeq) andThen
-        batchInsertAttributes(inserts.toSeq) andThen
-        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+      for {
+        _ <- if (deleteIds.nonEmpty) deleteAttributeRecordsById(deleteIds.toSeq) else DBIO.successful(0)
+        _ <- if (inserts.nonEmpty) batchInsertAttributes(inserts.toSeq) else DBIO.successful(0)
+        updateResult <- if (updates.nonEmpty)
+                          AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+                        else
+                          DBIO.successful(0)
+      } yield {
+        updateResult
+      }
     }
 
-    def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
+    /**
+     * Compares a collection of pre-existing attributes to a collection of attributes requested to save by a user,
+     * finds the differences, saves the differences, and then returns the ids of the parent (entity|workspace) objects
+     * that were affected.
+     *
+     * @param attributesToSave collection of attributes to be written
+     * @param existingAttributes collection of pre-existing attributes to compare against
+     * @param insertFunction function to use when writing attributes to the db (allows rewriteAttrsAction to be generic)
+     * @return the ids of the parent (entity|workspace) objects that had attribute inserts/updates/deletes
+     */
+    def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]): ReadWriteAction[Set[OWNER_ID]] = {
       val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
       val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
-      // update attributes which are in both to-save and currently-exists, insert attributes which are in save but not exists
-      val (attrsToUpdateMap, attrsToInsertMap) = toSaveAttrMap.partition { case (k, v) => existingAttrMap.keySet.contains(k) }
-      // delete attributes which currently exist but are not in the attributes to save
-      val attributesToDelete = existingAttrMap.filterKeys(! attrsToUpdateMap.keySet.contains(_)).values
+      val existingKeys = existingAttrMap.keySet
 
-      deleteAttributeRecordsById(attributesToDelete.map(_.id).toSeq) andThen
-        batchInsertAttributes(attrsToInsertMap.values.toSeq) andThen
-        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(attrsToUpdateMap.values.toSeq))
+      // insert attributes which are in save but not exists
+      val attributesToInsert = toSaveAttrMap.filterKeys(! existingKeys.contains(_))
+
+      // delete attributes which are in exists but not save
+      val attributesToDelete = existingAttrMap.filterKeys(! toSaveAttrMap.keySet.contains(_))
+
+      // update attributes which are in both to-save and currently-exists, but have different values.
+      // note that currently-existing attributes will have a populated id e.g. "1234", but to-save will have an id of "0"
+      // therefore, use a comparison function that looks at everything except id
+      // note this does not compare transactionId for AttributeScratchRecords. We do not expect AttributeScratchRecords
+      // here, and transactionId will eventually be going away, so don't bother
+      // TODO: should this compare function move closer to the AttributeRecord class?
+      def equalRecords(left: RECORD, right: RECORD): Boolean = {
+        // compare everything except id
+        left.name == right.name &&
+        left.valueString == right.valueString &&
+        left.valueNumber == right.valueNumber &&
+        left.valueBoolean == right.valueBoolean &&
+        left.valueJson == right.valueJson &&
+        left.valueEntityRef == right.valueEntityRef &&
+        left.listIndex == right.listIndex &&
+        left.listLength == right.listLength &&
+        left.namespace == right.namespace &&
+        left.ownerId == right.ownerId &&
+        left.deleted == right.deleted &&
+        left.deletedDate == right.deletedDate
+      }
+
+      val attributesToUpdate = toSaveAttrMap.filter {
+        case (k, v) =>
+            existingKeys.contains(k) && // if the attribute doesn't already exist, don't attempt to update it
+            !existingAttributes.exists(equalRecords(_, v)) // if the attribute exists and is unchanged, don't update it
+      }
+
+      // collect the parent objects (e.g. entity, workspace) that have writes, so we know which object rows to re-calculate
+      val ownersWithWrites: Set[OWNER_ID] = (attributesToInsert.values.map(_.ownerId) ++
+        attributesToUpdate.values.map(_.ownerId) ++
+        attributesToDelete.values.map(_.ownerId))
+        .toSet
+
+      // perform the inserts/updates/deletes
+      patchAttributesAction(attributesToInsert.values,
+        attributesToUpdate.values,
+        attributesToDelete.values.map(_.id),
+        insertFunction)
+        .map(_ => ownersWithWrites)
     }
 
     //noinspection SqlDialectInspection

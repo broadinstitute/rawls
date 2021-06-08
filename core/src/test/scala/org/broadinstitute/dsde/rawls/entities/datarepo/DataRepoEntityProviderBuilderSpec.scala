@@ -58,7 +58,7 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   it should "bubble up lookupSnapshotForName error" in {
     val builder = createTestBuilder(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(referenceType = null)))
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource(resourceType = null)))
     )
 
     val ex = intercept[DataEntityException] { builder.build(defaultEntityRequestArguments).get }
@@ -67,10 +67,23 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   behavior of "DataRepoEntityProviderBuilder.lookupSnapshotForName()"
 
-  it should "return snapshot id in the golden path" in {
-    val builder = createTestBuilder()
-    val actual = builder.lookupSnapshotForName(DataReferenceName("foo"), defaultEntityRequestArguments)
-    assertResult(UUID.fromString(snapshot)) { actual }
+  it should "return DataReferenceDescription id in the golden path" in {
+    // modify the DataReferenceDescription used by this test to ensure the test
+    // isn't mistakenly passing by using defaults where it shouldn't
+    val randomName = scala.util.Random.alphanumeric.take(16).mkString
+
+    val expected = createDataRepoSnapshotResource(
+      name = randomName,
+      refSnapshot = UUID.randomUUID().toString)
+
+    val builder = createTestBuilder(
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(expected))
+    )
+
+    // NB see comment in SpecWorkspaceManagerDAO; the name we use for lookup is ignored
+    val actual = builder.lookupSnapshotForName(DataReferenceName(randomName), defaultEntityRequestArguments)
+
+    assertResult(expected) { actual }
   }
 
   it should "bubble up error if workspace manager errors" in  {
@@ -83,7 +96,7 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   it should "error if workspace manager returns a non-snapshot reference type" in {
     val builder = createTestBuilder(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(referenceType = null)))
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource(resourceType = null)))
     )
 
     val ex = intercept[DataEntityException] { builder.lookupSnapshotForName(DataReferenceName("foo"), defaultEntityRequestArguments) }
@@ -92,7 +105,7 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   it should "error if workspace manager reference json `instanceName` value does not match DataRepoDAO's base url" in {
     val builder = createTestBuilder(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refInstanceName = "this is wrong")))
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource(refInstanceName = "this is wrong")))
     )
 
     val ex = intercept[DataEntityException] { builder.lookupSnapshotForName(DataReferenceName("foo"), defaultEntityRequestArguments) }
@@ -101,7 +114,7 @@ class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityP
 
   it should "error if workspace manager reference json `snapshot` value is not a valid UUID" in {
     val builder = createTestBuilder(
-      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRefDescription(refSnapshot = "this is not a uuid")))
+      workspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource(refSnapshot = "this is not a uuid")))
     )
 
     val ex = intercept[DataEntityException] { builder.lookupSnapshotForName(DataReferenceName("foo"), defaultEntityRequestArguments) }

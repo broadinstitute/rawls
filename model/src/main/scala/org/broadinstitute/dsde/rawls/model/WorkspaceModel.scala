@@ -28,6 +28,18 @@ object Attributable {
   val entityTypeReservedAttribute = "entityType"
   val reservedAttributeNames = Set(nameReservedAttribute, entityTypeReservedAttribute, workspaceIdAttribute)
   type AttributeMap = Map[AttributeName, Attribute]
+
+  def attributeCount(map: AttributeMap): Int = {
+    def countAttributes(attribute: Attribute): Int = {
+      attribute match {
+        case _: AttributeListElementable => 1
+        case attributeList: AttributeList[_] => attributeList.list.map(countAttributes).sum
+      }
+    }
+
+    map.values.map(countAttributes).sum
+  }
+
 }
 
 trait Attributable {
