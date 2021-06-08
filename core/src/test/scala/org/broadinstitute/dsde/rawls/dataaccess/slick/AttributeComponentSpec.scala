@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType
+
 import java.util.UUID
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -339,44 +341,6 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
-  it should "extra data in workspace attribute temp table should not mess things up" in withEmptyTestDatabase {
-    val workspaceId: UUID = UUID.randomUUID()
-    val workspace = Workspace(
-      "test_namespace",
-      "test_name",
-      workspaceId.toString,
-      "bucketname",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "me",
-      Map(
-        AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
-        AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
-      false)
-
-
-    val updatedWorkspace = workspace.copy(attributes = Map(AttributeName.withDefaultNS("attributeString") -> AttributeString(UUID.randomUUID().toString)))
-
-    def saveWorkspace = DbResource.dataSource.inTransaction(d => d.workspaceQuery.save(workspace))
-
-    def updateWorkspace = {
-      DbResource.dataSource.database.run(
-        (this.workspaceAttributeScratchQuery += WorkspaceAttributeScratchRecord(0, workspaceId, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, None, false, None, "not a transaction id")) andThen
-          this.workspaceQuery.save(updatedWorkspace).transactionally andThen
-          this.workspaceAttributeScratchQuery.map { r => (r.name, r.valueString) }.result.withPinnedSession
-      )
-    }
-
-    assertResult(Vector(("attributeString", Some("foo")))) {
-      Await.result(saveWorkspace flatMap { _ => updateWorkspace }, Duration.Inf)
-    }
-
-    assertWorkspaceResult(Option(updatedWorkspace)) {
-      runAndWait(this.workspaceQuery.findById(workspaceId.toString))
-    }
-  }
 
   List(8, 17, 32, 65, 128, 257) foreach { parallelism =>
     it should s"handle $parallelism simultaneous writes to their own entity attribute temp tables" in withEmptyTestDatabase {
@@ -399,7 +363,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
       val entityType: String = "et"
 
-      def saveEntity(e: Entity): Future[Entity] = DbResource.dataSource.inTransactionWithAttrTempTable { d =>
+      def saveEntity(e: Entity): Future[Entity] = DbResource.dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity)){ d =>
         val targetWorkspace = if (isOdd(e.name.toInt))
           workspaceOdd
         else
@@ -503,7 +467,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None, None, deleted = false, None)
     val toSave = Seq(update, insert)
 
-    runAndWait(workspaceAttributeQuery.rewriteAttrsAction(toSave, existing, workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.rewriteAttrsAction(toSave, existing, workspaceAttributeTempQuery.insertScratchAttributes))
 
     assertExpectedRecords(toSave:_*)
   }
@@ -526,11 +490,11 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None, None, deleted = false, None)
 
     //test insert and update
-    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(insert), Seq(update), Seq(), workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(insert), Seq(update), Seq(), workspaceAttributeTempQuery.insertScratchAttributes))
     assertExpectedRecords(Seq(existing.head, update, insert):_*)
 
     //test delete
-    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(), Seq(), existing.map(_.id), workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(), Seq(), existing.map(_.id), workspaceAttributeTempQuery.insertScratchAttributes))
     assertExpectedRecords(Seq(insert):_*)
   }
 

@@ -82,7 +82,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   // this is used by many tests to set up fixture data, which includes saving entities, therefore it needs
   // the temp table.
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
-    Await.result(DbResource.dataSource.inTransactionWithAttrTempTable { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
+    Await.result(DbResource.dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace))
+    { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
   }
 
   protected def runMultipleAndWait[R](count: Int, duration: Duration = 1 minutes)(actionGenerator: Int => DBIOAction[R, _ <: NoStream, _ <: Effect]): R = {
@@ -94,7 +95,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     import scala.language.existentials
 
-    val chain = (DbResource.dataSource.createTempTable andThen action.map{ x => Thread.sleep((Math.random() * 500).toLong); x } andFinally DbResource.dataSource.dropTempTable).withPinnedSession
+    val chain = (DbResource.dataSource.createEntityAttributeTempTable andThen action.map{ x => Thread.sleep((Math.random() * 500).toLong); x } andFinally DbResource.dataSource.dropEntityAttributeTempTable).withPinnedSession
 
     DbResource.dataSource.database.run(chain).recoverWith {
       case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action)

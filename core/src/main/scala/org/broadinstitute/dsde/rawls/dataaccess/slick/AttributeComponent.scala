@@ -79,7 +79,7 @@ case class WorkspaceAttributeRecord(id: Long,
                                     deleted: Boolean,
                                     deletedDate: Option[Timestamp]) extends AttributeRecord[UUID]
 
-case class WorkspaceAttributeScratchRecord(id: Long,
+case class WorkspaceAttributeTempRecord(id: Long,
                                         ownerId: UUID, // workspace id
                                         namespace: String,
                                         name: String,
@@ -174,8 +174,8 @@ trait AttributeComponent {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <> (EntityAttributeTempRecord.tupled, EntityAttributeTempRecord.unapply)
   }
 
-  class WorkspaceAttributeScratchTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeScratchRecord](tag, "WORKSPACE_ATTRIBUTE_SCRATCH") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeScratchRecord.tupled, WorkspaceAttributeScratchRecord.unapply)
+  class WorkspaceAttributeTempTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeTempRecord](tag, "WORKSPACE_ATTRIBUTE_TEMP") {
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
@@ -196,7 +196,7 @@ trait AttributeComponent {
   }
 
   protected object entityAttributeTempQuery extends AttributeScratchQuery[Long, EntityAttributeRecord, EntityAttributeTempRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_), EntityAttributeTempRecord)
-  protected object workspaceAttributeScratchQuery extends AttributeScratchQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeScratchRecord, WorkspaceAttributeScratchTable](new WorkspaceAttributeScratchTable(_), WorkspaceAttributeScratchRecord)
+  protected object workspaceAttributeTempQuery extends AttributeScratchQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTempRecord, WorkspaceAttributeTempTable](new WorkspaceAttributeTempTable(_), WorkspaceAttributeTempRecord)
 
   /**
    * @param createRecord function to create a RECORD object, parameters: id, ownerId, name, valueString, valueNumber, valueBoolean, None, listIndex, listLength
@@ -530,7 +530,7 @@ trait AttributeComponent {
     private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
 
     private def getTableSuffix(tableName: String): String = {
-      if (tableName == "ENTITY_ATTRIBUTE")
+      if (tableName == "ENTITY_ATTRIBUTE" || tableName == "WORKSPACE_ATTRIBUTE")
         "TEMP"
       else
         "SCRATCH"

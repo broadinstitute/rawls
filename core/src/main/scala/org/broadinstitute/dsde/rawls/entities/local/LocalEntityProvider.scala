@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.trace
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
@@ -64,7 +64,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   }
 
   override def createEntity(entity: Entity): Future[Entity] = {
-    dataSource.inTransactionWithAttrTempTable { dataAccess =>
+    dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity)) { dataAccess =>
       dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspace.toWorkspaceName}")))
         case None => dataAccess.entityQuery.save(workspaceContext, entity)
@@ -168,7 +168,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     } yield operation.name
 
     withAttributeNamespaceCheck(namesToCheck) {
-      dataSource.inTransactionWithAttrTempTable { dataAccess =>
+      dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity)){ dataAccess =>
         val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
           val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
           entityUpdates.map { entityUpdate =>
