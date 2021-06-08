@@ -1182,4 +1182,25 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       }
     }
   }
+
+  "getSpendReportTableName" should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices { services =>
+    val billingProjectName = RawlsBillingProjectName("test-project")
+    val billingProject = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None, None, None, None, false, Some("bar"), Some("baz"), Some("foo"))
+    runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
+
+    val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+
+    result shouldBe Some("foo.bar.baz")
+  }
+
+  it should "return None if the spend report config is not set" in withTestDataServices { services =>
+    val billingProjectName = RawlsBillingProjectName("test-project")
+    val billingProject = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None, None, None, None, false, None, None, None)
+    runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
+
+    val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+
+    result shouldBe None
+  }
+
 }

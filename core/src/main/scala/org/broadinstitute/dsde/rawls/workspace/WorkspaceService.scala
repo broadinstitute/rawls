@@ -1987,7 +1987,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def getSpendReportTableName(billingProjectName: RawlsBillingProjectName): Future[Option[String]] = {
+  def getSpendReportTableName(billingProjectName: RawlsBillingProjectName): Future[Option[String]] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map { bpOpt =>
         val billingProject = bpOpt.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Could not load billing project ${billingProjectName.value}")))
