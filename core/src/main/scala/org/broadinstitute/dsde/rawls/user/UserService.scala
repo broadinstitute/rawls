@@ -312,7 +312,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     val datasetGoogleProject = spendReportConfiguration.datasetGoogleProject
 
     validateBigQueryDatasetName(datasetName)
-    validateBillingProjectName(datasetGoogleProject)
+    validateGoogleProjectName(datasetGoogleProject)
 
     requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
       val bqService = bqServiceFactory.getServiceFromJson(bigQueryCredentialJson, GoogleProject(billingProjectName.value))

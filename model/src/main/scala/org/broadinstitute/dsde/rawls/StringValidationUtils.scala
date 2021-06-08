@@ -32,9 +32,9 @@ trait StringValidationUtils {
     }
   }
 
-  private lazy val billingProjectNameRegex = "[A-z0-9_-]{6,30}".r
-  def validateBillingProjectName(s: String): Future[Unit] = {
-    if(! billingProjectNameRegex.pattern.matcher(s).matches) {
+  private lazy val googleProjectNameRegex = "[A-z0-9_-]{6,30}".r
+  def validateGoogleProjectName(s: String): Future[Unit] = {
+    if(! googleProjectNameRegex.pattern.matcher(s).matches) {
       val msg = s"Invalid name for billing project. Input must be between 6 and 30 characters in length and may only contain alphanumeric characters, underscores, and dashes."
       Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest)))
     } else {
@@ -48,6 +48,12 @@ trait StringValidationUtils {
       val msg = s"Invalid input: $s. Input must be of the format XXXXXX-XXXXXX-XXXXXX."
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
     }
+  }
+
+  // Note that the naming requirements for Google projects and  illing projects are
+  // currently identical, but that may change in the future
+  def validateBillingProjectName(s: String): Future[Unit] = {
+    validateGoogleProjectName(s)
   }
 
   //See https://cloud.google.com/bigquery/docs/datasets#dataset-naming
