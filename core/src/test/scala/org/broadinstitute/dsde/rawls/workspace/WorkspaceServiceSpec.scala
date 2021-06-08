@@ -1203,4 +1203,14 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     result shouldBe None
   }
 
+  it should "throw a RawlsExceptionWithErrorReport if the billing project does not exist" in withTestDataServices { services =>
+    val billingProjectName = RawlsBillingProjectName("test-project")
+
+    val actual = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+    }
+
+    actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
+  }
+
 }
