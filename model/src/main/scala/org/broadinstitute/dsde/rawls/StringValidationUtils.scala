@@ -42,6 +42,14 @@ trait StringValidationUtils {
     }
   }
 
+  private lazy val billingAccountNameRegex = "[A-z0-9]{6}-[A-z0-9]{6}-[A-z0-9]{6}$".r
+  def validateBillingAccountName(s: String): Unit = {
+    if(! billingAccountNameRegex.pattern.matcher(s).matches) {
+      val msg = s"Invalid input: $s. Input must be of the format XXXXXX-XXXXXX-XXXXXX."
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
+    }
+  }
+
   //See https://cloud.google.com/bigquery/docs/datasets#dataset-naming
   private lazy val bigQueryDatasetNameRegex = "[A-z0-9_]{1,1024}".r
   def validateBigQueryDatasetName(s: String): Unit = {

@@ -461,6 +461,39 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  def updateBillingProjectBillingAccount(billingProjectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[Unit] = {
+    validateBillingAccountName(updateAccountRequest.billingAccount.value)
+
+    requireProjectAction(billingProjectName, SamBillingProjectActions.updateBillingAccount) {
+      for {
+        hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, userInfo)
+        _ = if (!hasAccess) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
+        }
+        result <- setBillingProjectBillingAccountInternal(billingProjectName, Option(updateAccountRequest.billingAccount))
+      } yield result
+    }
+  }
+
+  def deleteBillingAccount(billingProjectName: RawlsBillingProjectName): Future[Unit] = {
+    requireProjectAction(billingProjectName, SamBillingProjectActions.updateBillingAccount) {
+      setBillingProjectBillingAccountInternal(billingProjectName, None)
+    }
+  }
+
+  private def setBillingProjectBillingAccountInternal(billingProjectName: RawlsBillingProjectName, billingAccountName: Option[RawlsBillingAccountName]): Future[Unit] = {
+
+    //Note that this assumes that the mapping between a Google Project and a Billing Project is 1:1.
+    //This will not be the case once PPW goes live. See Jira ticket CA-1363 for details.
+    val googleProjectName = GoogleProject(billingProjectName.value)
+
+    for {
+      result <- gcsDAO.setGoogleProjectBillingAccount(googleProjectName, billingAccountName, userInfo)
+      //Since the billing account has been updated, any existing spend configuration is now out of date
+      _ <- dataSource.inTransaction { dataSource => dataSource.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName) }
+    } yield result
+  }
+
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
       _ <- validateCreateProjectRequest(createProjectRequest)

@@ -12,12 +12,15 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockBigQuery
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.any
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatestplus.mockito.MockitoSugar
 import org.mockito.Mockito._
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -398,6 +401,160 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
+    }
+  }
+
+  it should "update the billing account for a billing project" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val billingAccountName = RawlsBillingAccountName("111111-111111-111111")
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
+      val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(true))
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
+
+      Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual ()
+
+      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
+
+      //assert that the spend report configuration has been fully cleared
+      spendReportDatasetInDb.head shouldEqual (None, None)
+
+      verify(mockGcsDAO, times(1)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+    }
+  }
+
+  it should "remove the billing account for a billing project" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(true))
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
+
+      Await.result(userService.deleteBillingAccount(billingProject.projectName), Duration.Inf) shouldEqual ()
+
+      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
+
+      //assert that the spend report configuration has been fully cleared
+      spendReportDatasetInDb.head shouldEqual (None, None)
+
+      verify(mockGcsDAO, times(1)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), ArgumentMatchers.eq(None), any[UserInfo])(any[ExecutionContext])
+    }
+  }
+
+  it should "not update the billing account for a billing project if the user does not have access to the billing project" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val billingAccountName = RawlsBillingAccountName("111111-111111-111111")
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
+      val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(false))
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual()
+      }
+
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
+
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+    }
+  }
+
+  it should "not update the billing account for a billing project if the user does not have access to the billing account" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val billingAccountName = RawlsBillingAccountName("111111-111111-111111")
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
+      val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(true))
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(false))
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual()
+      }
+
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
+
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+    }
+  }
+
+  it should "not remove the billing account for a billing project if the user does not have access to the billing project" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val billingAccountName = RawlsBillingAccountName("111111-111111-111111")
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(false))
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.deleteBillingAccount(billingProject.projectName), Duration.Inf) shouldEqual()
+      }
+
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.Forbidden
+
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
+    }
+  }
+
+  it should "throw a RawlsExceptionWithErrorReport when updating the billing account for a billing project and the billing account name is not valid" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val billingAccountName = RawlsBillingAccountName("INVALID")
+      val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
+      val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(true))
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(mockGcsDAO.setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])).thenReturn(Future.unit)
+      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf) shouldEqual()
+      }
+
+      actual.errorReport.statusCode.get shouldEqual StatusCodes.BadRequest
+
+      verify(mockGcsDAO, times(0)).setGoogleProjectBillingAccount(ArgumentMatchers.eq(googleProjectName), any[Option[RawlsBillingAccountName]], any[UserInfo])(any[ExecutionContext])
     }
   }
 

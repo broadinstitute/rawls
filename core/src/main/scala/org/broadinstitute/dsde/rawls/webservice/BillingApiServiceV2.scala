@@ -53,6 +53,22 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             }
           }
         } ~
+        pathPrefix("billingAccount") {
+          pathEnd {
+            put {
+              entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
+                complete{
+                  userServiceConstructor(userInfo).updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest).map(_ => StatusCodes.OK)
+                }
+              }
+            } ~
+              delete {
+                complete {
+                  userServiceConstructor(userInfo).deleteBillingAccount(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.OK)
+                }
+              }
+          }
+        } ~
         pathPrefix("members") {
           pathEnd {
             get {
