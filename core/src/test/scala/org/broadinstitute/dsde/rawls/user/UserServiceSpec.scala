@@ -4,7 +4,6 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
