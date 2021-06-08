@@ -47,8 +47,8 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
                       workspaceNamespace: String,
                       submissionDate: DateTime,
                       terminalStatusDate: Option[DateTime],
-                      tableNameP: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
-    val tableName = tableNameP.getOrElse(defaultTableName)
+                      tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
+    val tableName = tableNameOpt.getOrElse(defaultTableName)
 
     executeWorkflowCostsQuery(Seq(workflowId), workspaceNamespace, submissionDate, terminalStatusDate, tableName) map extractCostResults
   }

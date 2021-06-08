@@ -11,7 +11,7 @@ class MockSubmissionCostService(defaultTableName: String, serviceProject: String
     Future(workflowIds.map(_ -> fixedCost).toMap)
   }
 
-  override def getWorkflowCost(workflowId: String, workspaceNamespace: String, submissionDate: DateTime, submissionDoneDate: Option[DateTime], tableNameP: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
+  override def getWorkflowCost(workflowId: String, workspaceNamespace: String, submissionDate: DateTime, submissionDoneDate: Option[DateTime], tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
     Future(Map(workflowId -> fixedCost))
   }
 }
