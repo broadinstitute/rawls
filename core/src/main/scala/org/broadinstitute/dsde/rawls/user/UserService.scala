@@ -462,6 +462,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def updateBillingProjectBillingAccount(billingProjectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[Unit] = {
+    validateBillingAccountName(updateAccountRequest.billingAccount.value)
+
     requireProjectAction(billingProjectName, SamBillingProjectActions.updateBillingAccount) {
       for {
         hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, userInfo)
