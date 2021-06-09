@@ -475,20 +475,26 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         val updates = updateEntityAndWorkspace(workflowRecord.workflowEntityId.map(id => Some(entitiesById(id))).getOrElse(None), workspace, boundExpressions)
 
         val (optEntityUpdates, optWs) = updates
-        optEntityUpdates foreach { update: WorkflowEntityUpdate =>
+
+        val entityAttributeCount = optEntityUpdates map { update: WorkflowEntityUpdate =>
           val cnt = attributeCount(update.upserts)
           logger.debug(s"Updating $cnt attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}")
-          if (cnt > config.attributeUpdatesPerWorkflow)
-            throw new RawlsFatalExceptionWithErrorReport(ErrorReport(s"Cannot save outputs to entity because workflow's attribute count of $cnt exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))
-        }
-        optWs foreach { workspace: Workspace =>
+          cnt
+        } getOrElse 0
+
+        val workspaceAttributeCount = optWs map { workspace: Workspace =>
           val cnt = attributeCount(workspace.attributes)
           logger.debug(s"Updating $cnt attribute values for workspace in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}")
-          if (cnt > config.attributeUpdatesPerWorkflow)
-            throw new RawlsFatalExceptionWithErrorReport(ErrorReport(s"Cannot save outputs to workspace because workflow's attribute count of $cnt exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))
-        }
+          cnt
+        } getOrElse 0
 
-        Left(updates)
+        if (entityAttributeCount > config.attributeUpdatesPerWorkflow) {
+          Right((workflowRecord, Seq(AttributeString(s"Cannot save outputs to entity because workflow's attribute count of $entityAttributeCount exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))))
+        } else if (workspaceAttributeCount > config.attributeUpdatesPerWorkflow) {
+          Right((workflowRecord, Seq(AttributeString(s"Cannot save outputs to workspace because workflow's attribute count of $workspaceAttributeCount exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))))
+        } else {
+          Left(updates)
+        }
       } else {
         Right((workflowRecord, parsedExpressions.collect { case Failure(t) => AttributeString(t.getMessage) }))
       }
