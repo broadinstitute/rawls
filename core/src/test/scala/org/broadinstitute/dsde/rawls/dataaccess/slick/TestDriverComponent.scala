@@ -373,7 +373,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Some("Sample"),
       None,
       Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("boutput")),
+      Map("o1" -> AttributeString("output")),
       agoraMethod
     )
 
@@ -416,7 +416,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Some("Sample"),
       None,
       Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("doutput")),
+      Map("o1" -> AttributeString("output")),
       dockstoreMethod
     )
 
@@ -1168,7 +1168,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Some("Sample"),
       None,
       Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("aoutput")),
+      Map("o1" -> AttributeString("output")),
       AgoraMethod("ns-config", "meth1", 1)
     )
 
