@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 import akka.http.scaladsl.model.Uri
-import org.broadinstitute.dsde.rawls.model.DeltaInsert
+import org.broadinstitute.dsde.rawls.model.deltalayer.v1.DeltaInsert
 
 import scala.concurrent.Future
 

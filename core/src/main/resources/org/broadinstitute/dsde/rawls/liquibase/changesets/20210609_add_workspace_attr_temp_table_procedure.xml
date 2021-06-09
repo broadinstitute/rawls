@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="create_entity_attr_temp_table">
+    <changeSet logicalFilePath="dummy" author="dhite" id="create_workspace_attr_temp_table">
         <createProcedure>
-            CREATE PROCEDURE createEntityAttributeTempTable ()
+            CREATE PROCEDURE createWorkspaceAttributeTempTable ()
             BEGIN
-            create temporary table ENTITY_ATTRIBUTE_TEMP (
+            create temporary table WORKSPACE_ATTRIBUTE_TEMP (
                 id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key,
                 namespace text NOT NULL,
                 name text NOT NULL,
@@ -16,7 +16,7 @@
                 value_entity_ref bigint(20) unsigned DEFAULT NULL,
                 list_index int(11) DEFAULT NULL,
                 list_length int(11) DEFAULT NULL,
-                owner_id bigint(20) unsigned NOT NULL,
+                owner_id CHAR(36) NOT NULL,
                 deleted bit(1) DEFAULT false,
                 deleted_date timestamp NULL DEFAULT NULL,
                 transaction_id CHAR(36) NOT NULL,
@@ -26,13 +26,18 @@
         </createProcedure>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="drop_entity_attr_temp_table">
+    <changeSet logicalFilePath="dummy" author="dhite" id="drop_workspace_attr_temp_table">
         <createProcedure>
-            CREATE PROCEDURE dropEntityAttributeTempTable ()
+            CREATE PROCEDURE dropWorkspaceAttributeTempTable ()
             BEGIN
-            drop temporary table if exists ENTITY_ATTRIBUTE_TEMP;
+                drop temporary table if exists WORKSPACE_ATTRIBUTE_TEMP;
             END
         </createProcedure>
     </changeSet>
+
+    <changeSet id="REMOVE_WORKSPACE_ATTRIBUTE_SCRATCH" author="dhite" logicalFilePath="dummy">
+        <sql>drop table WORKSPACE_ATTRIBUTE_SCRATCH</sql>
+    </changeSet>
+
 
 </databaseChangeLog>

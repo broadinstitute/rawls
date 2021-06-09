@@ -118,7 +118,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
-        traceWithParent("withNewWorkspaceContext", s2)( s3 => dataSource.inTransaction({ dataAccess =>
+        traceWithParent("withNewWorkspaceContext", s2)( s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
           withNewWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
             DBIO.successful(workspaceContext)
           }
@@ -381,7 +381,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         isCurator <- tryIsCurator(userInfo.userEmail)
         workspace <- getWorkspaceContext(workspaceName) flatMap { ctx =>
           withLibraryPermissions(ctx, operations, userInfo, isCurator) {
-            dataSource.inTransaction ({ dataAccess =>
+            dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
               updateWorkspace(operations, dataAccess)(ctx.toWorkspaceName)
             }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
           }
@@ -397,7 +397,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
         ctx <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
-        workspace <- dataSource.inTransaction({ dataAccess =>
+        workspace <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
             updateWorkspace(operations, dataAccess)(ctx.toWorkspaceName)
         }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
@@ -547,7 +547,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           } yield bucketLocation) else withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {Future(destWorkspaceRequest.bucketLocation)}
 
           bucketLocationFuture flatMap { bucketLocationOption =>
-            dataSource.inTransaction({ dataAccess =>
+            dataSource.inTransactionWithAttrTempTable( Set(AttributeTempTableType.Workspace))({ dataAccess =>
               // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
               withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
                 DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>

@@ -11,6 +11,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspaceActions, SamWorkspacePolicyNames, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -41,7 +42,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshot.snapshotId, snapshot.name, snapshot.description, terraDataRepoInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
       val referenceId = snapshotRef.getMetadata.getResourceId
-      val datasetName = generateDatasetName(referenceId)
+      val datasetName = DeltaLayer.generateDatasetName(referenceId)
 
       val datasetLabels = Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_id" -> snapshot.snapshotId.toString)
 
@@ -120,7 +121,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val snapshotRef = workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
       workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
 
-      val datasetName = generateDatasetName(snapshotRef.getMetadata.getResourceId)
+      val datasetName = DeltaLayer.generateDatasetName(snapshotRef.getMetadata.getResourceId)
       deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture().map { _ =>
         val datasetRef = workspaceManagerDAO.getBigQueryDatasetReferenceByName(workspaceContext.workspaceIdAsUUID, datasetName, userInfo.accessToken)
         workspaceManagerDAO.deleteBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, datasetRef.getMetadata.getResourceId, userInfo.accessToken)
@@ -162,10 +163,6 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     val samAclBindings = Acl.Role.READER -> filteredSamPolicies.map{ filteredSamPolicyEmail =>(filteredSamPolicyEmail, Acl.Entity.Type.GROUP) }.toSeq
 
     defaultIamRoles + samAclBindings
-  }
-
-  private[snapshot] def generateDatasetName(datasetReferenceId: UUID) = {
-    "deltalayer_" + datasetReferenceId.toString.replace('-', '_')
   }
 
 }
