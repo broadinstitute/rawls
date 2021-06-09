@@ -317,7 +317,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     } recoverWith {
       // If there is something fatally wrong handling outputs, mark the workflows as failed
       case fatal: RawlsFatalExceptionWithErrorReport =>
-        failWorkflowsWithReason(workflowsWithStatuses, fatal)
+        datasource.inTransaction { dataAccess =>
+          DBIO.sequence(workflowsWithStatuses map { workflowRecord =>
+            dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
+              dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
+          })
+        }
     } flatMap { _ =>
       // NEW TXN! Update statuses for workflows and submission.
       datasource.inTransaction { dataAccess =>
@@ -346,15 +351,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           }
         }
       }
-    }
-  }
-
-  private def failWorkflowsWithReason(workflowsWithStatuses: Seq[WorkflowRecord], reason: Exception) = {
-    datasource.inTransaction { dataAccess =>
-      DBIO.sequence(workflowsWithStatuses map { workflowRecord =>
-        dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
-          dataAccess.workflowQuery.saveMessages(Seq(AttributeString(reason.toString)), workflowRecord.id)
-      })
     }
   }
 
