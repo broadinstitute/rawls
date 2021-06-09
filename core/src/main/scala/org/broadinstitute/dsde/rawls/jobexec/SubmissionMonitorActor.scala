@@ -485,8 +485,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         } getOrElse 0
 
         if (entityAttributeCount > config.attributeUpdatesPerWorkflow) {
+          logger.error(s"Cancelled update of $entityAttributeCount entity attributes for workflow ${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}.")
           Right((workflowRecord, Seq(AttributeString(s"Cannot save outputs to entity because workflow's attribute count of $entityAttributeCount exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))))
         } else if (workspaceAttributeCount > config.attributeUpdatesPerWorkflow) {
+          logger.error(s"Cancelled update of $workspaceAttributeCount workspace attributes for workflow ${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}.")
           Right((workflowRecord, Seq(AttributeString(s"Cannot save outputs to workspace because workflow's attribute count of $workspaceAttributeCount exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))))
         } else {
           Left(updates)
