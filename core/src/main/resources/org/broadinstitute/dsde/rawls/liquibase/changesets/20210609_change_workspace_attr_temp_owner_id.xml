@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
-    <changeSet logicalFilePath="dummy" author="dhite" id="create_workspace_attr_temp_table">
+    <changeSet logicalFilePath="dummy" author="dhite" id="create_workspace_attr_temp_table_revised">
         <dropProcedure procedureName="createWorkspaceAttributeTempTable" />
         <createProcedure>
             CREATE PROCEDURE createWorkspaceAttributeTempTable ()
@@ -25,19 +25,6 @@
             );
             END
         </createProcedure>
-    </changeSet>
-
-    <changeSet logicalFilePath="dummy" author="dhite" id="drop_workspace_attr_temp_table">
-        <createProcedure>
-            CREATE PROCEDURE dropWorkspaceAttributeTempTable ()
-            BEGIN
-                drop temporary table if exists WORKSPACE_ATTRIBUTE_TEMP;
-            END
-        </createProcedure>
-    </changeSet>
-
-    <changeSet id="REMOVE_WORKSPACE_ATTRIBUTE_SCRATCH" author="dhite" logicalFilePath="dummy">
-        <sql>drop table WORKSPACE_ATTRIBUTE_SCRATCH</sql>
     </changeSet>
 
 
