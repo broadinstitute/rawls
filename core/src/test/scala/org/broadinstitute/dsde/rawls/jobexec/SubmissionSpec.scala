@@ -290,7 +290,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
-      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 2000)
+      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 20000)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val samDAO = new MockSamDAO(dataSource)
       val gpsDAO = new MockGooglePubSubDAO

@@ -130,7 +130,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
-    val config = SubmissionMonitorConfig(5 seconds, true, 2000)
+    val config = SubmissionMonitorConfig(5 seconds, true, 20000)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       new UncoordinatedDataSourceAccess(slickDataSource),
