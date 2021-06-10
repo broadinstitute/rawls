@@ -443,13 +443,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def updateBillingAccount(projectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[PerRequestMessage] = {
-    for {
-      hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, userInfo)
-      _ = if (!hasAccess) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
-      }
-      result <- updateBillingAccountInternal(projectName, Option(updateAccountRequest.billingAccount))
-    } yield result
+    requireProjectAction(projectName, SamBillingProjectActions.updateBillingAccount) {
+      for {
+        hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, userInfo)
+        _ = if (!hasAccess) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
+        }
+        result <- updateBillingAccountInternal(projectName, Option(updateAccountRequest.billingAccount))
+      } yield result
+    }
   }
 
   def deleteBillingAccount(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
