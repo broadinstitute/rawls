@@ -49,7 +49,8 @@ object Submission extends LazyLogging with Eventually with RandomUtil {
     eventually {
       val (actualStatus, workflowIds) = getSubmissionStatusAndWorkflowIds(billingProjectName, workspaceName, submissionId)
       withClue(s"Monitoring submission [$billingProjectName/$workspaceName/$submissionId] until finish; " +
-                     s"actual status was [$actualStatus] with first 10 workflow ids [${workflowIds.take(10).mkString(", ")}]") {
+                     s"actual status was [$actualStatus] with first 10 workflow ids [${workflowIds.take(10).mkString(", ")}]. " +
+                     s"Scalatest-generated error message is:") {
         SUBMISSION_COMPLETED_STATES should contain (actualStatus)
       }
     }
