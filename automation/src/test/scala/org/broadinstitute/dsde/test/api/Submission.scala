@@ -16,6 +16,7 @@ object Submission extends LazyLogging with Eventually with RandomUtil {
 
   private val SUBMISSION_COMPLETED_STATES = List(DONE_STATUS, ABORTED_STATUS)
 
+  // N.B. currently not used anywhere
   def isSubmissionDone(status: String): Boolean = {
     SUBMISSION_COMPLETED_STATES.contains(status)
   }
@@ -49,7 +50,7 @@ object Submission extends LazyLogging with Eventually with RandomUtil {
       val (actualStatus, workflowIds) = getSubmissionStatusAndWorkflowIds(billingProjectName, workspaceName, submissionId)
       withClue(s"Monitoring submission [$billingProjectName/$workspaceName/$submissionId] until finish; " +
                      s"actual status was [$actualStatus] with first 10 workflow ids [${workflowIds.take(10).mkString(", ")}]") {
-        isSubmissionDone(actualStatus) shouldBe true
+        SUBMISSION_COMPLETED_STATES should contain (actualStatus)
       }
     }
   }
