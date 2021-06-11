@@ -1,28 +1,27 @@
 package org.broadinstitute.dsde.test.api
 
+import java.nio.charset.Charset
 import java.util.UUID
 
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import akka.http.scaladsl.model.Uri.{Path, Query}
-import akka.http.scaladsl.model.{StatusCodes, Uri}
-import bio.terra.datarepo.api.RepositoryApi
-import bio.terra.datarepo.client.ApiClient
-import bio.terra.datarepo.model.{EnumerateSnapshotModel, SnapshotModel}
-import bio.terra.workspace.model._
-import cats.effect.Blocker
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import spray.json._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 //import org.broadinstitute.dsde.workbench.dao.Google.googleBigQueryDAO
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
+import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import com.google.cloud.bigquery.BigQuery
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.time.{Minutes, Seconds, Span}
+import spray.json.DefaultJsonProtocol._
 
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.language.postfixOps
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
@@ -162,6 +161,8 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     }
 
     "should add a BigQuery dataset for each snapshot reference added" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
@@ -183,7 +184,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           resources.size shouldBe 1
 
           // check that the bq dataset has been created
-
+          val dataset = getDataset("hello", projectName)
         }
       }
     }
@@ -280,7 +281,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
             }
           }
 
-          }
+        }
 
       }
     }
@@ -358,14 +359,27 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     }
   }
 
-  private def getDataset(datasetName: String) = {
+  //    GoogleBigQueryService.resource(
+  //      RawlsConfig.pathToQAJson,
+  //      Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global),
+  //      projectId
+  //    )
+
+  //    new GoogleBigQueryServiceFactory(Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global))(scala.concurrent.ExecutionContext.global)
+  //      .getServiceFromCredentialPath(RawlsConfig.pathToQAJson, GoogleProject(projectId))
+
+  private def getDataset(datasetName: String, projectId: String)(implicit patienceConfig: PatienceConfig) = {
+    import org.apache.commons.io.IOUtils
+    import com.google.auth.oauth2.ServiceAccountCredentials
+
     GoogleBigQueryService.resource(
-      RawlsConfig.pathToQAJshi,
-      Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global)
+      ServiceAccountCredentials.fromStream(IOUtils.toInputStream(RawlsConfig.pathToQAJson, Charset.defaultCharset)),
+      Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global),
+      GoogleProject(projectId)
     ).use {
-       bq =>
+      bq =>
         for {
-         // policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError
+          // policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError
           dataset <- bq.getDataset(datasetName)
         } yield {
           dataset
