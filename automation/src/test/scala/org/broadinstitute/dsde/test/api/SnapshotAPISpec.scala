@@ -9,6 +9,7 @@ import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
 import bio.terra.datarepo.model.{EnumerateSnapshotModel, SnapshotModel}
 import bio.terra.workspace.model._
+import cats.effect.Blocker
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 import com.typesafe.scalalogging.LazyLogging
@@ -18,6 +19,10 @@ import spray.json._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
+//import org.broadinstitute.dsde.workbench.dao.Google.googleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
+import com.google.cloud.bigquery.BigQuery
+
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
@@ -154,6 +159,33 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
         }
       }
 
+    }
+
+    "should add a BigQuery dataset for each snapshot reference added" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+      val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
+
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
+
+      withCleanBillingProject(owner) { projectName =>
+        withWorkspace(projectName, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
+
+          val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
+          val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
+
+          val snapshotName = "snapshotReferenceForAnalysis"
+          // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
+          createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)
+
+          // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
+          // if we can successfully list snapshot references, it means WSM created its copy of the workspace
+          val listResponse = listSnapshotReferences(projectName, workspaceName)
+          val resources = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
+          resources.size shouldBe 1
+
+          // check that the bq dataset has been created
+
+        }
+      }
     }
 
     "should be able to run analysis on a snapshot" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
@@ -326,6 +358,21 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     }
   }
 
+  private def getDataset(datasetName: String) = {
+    GoogleBigQueryService.resource(
+      RawlsConfig.pathToQAJshi,
+      Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global)
+    ).use {
+       bq =>
+        for {
+         // policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError
+          dataset <- bq.getDataset(datasetName)
+        } yield {
+          dataset
+        }.toList
+    }.unsafeRunSync()
+  }
+
 
   // a bastardized version of the HttpDataRepoDAO in the main rawls codebase
   class TestDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) {
@@ -342,5 +389,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       new RepositoryApi(getApiClient(accessToken.value))
     }
   }
+
 
 }
