@@ -466,25 +466,25 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
   "Safe printer" - {
     "should safely print attributes" in {
-      val map1 = Map(
+      val simpleMap = Map(
         AttributeName("namespace1", "name1") -> AttributeString("value1")
       )
-      val map2: AttributeMap = Map.empty
-      val map3 = Map(
+      val emptyMap: AttributeMap = Map.empty
+      val emptyListMap = Map(
         AttributeName("namespace1", "name1") -> AttributeValueEmptyList
       )
-      val map4 = Map(
+      val populatedListMap = Map(
         AttributeName("namespace1", "name1") -> AttributeValueList(
           Seq(
             AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)
           )
         )
       )
-      val map5 = Map(
+      val multiKeyMap = Map(
         AttributeName("namespace1", "name1") -> AttributeString("value1"),
         AttributeName("namespace2", "name2") -> AttributeString("value2")
       )
-      val map6 = Map(
+      val realisticUserMap = Map(
         AttributeName("default", "read_counts") ->
           AttributeValueList(
             Vector(
@@ -498,10 +498,10 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
           )
         )
 
-      val map7 = Map(
+      val attributeReferenceMap = Map(
         AttributeName("default", "read_counts") -> AttributeEntityReference("type", "name"))
 
-      val map8 = Map(
+      val attributeReferenceListMap = Map(
         AttributeName("default", "read_counts") -> AttributeEntityReferenceList(Seq(AttributeEntityReference("type", "name1"), AttributeEntityReference("type", "name2")))
       )
 
@@ -524,14 +524,14 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       //     )
       // )
 
-      Attributable.safePrint(map1) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1))"
-      Attributable.safePrint(map2) shouldBe "[First 10 items] Map()"
-      Attributable.safePrint(map3) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> List())"
-      Attributable.safePrint(map4) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> List(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)))"
-      Attributable.safePrint(map5) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1), AttributeName(namespace2,name2) -> AttributeString(value2))"
-      Attributable.safePrint(map6, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> Vector(AttributeString(gs://my-workflow/shard-0/cacheCopy/some_file.tsv), AttributeString(gs://my-workflow/shard-1/cacheCopy/some_file.tsv)))"
-      Attributable.safePrint(map7, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> AttributeEntityReference(type,name))"
-      Attributable.safePrint(map8, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> List(AttributeEntityReference(type,name1), AttributeEntityReference(type,name2)))"
+      Attributable.safePrint(simpleMap) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1))"
+      Attributable.safePrint(emptyMap) shouldBe "[First 10 items] Map()"
+      Attributable.safePrint(emptyListMap) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> List())"
+      Attributable.safePrint(populatedListMap) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> List(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)))"
+      Attributable.safePrint(multiKeyMap) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1), AttributeName(namespace2,name2) -> AttributeString(value2))"
+      Attributable.safePrint(realisticUserMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> Vector(AttributeString(gs://my-workflow/shard-0/cacheCopy/some_file.tsv), AttributeString(gs://my-workflow/shard-1/cacheCopy/some_file.tsv)))"
+      Attributable.safePrint(attributeReferenceMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> AttributeEntityReference(type,name))"
+      Attributable.safePrint(attributeReferenceListMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> List(AttributeEntityReference(type,name1), AttributeEntityReference(type,name2)))"
     }
   }
 }
