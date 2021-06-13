@@ -6,7 +6,7 @@ import java.nio.charset.Charset
 import java.util.UUID
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
-//import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.Uri.{Path, Query}
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import bio.terra.datarepo.api.RepositoryApi
