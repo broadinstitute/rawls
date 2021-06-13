@@ -1,24 +1,35 @@
 package org.broadinstitute.dsde.test.api
 
+
+import org.apache.commons.io.IOUtils
 import java.nio.charset.Charset
 import java.util.UUID
-
+import scala.concurrent.ExecutionContext
+import scala.concurrent.ExecutionContext.Implicits.global
+//import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.model.Uri.{Path, Query}
+import akka.http.scaladsl.model.{StatusCodes, Uri}
+import bio.terra.datarepo.api.RepositoryApi
+import bio.terra.datarepo.client.ApiClient
+import bio.terra.datarepo.model.{EnumerateSnapshotModel, SnapshotModel}
+import bio.terra.workspace.model._
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
+import spray.json._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-//import org.broadinstitute.dsde.workbench.dao.Google.googleBigQueryDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import com.google.cloud.bigquery.BigQuery
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json.DefaultJsonProtocol._
-
+import com.google.auth.oauth2.ServiceAccountCredentials
+import cats.effect.{Blocker, ContextShift, IO, Timer}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -180,11 +191,12 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
           // if we can successfully list snapshot references, it means WSM created its copy of the workspace
           val listResponse = listSnapshotReferences(projectName, workspaceName)
-          val resourceList = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
-          resourceList.resources.size shouldBe 1
+          val resources = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
+          resources.size shouldBe 1
+          val resourceId = resources.head.getMetadata.getResourceId
 
           // check that the bq dataset has been created
-          val dataset = getDataset("deltalayer_" + resourceList.resources.head.getResourceMetadata.getResourceId.toString.replace('-', '_'), projectName)
+          val dataset = getDataset("deltalayer_" + resourceId.toString.replace('-', '_'), projectName, ownerAuthToken)
           dataset shouldBe 1
           logger.info("DATASET: " + dataset.toString)
         }
@@ -370,15 +382,21 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
   //    new GoogleBigQueryServiceFactory(Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global))(scala.concurrent.ExecutionContext.global)
   //      .getServiceFromCredentialPath(RawlsConfig.pathToQAJson, GoogleProject(projectId))
 
-  private def getDataset(datasetName: String, projectId: String)(implicit patienceConfig: PatienceConfig) = {
-    import org.apache.commons.io.IOUtils
-    import com.google.auth.oauth2.ServiceAccountCredentials
+  private def getDataset(datasetName: String, projectId: String, authToken: AuthToken)(implicit executionContext: ExecutionContext) = {
+    import org.typelevel.log4cats.Logger
+    import org.typelevel.log4cats.slf4j.Slf4jLogger
 
-    GoogleBigQueryService.resource(
+    implicit lazy val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(executionContext)
+    implicit lazy val timer: Timer[IO] = cats.effect.IO.timer(executionContext)
+    implicit val logger: org.typelevel.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+
+    val bqService = GoogleBigQueryService.resource[IO](
       ServiceAccountCredentials.fromStream(IOUtils.toInputStream(RawlsConfig.pathToQAJson, Charset.defaultCharset)),
-      Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global),
+      Blocker.liftExecutionContext(executionContext),
       GoogleProject(projectId)
-    ).use {
+    )
+
+    bqService.use {
       bq =>
         for {
           // policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError

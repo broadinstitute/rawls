@@ -9,7 +9,7 @@ object Dependencies {
 
   val serviceTestV = "0.18-23f5ae7"
   val workbenchGoogleV = "0.21-24dcd92"
-  val workbenchGoogle2V = "0.18-4631ebf"
+  val workbenchGoogle2V = "0.21-e17afdf"
   val workbenchModelV  = "0.14-65bba14"
   val workbenchMetricsV  = "0.5-64a7b29"
 
@@ -29,7 +29,10 @@ object Dependencies {
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
   val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
 
+  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
+
   val rootDependencies = Seq(
+    apacheCommonsIO,
     // proactively pull in latest versions of Jackson libs, instead of relying on the versions
     // specified as transitive dependencies, due to OWASP DependencyCheck warnings for earlier versions.
     "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonV,
