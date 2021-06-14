@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls
 
 import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, ErrorReport, ErrorReportSource}
 import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.workbench.model.google.BigQueryDatasetName
 
 import scala.concurrent.Future
 
@@ -58,8 +59,8 @@ trait StringValidationUtils {
 
   //See https://cloud.google.com/bigquery/docs/datasets#dataset-naming
   private lazy val bigQueryDatasetNameRegex = "[A-z0-9_]{1,1024}".r
-  def validateBigQueryDatasetName(s: String): Unit = {
-    if(! bigQueryDatasetNameRegex.pattern.matcher(s).matches) {
+  def validateBigQueryDatasetName(s: BigQueryDatasetName): Unit = {
+    if(! bigQueryDatasetNameRegex.pattern.matcher(s.value).matches) {
       val msg = s"Invalid name for dataset. Input must be between 1 and 1024 characters in length and may only contain alphanumeric characters and underscores."
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
     }

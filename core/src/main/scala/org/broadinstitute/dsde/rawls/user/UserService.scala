@@ -20,7 +20,7 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, GoogleProject}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -312,14 +312,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     val datasetGoogleProject = spendReportConfiguration.datasetGoogleProject
 
     validateBigQueryDatasetName(datasetName)
-    validateGoogleProjectName(datasetGoogleProject)
+    validateGoogleProjectName(datasetGoogleProject.value)
 
     requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
       val bqService = bqServiceFactory.getServiceFromJson(bigQueryCredentialJson, GoogleProject(billingProjectName.value))
 
       for {
         //Get the dataset to validate that it exists and that we have permission to see it
-        _ <- bqService.use(_.getDataset(GoogleProject(datasetGoogleProject), datasetName)).unsafeToFuture().map {
+        _ <- bqService.use(_.getDataset(datasetGoogleProject, datasetName)).unsafeToFuture().map {
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The dataset $datasetName could not be found."))
           case dataset => dataset
         }
@@ -332,8 +332,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
         //Get the table and validate that it exists and that we have permission to see it
         //Note that the table name replaces all dashes in the billing account ID with underscores
-        tableName = s"gcp_billing_export_v1_${billingAccountId.replace("-", "_")}"
-        table <- bqService.use(_.getTable(GoogleProject(datasetGoogleProject), datasetName, tableName)).unsafeToFuture()
+        tableName = BigQueryTableName(s"gcp_billing_export_v1_${billingAccountId.replace("-", "_")}")
+        table <- bqService.use(_.getTable(datasetGoogleProject, datasetName, tableName)).unsafeToFuture()
 
         res <- if(table.isDefined) {
                 //Isolate the db txn so we're not running any REST calls inside of it
