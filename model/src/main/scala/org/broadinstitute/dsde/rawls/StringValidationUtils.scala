@@ -33,16 +33,6 @@ trait StringValidationUtils {
     }
   }
 
-  private lazy val googleProjectNameRegex = "[A-z0-9_-]{6,30}".r
-  def validateGoogleProjectName(s: String): Future[Unit] = {
-    if(! googleProjectNameRegex.pattern.matcher(s).matches) {
-      val msg = s"Invalid input: $s. Input must be between 6 and 30 characters in length and may only contain alphanumeric characters, underscores, and dashes."
-      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest)))
-    } else {
-      Future.successful(())
-    }
-  }
-
   private lazy val billingAccountNameRegex = "[A-z0-9]{6}-[A-z0-9]{6}-[A-z0-9]{6}$".r
   def validateBillingAccountName(s: String): Unit = {
     if(! billingAccountNameRegex.pattern.matcher(s).matches) {
@@ -51,10 +41,25 @@ trait StringValidationUtils {
     }
   }
 
-  // Note that the naming requirements for Google projects and billing projects are
-  // currently identical, but that may change in the future
+  private lazy val billingProjectNameRegex = "[A-z0-9_-]{6,30}".r
   def validateBillingProjectName(s: String): Future[Unit] = {
-    validateGoogleProjectName(s)
+    if(! billingProjectNameRegex.pattern.matcher(s).matches) {
+      val msg = s"Invalid name for billing project. Input must be between 6 and 30 characters in length and may only contain alphanumeric characters, underscores, and dashes."
+      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest)))
+    } else {
+      Future.successful(())
+    }
+  }
+
+  //See Google docs for naming requirements: https://cloud.google.com/resource-manager/docs/creating-managing-projects#before_you_begin
+  private lazy val googleProjectNameRegex = "^[a-z]([-a-z0-9]){4,28}[a-z0-9]$".r
+  def validateGoogleProjectName(s: String): Future[Unit] = {
+    if(! googleProjectNameRegex.pattern.matcher(s).matches) {
+      val msg = s"Invalid name for Google project. Input must be 6 to 30 lowercase letters, digits, or hyphens. It must start with a letter. Trailing hyphens are prohibited."
+      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest)))
+    } else {
+      Future.successful(())
+    }
   }
 
   //See https://cloud.google.com/bigquery/docs/datasets#dataset-naming
