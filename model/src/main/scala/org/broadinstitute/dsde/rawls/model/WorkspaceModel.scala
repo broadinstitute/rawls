@@ -44,7 +44,10 @@ object Attributable {
     def safePrintInner(attr: Attribute): String = {
       attr match {
         case attr: AttributeListElementable => attr.toString
-        case attrList: AttributeList[_] => attrList.list.take(depth).toString
+        case attrList: AttributeList[_] =>
+          // This is OK because lists of lists are not supported (see comment in WorkspaceModelSpec.scala)
+          attrList.list.take(depth).toString
+
       }
     }
 
