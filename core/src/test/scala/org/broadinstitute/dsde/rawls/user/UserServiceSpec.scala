@@ -256,7 +256,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
 
-      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName), Some("gcp_billing_export_v1_some_billing_account"))
+      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName.value), Some("gcp_billing_export_v1_some_billing_account"))
     }
   }
 
@@ -329,7 +329,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val spendReportConfigInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
 
       //assert that no change was made to the spend configuration
-      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName), Some(spendReportTableName))
+      spendReportConfigInDb.head shouldEqual (Some(spendReportDatasetName.value), Some(spendReportTableName.value))
     }
   }
 
