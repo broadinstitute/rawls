@@ -51,7 +51,7 @@ trait StringValidationUtils {
     }
   }
 
-  // Note that the naming requirements for Google projects and  illing projects are
+  // Note that the naming requirements for Google projects and billing projects are
   // currently identical, but that may change in the future
   def validateBillingProjectName(s: String): Future[Unit] = {
     validateGoogleProjectName(s)
