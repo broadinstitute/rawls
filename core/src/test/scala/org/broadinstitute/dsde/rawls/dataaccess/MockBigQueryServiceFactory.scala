@@ -9,7 +9,7 @@ import com.google.cloud.bigquery.{Acl, BigQuery, Dataset, DatasetId, DatasetInfo
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
@@ -141,15 +141,29 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
     // to succeed, and no code actually looks at the contents of this option.
   }
 
-  override def getTable(googleProject: GoogleProject, datasetName: String, tableName: String): IO[Option[Table]] = {
-    if(tableName.equals("gcp_billing_export_v1_billing_account_for_google_project_without_table")) IO.none
+  override def getTable(googleProject: GoogleProject, datasetName: BigQueryDatasetName, tableName: BigQueryTableName): IO[Option[Table]] = {
+    if(tableName.value.equals("gcp_billing_export_v1_billing_account_for_google_project_without_table")) IO.none
     else IO.pure(Some(null))
     // Note that this Some(null) is intentional. We just need the method
     // to succeed, and no code actually looks at the contents of this option.
   }
 
-  override def getDataset(googleProject: GoogleProject, datasetName: String): IO[Option[Dataset]] = {
-    if(datasetName.equals("dataset_does_not_exist")) IO.none
+  override def getDataset(googleProject: GoogleProject, datasetName: BigQueryDatasetName): IO[Option[Dataset]] = {
+    if(datasetName.value.equals("dataset_does_not_exist")) IO.none
+    else IO.pure(Some(null))
+    // Note that this Some(null) is intentional. We just need the method
+    // to succeed, and no code actually looks at the contents of this option.
+  }
+
+  override def getTable(datasetName: BigQueryDatasetName, tableName: BigQueryTableName): IO[Option[Table]] = {
+    if(tableName.value.equals("gcp_billing_export_v1_billing_account_for_google_project_without_table")) IO.none
+    else IO.pure(Some(null))
+    // Note that this Some(null) is intentional. We just need the method
+    // to succeed, and no code actually looks at the contents of this option.
+  }
+
+  override def getDataset(datasetName: BigQueryDatasetName): IO[Option[Dataset]] = {
+    if(datasetName.value.equals("dataset_does_not_exist")) IO.none
     else IO.pure(Some(null))
     // Note that this Some(null) is intentional. We just need the method
     // to succeed, and no code actually looks at the contents of this option.

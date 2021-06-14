@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -32,6 +31,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify}
@@ -1185,7 +1185,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   "getSpendReportTableName" should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices { services =>
     val billingProjectName = RawlsBillingProjectName("test-project")
-    val billingProject = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None, None, None, None, false, Some("bar"), Some("baz"), Some("foo"))
+    val billingProject = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None, None, None, None, false, Some(BigQueryDatasetName("bar")), Some(BigQueryTableName("baz")), Some(GoogleProject("foo")))
     runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
 
     val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
