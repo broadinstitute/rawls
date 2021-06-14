@@ -694,6 +694,87 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  it should "fail workflows that exceed the configured workspace attribute maximum" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+
+    runAndWait {
+      withWorkspaceContext(testData.workspace) { context =>
+        submissionQuery.create(context, testData.submissionMaxWorkspaceAttributes)
+      }
+    }
+
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionMaxWorkspaceAttributes, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionMaxWorkspaceAttributes.submissionId)))
+
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(
+      AttributeValueList(
+        Vector(
+          AttributeString("entry 1"),
+          AttributeString("entry 2"),
+          AttributeString("entry 3"),
+          AttributeString("entry 4"),
+          AttributeString("entry 5"),
+          AttributeString("entry 6"),
+          AttributeString("entry 7"),
+          AttributeString("entry 8"),
+          AttributeString("entry 9"),
+          AttributeString("entry 10"),
+          AttributeString("entry 11")
+    ))))))), this))
+
+    val workflowRecord = runAndWait(
+      workflowQuery.findWorkflowByExternalIdAndSubmissionId(
+        testData.submissionMaxWorkspaceAttributes.workflows.head.workflowId.get,
+        UUID.fromString(testData.submissionMaxWorkspaceAttributes.submissionId)).result).head
+
+    val errorMessage = "Cannot save outputs to workspace because workflow's attribute count of 15 exceeds Terra maximum of 10."
+    assertResult(Vector(AttributeString(errorMessage))) {
+      runAndWait(
+        workflowQuery.loadWorkflowMessages(workflowRecord.id)
+      )
+    }
+
+  }
+
+  it should "fail workflows that exceed the configured entity attribute maximum" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+
+    runAndWait {
+      withWorkspaceContext(testData.workspace) { context =>
+        submissionQuery.create(context, testData.submissionMaxEntityAttributes)
+      }
+    }
+
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionMaxEntityAttributes, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionMaxEntityAttributes.submissionId)))
+
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(
+      AttributeValueList(
+        Vector(
+          AttributeString("entry 1"),
+          AttributeString("entry 2"),
+          AttributeString("entry 3"),
+          AttributeString("entry 4"),
+          AttributeString("entry 5"),
+          AttributeString("entry 6"),
+          AttributeString("entry 7"),
+          AttributeString("entry 8"),
+          AttributeString("entry 9"),
+          AttributeString("entry 10"),
+          AttributeString("entry 11")
+        ))))))), this))
+
+    val workflowRecord = runAndWait(
+      workflowQuery.findWorkflowByExternalIdAndSubmissionId(
+        testData.submissionMaxEntityAttributes.workflows.head.workflowId.get,
+        UUID.fromString(testData.submissionMaxEntityAttributes.submissionId)).result).head
+
+    val errorMessage = "Cannot save outputs to entity because workflow's attribute count of 11 exceeds Terra maximum of 10."
+    assertResult(Vector(AttributeString(errorMessage))) {
+      runAndWait(
+        workflowQuery.loadWorkflowMessages(workflowRecord.id)
+      )
+    }
+  }
+
   it should "handleStatusResponses and fail workflows that are missing outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     runAndWait {
       withWorkspaceContext(testData.workspace) { context =>
@@ -846,7 +927,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO, trackDetailedSubmissionMetrics: Boolean = true): TestActorRef[SubmissionMonitorActor] = {
-    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics)
+    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics, 10)
     TestActorRef[SubmissionMonitorActor](SubmissionMonitorActor.props(
       wsName,
       UUID.fromString(submission.submissionId),
@@ -861,7 +942,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   def createSubmissionMonitor(dataSource: SlickDataSource, samDAO: SamDAO, googleServicesDAO: GoogleServicesDAO, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO): SubmissionMonitor = {
-    val config = SubmissionMonitorConfig(1 minutes, true)
+    val config = SubmissionMonitorConfig(1 minutes, true, 10)
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),
