@@ -7,7 +7,7 @@ object Dependencies {
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
-  val workbenchGoogle2V = "0.21-50f694e1-SNAP"
+  val workbenchGoogle2V = "0.21-92b078c"
 
   val cromwellVersion = "40-2754783"
 
@@ -94,7 +94,7 @@ object Dependencies {
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
-  val workbenchModelV  = "0.14-f00eb6ea-SNAP"
+  val workbenchModelV  = "0.14-d415128"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogleV = "0.21-64a7b29"
   val workbenchGoogle: ModuleID =       workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV)
