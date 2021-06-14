@@ -506,7 +506,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       )
 
       // We forbid nested lists. `AttributeValueList` requires its contents to be an `AttributeValue` and not another `AttributeValueList`
-      // Does not compile:
+      // For example, this would not compile:
       // val map7 = Map(
       //   AttributeName("default", "read_counts") ->
       //     AttributeValueList(
