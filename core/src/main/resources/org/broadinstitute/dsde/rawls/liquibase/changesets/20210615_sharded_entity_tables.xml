@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_sharded_entity_tables">
+        <sql stripComments="true">
+            -- TODO: davidan turn the create-table code into a stored proc; call the stored proc repeatedly
+
+            CREATE TABLE ENTITY_ATTRIBUTE_0 (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            name varchar(200) NOT NULL,
+            value_string text,
+            value_number double DEFAULT NULL,
+            value_boolean bit(1) DEFAULT NULL,
+            value_entity_ref bigint(20) unsigned DEFAULT NULL,
+            list_index int(11) DEFAULT NULL,
+            owner_id bigint(20) unsigned NOT NULL,
+            list_length int(11) DEFAULT NULL,
+            namespace varchar(32) NOT NULL DEFAULT 'default',
+            VALUE_JSON longtext,
+            deleted bit(1) DEFAULT b'0',
+            deleted_date timestamp(6) NULL DEFAULT NULL,
+            PRIMARY KEY (id),
+            KEY FK_ENT_ATTRIBUTE_ENTITY_REF (value_entity_ref),
+            KEY UNQ_ENTITY_ATTRIBUTE (owner_id,namespace,name,list_index),
+            CONSTRAINT FK_ATTRIBUTE_PARENT_ENTITY_0 FOREIGN KEY (owner_id) REFERENCES ENTITY (id),
+            CONSTRAINT FK_ENT_ATTRIBUTE_ENTITY_REF_0 FOREIGN KEY (value_entity_ref) REFERENCES ENTITY (id)
+            ) ENGINE=InnoDB AUTO_INCREMENT=231805857 DEFAULT CHARSET=utf8;
+
+            CREATE TABLE ENTITY_ATTRIBUTE_1 (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            name varchar(200) NOT NULL,
+            value_string text,
+            value_number double DEFAULT NULL,
+            value_boolean bit(1) DEFAULT NULL,
+            value_entity_ref bigint(20) unsigned DEFAULT NULL,
+            list_index int(11) DEFAULT NULL,
+            owner_id bigint(20) unsigned NOT NULL,
+            list_length int(11) DEFAULT NULL,
+            namespace varchar(32) NOT NULL DEFAULT 'default',
+            VALUE_JSON longtext,
+            deleted bit(1) DEFAULT b'0',
+            deleted_date timestamp(6) NULL DEFAULT NULL,
+            PRIMARY KEY (id),
+            KEY FK_ENT_ATTRIBUTE_ENTITY_REF (value_entity_ref),
+            KEY UNQ_ENTITY_ATTRIBUTE (owner_id,namespace,name,list_index),
+            CONSTRAINT FK_ATTRIBUTE_PARENT_ENTITY_1 FOREIGN KEY (owner_id) REFERENCES ENTITY (id),
+            CONSTRAINT FK_ENT_ATTRIBUTE_ENTITY_REF_1 FOREIGN KEY (value_entity_ref) REFERENCES ENTITY (id)
+            ) ENGINE=InnoDB AUTO_INCREMENT=231805857 DEFAULT CHARSET=utf8;
+
+            -- copy rows from ea to ea_0, ea_1
+            INSERT INTO ENTITY_ATTRIBUTE_0(id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
+                SELECT ea.id, ea.name, ea.value_string, ea.value_number, ea.value_boolean, ea.value_entity_ref, ea.list_index, ea.owner_id, ea.list_length, ea.namespace, ea.VALUE_JSON, ea.deleted, ea.deleted_date
+                FROM ENTITY_ATTRIBUTE ea, ENTITY e, WORKSPACE w
+                WHERE e.workspace_id = w.id
+                    AND ea.owner_id = e.id
+                    AND MOD(CONV(substring(hex(w.id), 1, 1), 16, 10), 2) = 0;
+
+            INSERT INTO ENTITY_ATTRIBUTE_1(id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
+                SELECT ea.id, ea.name, ea.value_string, ea.value_number, ea.value_boolean, ea.value_entity_ref, ea.list_index, ea.owner_id, ea.list_length, ea.namespace, ea.VALUE_JSON, ea.deleted, ea.deleted_date
+                FROM ENTITY_ATTRIBUTE ea, ENTITY e, WORKSPACE w
+                WHERE e.workspace_id = w.id
+                    AND ea.owner_id = e.id
+                    AND MOD(CONV(substring(hex(w.id), 1, 1), 16, 10), 2) = 1;
+
+            -- drop ea (renaming for now to ease with debugging)
+            RENAME TABLE ENTITY_ATTRIBUTE to ENTITY_ATTRIBUTE_archived;
+        </sql>
+    </changeSet>
+
+
+</databaseChangeLog>
