@@ -192,6 +192,11 @@ trait AttributeComponent {
   def entityAttributeShardQuery(workspace: Workspace): EntityAttributeShardQuery = {
     entityAttributeShardQuery(workspace.workspaceIdAsUUID)
   }
+  def entityAttributeShardQuery(entityRec: EntityRecord): EntityAttributeShardQuery = {
+    entityAttributeShardQuery(entityRec.workspaceId)
+  }
+  val entityAttributeAllShardsViewQuery = new EntityAttributeShardQuery("ALL_SHARDS")
+
 
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
@@ -573,7 +578,7 @@ trait AttributeComponent {
     private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
 
     private def getTableSuffix(tableName: String): String = {
-      if (tableName == "ENTITY_ATTRIBUTE" || tableName == "WORKSPACE_ATTRIBUTE")
+      if (tableName.startsWith("ENTITY_ATTRIBUTE_") || tableName == "WORKSPACE_ATTRIBUTE")
         "TEMP"
       else
         "SCRATCH"
