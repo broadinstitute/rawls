@@ -702,7 +702,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       baseRec.copy(id = 2, name = "attr2", valueString = None, valueNumber = Some(2)),
       baseRec.copy(id = 3, name = "attr3", valueString = None, valueBoolean = Some(true)))
 
-    val spiedAttrQuery = spy(entityAttributeQuery)
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(existingAttributes, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 
@@ -746,7 +746,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeQuery)
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 
@@ -786,7 +786,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeQuery)
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 
@@ -822,7 +822,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeQuery)
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 
@@ -866,7 +866,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeQuery)
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 
