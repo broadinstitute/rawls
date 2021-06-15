@@ -41,8 +41,8 @@ trait DataAccess
     // do we have access to INFORMATION_SCHEMA.TABLES, and if so can we avoid listing all tables here?
 
     // TODO: davidan don't hardcode the shard names here, else this will need to be in sync with liquibase
-    sqlu"truncate table ENTITY_ATTRIBUTE_0" andThen // FK to entity
-      sqlu"truncate table ENTITY_ATTRIBUTE_1" andThen // FK to entity
+    sqlu"truncate table ENTITY_ATTRIBUTE_0;" andThen // FK to entity
+      sqlu"truncate table ENTITY_ATTRIBUTE_1;" andThen // FK to entity
       TableQuery[WorkspaceAttributeTable].delete andThen          // FK to entity, workspace
       TableQuery[SubmissionAttributeTable].delete andThen         // FK to entity, submissionvalidation
       TableQuery[MethodConfigurationInputTable].delete andThen    // FK to MC
