@@ -116,6 +116,8 @@ trait AttributeComponent {
 
   import driver.api._
 
+  type ShardId = String
+
   def isEntityRefRecord[T](rec: AttributeRecord[T]): Boolean = {
     val isEmptyRefListDummyRecord = rec.listLength.isDefined && rec.listLength.get == 0 && rec.valueNumber.isEmpty
     rec.valueEntityRef.isDefined || isEmptyRefListDummyRecord
@@ -143,7 +145,7 @@ trait AttributeComponent {
     def transactionId = column[String]("transaction_id")
   }
 
-  class EntityAttributeTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE") {
+  class EntityAttributeTable(shard: ShardId)(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, s"ENTITY_ATTRIBUTE_$shard") {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
 
     def uniqueIdx = index("UNQ_ENTITY_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
@@ -178,7 +180,19 @@ trait AttributeComponent {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
-  protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
+  // TODO: davidan reorganize these, add tests
+  def determineShard(workspaceId: UUID): ShardId = {
+    (Integer.parseInt(workspaceId.toString.take(1), 16) % 2).toString
+  }
+  class EntityAttributeShardQuery(shard: ShardId) extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(shard)(_), EntityAttributeRecord)
+  def entityAttributeShardQuery(workspaceId: UUID): EntityAttributeShardQuery = {
+    // TODO: davidan is it ok to create a new EntityAttributeShardQuery each time? Should we pre-create one for each shard and reuse it?
+    new EntityAttributeShardQuery(determineShard(workspaceId))
+  }
+  def entityAttributeShardQuery(workspace: Workspace): EntityAttributeShardQuery = {
+    entityAttributeShardQuery(workspace.workspaceIdAsUUID)
+  }
+
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
