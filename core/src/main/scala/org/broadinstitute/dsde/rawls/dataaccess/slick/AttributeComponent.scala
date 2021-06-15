@@ -195,7 +195,7 @@ trait AttributeComponent {
   def entityAttributeShardQuery(entityRec: EntityRecord): EntityAttributeShardQuery = {
     entityAttributeShardQuery(entityRec.workspaceId)
   }
-  val entityAttributeAllShardsViewQuery = new EntityAttributeShardQuery("ALL_SHARDS")
+  lazy val entityAttributeAllShardsViewQuery = new EntityAttributeShardQuery("ALL_SHARDS")
 
 
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
@@ -465,11 +465,11 @@ trait AttributeComponent {
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
       def updateInMasterAction(transactionId: String) = {
-          val tableSuffix = getTableSuffix(baseTableRow.tableName)
+          val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
 
           sql"""
           update #${baseTableRow.tableName} a
-              join #${baseTableRow.tableName}_#${tableSuffix} ta
+              join #${joinTableName} ta
               on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
                   and ta.transaction_id = $transactionId
@@ -485,10 +485,10 @@ trait AttributeComponent {
       }
 
       def clearAttributeScratchTableAction(transactionId: String) = {
-        val tableSuffix = getTableSuffix(baseTableRow.tableName)
+        val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
 
-        if(tableSuffix == "SCRATCH")
-          sqlu"""delete from #${baseTableRow.tableName}_#${tableSuffix} where transaction_id = $transactionId"""
+        if(joinTableName.endsWith("SCRATCH"))
+          sqlu"""delete from #${joinTableName} where transaction_id = $transactionId"""
         else DBIO.successful(0)
       }
 
@@ -577,11 +577,15 @@ trait AttributeComponent {
 
     private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
 
-    private def getTableSuffix(tableName: String): String = {
-      if (tableName.startsWith("ENTITY_ATTRIBUTE_") || tableName == "WORKSPACE_ATTRIBUTE")
-        "TEMP"
-      else
-        "SCRATCH"
+    private def getTempOrScratchTableName(tableName: String): String = {
+      if (tableName.startsWith("ENTITY_ATTRIBUTE_")) {
+        "ENTITY_ATTRIBUTE_TEMP"
+      } else if (tableName == "WORKSPACE_ATTRIBUTE") {
+        "WORKSPACE_ATTRIBUTE_TEMP"
+      } else {
+        s"${tableName}_SCRATCH"
+      }
     }
+
   }
 }
