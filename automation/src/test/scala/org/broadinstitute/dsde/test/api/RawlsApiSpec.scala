@@ -258,6 +258,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
+            val start = System.currentTimeMillis()
+
             val submissionId = Rawls.submissions.launchWorkflow(
               projectName,
               workspaceName,
@@ -269,6 +271,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               useCallCache = false,
               deleteIntermediateOutputFiles = false
             )
+
+            logger.info(s"****** create workspace and run sub-workflow tasks in non-US regions: Returned Submission ID: $submissionId ******")
+
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
@@ -286,6 +291,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
+            logger.info(s"****** create workspace and run sub-workflow tasks in non-US regions: Returned Root Workflow ID: $rootWorkflowId ******")
+
             // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-north1` region
             val subWorkflowIds: List[String] = eventually {
               val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
@@ -302,6 +309,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
+            logger.info(s"****** create workspace and run sub-workflow tasks in non-US regions: Returned sub-workflow ids: $subWorkflowIds ******")
+
             // Get the sub-workflows call metadata once they finish running
             val subWorkflowCallMetadata: List[JsonNode] = eventually {
               val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
@@ -311,6 +320,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
               subWorkflowCallMetadata
             }
+
+            val finish = System.currentTimeMillis()
+            logger.info(s"****** create workspace and run sub-workflow tasks in non-US regions: All sub-workflows have executionStatus:Done after ${finish - start} milliseconds ******")
 
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
@@ -357,6 +369,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
+            val start = System.currentTimeMillis()
+
             val submissionId = Rawls.submissions.launchWorkflow(
               projectName,
               workspaceName,
@@ -368,6 +382,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               useCallCache = false,
               deleteIntermediateOutputFiles = false
             )
+
+            logger.info(s"****** run sub-workflow tasks in a cloned workspace in non-US regions: Returned Submission ID: $submissionId ******")
+
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
@@ -385,6 +402,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
+            logger.info(s"****** run sub-workflow tasks in a cloned workspace in non-US regions: Returned Root Workflow ID: $rootWorkflowId ******")
+
             // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-north1` region
             val subWorkflowIds: List[String] = eventually {
               val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
@@ -401,6 +420,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
+            logger.info(s"****** run sub-workflow tasks in a cloned workspace in non-US regions: Returned sub-workflow ids: $subWorkflowIds ******")
+
             // Get the sub-workflows call metadata once they finish running
             val subWorkflowCallMetadata = eventually {
               val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
@@ -410,6 +431,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
               subWorkflowCallMetadata
             }
+
+            val finish = System.currentTimeMillis()
+            logger.info(s"****** run sub-workflow tasks in a cloned workspace in non-US regions: All sub-workflows have executionStatus:Done after ${finish - start} milliseconds ******")
 
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
