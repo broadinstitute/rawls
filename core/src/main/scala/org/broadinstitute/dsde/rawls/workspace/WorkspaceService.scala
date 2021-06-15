@@ -1421,19 +1421,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case (submission) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
         val submissionDoneDate: Option[DateTime] = WorkspaceService.getTerminalStatusDate(submission, None)
-        toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, submission.submissionDate, submissionDoneDate)) map {
-          case Failure(ex) =>
-            logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
-            RequestComplete((StatusCodes.OK, submission))
-          case Success(costMap) =>
-            val costedWorkflows = submission.workflows.map { workflow =>
-              workflow.workflowId match {
-                case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
-                case None => workflow
+
+        getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
+          toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, submission.submissionDate, submissionDoneDate, tableName)) map {
+            case Failure(ex) =>
+              logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
+              RequestComplete((StatusCodes.OK, submission))
+            case Success(costMap) =>
+              val costedWorkflows = submission.workflows.map { workflow =>
+                workflow.workflowId match {
+                  case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
+                  case None => workflow
+                }
               }
-            }
-            val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-            RequestComplete((StatusCodes.OK, costedSubmission))
+              val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
+              RequestComplete((StatusCodes.OK, costedSubmission))
+          }
         }
       }
     }
@@ -1517,11 +1520,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     for {
       (optExecId, submission) <- execIdFutOpt
+      tableName <- getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace))
       // we don't need the Execution Service ID, but we do need to confirm the Workflow is in one for this Submission
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, userInfo, optExecId)
       submissionDoneDate = WorkspaceService.getTerminalStatusDate(submission, Option(workflowId))
-      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, submission.submissionDate, submissionDoneDate)
+      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, submission.submissionDate, submissionDoneDate, tableName)
     } yield RequestComplete(StatusCodes.OK, WorkflowCost(workflowId, costs.get(workflowId)))
   }
 
@@ -1982,6 +1986,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Your method config defines a data reference and an entity name. Running on a submission on a single entity in a data reference is not yet supported."))
     }
   }
+
+  def getSpendReportTableName(billingProjectName: RawlsBillingProjectName): Future[Option[String]] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map { billingProject =>
+        billingProject match {
+          case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Could not find billing project ${billingProjectName.value}"))
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject))) =>
+            Option(s"${spendReportDatasetGoogleProject}.${spendReportDataset}.${spendReportTable}")
+          case _ => None
+        }
+      }
+    }
+  }
+
 }
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)

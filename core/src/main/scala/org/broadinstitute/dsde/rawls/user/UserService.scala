@@ -20,7 +20,7 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, GoogleProject}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -31,8 +31,8 @@ import scala.util.{Failure, Success}
 object UserService {
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, pathToCredentialJson: String, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, bqServiceFactory, pathToCredentialJson, requesterPaysRole, dmConfig, projectTemplate)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, bigQueryCredentialJson: String, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -58,7 +58,7 @@ object UserService {
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, pathToCredentialJson: String, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, bigQueryCredentialJson: String, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
@@ -302,20 +302,24 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, datasetName: String): Future[Int] = {
+  def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, spendReportConfiguration: BillingProjectSpendConfiguration): Future[Int] = {
 
     //Note that this assumes that the mapping between a Google Project and a Billing Project is 1:1.
     //This will not be the case once PPW goes live. See Jira ticket CA-1363 for details.
     val googleProjectName = GoogleProject(billingProjectName.value)
 
+    val datasetName = spendReportConfiguration.datasetName
+    val datasetGoogleProject = spendReportConfiguration.datasetGoogleProject
+
     validateBigQueryDatasetName(datasetName)
+    validateGoogleProjectName(datasetGoogleProject.value)
 
     requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
-      val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, googleProjectName)
+      val bqService = bqServiceFactory.getServiceFromJson(bigQueryCredentialJson, GoogleProject(billingProjectName.value))
 
       for {
         //Get the dataset to validate that it exists and that we have permission to see it
-        _ <- bqService.use(_.getDataset(datasetName)).unsafeToFuture().map {
+        _ <- bqService.use(_.getDataset(datasetGoogleProject, datasetName)).unsafeToFuture().map {
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The dataset $datasetName could not be found."))
           case dataset => dataset
         }
@@ -327,13 +331,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         }
 
         //Get the table and validate that it exists and that we have permission to see it
-        tableName = s"gcp_billing_export_v1_${billingAccountId}"
-        table <- bqService.use(_.getTable(datasetName, tableName)).unsafeToFuture()
+        //Note that the table name replaces all dashes in the billing account ID with underscores
+        tableName = BigQueryTableName(s"gcp_billing_export_v1_${billingAccountId.replace("-", "_")}")
+        table <- bqService.use(_.getTable(datasetGoogleProject, datasetName, tableName)).unsafeToFuture()
 
         res <- if(table.isDefined) {
                 //Isolate the db txn so we're not running any REST calls inside of it
                 dataSource.inTransaction { dataAccess =>
-                  dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(billingProjectName, Option(datasetName), Option(tableName))
+                  dataAccess.rawlsBillingProjectQuery.setBillingProjectSpendConfiguration(billingProjectName, Option(datasetName), Option(tableName), Option(datasetGoogleProject))
                 }
               } else throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The billing export table ${tableName} in dataset ${datasetName} could not be found."))
       } yield {

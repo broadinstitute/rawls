@@ -45,7 +45,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY wflabels.key, workflowId""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
+      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate, "test")
     }
   }
 
@@ -64,7 +64,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY wflabels.key, workflowId""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
+      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate, "test")
     }
   }
 
@@ -82,7 +82,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |GROUP BY labels.key, workflowId
         |HAVING some having clause""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause")
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause", "test")
     }
   }
 
@@ -100,7 +100,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |GROUP BY labels.key, workflowId
         |HAVING some having clause""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause")
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause", "test")
     }
   }
 

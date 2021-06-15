@@ -273,7 +273,7 @@ object Boot extends IOApp with LazyLogging {
           notificationDAO,
           samDAO,
           appDependencies.bigQueryServiceFactory,
-          gcsConfig.getString("pathToCredentialJson"),
+          gcsConfig.getString("bigQueryJson"),
           requesterPaysRole,
           dmConfig,
           projectTemplate
