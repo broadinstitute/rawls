@@ -464,7 +464,7 @@ trait EntityComponent {
       def deleteAction(workspaceId: UUID): WriteAction[Int] = {
         val shardId = determineShard(workspaceId)
 
-        sqlu"""delete ea from ENTITY_ATTRIBUTE_$shardId ea
+        sqlu"""delete ea from ENTITY_ATTRIBUTE_#$shardId ea
                inner join ENTITY e
                on ea.owner_id = e.id
                where e.workspace_id=$workspaceId
