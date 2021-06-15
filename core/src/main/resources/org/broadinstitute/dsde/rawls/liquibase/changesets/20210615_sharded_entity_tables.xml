@@ -64,6 +64,14 @@
 
             -- drop ea (renaming for now to ease with debugging)
             RENAME TABLE ENTITY_ATTRIBUTE to ENTITY_ATTRIBUTE_archived;
+
+            -- create ENTITY_ATTRIBUTE_ALL_SHARDS view as union of all shards
+            CREATE VIEW ENTITY_ATTRIBUTE_ALL_SHARDS AS
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_0
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_1;
         </sql>
     </changeSet>
 
