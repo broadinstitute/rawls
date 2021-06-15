@@ -1915,7 +1915,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     )
 
     // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
-    policyGroupsToRoles.toList.foldLeft(Future(true)){case (result, (email, roles)) => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles)}
+    policyGroupsToRoles.toList.foldLeft(Future(true)){case (result, (email, roles)) => result.flatMap(_ => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles))}
   }
 
   /**
