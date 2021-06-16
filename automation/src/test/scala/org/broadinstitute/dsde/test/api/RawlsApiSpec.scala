@@ -272,9 +272,11 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               deleteIntermediateOutputFiles = false
             )
 
-            logger.info(s"****** create workspace and run sub-workflow tasks in non-US regions: Returned Submission ID: $submissionId ******")
+            logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
 
-            // clean up: Abort submission
+            // Clean up: Abort submission. This doesn't abort the submission immediately, but only registers it to be aborted
+            // as part of clean up process. Once the test finishes (or times out), an abort request is sent to Cromwell to undo any
+            // side effects of the test. If the workflow has reached terminal state, Cromwell will return 404 for the abort request
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             // may need to wait for Cromwell to start processing workflows
@@ -290,8 +292,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
                 workflows.head
               }
             }
-
-            logger.info(s"****** create workspace and run sub-workflow tasks in non-US regions: Returned Root Workflow ID: $rootWorkflowId ******")
 
             // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-north1` region
             val subWorkflowIds: List[String] = eventually {
@@ -309,7 +309,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
-            logger.info(s"****** create workspace and run sub-workflow tasks in non-US regions: Returned sub-workflow ids: $subWorkflowIds ******")
+            logger.info(s"Submission in $projectName/$workspaceName/$submissionId returned root workflow ID: $rootWorkflowId " +
+              s"and sub-workflow IDs: ${subWorkflowIds.mkString(",")}")
 
             // Get the sub-workflows call metadata once they finish running
             val subWorkflowCallMetadata: List[JsonNode] = eventually {
@@ -322,7 +323,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             }
 
             val finish = System.currentTimeMillis()
-            logger.info(s"****** create workspace and run sub-workflow tasks in non-US regions: All sub-workflows have executionStatus:Done after ${finish - start} milliseconds ******")
+            logger.info(s"All sub-workflows in submission $projectName/$workspaceName/$submissionId have finished execution after ${finish - start} milliseconds")
 
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
@@ -383,9 +384,11 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               deleteIntermediateOutputFiles = false
             )
 
-            logger.info(s"****** run sub-workflow tasks in a cloned workspace in non-US regions: Returned Submission ID: $submissionId ******")
+            logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
 
-            // clean up: Abort submission
+            // Clean up: Abort submission. This doesn't abort the submission immediately, but only registers it to be aborted
+            // as part of clean up process. Once the test finishes (or times out), an abort request is sent to Cromwell to undo any
+            // side effects of the test. If the workflow has reached terminal state, Cromwell will return 404 for the abort request
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             // may need to wait for Cromwell to start processing workflows
@@ -401,8 +404,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
                 workflows.head
               }
             }
-
-            logger.info(s"****** run sub-workflow tasks in a cloned workspace in non-US regions: Returned Root Workflow ID: $rootWorkflowId ******")
 
             // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-north1` region
             val subWorkflowIds: List[String] = eventually {
@@ -420,7 +421,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
-            logger.info(s"****** run sub-workflow tasks in a cloned workspace in non-US regions: Returned sub-workflow ids: $subWorkflowIds ******")
+            logger.info(s"Submission in $projectName/$workspaceName/$submissionId returned root workflow ID: $rootWorkflowId " +
+              s"and sub-workflow IDs: ${subWorkflowIds.mkString(",")}")
 
             // Get the sub-workflows call metadata once they finish running
             val subWorkflowCallMetadata = eventually {
@@ -433,7 +435,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             }
 
             val finish = System.currentTimeMillis()
-            logger.info(s"****** run sub-workflow tasks in a cloned workspace in non-US regions: All sub-workflows have executionStatus:Done after ${finish - start} milliseconds ******")
+            logger.info(s"All sub-workflows in submission $projectName/$workspaceName/$submissionId have finished execution after ${finish - start} milliseconds")
 
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
