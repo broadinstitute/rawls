@@ -176,7 +176,7 @@ trait EntityComponent {
         val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
         val deletedDate = new Timestamp(new Date().getTime)
         // issue bulk rename/hide for all entities
-        val baseUpdate = sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where workspace_id = $workspaceId and (entity_type, name) in ("""
+        val baseUpdate = sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where deleted=0 AND workspace_id=$workspaceId and (entity_type, name) in ("""
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
@@ -321,6 +321,19 @@ trait EntityComponent {
 
       def actionForWorkspace(workspaceContext: Workspace): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
+      }
+
+      def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
+        // get unique suffix for renaming
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entity attributes, given a set of entities
+        val baseUpdate =
+          sql"""update ENTITY_ATTRIBUTE ea join ENTITY e on ea.owner_id = e.id
+                set ea.deleted=1, ea.deleted_date=$deletedDate, ea.name=CONCAT(ea.name, $renameSuffix)
+                where e.workspace_id=$workspaceId and ea.deleted=0 and (e.entity_type, e.name) in ("""
+        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
+        concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
     }
 
@@ -624,10 +637,12 @@ trait EntityComponent {
     // "delete" entities by hiding and renaming. we must rename the entity to avoid future name collisions if the user
     // attempts to create a new entity of the same name.
     def hide(workspaceContext: Workspace, entRefs: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
-      // N.B. we do not hide the entity's attributes, just the entity itself.
-      // since the entity itself is considered when checking uniqueness of attributes,
-      // renaming the entity will effectively hide its attributes.
+      // N.B. we must hide both the entity attributes and the entity itself. Other queries, such
+      // as baseEntityAndAttributeSql, use "where ENTITY.deleted = ENTITY_ATTRIBUTE.deleted" during joins.
+      // Thus, we need to keep the "deleted" value for attributes in sync with their parent entity,
+      // when hiding that entity.
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
+        EntityAndAttributesRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs) andThen
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map( res => res.sum)
     }
 
