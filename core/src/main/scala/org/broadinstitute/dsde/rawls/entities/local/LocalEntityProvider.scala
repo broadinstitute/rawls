@@ -75,7 +75,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   // EntityApiServiceSpec has good test coverage for this api
   override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
-      // withAllEntities throws exception if some entities not found; passes through if all ok
+      // withAllEntityRefs throws exception if some entities not found; passes through if all ok
       withAllEntityRefs(workspaceContext, dataAccess, entRefs) { _ =>
         dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
           if (referringEntities != entRefs.toSet)

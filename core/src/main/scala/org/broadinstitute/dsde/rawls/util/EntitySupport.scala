@@ -38,10 +38,8 @@ trait EntitySupport {
       val notFound = entities diff found
       if (notFound.nonEmpty) {
         // generate error messages
-        val failures = notFound.map { e =>
-          Failure(new RawlsException(s"${e.entityType} ${e.entityName} does not exist in ${workspaceContext.toWorkspaceName}"))
-        }
-        val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = (Seq("Entities were not found:") ++ failures) mkString System.lineSeparator())
+        val failureMessages = notFound.map { e => s"${e.entityType} ${e.entityName} does not exist in ${workspaceContext.toWorkspaceName}" }
+        val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = (Seq("Entities were not found:") ++ failureMessages) mkString System.lineSeparator())
         DBIO.failed(new RawlsExceptionWithErrorReport(err))
       } else {
         op(found)
