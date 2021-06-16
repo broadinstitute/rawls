@@ -612,12 +612,10 @@ trait EntityComponent {
     }
 
     // "delete" entities by hiding and renaming
-
     def hide(workspaceContext: Workspace, entRefs: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         getEntityRecords(workspaceContext.workspaceIdAsUUID, entRefs.toSet) flatMap { entRecs =>
           val hideAction = entRecs map { rec =>
-            hideEntityAttributes(rec.id) andThen
               hideEntityAction(rec)
           }
           DBIO.sequence(hideAction).map(_.sum)
