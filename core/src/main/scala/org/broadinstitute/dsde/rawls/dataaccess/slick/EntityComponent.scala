@@ -170,6 +170,16 @@ trait EntityComponent {
           concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
         }
       }
+
+      def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
+        // get unique suffix for renaming
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entities
+        val baseUpdate = sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where workspace_id = $workspaceId and (entity_type, name) in ("""
+        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
+        concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
+      }
     }
 
     //noinspection ScalaDocMissingParameterDescription,SqlDialectInspection,RedundantBlock,DuplicatedCode
@@ -611,31 +621,30 @@ trait EntityComponent {
       }
     }
 
-    // "delete" entities by hiding and renaming
+    // "delete" entities by hiding and renaming. we must rename the entity to avoid future name collisions if the user
+    // attempts to create a new entity of the same name.
     def hide(workspaceContext: Workspace, entRefs: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
+      // N.B. we do not hide the entity's attributes, just the entity itself.
+      // since the entity itself is considered when checking uniqueness of attributes,
+      // renaming the entity will effectively hide its attributes.
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
-        getEntityRecords(workspaceContext.workspaceIdAsUUID, entRefs.toSet) flatMap { entRecs =>
-          val hideAction = entRecs map { rec =>
-            // N.B. we do not hide the entity's attributes, just the entity itself.
-            // since the entity itself is considered when checking uniqueness of attributes,
-            // renaming the entity will effectively hide its attributes.
-            hideEntityAction(rec)
-          }
-          DBIO.sequence(hideAction).map(_.sum)
-        }
+        EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map( res => res.sum)
     }
 
+    // currently unused
     private def hideEntityAttributes(entityId: Long): ReadWriteAction[Seq[Int]] = {
       findActiveAttributesByEntityId(entityId).result flatMap { attrRecs =>
         DBIO.sequence(attrRecs map hideEntityAttribute)
       }
     }
 
+    // currently unused, except from hideEntityAttributes(entityId: Long) above
     private def hideEntityAttribute(attrRec: EntityAttributeRecord): WriteAction[Int] = {
       val currentTime = new Timestamp(new Date().getTime)
       entityAttributeQuery.filter(_.id === attrRec.id).map(rec => (rec.deleted, rec.name, rec.deletedDate)).update(true, renameForHiding(attrRec.id, attrRec.name), Option(currentTime))
     }
 
+    // currently unused
     private def hideEntityAction(entRec: EntityRecord): WriteAction[Int] = {
       val currentTime = new Timestamp(new Date().getTime)
       findEntityById(entRec.id).map(rec => (rec.deleted, rec.name, rec.deletedDate)).update(true, renameForHiding(entRec.id, entRec.name), Option(currentTime))
