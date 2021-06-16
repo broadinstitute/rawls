@@ -616,7 +616,10 @@ trait EntityComponent {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         getEntityRecords(workspaceContext.workspaceIdAsUUID, entRefs.toSet) flatMap { entRecs =>
           val hideAction = entRecs map { rec =>
-              hideEntityAction(rec)
+            // N.B. we do not hide the entity's attributes, just the entity itself.
+            // since the entity itself is considered when checking uniqueness of attributes,
+            // renaming the entity will effectively hide its attributes.
+            hideEntityAction(rec)
           }
           DBIO.sequence(hideAction).map(_.sum)
         }
