@@ -646,25 +646,6 @@ trait EntityComponent {
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map( res => res.sum)
     }
 
-    // currently unused
-    private def hideEntityAttributes(entityId: Long): ReadWriteAction[Seq[Int]] = {
-      findActiveAttributesByEntityId(entityId).result flatMap { attrRecs =>
-        DBIO.sequence(attrRecs map hideEntityAttribute)
-      }
-    }
-
-    // currently unused, except from hideEntityAttributes(entityId: Long) above
-    private def hideEntityAttribute(attrRec: EntityAttributeRecord): WriteAction[Int] = {
-      val currentTime = new Timestamp(new Date().getTime)
-      entityAttributeQuery.filter(_.id === attrRec.id).map(rec => (rec.deleted, rec.name, rec.deletedDate)).update(true, renameForHiding(attrRec.id, attrRec.name), Option(currentTime))
-    }
-
-    // currently unused
-    private def hideEntityAction(entRec: EntityRecord): WriteAction[Int] = {
-      val currentTime = new Timestamp(new Date().getTime)
-      findEntityById(entRec.id).map(rec => (rec.deleted, rec.name, rec.deletedDate)).update(true, renameForHiding(entRec.id, entRec.name), Option(currentTime))
-    }
-
     // perform actual deletion (not hiding) of all entities in a workspace
 
     def deleteFromDb(workspaceId: UUID): WriteAction[Int] = {
