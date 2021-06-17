@@ -180,6 +180,17 @@ trait EntityComponent {
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
+
+      def activeActionForRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
+        if( entities.isEmpty ) {
+          DBIO.successful(Seq.empty[AttributeEntityReference])
+        } else {
+          val baseSelect = sql"select entity_type, name from ENTITY where workspace_id = $workspaceId and deleted = 0 and (entity_type, name) in ("
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
+          concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[(String, String)].map { vect => vect.map { pair => AttributeEntityReference(pair._1, pair._2) } }
+        }
+      }
+
     }
 
     //noinspection ScalaDocMissingParameterDescription,SqlDialectInspection,RedundantBlock,DuplicatedCode
@@ -361,6 +372,19 @@ trait EntityComponent {
 
     def findActiveEntityByWorkspace(workspaceId: UUID): EntityQuery = {
       filter(entRec => entRec.workspaceId === workspaceId && ! entRec.deleted)
+    }
+
+    /**
+      * given a set of AttributeEntityReference, query the db and return those refs that
+      * are 1) active and 2) exist in the specified workspace. Use this method to validate user input
+      * with the lightest SQL query; it does not fetch attributes or extraneous columns
+      *
+      * @param workspaceId the workspace to query for entity refs
+      * @param entities the refs for which to query
+      * @return the subset of refs that are active and found in the workspace
+      */
+    def getActiveRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
+      EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
     }
 
     private def findActiveAttributesByEntityId(entityId: Rep[Long]): EntityAttributeQuery = for {
