@@ -76,9 +76,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
       // withAllEntities throws exception if some entities not found; passes through if all ok
-      // TODO: davidan: withAllEntities issues individual SELECT statements for each entity, in order to collect
-      // error messages on which are missing. This could be significantly optimized.
-      withAllEntities(workspaceContext, dataAccess, entRefs) { entities =>
+      withAllEntityRefs(workspaceContext, dataAccess, entRefs) { _ =>
         dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
           if (referringEntities != entRefs.toSet)
             throw new DeleteEntitiesConflictException(referringEntities)
