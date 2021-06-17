@@ -150,8 +150,8 @@ trait AttributeComponent {
 
     def uniqueIdx = index("UNQ_ENTITY_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
 
-    def entityRef = foreignKey("FK_ENT_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
-    def parentEntity = foreignKey("FK_ATTRIBUTE_PARENT_ENTITY", ownerId, entityQuery)(_.id)
+    def entityRef = foreignKey(s"FK_ENT_ATTRIBUTE_ENTITY_REF_$shard", valueEntityRef, entityQuery)(_.id.?)
+    def parentEntity = foreignKey(s"FK_ATTRIBUTE_PARENT_ENTITY_$shard", ownerId, entityQuery)(_.id)
   }
 
   class WorkspaceAttributeTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
@@ -182,7 +182,14 @@ trait AttributeComponent {
 
   // TODO: davidan reorganize these, add tests
   def determineShard(workspaceId: UUID): ShardId = {
-    (Integer.parseInt(workspaceId.toString.take(1), 16) % 2).toString
+    // see the liquibase changeset "20210615_sharded_entity_tables.xml" for expected shard identifier values
+    val idString = workspaceId.toString
+    val part1 = idString.take(1); // first part of shardid just copies the first char of workspaceid
+    val secondChar = idString.take(2).tail.head // second character of workspaceId
+    val part2 = if ('0' <= secondChar && secondChar <= '7') "07" else "8f"
+    val shardId = part1 + "_" + part2
+
+    shardId
   }
   class EntityAttributeShardQuery(shard: ShardId) extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(shard)(_), EntityAttributeRecord)
   def entityAttributeShardQuery(workspaceId: UUID): EntityAttributeShardQuery = {

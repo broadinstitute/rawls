@@ -5,6 +5,7 @@ import javax.naming.directory.DirContext
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
 import slick.jdbc.JdbcProfile
 
+import java.lang.Integer.toHexString
 import scala.util.Try
 
 trait DataAccess
@@ -39,10 +40,15 @@ trait DataAccess
 
     // TODO: davidan could we instead SET FOREIGN_KEY_CHECKS = 0; truncate tables ...; SET FOREIGN_KEY_CHECKS = 1; ?
     // do we have access to INFORMATION_SCHEMA.TABLES, and if so can we avoid listing all tables here?
+    val shardDeletes = DBIO.sequence((0 to 15).map(toHexString) flatMap { firstPart =>
+      List("07", "8f") map { secondPart =>
+        val shardSuffix = firstPart + "_" + secondPart
+        new EntityAttributeShardQuery(shardSuffix).delete
+      }
+    })
 
     // TODO: davidan don't hardcode the shard names here, else this will need to be in sync with liquibase
-    new EntityAttributeShardQuery("0").delete andThen // FK to entity
-      new EntityAttributeShardQuery("1").delete andThen // FK to entity
+    shardDeletes andThen // FK to entity
       TableQuery[WorkspaceAttributeTable].delete andThen          // FK to entity, workspace
       TableQuery[SubmissionAttributeTable].delete andThen         // FK to entity, submissionvalidation
       TableQuery[MethodConfigurationInputTable].delete andThen    // FK to MC
