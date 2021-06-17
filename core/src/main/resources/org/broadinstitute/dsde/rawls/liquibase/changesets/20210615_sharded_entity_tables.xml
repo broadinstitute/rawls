@@ -2,78 +2,225 @@
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
     <changeSet logicalFilePath="dummy" author="davidan" id="create_sharded_entity_tables">
-        <sql stripComments="true">
-            -- TODO: davidan turn the create-table code into a stored proc; call the stored proc repeatedly
+        <sql stripComments="true" endDelimiter="/">
 
-            CREATE TABLE ENTITY_ATTRIBUTE_0 (
-            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            name varchar(200) NOT NULL,
-            value_string text,
-            value_number double DEFAULT NULL,
-            value_boolean bit(1) DEFAULT NULL,
-            value_entity_ref bigint(20) unsigned DEFAULT NULL,
-            list_index int(11) DEFAULT NULL,
-            owner_id bigint(20) unsigned NOT NULL,
-            list_length int(11) DEFAULT NULL,
-            namespace varchar(32) NOT NULL DEFAULT 'default',
-            VALUE_JSON longtext,
-            deleted bit(1) DEFAULT b'0',
-            deleted_date timestamp(6) NULL DEFAULT NULL,
-            PRIMARY KEY (id),
-            KEY FK_ENT_ATTRIBUTE_ENTITY_REF (value_entity_ref),
-            KEY UNQ_ENTITY_ATTRIBUTE (owner_id,namespace,name,list_index),
-            CONSTRAINT FK_ATTRIBUTE_PARENT_ENTITY_0 FOREIGN KEY (owner_id) REFERENCES ENTITY (id),
-            CONSTRAINT FK_ENT_ATTRIBUTE_ENTITY_REF_0 FOREIGN KEY (value_entity_ref) REFERENCES ENTITY (id)
-            ) ENGINE=InnoDB AUTO_INCREMENT=231805857 DEFAULT CHARSET=utf8;
+            -- populate a "shards" table to hold our expected shard ids; we use this later for looping
+            CREATE TABLE shards(shardid char(4), PRIMARY KEY (shardid)); /
+            INSERT INTO shards(shardid) VALUES('0_07'), ('0_8f'), ('1_07'), ('1_8f'), ('2_07'), ('2_8f'), ('3_07'), ('3_8f'),
+                ('4_07'), ('4_8f'), ('5_07'), ('5_8f'), ('6_07'), ('6_8f'), ('7_07'), ('7_8f'),
+                ('8_07'), ('8_8f'), ('9_07'), ('9_8f'), ('a_07'), ('a_8f'), ('b_07'), ('b_8f'),
+                ('c_07'), ('c_8f'), ('d_07'), ('d_8f'), ('e_07'), ('e_8f'), ('f_07'), ('f_8f'); /
 
-            CREATE TABLE ENTITY_ATTRIBUTE_1 (
-            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            name varchar(200) NOT NULL,
-            value_string text,
-            value_number double DEFAULT NULL,
-            value_boolean bit(1) DEFAULT NULL,
-            value_entity_ref bigint(20) unsigned DEFAULT NULL,
-            list_index int(11) DEFAULT NULL,
-            owner_id bigint(20) unsigned NOT NULL,
-            list_length int(11) DEFAULT NULL,
-            namespace varchar(32) NOT NULL DEFAULT 'default',
-            VALUE_JSON longtext,
-            deleted bit(1) DEFAULT b'0',
-            deleted_date timestamp(6) NULL DEFAULT NULL,
-            PRIMARY KEY (id),
-            KEY FK_ENT_ATTRIBUTE_ENTITY_REF (value_entity_ref),
-            KEY UNQ_ENTITY_ATTRIBUTE (owner_id,namespace,name,list_index),
-            CONSTRAINT FK_ATTRIBUTE_PARENT_ENTITY_1 FOREIGN KEY (owner_id) REFERENCES ENTITY (id),
-            CONSTRAINT FK_ENT_ATTRIBUTE_ENTITY_REF_1 FOREIGN KEY (value_entity_ref) REFERENCES ENTITY (id)
-            ) ENGINE=InnoDB AUTO_INCREMENT=231805857 DEFAULT CHARSET=utf8;
+            -- function to produce a shard identifier from a workspace uuid string
+            -- important: the values produced by this function must match exactly the values produced by Rawls scala code
+            -- and the values inserted into 'shards' above
+            DROP FUNCTION IF EXISTS shardIdentifier /
+            CREATE FUNCTION shardIdentifier(workspaceId CHAR(32))
+            RETURNS CHAR(4) DETERMINISTIC
+            BEGIN
+                -- this function produces 32 shards
+                DECLARE stringToInspect CHAR(2);
+                DECLARE secondCharToInspect CHAR(1);
+                DECLARE shardIdPart1 CHAR(1);
+                DECLARE shardIdPart2 CHAR(2);
 
-            -- copy rows from ea to ea_0, ea_1
-            INSERT INTO ENTITY_ATTRIBUTE_0(id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
-                SELECT ea.id, ea.name, ea.value_string, ea.value_number, ea.value_boolean, ea.value_entity_ref, ea.list_index, ea.owner_id, ea.list_length, ea.namespace, ea.VALUE_JSON, ea.deleted, ea.deleted_date
-                FROM ENTITY_ATTRIBUTE ea, ENTITY e, WORKSPACE w
-                WHERE e.workspace_id = w.id
-                    AND ea.owner_id = e.id
-                    AND MOD(CONV(substring(hex(w.id), 1, 1), 16, 10), 2) = 0;
+                SET stringToInspect = SUBSTRING(workspaceId,1,2);
+                SET secondCharToInspect = SUBSTRING(stringToInspect,2,1);
 
-            INSERT INTO ENTITY_ATTRIBUTE_1(id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
-                SELECT ea.id, ea.name, ea.value_string, ea.value_number, ea.value_boolean, ea.value_entity_ref, ea.list_index, ea.owner_id, ea.list_length, ea.namespace, ea.VALUE_JSON, ea.deleted, ea.deleted_date
-                FROM ENTITY_ATTRIBUTE ea, ENTITY e, WORKSPACE w
-                WHERE e.workspace_id = w.id
-                    AND ea.owner_id = e.id
-                    AND MOD(CONV(substring(hex(w.id), 1, 1), 16, 10), 2) = 1;
+                -- first part of the shard id is equal to the first char of the workspace id, 16 possible values
+                SET shardIdPart1 = SUBSTRING(stringToInspect,1,1);
+                -- second part of the shard id produces 2 values: 0-7 and 8-f
+                IF secondCharToInspect >= '0' &amp;&amp; secondCharToInspect &lt;= '7' THEN
+                    SET shardIdPart2 = '07';
+                ELSE
+                    SET shardIdPart2 = '8f';
+                END IF;
+
+                RETURN CONCAT(shardIdPart1, '_', shardIdPart2);
+            END /
+
+            -- procedure to create a shard table
+            DROP PROCEDURE IF EXISTS createEntityAttributeShard /
+            CREATE PROCEDURE createEntityAttributeShard(IN shardIdentifier CHAR(4))
+            BEGIN
+                SET @tableSuffix := shardIdentifier;
+                SET @sql_text:=CONCAT('CREATE TABLE ENTITY_ATTRIBUTE_',@tableSuffix,' ('
+                    ' id bigint(20) unsigned NOT NULL AUTO_INCREMENT,'
+                    ' name varchar(200) NOT NULL,'
+                    ' value_string text,'
+                    ' value_number double DEFAULT NULL,'
+                    ' value_boolean bit(1) DEFAULT NULL,'
+                    ' value_entity_ref bigint(20) unsigned DEFAULT NULL,'
+                    ' list_index int(11) DEFAULT NULL,'
+                    ' owner_id bigint(20) unsigned NOT NULL,'
+                    ' list_length int(11) DEFAULT NULL,'
+                    ' namespace varchar(32) NOT NULL DEFAULT ''default'','
+                    ' VALUE_JSON longtext,'
+                    ' deleted bit(1) DEFAULT b''0'','
+                    ' deleted_date timestamp(6) NULL DEFAULT NULL,'
+                    ' PRIMARY KEY (id),'
+                    ' KEY FK_ENT_ATTRIBUTE_ENTITY_REF (value_entity_ref),'
+                    ' KEY UNQ_ENTITY_ATTRIBUTE (owner_id,namespace,name,list_index),'
+                    ' CONSTRAINT FK_ATTRIBUTE_PARENT_ENTITY_',@tableSuffix,' FOREIGN KEY (owner_id) REFERENCES ENTITY (id),'
+                    ' CONSTRAINT FK_ENT_ATTRIBUTE_ENTITY_REF_',@tableSuffix,' FOREIGN KEY (value_entity_ref) REFERENCES ENTITY (id)'
+                    ') ENGINE=InnoDB AUTO_INCREMENT=231805857 DEFAULT CHARSET=utf8;');
+                PREPARE stmt from @sql_text;
+                EXECUTE stmt;
+            END /
+
+            -- procedure to copy rows from ENTITY_ATTRIBUTE to the appropriate shard table,
+            -- based on the attributes' owning workspace
+            DROP PROCEDURE IF EXISTS copyRowsToAttributeShard /
+            CREATE PROCEDURE copyRowsToAttributeShard(IN shardIdentifier CHAR(4))
+            BEGIN
+                SET @tableSuffix := shardIdentifier;
+                SET @sql_text:=CONCAT('INSERT INTO ENTITY_ATTRIBUTE_',@tableSuffix,'(id, name, value_string, value_number, value_boolean,'
+                    ' value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)'
+                    'SELECT ea.id, ea.name, ea.value_string, ea.value_number, ea.value_boolean,'
+                    ' ea.value_entity_ref, ea.list_index, ea.owner_id, ea.list_length, ea.namespace, ea.VALUE_JSON, ea.deleted, ea.deleted_date'
+                    ' FROM ENTITY_ATTRIBUTE ea, ENTITY e, WORKSPACE w'
+                    ' WHERE e.workspace_id = w.id'
+                    ' AND ea.owner_id = e.id'
+                    ' AND shardIdentifier(hex(w.id)) = ''',@tableSuffix,''';');
+                PREPARE stmt from @sql_text;
+                EXECUTE stmt;
+            END /
+
+            -- convenience procedure to both create a shard and copy rows into it
+            DROP PROCEDURE IF EXISTS createAndPopulateShard /
+            CREATE PROCEDURE createAndPopulateShard(IN shardIdentifier CHAR(4))
+            BEGIN
+                CALL createEntityAttributeShard(shardIdentifier);
+                CALL copyRowsToAttributeShard(shardIdentifier);
+            END /
+
+            -- procedure to loop over all defined shards, create and populate each
+            DROP PROCEDURE IF EXISTS createAndPopulateAllShards //
+            CREATE PROCEDURE createAndPopulateAllShards()
+            BEGIN
+                DECLARE done INT DEFAULT FALSE;
+                DECLARE shardSuffix char(4);
+                DECLARE cursorElement CURSOR FOR SELECT shardid FROM shards;
+                DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+                OPEN cursorElement;
+
+                createLoop: LOOP
+                    FETCH NEXT FROM cursorElement INTO shardSuffix;
+                    IF done THEN
+                        LEAVE createLoop;
+                    END IF;
+                    call createAndPopulateShard(shardSuffix);
+                END LOOP createLoop;
+
+                CLOSE cursorElement;
+            END /
+
+            call createAndPopulateAllShards(); /
 
             -- drop ea (renaming for now to ease with debugging)
-            RENAME TABLE ENTITY_ATTRIBUTE to ENTITY_ATTRIBUTE_archived;
+            RENAME TABLE ENTITY_ATTRIBUTE to ENTITY_ATTRIBUTE_archived; /
 
             -- create ENTITY_ATTRIBUTE_ALL_SHARDS view as union of all shards
+            -- TODO: build this dynamically
             CREATE VIEW ENTITY_ATTRIBUTE_ALL_SHARDS AS
                 SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
-                FROM ENTITY_ATTRIBUTE_0
+                FROM ENTITY_ATTRIBUTE_0_07
+                  UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_0_8f
                     UNION
                 SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
-                FROM ENTITY_ATTRIBUTE_1;
+                FROM ENTITY_ATTRIBUTE_1_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_1_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_2_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_2_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_3_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_3_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_4_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_4_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_5_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_5_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_6_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_6_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_7_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_7_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_8_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_8_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_9_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_9_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_a_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_a_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_b_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_b_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_c_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_c_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_d_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_d_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_e_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_e_8f
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_f_07
+                    UNION
+                SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
+                FROM ENTITY_ATTRIBUTE_f_8f; /
+
         </sql>
     </changeSet>
-
 
 </databaseChangeLog>
