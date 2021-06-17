@@ -220,6 +220,8 @@
                 SELECT id, name, value_string, value_number, value_boolean, value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date
                 FROM ENTITY_ATTRIBUTE_f_8f; /
 
+            -- TODO: should we drop table 'shards'? Would that table be useful in the future?
+
         </sql>
     </changeSet>
 
