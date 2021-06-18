@@ -84,7 +84,8 @@ class BatchUpsertScalingSpec extends AnyFlatSpec with ScalatestRouteTest with Ma
 
   behavior of "Batch Upsert scaling"
 
-  it should "calculate perf stats for a medium-sized data table, updating one cell and ignoring unchanged cells" in withTestDataServices { testApiService =>
+  // test is currently ignored; manually re-enable it in order to run tests locally
+  it should "calculate perf stats for a medium-sized data table, updating one cell and ignoring unchanged cells" ignore withTestDataServices { testApiService =>
 
     // =========== START DATA SETUP ===========
     // read batch upsert file from src/test/resources
