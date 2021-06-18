@@ -89,6 +89,7 @@ object Dependencies {
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-3-4"          % "3.2.2.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.11.2" % "test"
+  val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2"% "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
   val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
@@ -223,6 +224,7 @@ object Dependencies {
     akkaHttpTestKit,
     mockserverNetty,
     mockito,
+    breeze,
     workbenchModel,
     workbenchGoogle,
     googleStorageLocal,
