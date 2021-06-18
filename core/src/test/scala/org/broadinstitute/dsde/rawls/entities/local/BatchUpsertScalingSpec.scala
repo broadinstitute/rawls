@@ -32,6 +32,18 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.io.Source
 
+/**
+  * This spec contains one test and that test is ignored by default; it does not run as part of the main unit test suite.
+  *
+  * The "test" is a pseudo perf test for batchUpsert-entity and delete-entity (which is actually hide-entity). The goal
+  * of this test is to allow you, the developer, to quickly and easily test before/after changes to the
+  * batchUpsert-entity and delete-entity code paths. Furthermore, the test always passes unless something throws an
+  * exception; it is up to you to look at the console/log output and find the performance timings it outputs.
+  *
+  * Because this test runs on your laptop, or potentially in Jenkins or GHA, the numbers it produces should not be
+  * considered to be objective results, and they do not translate to performance on production. They should only be used
+  * to compare before/after your code changes.
+  */
 class BatchUpsertScalingSpec extends AnyFlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll  with LazyLogging {
 
   // =========== START SERVICES AND MOCKS SETUP ===========
