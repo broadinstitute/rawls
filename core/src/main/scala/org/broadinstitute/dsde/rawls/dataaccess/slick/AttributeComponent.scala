@@ -360,14 +360,13 @@ trait AttributeComponent {
       // note this does not include transactionId for AttributeScratchRecords. We do not expect AttributeScratchRecords
       // here, and transactionId will eventually be going away, so don't bother
       object ComparableRecord {
-        def fromRecord[OWNER_ID](rec: RECORD): ComparableRecord[OWNER_ID] = {
-          // TODO: davidan: is the asInstanceOf safe here?? I'm not sure why rec.ownerId doesn't compile on its own
-          new ComparableRecord[OWNER_ID](rec.ownerId.asInstanceOf[OWNER_ID], rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean,
+        def fromRecord(rec: RECORD): ComparableRecord = {
+          new ComparableRecord(rec.ownerId, rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean,
             rec.valueJson, rec.valueEntityRef, rec.listIndex, rec.listLength, rec.deleted, rec.deletedDate)
         }
       }
 
-      case class ComparableRecord[OWNER_ID] (
+      case class ComparableRecord (
         ownerId: OWNER_ID,
         namespace: String,
         name: String,
@@ -383,7 +382,7 @@ trait AttributeComponent {
       )
 
       // create a set of ComparableRecords representing the existing attributes
-      val existingAttributesSet: Set[ComparableRecord[OWNER_ID]] = existingAttributes.toSet.map(r => ComparableRecord.fromRecord[OWNER_ID](r))
+      val existingAttributesSet: Set[ComparableRecord] = existingAttributes.toSet.map(r => ComparableRecord.fromRecord(r))
 
       val existingKeys = existingAttrMap.keySet
 
@@ -396,7 +395,7 @@ trait AttributeComponent {
       val attributesToUpdate = toSaveAttrMap.filter {
         case (k, v) =>
             existingKeys.contains(k) && // if the attribute doesn't already exist, don't attempt to update it
-            !existingAttributesSet.contains(ComparableRecord.fromRecord[OWNER_ID](v)) // if the attribute exists and is unchanged, don't update it
+            !existingAttributesSet.contains(ComparableRecord.fromRecord(v)) // if the attribute exists and is unchanged, don't update it
       }
 
       // collect the parent objects (e.g. entity, workspace) that have writes, so we know which object rows to re-calculate
