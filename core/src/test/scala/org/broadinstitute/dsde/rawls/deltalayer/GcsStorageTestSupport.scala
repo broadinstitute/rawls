@@ -5,7 +5,7 @@ import cats.effect.{Blocker, IO}
 import cats.effect.concurrent.Semaphore
 import com.google.cloud.storage.Storage
 import com.google.cloud.storage.contrib.nio.testing.LocalStorageHelper
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageInterpreter
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
