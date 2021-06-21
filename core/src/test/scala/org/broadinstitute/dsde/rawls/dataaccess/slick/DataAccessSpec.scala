@@ -19,19 +19,24 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
 
   import driver.api._
 
-  "DataAccess" should "test that truncateAll has left the DB in a known empty state" in withEmptyTestDatabase {
-    val rawTableNames: Seq[String] = runAndWait(MTable.getTables).map(_.name.name)
+  behavior of "DataAccess"
 
-    val safeTableNames: Seq[String] = rawTableNames flatMap {
-      case "GROUP" => None
-      case "USER" => None
-      case "MANAGED_GROUP" => None
-      case "DATABASECHANGELOG" => None        // managed by Liquibase
-      case "DATABASECHANGELOGLOCK" => None    // managed by Liquibase
-      case other => Option(other)
-    }
+  val rawTableNames: Seq[String] = runAndWait(MTable.getTables).map(_.name.name)
 
-    safeTableNames foreach { tableName =>
+  val safeTableNames: Seq[String] = rawTableNames flatMap {
+    case "GROUP" => None
+    case "USER" => None
+    case "MANAGED_GROUP" => None
+    case "shards" => None // populated by Liquibase, not written to by Rawls
+    case "ENTITY_ATTRIBUTE_archived" => None // never read by Rawls, will be deleted
+    case "ENTITY_ATTRIBUTE_ALL_SHARDS" => None // a view, not a table
+    case "DATABASECHANGELOG" => None        // managed by Liquibase
+    case "DATABASECHANGELOGLOCK" => None    // managed by Liquibase
+    case other => Option(other)
+  }
+
+  safeTableNames foreach { tableName =>
+    it should s"test that truncateAll has left table '$tableName' in a known empty state" in withEmptyTestDatabase {
       val count = sql"SELECT COUNT(*) FROM #$tableName "
       assertResult(0, tableName + " not empty") {
         runAndWait(count.as[Int].head)

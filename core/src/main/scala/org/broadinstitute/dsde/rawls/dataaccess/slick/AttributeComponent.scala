@@ -116,6 +116,8 @@ trait AttributeComponent {
 
   import driver.api._
 
+  type ShardId = String
+
   def isEntityRefRecord[T](rec: AttributeRecord[T]): Boolean = {
     val isEmptyRefListDummyRecord = rec.listLength.isDefined && rec.listLength.get == 0 && rec.valueNumber.isEmpty
     rec.valueEntityRef.isDefined || isEmptyRefListDummyRecord
@@ -143,13 +145,13 @@ trait AttributeComponent {
     def transactionId = column[String]("transaction_id")
   }
 
-  class EntityAttributeTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE") {
+  class EntityAttributeTable(shard: ShardId)(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, s"ENTITY_ATTRIBUTE_$shard") {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
 
     def uniqueIdx = index("UNQ_ENTITY_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
 
-    def entityRef = foreignKey("FK_ENT_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
-    def parentEntity = foreignKey("FK_ATTRIBUTE_PARENT_ENTITY", ownerId, entityQuery)(_.id)
+    def entityRef = foreignKey(s"FK_ENT_ATTRIBUTE_ENTITY_REF_$shard", valueEntityRef, entityQuery)(_.id.?)
+    def parentEntity = foreignKey(s"FK_ATTRIBUTE_PARENT_ENTITY_$shard", ownerId, entityQuery)(_.id)
   }
 
   class WorkspaceAttributeTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
@@ -178,7 +180,31 @@ trait AttributeComponent {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
-  protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
+  // TODO: davidan reorganize these, add tests
+  def determineShard(workspaceId: UUID): ShardId = {
+    // see the liquibase changeset "20210615_sharded_entity_tables.xml" for expected shard identifier values
+    val idString = workspaceId.toString
+    val part1 = idString.take(1); // first part of shardid just copies the first char of workspaceid
+    val secondChar = idString.take(2).tail.head // second character of workspaceId
+    val part2 = if ('0' <= secondChar && secondChar <= '7') "07" else "8f"
+    val shardId = part1 + "_" + part2
+
+    shardId
+  }
+  class EntityAttributeShardQuery(shard: ShardId) extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(shard)(_), EntityAttributeRecord)
+  def entityAttributeShardQuery(workspaceId: UUID): EntityAttributeShardQuery = {
+    // TODO: davidan is it ok to create a new EntityAttributeShardQuery each time? Should we pre-create one for each shard and reuse it?
+    new EntityAttributeShardQuery(determineShard(workspaceId))
+  }
+  def entityAttributeShardQuery(workspace: Workspace): EntityAttributeShardQuery = {
+    entityAttributeShardQuery(workspace.workspaceIdAsUUID)
+  }
+  def entityAttributeShardQuery(entityRec: EntityRecord): EntityAttributeShardQuery = {
+    entityAttributeShardQuery(entityRec.workspaceId)
+  }
+  lazy val entityAttributeAllShardsViewQuery = new EntityAttributeShardQuery("ALL_SHARDS")
+
+
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
@@ -424,11 +450,11 @@ trait AttributeComponent {
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
       def updateInMasterAction(transactionId: String) = {
-          val tableSuffix = getTableSuffix(baseTableRow.tableName)
+          val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
 
           sql"""
           update #${baseTableRow.tableName} a
-              join #${baseTableRow.tableName}_#${tableSuffix} ta
+              join #${joinTableName} ta
               on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
                   and ta.transaction_id = $transactionId
@@ -444,10 +470,10 @@ trait AttributeComponent {
       }
 
       def clearAttributeScratchTableAction(transactionId: String) = {
-        val tableSuffix = getTableSuffix(baseTableRow.tableName)
+        val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
 
-        if(tableSuffix == "SCRATCH")
-          sqlu"""delete from #${baseTableRow.tableName}_#${tableSuffix} where transaction_id = $transactionId"""
+        if(joinTableName.endsWith("SCRATCH"))
+          sqlu"""delete from #${joinTableName} where transaction_id = $transactionId"""
         else DBIO.successful(0)
       }
 
@@ -536,11 +562,15 @@ trait AttributeComponent {
 
     private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
 
-    private def getTableSuffix(tableName: String): String = {
-      if (tableName == "ENTITY_ATTRIBUTE" || tableName == "WORKSPACE_ATTRIBUTE")
-        "TEMP"
-      else
-        "SCRATCH"
+    private def getTempOrScratchTableName(tableName: String): String = {
+      if (tableName.startsWith("ENTITY_ATTRIBUTE_")) {
+        "ENTITY_ATTRIBUTE_TEMP"
+      } else if (tableName == "WORKSPACE_ATTRIBUTE") {
+        "WORKSPACE_ATTRIBUTE_TEMP"
+      } else {
+        s"${tableName}_SCRATCH"
+      }
     }
+
   }
 }
