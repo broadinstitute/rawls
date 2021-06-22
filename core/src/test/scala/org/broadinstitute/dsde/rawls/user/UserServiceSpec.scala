@@ -420,7 +420,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   it should "update the billing account for a billing project" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
-      val billingAccountName = RawlsBillingAccountName("111111-111111-111111")
+      val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
       val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
 
@@ -471,7 +471,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   it should "not update the billing account for a billing project if the user does not have access to the billing project" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
-      val billingAccountName = RawlsBillingAccountName("111111-111111-111111")
+      val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
       val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
 
@@ -497,7 +497,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   it should "not update the billing account for a billing project if the user does not have access to the billing account" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
-      val billingAccountName = RawlsBillingAccountName("111111-111111-111111")
+      val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
       val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
 
@@ -523,7 +523,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   it should "not remove the billing account for a billing project if the user does not have access to the billing project" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
-      val billingAccountName = RawlsBillingAccountName("111111-111111-111111")
+      val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
       val googleProjectName = GoogleProject(billingProject.projectName.value) //TODO: See CA-1363 for PPW concerns
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
