@@ -34,12 +34,8 @@ class GoogleBigQueryServiceFactory(pathToCredentialJson: String, blocker: Blocke
     GoogleBigQueryService.resource[IO](petCredentials, blocker, projectId)
   }
 
-  def getServiceForProject(projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
-    GoogleBigQueryService.resource[IO](pathToCredentialJson, projectId, blocker)
-  }
-
   def getServiceForProject(projectId: GoogleProjectId): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
-    getServiceForProject(GoogleProject(projectId.value))
+    GoogleBigQueryService.resource[IO](pathToCredentialJson, GoogleProject(projectId.value), blocker)
   }
 
   def getServiceFromJson(json: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
