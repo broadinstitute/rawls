@@ -102,7 +102,7 @@ class MockBigQueryServiceFactory(credentialPath: String, blocker: Blocker, query
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
   }
 
-  override def getServiceForProject(projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
+  override def getServiceForProject(projectId: GoogleProjectId): Resource[IO, GoogleBigQueryService[IO]] = {
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
   }
 
