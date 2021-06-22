@@ -256,6 +256,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   /**
    * Unregisters a billing project with OwnerInfo provided in the request body.
    *
+   * The admin unregister endpoint does not delete the Google project in Google when we unregister it. Project
+   * registration allows tests to use existing Google projects (like GPAlloc) as if Rawls had created it,
+   * so we should not delete those pre-existing Google projects when we unregister them.
+   *
    * @param projectName The project name to be unregistered.
    * @param ownerInfo A map parsed from request body contains the project's owner info.
    * */
