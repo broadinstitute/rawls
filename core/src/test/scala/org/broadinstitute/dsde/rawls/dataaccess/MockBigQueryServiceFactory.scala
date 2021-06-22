@@ -5,11 +5,11 @@ import cats.effect._
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.Acl.Entity
 import com.google.cloud.bigquery.Dataset.Builder
-import com.google.cloud.bigquery.{Acl, BigQuery, Dataset, DatasetId, DatasetInfo, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, TableResult}
+import com.google.cloud.bigquery.{Acl, BigQuery, Dataset, DatasetId, DatasetInfo, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, Table, TableResult}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
@@ -122,4 +122,16 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
   }
 
   override def deleteDataset(datasetName: String): IO[Boolean] = IO.pure(true)
+
+  override def getTable(datasetName: String, tableName: String): IO[Option[Table]] = IO.pure(None)
+
+  override def getTable(datasetName: BigQueryDatasetName, tableName: BigQueryTableName): IO[Option[Table]] = IO.pure(None)
+
+  override def getTable(googleProjectName: GoogleProject, datasetName: BigQueryDatasetName, tableName: BigQueryTableName): IO[Option[Table]] = IO.pure(None)
+
+  override def getDataset(datasetName: String): IO[Option[Dataset]] = IO.pure(None)
+
+  override def getDataset(datasetName: BigQueryDatasetName): IO[Option[Dataset]] = IO.pure(None)
+
+  override def getDataset(googleProjectName: GoogleProject, datasetName: BigQueryDatasetName): IO[Option[Dataset]] = IO.pure(None)
 }
