@@ -43,7 +43,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
       val referenceId = snapshotRef.getMetadata.getResourceId
 
-      // create BQ dataset, get workspace policies from Sam, and add those Sam policies to the dataset IAM
+      // create BQ dataset
       val createDatasetIO = deltaLayer.createDataset(workspaceContext, userInfo)
 
       createDatasetIO.unsafeToFuture().recover {
