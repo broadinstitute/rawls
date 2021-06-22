@@ -420,7 +420,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     val inserts = DeltaLayerTranslator.translateEntityUpdates(entityUpdates)
 
     // determine destination BQ dataset, based on snapshot reference.
-    val bqDataset = DeltaLayer.generateDatasetName(dataReference.getMetadata.getResourceId)
+    val bqDataset = DeltaLayer.generateDatasetNameForReference(dataReference.getMetadata.getResourceId)
 
     // create DeltaInsert object
     val insertId = UUID.randomUUID()

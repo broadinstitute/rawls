@@ -24,7 +24,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceMa
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
-import org.broadinstitute.dsde.rawls.deltalayer.GcsDeltaLayerWriter
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, GcsDeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -355,14 +355,20 @@ object Boot extends IOApp with LazyLogging {
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
       val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
-      // create the entity manager.
+      // create the Delta Layer writer
       val deltaLayerWriter = new GcsDeltaLayerWriter(appDependencies.googleStorageService,
         GcsBucketName(conf.getString("deltaLayer.deltaLayerSourceBucket")),
         metricsPrefix)
+      // create the Delta Layer main class
+      // TODO: AS-724 - move deltaLayerWriter construction inside the DeltaLayer class?
+      val deltaLayer = new DeltaLayer(appDependencies.bigQueryServiceFactory, deltaLayerWriter, samDAO, WorkbenchEmail(clientEmail),
+        WorkbenchEmail(conf.getString("deltaLayer.deltaLayerStreamerEmail")))
+      // create the entity manager.
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
         appDependencies.bigQueryServiceFactory, deltaLayerWriter,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
         conf.getBoolean("entityStatisticsCache.enabled"))
+
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
@@ -398,9 +404,8 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         samDAO,
         workspaceManagerDAO,
-        appDependencies.bigQueryServiceFactory,
+        deltaLayer,
         conf.getString("dataRepo.terraInstanceName"),
-        gcsConfig.getString("pathToCredentialJson"),
         WorkbenchEmail(clientEmail),
         WorkbenchEmail(conf.getString("deltaLayer.deltaLayerStreamerEmail"))
       )
@@ -514,7 +519,7 @@ object Boot extends IOApp with LazyLogging {
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
-      bqServiceFactory = new GoogleBigQueryServiceFactory(blocker)(executionContext)
+      bqServiceFactory = new GoogleBigQueryServiceFactory(pathToCredentialJson, blocker)(executionContext)
     } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory)
   }
 }

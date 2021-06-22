@@ -7,6 +7,7 @@ import com.google.cloud.bigquery.Acl.Entity
 import com.google.cloud.bigquery.Dataset.Builder
 import com.google.cloud.bigquery.{Acl, BigQuery, Dataset, DatasetId, DatasetInfo, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, Table, TableInfo, TableResult}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
@@ -89,19 +90,19 @@ object MockBigQueryServiceFactory {
     lazy val blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)
     implicit val ec = TestExecutionContext.testExecutionContext
 
-    new MockBigQueryServiceFactory(blocker, queryResponse)
+    new MockBigQueryServiceFactory("dummy-credential-path", blocker, queryResponse)
   }
 
 }
 
-class MockBigQueryServiceFactory(blocker: Blocker, queryResponse: Either[Throwable, TableResult])(implicit val executionContext: ExecutionContext)
-  extends GoogleBigQueryServiceFactory(blocker: Blocker)(executionContext: ExecutionContext) {
+class MockBigQueryServiceFactory(credentialPath: String, blocker: Blocker, queryResponse: Either[Throwable, TableResult])(implicit val executionContext: ExecutionContext)
+  extends GoogleBigQueryServiceFactory(credentialPath: String, blocker: Blocker)(executionContext: ExecutionContext) {
 
   override def getServiceForPet(petKey: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
   }
 
-  override def getServiceFromCredentialPath(credentialPath: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
+  override def getServiceForProject(projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
   }
 
