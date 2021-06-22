@@ -47,6 +47,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
       when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProject])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
+      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
       when(mockWorkspaceManagerDAO.createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken]))
@@ -84,6 +85,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
       when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProject])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
+      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
@@ -124,6 +126,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
       when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProject])).thenThrow(new RuntimeException)
+      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenThrow(new RuntimeException)
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
@@ -167,6 +170,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
       when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProject])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
+      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
@@ -212,6 +216,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
       when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProject])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
+      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
@@ -251,6 +256,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
       when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProject])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
+      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
