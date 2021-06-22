@@ -47,19 +47,32 @@ object DeltaLayer {
 class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWriter: DeltaLayerWriter, samDAO: SamDAO, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
                 (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO]) {
 
+  /**
+    * Creates the Delta Layer companion dataset for a given workspace, assigning it proper ACLs and labels
+    * based on the workspace.
+    * @param workspace workspace in which to create the companion dataset
+    * @param userInfo user credentials for retrieving workspace ACLs
+    * @return the created dataset's project and name
+    */
   def createDataset(workspace: Workspace, userInfo: UserInfo): IO[DatasetId] = {
-    val bqService = bqServiceFactory.getServiceForProject(workspace.googleProject)
-    val datasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
-    val datasetLabels = Map("workspace_id" -> workspace.workspaceId)
     for {
       samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)))
+      bqService = bqServiceFactory.getServiceForProject(workspace.googleProject)
+      datasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
+      datasetLabels = Map("workspace_id" -> workspace.workspaceId)
       aclBindings = calculateDatasetAcl(samPolicies)
       datasetId <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings))
     } yield {
-      datasetId // the DatasetId object contains project name and dataset name
+      // the DatasetId object contains project name and dataset name
+      datasetId
     }
   }
 
+  /**
+    * Deletes the Delta Layer companion dataset from a given workspace.
+    * @param workspace the workspace from which to delete the companion dataset
+    * @return status of dataset deletion
+    */
   def deleteDataset(workspace: Workspace): IO[Boolean] = {
     val bqService = bqServiceFactory.getServiceForProject(workspace.googleProject)
     val datasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
