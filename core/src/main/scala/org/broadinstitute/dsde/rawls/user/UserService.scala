@@ -256,6 +256,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   /**
    * Unregisters a billing project with OwnerInfo provided in the request body.
    *
+   * The admin unregister endpoint does not delete the Google project in Google when we unregister it. Project
+   * registration allows tests to use existing Google projects (like GPAlloc) as if Rawls had created it,
+   * so we should not delete those pre-existing Google projects when we unregister them.
+   *
    * @param projectName The project name to be unregistered.
    * @param ownerInfo A map parsed from request body contains the project's owner info.
    * */
@@ -263,7 +267,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     asFCAdmin {
       val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
       for {
-        _ <- deleteGoogleProjectIfChild(projectName, ownerUserInfo)
+        _ <- deleteGoogleProjectIfChild(projectName, ownerUserInfo, deleteGoogleProjectWithGoogle = false)
         result <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
       } yield result
     }
@@ -335,12 +339,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
-  private def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName, userInfoForSam: UserInfo) = {
+  private def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName, userInfoForSam: UserInfo, deleteGoogleProjectWithGoogle: Boolean = true) = {
     samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, userInfoForSam).flatMap { projectChildren =>
       if (projectChildren.contains(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))) {
         for {
           _ <- deletePetsInProject(GoogleProjectId(projectName.value), userInfoForSam)
-          _ <- gcsDAO.deleteV1Project(GoogleProjectId(projectName.value))
+          _ <- if (deleteGoogleProjectWithGoogle) {
+            gcsDAO.deleteV1Project(GoogleProjectId(projectName.value))
+          } else Future.successful(())
           _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, userInfoForSam)
         } yield ()
       } else {

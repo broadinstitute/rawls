@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -14,6 +15,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleSe
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
@@ -258,6 +261,41 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
         Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
+    }
+  }
+
+  it should "not delete the Google project when unregistering a Billing project" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val project = defaultBillingProject
+      val ownerInfoMap = Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" ->  userInfo.accessToken.value)
+      val ownerIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
+      val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfoMap("newOwnerEmail")), OAuth2BearerToken(ownerInfoMap("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
+      val petSAJson = "petJson"
+      runAndWait(rawlsBillingProjectQuery.create(project))
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.listResourceChildren(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[UserInfo])).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))))
+      when(mockSamDAO.listAllResourceMemberIds(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[UserInfo])).thenReturn(Future.successful(Set(ownerIdInfo)))
+      when(mockSamDAO.getPetServiceAccountKeyForUser(project.googleProjectId, ownerUserInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, ownerUserInfo)).thenReturn(Future.successful())
+      when(mockSamDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.googleProject), ArgumentMatchers.eq(project.googleProjectId.value), any[UserInfo])).thenReturn(Future.successful())
+      when(mockSamDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[UserInfo])).thenReturn(Future.successful())
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      when(mockGcsDAO.isAdmin(any[String])).thenReturn(Future.successful(true))
+      when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(ownerUserInfo))
+      when(mockGcsDAO.deleteV1Project(project.googleProjectId)).thenReturn(Future.successful())
+
+      val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
+      val actual = userService.adminUnregisterBillingProjectWithOwnerInfo(project.projectName, ownerInfoMap).futureValue
+
+      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, ownerUserInfo)
+      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, ownerUserInfo)
+      verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, ownerUserInfo)
+      verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
+
+      runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
+      actual shouldEqual RequestComplete(StatusCodes.NoContent)
     }
   }
 }
