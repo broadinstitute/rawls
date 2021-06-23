@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
 import cats.effect.{ContextShift, IO}
-import com.google.cloud.bigquery.{Acl, DatasetId}
+import com.google.cloud.bigquery.{Acl, BigQueryException, DatasetId}
 import com.google.cloud.bigquery.Acl.Entity
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo, Workspace}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -45,11 +46,12 @@ object DeltaLayer {
 }
 
 class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWriter: DeltaLayerWriter, samDAO: SamDAO, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
-                (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO]) {
+                (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO])
+                extends LazyLogging {
 
   /**
     * Creates the Delta Layer companion dataset for a given workspace, assigning it proper ACLs and labels
-    * based on the workspace.
+    * based on the workspace. Throws an error if the dataset already exists.
     * @param workspace workspace in which to create the companion dataset
     * @param userInfo user credentials for retrieving workspace ACLs
     * @return the created dataset's project and name
@@ -61,10 +63,35 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
       datasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
       datasetLabels = Map("workspace_id" -> workspace.workspaceId)
       aclBindings = calculateDatasetAcl(samPolicies)
+      _ = logger.debug(s"creating BigQuery dataset $datasetName in project ${workspace.googleProject} ...")
       datasetId <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings))
     } yield {
       // the DatasetId object contains project name and dataset name
       datasetId
+    }
+  }
+
+  /**
+    * Creates the Delta Layer companion dataset for a given workspace, assigning it proper ACLs and labels
+    * based on the workspace. Ignores errors if the dataset already exists.
+    * @param workspace workspace in which to create the companion dataset
+    * @param userInfo user credentials for retrieving workspace ACLs
+    * @return a boolean indicating whether or not this call created the dataset, plus dataset's project and name
+    */
+  def createDatasetIfNotExist(workspace: Workspace, userInfo: UserInfo): IO[(Boolean, DatasetId)] = {
+    createDataset(workspace, userInfo).attempt map {
+      case Right(datasetId) =>
+        // dataset was created
+        logger.info(s"successfully created Delta Layer companion BigQuery dataset ${datasetId.getDataset} in project ${datasetId.getProject}")
+        (true, datasetId)
+      case Left(bqe: BigQueryException) if bqe.getCode == 409 =>
+        // dataset already exists
+        val ds = DatasetId.of(workspace.googleProject.value, DeltaLayer.generateDatasetNameForWorkspace(workspace))
+        logger.info(s"Delta Layer companion dataset already exists; createDatasetIfNotExist ignoring BigQuery 409 for ${ds.getProject}/${ds.getDataset}")
+        (false, ds)
+      case Left(err)  =>
+        // some other error occurred; rethrow that error
+        throw err
     }
   }
 
