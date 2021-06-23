@@ -30,10 +30,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
   implicit val cs = IO.contextShift(global)
 
-  val testConf = ConfigFactory.load()
-
   //test constants
-  val fakeCredentialPath = testConf.getString("gcs.pathToCredentialJson")
   val fakeRawlsClientEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
   val fakeDeltaLayerStreamerEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
 
