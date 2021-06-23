@@ -31,20 +31,18 @@ trait EntitySupport {
     }
   }
 
-  def withAllEntities[T](workspaceContext: Workspace, dataAccess: DataAccess, entities: Seq[AttributeEntityReference])(op: (Seq[Entity]) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    val entityActions: Seq[ReadAction[Try[Entity]]] = entities map { e =>
-      dataAccess.entityQuery.get(workspaceContext, e.entityType, e.entityName) map {
-        case None => Failure(new RawlsException(s"${e.entityType} ${e.entityName} does not exist in ${workspaceContext.toWorkspaceName}"))
-        case Some(entity) => Success(entity)
-      }
-    }
-
-    DBIO.sequence(entityActions) flatMap { entityTries =>
-      val failures = entityTries.collect { case Failure(y) => y.getMessage }
-      if (failures.isEmpty) op(entityTries collect { case Success(e) => e })
-      else {
-        val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = (Seq("Entities were not found:") ++ failures) mkString System.lineSeparator())
+  def withAllEntityRefs[T](workspaceContext: Workspace, dataAccess: DataAccess, entities: Seq[AttributeEntityReference])(op: (Seq[AttributeEntityReference]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    // query the db to see which of the specified entity refs exist in the workspace and are active
+    dataAccess.entityQuery.getActiveRefs(workspaceContext.workspaceIdAsUUID, entities.toSet) flatMap { found =>
+      // were any of the user's entities not found in our query?
+      val notFound = entities diff found
+      if (notFound.nonEmpty) {
+        // generate error messages
+        val failureMessages = notFound.map { e => s"${e.entityType} ${e.entityName} does not exist in ${workspaceContext.toWorkspaceName}" }
+        val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = (Seq("Entities were not found:") ++ failureMessages) mkString System.lineSeparator())
         DBIO.failed(new RawlsExceptionWithErrorReport(err))
+      } else {
+        op(found)
       }
     }
   }

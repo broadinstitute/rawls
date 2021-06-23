@@ -87,7 +87,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val samDAO = new MockSamDAO(dataSource)
     val gpsDAO = new MockGooglePubSubDAO
     val workspaceManagerDAO = mock[MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
@@ -101,7 +101,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
-      SubmissionMonitorConfig(1 second, true),
+      SubmissionMonitorConfig(1 second, true, 20000),
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))
 

@@ -357,7 +357,8 @@ object Boot extends IOApp with LazyLogging {
 
       // create the entity manager.
       val deltaLayerWriter = new GcsDeltaLayerWriter(appDependencies.googleStorageService,
-        GcsBucketName(conf.getString("deltaLayer.deltaLayerSourceBucket")))
+        GcsBucketName(conf.getString("deltaLayer.deltaLayerSourceBucket")),
+        metricsPrefix)
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
         appDependencies.bigQueryServiceFactory, deltaLayerWriter,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),

@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, ReferenceTypeEnum}
+import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, DataRepoSnapshotAttributes, ReferenceResourceCommonFields, ReferenceTypeEnum}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
 import com.typesafe.config.ConfigFactory
@@ -292,7 +292,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
-      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true)
+      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 20000)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val samDAO = new MockSamDAO(dataSource)
       val gpsDAO = new MockGooglePubSubDAO
@@ -1130,7 +1130,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
 
     withDataAndService({ workspaceService =>
-      workspaceService.workspaceManagerDAO.createDataReference(minimalTestData.workspace.workspaceIdAsUUID, dataReferenceName, dataReferenceDescription, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, new DataRepoSnapshot().instanceName(dataRepoDAO.getInstanceName).snapshot(snapshotUUID.toString), CloningInstructionsEnum.NOTHING, userInfo.accessToken)
+      workspaceService.workspaceManagerDAO.createDataRepoSnapshotReference(minimalTestData.workspace.workspaceIdAsUUID, snapshotUUID, dataReferenceName, dataReferenceDescription, dataRepoDAO.getInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken )
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
       test(workspaceService, methodConfig, snapshotUUID)
     }, withMinimalTestDatabase[Any], bigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)), dataRepoDAO = dataRepoDAO)

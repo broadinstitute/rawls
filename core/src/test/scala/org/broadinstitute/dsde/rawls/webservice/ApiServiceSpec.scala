@@ -124,13 +124,13 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
 
-    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
-    val config = SubmissionMonitorConfig(5 seconds, true)
+    val config = SubmissionMonitorConfig(5 seconds, true, 20000)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       new UncoordinatedDataSourceAccess(slickDataSource),

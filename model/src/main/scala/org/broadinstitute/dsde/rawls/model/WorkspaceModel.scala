@@ -28,6 +28,33 @@ object Attributable {
   val entityTypeReservedAttribute = "entityType"
   val reservedAttributeNames = Set(nameReservedAttribute, entityTypeReservedAttribute, workspaceIdAttribute)
   type AttributeMap = Map[AttributeName, Attribute]
+
+  def attributeCount(map: AttributeMap): Int = {
+    def countAttributes(attribute: Attribute): Int = {
+      attribute match {
+        case _: AttributeListElementable => 1
+        case attributeList: AttributeList[_] => attributeList.list.map(countAttributes).sum
+      }
+    }
+
+    map.values.map(countAttributes).sum
+  }
+
+  def safePrint(map: AttributeMap, depth: Int = 10): String = {
+    def safePrintInner(attr: Attribute): String = {
+      attr match {
+        case attr: AttributeListElementable => attr.toString
+        case attrList: AttributeList[_] =>
+          // This is OK because lists of lists are not supported (see comment in WorkspaceModelSpec.scala)
+          attrList.list.take(depth).toString
+
+      }
+    }
+
+    val keys = map.keys.take(depth)
+    val values = map.values.take(depth).map(safePrintInner)
+    s"[First $depth items] " + (keys zip values).toMap.toString
+  }
 }
 
 trait Attributable {
