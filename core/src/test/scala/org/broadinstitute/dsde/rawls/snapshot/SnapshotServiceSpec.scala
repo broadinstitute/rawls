@@ -259,7 +259,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         .thenReturn(new DataRepoSnapshotResource().metadata(new ResourceMetadata().resourceId(snapshotDataReferenceId).workspaceId(UUID.randomUUID()).name("foo").description("").cloningInstructions(CloningInstructionsEnum.NOTHING)).attributes(new DataRepoSnapshotAttributes()))
 
       when(mockWorkspaceManagerDAO.getBigQueryDatasetReferenceByName(any[UUID], any[String], any[OAuth2BearerToken]))
-        //.thenReturn(new BigQueryDatasetReference().metadata(new DataReferenceMetadata().referenceId(UUID.randomUUID())).dataset(new GoogleBigQueryDatasetUid))
         .thenReturn(new GcpBigQueryDatasetResource().metadata(new ResourceMetadata().resourceId(UUID.randomUUID())).attributes(new GcpBigQueryDatasetAttributes()))
 
       val workspace = minimalTestData.workspace
@@ -283,9 +282,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       verify(mockWorkspaceManagerDAO, times(1)).getDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID),any[OAuth2BearerToken])
       verify(mockWorkspaceManagerDAO, times(1)).deleteDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID), any[OAuth2BearerToken])
-      verify(mockWorkspaceManagerDAO, times(1)).getBigQueryDatasetReferenceByName(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(deltaLayerDatasetName), any[OAuth2BearerToken])
-      verify(mockWorkspaceManagerDAO, times(1)).deleteBigQueryDatasetReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), any[UUID], any[OAuth2BearerToken])
-      verify(mockBigQueryServiceFactory, times(1)).getServiceForProject(any[GoogleProjectId])
+      // assert we do NOT attempt to delete the companion dataset or its WSM reference
+      verify(mockWorkspaceManagerDAO, times(0)).getBigQueryDatasetReferenceByName(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(deltaLayerDatasetName), any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(0)).deleteBigQueryDatasetReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), any[UUID], any[OAuth2BearerToken])
+      verify(mockBigQueryServiceFactory, times(0)).getServiceForProject(any[GoogleProjectId])
 
     }
 
