@@ -2,9 +2,11 @@ package org.broadinstitute.dsde.rawls.snapshot
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshotAttributes, DataRepoSnapshotResource, GcpBigQueryDatasetAttributes, GcpBigQueryDatasetResource, ReferenceResourceCommonFields, ResourceMetadata}
-import cats.effect.IO
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model._
+import cats.effect.{IO, Resource}
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -28,9 +30,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
   implicit val cs = IO.contextShift(global)
 
+  val testConf = ConfigFactory.load()
 
   //test constants
-  val fakeCredentialPath = "/fake/Credential/Path/credentials.json"
+  val fakeCredentialPath = testConf.getString("gcs.pathToCredentialJson")
   val fakeRawlsClientEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
   val fakeDeltaLayerStreamerEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
 

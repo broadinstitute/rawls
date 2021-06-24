@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.model._
@@ -36,28 +37,60 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
               }
             }
         } ~
-          pathPrefix("members") {
-            pathEnd {
-              get {
+        pathPrefix("spendReportConfiguration") {
+          pathEnd {
+            put {
+              entity(as[BillingProjectSpendConfiguration]) { spendConfiguration =>
                 complete {
-                  userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId))
+                  userServiceConstructor(userInfo).setBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId), spendConfiguration).map(_ => StatusCodes.NoContent)
                 }
               }
             } ~
-              // these routes are for adding/removing users from projects
-              path(Segment / Segment) { (workbenchRole, userEmail) =>
-                put {
-                  complete {
-                    userServiceConstructor(userInfo).addUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
-                  }
-                } ~
-                  delete {
-                    complete {
-                      userServiceConstructor(userInfo).removeUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
-                    }
-                  }
+            delete {
+              complete {
+                userServiceConstructor(userInfo).clearBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
+              }
+            }
+          }
+        } ~
+        pathPrefix("billingAccount") {
+          pathEnd {
+            put {
+              entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
+                complete{
+                  userServiceConstructor(userInfo).updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest).map(_ => StatusCodes.OK)
+                }
+              }
+            } ~
+              delete {
+                complete {
+                  userServiceConstructor(userInfo).deleteBillingAccount(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.OK)
+                }
               }
           }
+        } ~
+        pathPrefix("members") {
+          pathEnd {
+            get {
+              complete {
+                userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId))
+              }
+            }
+          } ~
+            // these routes are for adding/removing users from projects
+            path(Segment / Segment) { (workbenchRole, userEmail) =>
+              put {
+                complete {
+                  userServiceConstructor(userInfo).addUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
+                }
+              } ~
+                delete {
+                  complete {
+                    userServiceConstructor(userInfo).removeUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole)))
+                  }
+                }
+            }
+        }
       } ~
       pathEnd {
         get {

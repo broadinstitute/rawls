@@ -1,14 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.nio.charset.Charset
-
 import cats.effect.{Blocker, ContextShift, IO, Timer}
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
+import com.google.api.client.util.Charsets
+import com.google.auth.Credentials
 import com.google.auth.oauth2.ServiceAccountCredentials
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.apache.commons.io.IOUtils
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
+import java.io.ByteArrayInputStream
 import scala.concurrent.ExecutionContext
 
 /**
@@ -32,6 +35,11 @@ class GoogleBigQueryServiceFactory(blocker: Blocker)(implicit executionContext: 
 
   def getServiceFromCredentialPath(credentialPath: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
     GoogleBigQueryService.resource[IO](credentialPath, projectId, blocker)
+  }
+
+  def getServiceFromJson(json: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
+    val creds = ServiceAccountCredentials.fromStream(new ByteArrayInputStream(json.getBytes(Charsets.UTF_8)))
+    GoogleBigQueryService.resource[IO](creds, blocker, projectId)
   }
 
 }

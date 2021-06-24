@@ -1043,6 +1043,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.save(workspace),
         workspaceQuery.save(workspace2)
       )

@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogle
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import spray.json._
 
@@ -245,4 +246,19 @@ class MockGoogleServicesDAO(groupsPrefix: String,
       }
     }
   }
+
+  override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+    val billingAccount = googleProject.value match {
+      case "project_without_table" => Some("billing_account_for_google_project_without_table")
+      case "project_without_billing_account" => None
+      case _ => Some("some-billing-account")
+    }
+
+    Future.successful(billingAccount)
+  }
+
+  override def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
+    Future.unit
+  }
+
 }

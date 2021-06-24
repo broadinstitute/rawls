@@ -685,6 +685,42 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  //Note that these APIs only allow for returning the fully qualified name i.e. billingAccounts/01010-01010-01010
+  //This will return just the ID of the billing account by stripping off the `billingAccounts/` prefix
+  override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+    implicit val service = GoogleInstrumentedService.Billing
+
+    val fullGoogleProjectName = s"projects/${googleProject.value}"
+
+    val credential = getUserCredential(userInfo)
+    val fetcher = getCloudBillingManager(credential).projects().getBillingInfo(fullGoogleProjectName)
+
+    retryWhen500orGoogleError(() => {
+      blocking {
+        executeGoogleRequest(fetcher)
+      }
+    }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
+  }
+
+  override def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Billing
+
+    val projectNameFormatted = s"projects/${googleProjectName.value}"
+
+    val credential = getUserCredential(userInfo)
+    val billingAccountInfo = new ProjectBillingInfo()
+
+    billingAccountName.foreach(name => billingAccountInfo.setBillingAccountName(name.value))
+
+    val setter = getCloudBillingManager(credential).projects().updateBillingInfo(projectNameFormatted, billingAccountInfo)
+
+    retryWhen500orGoogleError(() => {
+      blocking {
+        executeGoogleRequest(setter)
+      }
+    })
+  }
+
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
