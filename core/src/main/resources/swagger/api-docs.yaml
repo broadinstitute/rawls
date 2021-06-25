@@ -466,8 +466,8 @@ paths:
     get:
       tags:
         - billing_v2
-      summary: get the spend configuration for the billing project
-      description: get the spend configuration for the billing project
+      summary: get the spend report configuration for the billing project
+      description: get the spend report configuration for the billing project
       operationId: getSpendReportConfiguration
       parameters:
         - name: projectId
@@ -478,7 +478,7 @@ paths:
             type: string
       responses:
         200:
-          description: Successfully retrieved spend configuration
+          description: Successfully retrieved spend report configuration
           content:
             'application/json':
               schema:
