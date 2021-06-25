@@ -355,6 +355,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  def getBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): Future[Option[BillingProjectSpendConfiguration]] = {
+    requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) {
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject))) => Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
+          case Some(_) => None
+          case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Billing project ${billingProjectName.value} could not be found"))
+        }
+      }
+    }
+  }
+
   private def validateNoWorkspaces(projectName: RawlsBillingProjectName): Future[Unit] = {
     for {
       workspaceCount <- dataSource.inTransaction { dataAccess =>

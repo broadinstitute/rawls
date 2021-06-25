@@ -463,6 +463,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
   /api/billing/v2/{projectId}/spendReportConfiguration:
+    get:
+      tags:
+        - billing_v2
+      summary: get the spend configuration for the billing project
+      description: get the spend configuration for the billing project
+      operationId: getSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      200:
+        description: Successfully retrieved spend configuration
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/SpendReportConfiguration'
+      403:
+        description: You must be a billing project owner to view the spend report configuration of the billing project
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/ErrorReport'
+      404:
+        description: The specified billing project could not be found or spend reporting has not been configured for this billing project
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/ErrorReport'
+      500:
+        description: Rawls Internal Error
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/ErrorReport'
     put:
       tags:
         - billing_v2
