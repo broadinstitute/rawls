@@ -482,6 +482,8 @@ paths:
           'application/json':
             schema:
               $ref: '#/components/schemas/SpendReportConfiguration'
+      204:
+        description: The specified billing project exists but does not have spend reporting configured
       403:
         description: You must be a billing project owner to view the spend report configuration of the billing project
         content:
@@ -489,7 +491,7 @@ paths:
             schema:
               $ref: '#/components/schemas/ErrorReport'
       404:
-        description: The specified billing project could not be found or spend reporting has not been configured for this billing project
+        description: The specified billing project could not be found
         content:
           'application/json':
             schema:
