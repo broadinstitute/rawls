@@ -324,7 +324,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         "requesterPaysRole",
         DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
         ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
-        servicePerimeterService
+        servicePerimeterService,
+        RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
       )_
 
       val genomicsServiceConstructor = GenomicsService.constructor(
