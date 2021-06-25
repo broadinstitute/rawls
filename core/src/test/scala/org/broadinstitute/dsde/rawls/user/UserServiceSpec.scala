@@ -600,6 +600,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.readSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO)
 
@@ -617,6 +618,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.readSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO)
 
@@ -631,7 +633,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val billingProject = minimalTestData.billingProject
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.readSpendReportConfiguration, userInfo)).thenReturn(Future.successful(false))
 
       val userService = getUserService(dataSource, mockSamDAO)
 
@@ -648,7 +650,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val projectName = RawlsBillingProjectName("fake-project")
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.alterSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.readSpendReportConfiguration, userInfo)).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO)
 
