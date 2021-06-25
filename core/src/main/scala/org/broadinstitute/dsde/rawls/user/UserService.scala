@@ -32,8 +32,8 @@ import scala.util.{Failure, Success}
 object UserService {
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate, servicePerimeterService: ServicePerimeterService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate, servicePerimeterService: ServicePerimeterService, adminRegisterBillingAccountName: RawlsBillingAccountName)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService, adminRegisterBillingAccountName)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -60,7 +60,7 @@ object UserService {
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate, servicePerimeterService: ServicePerimeterService)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate, servicePerimeterService: ServicePerimeterService, adminRegisterBillingAccountName: RawlsBillingAccountName)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
@@ -361,7 +361,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def adminRegisterBillingProject(xfer: RawlsBillingProjectTransfer): Future[PerRequestMessage] = {
     asFCAdmin {
       val billingProjectName = RawlsBillingProjectName(xfer.project)
-      val project = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, Option(RawlsBillingAccountName("billingAccounts/00293C-5DEA2D-6887E7")), None)
+      val project = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, Option(adminRegisterBillingAccountName), None)
       val ownerUserInfo = UserInfo(RawlsUserEmail(xfer.newOwnerEmail), OAuth2BearerToken(xfer.newOwnerToken), 3600, RawlsUserSubjectId("0"))
 
 
