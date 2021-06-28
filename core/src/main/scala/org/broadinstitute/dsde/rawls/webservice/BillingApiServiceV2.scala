@@ -50,6 +50,14 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
               complete {
                 userServiceConstructor(userInfo).clearBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
               }
+            } ~
+            get {
+              complete {
+                userServiceConstructor(userInfo).getBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId)).map {
+                  case Some(config) => StatusCodes.OK -> Option(config)
+                  case None => StatusCodes.NoContent -> None
+                }
+              }
             }
           }
         } ~
