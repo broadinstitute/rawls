@@ -1,24 +1,17 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
-import cats.effect.{ContextShift, IO, Resource}
-import com.google.cloud.bigquery.{Acl, BigQueryException, DatasetId}
+import cats.effect.{ContextShift, IO}
 import com.google.cloud.bigquery.Acl.Entity
+import com.google.cloud.bigquery.{Acl, BigQueryException, DatasetId}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo, Workspace}
-import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
 
 object DeltaLayer {
-  @deprecated(message = "Use generateDatasetNameForWorkspace instead; one delta layer companion per workspace", since = "2021-06-22")
-  def generateDatasetNameForReference(datasetReferenceId: UUID) = {
-    "deltalayer_" + dashesToUnderscores(datasetReferenceId)
-  }
-
   /**
     * Google's doc on naming datasets:
     * the dataset name must be unique for each project. The dataset name can contain the following:
@@ -45,16 +38,38 @@ object DeltaLayer {
     uuid.toString.replace('-', '_')
   }
 
+  /**
+    * defines the labels attached to a Delta Layer dataset
+    * @param workspace workspace in which the Delta Layer dataset will be created
+    * @return correct labels for the dataset
+    */
+  private def calculateDatasetLabels(workspace: Workspace): Map[String, String] =
+    Map("workspace_id" -> workspace.workspaceId)
+
 }
 
 class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWriter: DeltaLayerWriter, samDAO: SamDAO, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
                 (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO])
                 extends LazyLogging {
 
+  /**
+    * Create a BigQuery dataset using the supplied parameters. Callers should use createDataset or createDatasetIfNotExist instead of
+    * this method; this method exists as a standalone to ease with testing.
+    *
+    * @param googleProjectId the project in which to create the dataset
+    * @param datasetName name for the created dataset
+    * @param datasetLabels labels for the created dataset
+    * @param aclBindings acls for the created dataset
+    * @return DatasetId if created
+    */
   def bqCreate(googleProjectId: GoogleProjectId, datasetName: String,
                        datasetLabels: Map[String, String], aclBindings: Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]): IO[DatasetId] = {
     val bqServiceResource = bqServiceFactory.getServiceForProject(googleProjectId)
     bqServiceResource.use(_.createDataset(datasetName, datasetLabels, aclBindings))
+    // TODO: AS-724: the GoogleBigQueryService.createDataset method, inside workbench-libs, always returns null for the DatasetId's project.
+    // the dataset is created in the correct project, but the return value is misleading; it results in "null" where
+    // we expect something more informative, such as the log message "successfully created Delta Layer companion
+    // BigQuery dataset my-dataset-name in project null" in createDatasetIfNotExist below.
   }
 
   /**
@@ -66,7 +81,7 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
     */
   def createDataset(workspace: Workspace, userInfo: UserInfo): Future[DatasetId] = {
     val datasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
-    val datasetLabels = calculateDatasetLabels(workspace)
+    val datasetLabels = DeltaLayer.calculateDatasetLabels(workspace)
 
     samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo) flatMap { samPolicies =>
       val aclBindings = calculateDatasetAcl(samPolicies)
@@ -109,6 +124,11 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
     bqService.use(_.deleteDataset(datasetName))
   }
 
+  /**
+    * Defines the ACLs to be placed on a Delta Layer dataset
+    * @param samPolicies the pre-existing policies for the workspace in which the dataset will be created
+    * @return the BigQuery ACLs to use for the dataset
+    */
   private def calculateDatasetAcl(samPolicies: Set[SamPolicyWithNameAndEmail]): Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]] = {
     val accessPolicies = Seq(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader)
     val defaultIamRoles = Map(Acl.Role.OWNER -> Seq((clientEmail, Acl.Entity.Type.USER)), Acl.Role.WRITER -> Seq((deltaLayerStreamerEmail, Acl.Entity.Type.USER)))
@@ -118,7 +138,5 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
     defaultIamRoles + samAclBindings
   }
 
-  private def calculateDatasetLabels(workspace: Workspace): Map[String, String] =
-    Map("workspace_id" -> workspace.workspaceId)
 
 }

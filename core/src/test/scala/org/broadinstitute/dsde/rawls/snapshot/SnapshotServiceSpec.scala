@@ -271,7 +271,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         fakeDeltaLayerStreamerEmail
       )(userInfo)
 
-      val deltaLayerDatasetName = DeltaLayer.generateDatasetNameForReference(snapshotDataReferenceId)
+      val deltaLayerDatasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
 
       val snapshotUUID = UUID.randomUUID()
 
