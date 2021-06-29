@@ -1913,6 +1913,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole),
       policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole)
     )
+    logger.warn(s"Beginning to add google project roles.")
 
     // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
     // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
