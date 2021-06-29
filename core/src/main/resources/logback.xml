@@ -88,13 +88,13 @@
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
-        <appender-ref ref="Sentry" />
     </logger>
 
     <logger name="akka" level="info" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
+        <appender-ref ref="Sentry" />
     </logger>
 
     <!-- see https://github.com/slick/slick/blob/master/common-test-resources/logback.xml for more Slick logging -->
