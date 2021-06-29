@@ -43,9 +43,11 @@ FIAB=true ./config/docker-rsync-local-ui.sh
 
 #### From IntelliJ
 
-In IntelliJ, go to `Run` > `Edit Configurations...`, select `ScalaTest` under `Defaults`, and make sure there is a `Build` task configured to run before launch.
+In IntelliJ, go to `Run` > `Edit Configurations...`, select `ScalaTest` under `Templates`, and make sure there is a `Build` task configured to run before launch.
 
-Now, simply open the test spec, right-click on the class name or a specific test string, and select `Run` or `Debug` as needed. A good one to start with is `GoogleSpec` to make sure your base configuration is correct. All test code lives in `automation/src/test/scala`. FireCloud test suites can be found in `automation/src/test/scala/org/broadinstitute/dsde/firecloud/test`.
+Now, simply open the test spec, right-click on the class name or a specific test string, and select `Run` or `Debug` as needed. A good one to start with is `SnapshotAPISpec > should be able to contact Data Repo` to make sure your base configuration is correct. All test code lives in `automation/src/test/scala`. FireCloud test suites can be found in `automation/src/test/scala/org/broadinstitute/dsde/firecloud/test`.
+
+In order to run the tests, you need to open the Automation folder as a separate IntelliJ project. (File -> Open -> select the `automation` folder.)
 
 #### From the command line
 
