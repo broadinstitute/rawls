@@ -1,15 +1,17 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ContextShift, IO, Resource}
 import com.google.cloud.bigquery.{Acl, BigQueryException, DatasetId}
 import com.google.cloud.bigquery.Acl.Entity
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo, Workspace}
+import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 object DeltaLayer {
   @deprecated(message = "Use generateDatasetNameForWorkspace instead; one delta layer companion per workspace", since = "2021-06-22")
@@ -49,6 +51,12 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
                 (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO])
                 extends LazyLogging {
 
+  def bqCreate(googleProjectId: GoogleProjectId, datasetName: String,
+                       datasetLabels: Map[String, String], aclBindings: Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]): IO[DatasetId] = {
+    val bqServiceResource = bqServiceFactory.getServiceForProject(googleProjectId)
+    bqServiceResource.use(_.createDataset(datasetName, datasetLabels, aclBindings))
+  }
+
   /**
     * Creates the Delta Layer companion dataset for a given workspace, assigning it proper ACLs and labels
     * based on the workspace. Throws an error if the dataset already exists.
@@ -56,18 +64,13 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
     * @param userInfo user credentials for retrieving workspace ACLs
     * @return the created dataset's project and name
     */
-  def createDataset(workspace: Workspace, userInfo: UserInfo): IO[DatasetId] = {
-    for {
-      samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)))
-      bqService = bqServiceFactory.getServiceForProject(workspace.googleProject)
-      datasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
-      datasetLabels = Map("workspace_id" -> workspace.workspaceId)
-      aclBindings = calculateDatasetAcl(samPolicies)
-      _ = logger.debug(s"creating BigQuery dataset $datasetName in project ${workspace.googleProject} ...")
-      datasetId <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings))
-    } yield {
-      // the DatasetId object contains project name and dataset name
-      datasetId
+  def createDataset(workspace: Workspace, userInfo: UserInfo): Future[DatasetId] = {
+    val datasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
+    val datasetLabels = calculateDatasetLabels(workspace)
+
+    samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo) flatMap { samPolicies =>
+      val aclBindings = calculateDatasetAcl(samPolicies)
+      bqCreate(workspace.googleProject, datasetName, datasetLabels, aclBindings).unsafeToFuture()
     }
   }
 
@@ -78,18 +81,18 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
     * @param userInfo user credentials for retrieving workspace ACLs
     * @return a boolean indicating whether or not this call created the dataset, plus dataset's project and name
     */
-  def createDatasetIfNotExist(workspace: Workspace, userInfo: UserInfo): IO[(Boolean, DatasetId)] = {
-    createDataset(workspace, userInfo).attempt map {
-      case Right(datasetId) =>
-        // dataset was created
-        logger.info(s"successfully created Delta Layer companion BigQuery dataset ${datasetId.getDataset} in project ${datasetId.getProject}")
-        (true, datasetId)
-      case Left(bqe: BigQueryException) if bqe.getCode == 409 =>
+  def createDatasetIfNotExist(workspace: Workspace, userInfo: UserInfo): Future[(Boolean, DatasetId)] = {
+    createDataset(workspace, userInfo).map { datasetId =>
+      // dataset was created
+      logger.info(s"successfully created Delta Layer companion BigQuery dataset ${datasetId.getDataset} in project ${datasetId.getProject}")
+      (true, datasetId)
+    }.recover {
+      case bqe: BigQueryException if bqe.getCode == 409 =>
         // dataset already exists
         val ds = DatasetId.of(workspace.googleProject.value, DeltaLayer.generateDatasetNameForWorkspace(workspace))
         logger.info(s"Delta Layer companion dataset already exists; createDatasetIfNotExist ignoring BigQuery 409 for ${ds.getProject}/${ds.getDataset}")
         (false, ds)
-      case Left(err)  =>
+      case err  =>
         // some other error occurred; rethrow that error
         throw err
     }
@@ -114,5 +117,8 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
     val samAclBindings = Acl.Role.READER -> filteredSamPolicies.map{ filteredSamPolicyEmail =>(filteredSamPolicyEmail, Acl.Entity.Type.GROUP) }.toSeq
     defaultIamRoles + samAclBindings
   }
+
+  private def calculateDatasetLabels(workspace: Workspace): Map[String, String] =
+    Map("workspace_id" -> workspace.workspaceId)
 
 }

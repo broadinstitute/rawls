@@ -44,7 +44,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val referenceId = snapshotRef.getMetadata.getResourceId
 
       // attempt to create the BQ dataset, which might already exist
-      val createDatasetIO = deltaLayer.createDatasetIfNotExist(workspaceContext, userInfo)
+      val createDatasetIO = IO.fromFuture(IO(deltaLayer.createDatasetIfNotExist(workspaceContext, userInfo)))
 
       createDatasetIO.unsafeToFuture().recover {
         case t: Throwable =>
