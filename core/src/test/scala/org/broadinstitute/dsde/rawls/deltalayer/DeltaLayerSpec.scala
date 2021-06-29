@@ -1,13 +1,14 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
-import cats.effect.{Blocker, ContextShift, IO}
-import com.google.cloud.bigquery.Acl
+import cats.effect.{Blocker, ContextShift, IO, Resource}
 import com.google.cloud.bigquery.Acl.Entity
+import com.google.cloud.bigquery.{Acl, BigQueryException, DatasetId}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, SamPolicy, SamPolicyWithNameAndEmail, SamWorkspacePolicyNames, Workspace}
+import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.mockito.ArgumentCaptor
@@ -16,18 +17,18 @@ import org.mockito.Mockito._
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
-import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.freespec.AsyncFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.lang.reflect.InvocationTargetException
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
-class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMethodTester with MockitoSugar with Matchers with Eventually  {
+class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with PrivateMethodTester with MockitoSugar with Matchers with Eventually  {
 
-  implicit val ec = TestExecutionContext.testExecutionContext
-  implicit lazy val blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)
+  override implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
+  implicit lazy val blocker: Blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)
   implicit lazy val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(executionContext)
 
   // durations for async/eventually calls
@@ -43,6 +44,7 @@ class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMe
       val actual = DeltaLayer.generateDatasetNameForWorkspace(dummyWorkspace)
 
       assertResult(expected) { actual }
+      succeed
     }
   }
 
@@ -130,9 +132,44 @@ class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMe
       assertResult (expectedMap) { actualMap }
     }
   
-    "should catch/ignore 409s from BigQuery in createDatasetIfNotExist" is (pending)
+    "should catch/ignore 409s from BigQuery in createDatasetIfNotExist" in {
+      // mock GoogleBigQueryService that throws error on createDataset
+      val throwingBQService = mock[GoogleBigQueryService[IO]]
+      when(throwingBQService.createDataset(any(), any(), any())).thenThrow(new BigQueryException(409, s"BigQuery 409 errors via createDataset should bubble up"))
+      // mock GoogleBigQueryServiceFactory that returns the mock GoogleBigQueryService
+      val mockBQFactory = mock[GoogleBigQueryServiceFactory]
+      when(mockBQFactory.getServiceForProject(any())).thenReturn(Resource.pure[IO, GoogleBigQueryService[IO]](throwingBQService))
+
+      val deltaLayer = testDeltaLayer(mockBQFactory)
+
+      deltaLayer.createDatasetIfNotExist(constantData.workspace, userInfo) map {
+        case (didCreate, datasetId) =>
+          didCreate shouldBe false
+          datasetId shouldBe DatasetId.of(
+            constantData.workspace.googleProject.value,
+            s"deltalayer_forworkspace_${constantData.workspace.workspaceId.replace("-","_")}")
+      }
+    }
   
-    "should bubble up 409s from BigQuery in createDataset" is (pending)
+    "should bubble up 409s from BigQuery in createDataset" in {
+      // mock GoogleBigQueryService that throws error on createDataset
+      val throwingBQService = mock[GoogleBigQueryService[IO]]
+      when(throwingBQService.createDataset(any(), any(), any())).thenThrow(new BigQueryException(409, s"BigQuery 409 errors via createDataset should bubble up"))
+      // mock GoogleBigQueryServiceFactory that returns the mock GoogleBigQueryService
+      val mockBQFactory = mock[GoogleBigQueryServiceFactory]
+      when(mockBQFactory.getServiceForProject(any())).thenReturn(Resource.pure[IO, GoogleBigQueryService[IO]](throwingBQService))
+
+      val deltaLayer = testDeltaLayer(mockBQFactory)
+
+      val futureEx = recoverToExceptionIf[BigQueryException] {
+        deltaLayer.createDataset(constantData.workspace, userInfo)
+      }
+
+      futureEx map { caught =>
+        caught.getMessage shouldBe (s"BigQuery 409 errors via createDataset should bubble up")
+        caught.getCode shouldBe (409)
+      }
+    }
   
     List("createDatasetIfNotExist", "createDataset") foreach { method =>
       s"$method method" - {
@@ -141,7 +178,6 @@ class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMe
           // for unit tests, we don't actually check to see if a call goes out to the cloud to create the dataset.
           // we just test that we properly call the low-level DeltaLayer.bqCreate method, which contains the call to the cloud
     
-          // TODO: AS-724: don't specify this throws an exception
           // create the Delta Layer instance and spy on it
           val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory))
@@ -153,10 +189,10 @@ class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMe
           eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
             verify(deltaLayerSpy, times(1)).bqCreate(any(), any(), any(), any())
           }
+          succeed
         }
     
         s"should add appropriate labels to the companion dataset in $method" in {
-          // TODO: AS-724: don't specify this throws an exception
           // create the Delta Layer instance and spy on it
           val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory))
@@ -180,7 +216,6 @@ class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMe
           val clientEmailUnderTest = WorkbenchEmail("Fluffy")
           val deltaLayerStreamerEmailUnderTest = WorkbenchEmail("Patches")
     
-          // TODO: AS-724: don't specify this throws an exception
           // create the Delta Layer instance and spy on it
           val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory,
@@ -215,10 +250,10 @@ class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMe
           actual.keys foreach { key =>
             actual(key) should contain theSameElementsAs expected(key)
           }
+          succeed
         }
     
         s"should use the specified workspace's project for the companion dataset in $method" in {
-          // TODO: AS-724: don't specify this throws an exception
           // create the Delta Layer instance and spy on it
           val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory))
@@ -236,13 +271,55 @@ class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMe
           val expected = constantData.workspace.googleProject
           assertResult(expected) { actual }
         }
+
+        s"should bubble up synchronous GoogleBigQueryServiceFactory exceptions in $method" in {
+          // mock GoogleBigQueryServiceFactory that returns the mock GoogleBigQueryService
+          val mockBQFactory = mock[GoogleBigQueryServiceFactory]
+          when(mockBQFactory.getServiceForProject(any())).thenThrow(new RuntimeException(s"Errors getting the GoogleBigQueryService via $method should bubble up"))
+
+          val deltaLayer = testDeltaLayer(mockBQFactory)
+
+          val futureEx = recoverToExceptionIf[RuntimeException] {
+            method match {
+              case "createDataset" => deltaLayer.createDataset(constantData.workspace, userInfo)
+              case "createDatasetIfNotExist" => deltaLayer.createDatasetIfNotExist(constantData.workspace, userInfo)
+              case _ => fail(s"test encountered unexpected method '$method'")
+            }
+          }
+
+          futureEx map { caught =>
+            caught.getMessage shouldBe (s"Errors getting the GoogleBigQueryService via $method should bubble up")
+          }
+        }
+
+        s"should bubble up BigQuery non-409 async exceptions in $method" in {
+          // mock GoogleBigQueryService that throws error on createDataset
+          val throwingBQService = mock[GoogleBigQueryService[IO]]
+          when(throwingBQService.createDataset(any(), any(), any())).thenThrow(new BigQueryException(444, s"BigQuery non-409 errors via $method should bubble up"))
+          // mock GoogleBigQueryServiceFactory that returns the mock GoogleBigQueryService
+          val mockBQFactory = mock[GoogleBigQueryServiceFactory]
+          when(mockBQFactory.getServiceForProject(any())).thenReturn(Resource.pure[IO, GoogleBigQueryService[IO]](throwingBQService))
+
+          val deltaLayer = testDeltaLayer(mockBQFactory)
+
+          val futureEx = recoverToExceptionIf[BigQueryException] {
+            method match {
+              case "createDataset" => deltaLayer.createDataset(constantData.workspace, userInfo)
+              case "createDatasetIfNotExist" => deltaLayer.createDatasetIfNotExist(constantData.workspace, userInfo)
+              case _ => fail(s"test encountered unexpected method '$method'")
+            }
+          }
+
+          futureEx map { caught =>
+            caught.getMessage shouldBe (s"BigQuery non-409 errors via $method should bubble up")
+            caught.getCode shouldBe (444)
+          }
+        }
     
-        s"should bubble up non-BigQuery 409s in $method" is (pending)
-    
-        s"should bubble up Sam errors in $method" in {
+        s"should bubble up synchronous Sam exceptions in $method" in {
           // create a mock Sam dao that will throw an error
           val throwingSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-          when(throwingSamDAO.listPoliciesForResource(any(), any(), any())).thenThrow(new RuntimeException("Sam errors should bubble up"))
+          when(throwingSamDAO.listPoliciesForResource(any(), any(), any())).thenThrow(new RuntimeException(s"Sam synchronous errors should bubble up in $method"))
           // create the Delta Layer instance (no need to spy), using the throwing SamDAO
           val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
           val deltaLayer = testDeltaLayer(bqFactory, samDAO = throwingSamDAO)
@@ -257,7 +334,28 @@ class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMe
     
             Option(caught.getCause) should not be empty
             caught.getCause shouldBe a [RuntimeException]
-            caught.getCause.getMessage shouldBe ("Sam errors should bubble up")
+            caught.getCause.getMessage shouldBe (s"Sam synchronous errors should bubble up in $method")
+          }
+        }
+
+        s"should bubble up async Sam Future.failures in $method" in {
+          // create a mock Sam dao that will throw an error
+          val throwingSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+          when(throwingSamDAO.listPoliciesForResource(any(), any(), any())).thenReturn(Future.failed(new RuntimeException(s"Sam async errors should bubble up in $method")))
+          // create the Delta Layer instance (no need to spy), using the throwing SamDAO
+          val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
+          val deltaLayer = testDeltaLayer(bqFactory, samDAO = throwingSamDAO)
+
+          val futureEx = recoverToExceptionIf[RuntimeException] {
+            method match {
+              case "createDataset" => deltaLayer.createDataset(constantData.workspace, userInfo)
+              case "createDatasetIfNotExist" => deltaLayer.createDatasetIfNotExist(constantData.workspace, userInfo)
+              case _ => fail(s"test encountered unexpected method '$method'")
+            }
+          }
+
+          futureEx map { caught =>
+            caught.getMessage shouldBe (s"Sam async errors should bubble up in $method")
           }
         }
       }
@@ -275,6 +373,5 @@ class DeltaLayerSpec extends AnyFreeSpec with TestDriverComponent with PrivateMe
 
     new DeltaLayer(bqServiceFactory, deltaLayerWriter, samDAO, clientEmail, deltaLayerStreamerEmail)
   }
-
 
 }
