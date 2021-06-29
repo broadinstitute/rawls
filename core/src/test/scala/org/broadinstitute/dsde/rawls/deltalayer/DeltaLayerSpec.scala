@@ -166,8 +166,8 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
       }
 
       futureEx map { caught =>
-        caught.getMessage shouldBe (s"BigQuery 409 errors via createDataset should bubble up")
-        caught.getCode shouldBe (409)
+        caught.getMessage shouldBe s"BigQuery 409 errors via createDataset should bubble up"
+        caught.getCode shouldBe 409
       }
     }
   
@@ -288,7 +288,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           }
 
           futureEx map { caught =>
-            caught.getMessage shouldBe (s"Errors getting the GoogleBigQueryService via $method should bubble up")
+            caught.getMessage shouldBe s"Errors getting the GoogleBigQueryService via $method should bubble up"
           }
         }
 
@@ -311,8 +311,8 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           }
 
           futureEx map { caught =>
-            caught.getMessage shouldBe (s"BigQuery non-409 errors via $method should bubble up")
-            caught.getCode shouldBe (444)
+            caught.getMessage shouldBe s"BigQuery non-409 errors via $method should bubble up"
+            caught.getCode shouldBe 444
           }
         }
     
@@ -334,7 +334,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
     
             Option(caught.getCause) should not be empty
             caught.getCause shouldBe a [RuntimeException]
-            caught.getCause.getMessage shouldBe (s"Sam synchronous errors should bubble up in $method")
+            caught.getCause.getMessage shouldBe s"Sam synchronous errors should bubble up in $method"
           }
         }
 
@@ -355,7 +355,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           }
 
           futureEx map { caught =>
-            caught.getMessage shouldBe (s"Sam async errors should bubble up in $method")
+            caught.getMessage shouldBe s"Sam async errors should bubble up in $method"
           }
         }
       }
