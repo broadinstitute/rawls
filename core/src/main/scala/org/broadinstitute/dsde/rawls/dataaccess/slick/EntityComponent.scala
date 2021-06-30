@@ -490,10 +490,10 @@ trait EntityComponent {
     }
 
     def save(workspaceContext: Workspace, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
       entities.foreach(validateEntity)
 
       for {
+        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
         preExistingEntityRecs <- getEntityRecords(workspaceContext.workspaceIdAsUUID, entities.map(_.toReference).toSet)
         savingEntityRecs <- entityQueryWithInlineAttributes.insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference)).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs.map(_.toReference)).map(_ ++ savingEntityRecs)
