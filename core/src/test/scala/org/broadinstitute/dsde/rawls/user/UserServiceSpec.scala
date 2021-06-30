@@ -45,7 +45,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     when(defaultMockSamDAO.userHasAction(SamResourceTypeNames.billingProject, defaultBillingProjectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(true))
   }
 
-  def getUserService(dataSource: SlickDataSource, samDAO: SamDAO = defaultMockSamDAO, gcsDAO: GoogleServicesDAO = defaultMockGcsDAO, servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService, adminRegisterBillingAccountName: RawlsBillingAccountName = RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")): UserService = {
+  def getUserService(dataSource: SlickDataSource, samDAO: SamDAO = defaultMockSamDAO, gcsDAO: GoogleServicesDAO = defaultMockGcsDAO, servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService, adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")): UserService = {
     new UserService(
       userInfo,
       dataSource,
@@ -56,7 +56,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       null,
       servicePerimeterService,
-      adminRegisterBillingAccountName: RawlsBillingAccountName
+      adminRegisterBillingAccountId: RawlsBillingAccountName
     )
   }
 
