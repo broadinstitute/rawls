@@ -358,6 +358,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   //very sad: have to pass the new owner's token in the POST body (oh no!)
   //we could instead exploit the fact that Sam will let you create pets in projects you're not in (!!!),
   //but that seems extremely shady
+  // We believe this is mostly used by gpalloc/only used by gpalloc, which is why the billing account
+  // is hard coded.
   def adminRegisterBillingProject(xfer: RawlsBillingProjectTransfer): Future[PerRequestMessage] = {
     asFCAdmin {
       val billingProjectName = RawlsBillingProjectName(xfer.project)
