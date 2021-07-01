@@ -1876,13 +1876,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
+      _ = logger.info(s"Moving google project ${googleProjectId} to folder.")
       _ <- traceWithParent("maybeMoveGoogleProjectToFolder", span)(_ => maybeMoveGoogleProjectToFolder(billingProject.servicePerimeter, googleProjectId))
+      _ = logger.info(s"Setting up billing account for ${googleProjectId}.")
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
+      _ = logger.info(s"Creating labels for ${googleProjectId}.")
       googleProjectLabels = gcsDAO.labelSafeMap(Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId), "")
       googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
+      _ = logger.info(s"Setting up project in ${googleProjectId} cloud resource manager.")
       googleProject <- traceWithParent("setUpProjectInCloudResourceManager", span)(_ => setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName))
+      _ = logger.info(s"Remove RBS SA from owner policy ${googleProjectId}.")
       googleProjectNumber = gcsDAO.getGoogleProjectNumber(googleProject)
       _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
+      _ = logger.info(s"Updating google project IAM ${googleProjectId}.")
       _ <- traceWithParent("updateGoogleProjectIam", span)(_ => updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail))
     } yield (googleProjectId, googleProjectNumber)
   }
@@ -1916,7 +1922,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
     // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
-    policyGroupsToRoles.toList.foldLeft(Future(true)){case (result, (email, roles)) => result.flatMap(_ => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles))}
+    policyGroupsToRoles.toList.foldLeft(Future(true)){case (result, (email, roles)) => {
+      result.flatMap(_ => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles))
+    }}
   }
 
   /**

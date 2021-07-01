@@ -30,7 +30,7 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
-import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
+import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsBillingAccountName, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -166,7 +166,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       "requesterPaysRole",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
-      servicePerimeterService
+      servicePerimeterService,
+      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
     )_
 
     override val snapshotServiceConstructor = SnapshotService.constructor(

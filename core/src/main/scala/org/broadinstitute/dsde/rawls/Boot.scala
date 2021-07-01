@@ -282,7 +282,8 @@ object Boot extends IOApp with LazyLogging {
           requesterPaysRole,
           dmConfig,
           projectTemplate,
-          servicePerimeterService
+          servicePerimeterService,
+          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId"))
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
