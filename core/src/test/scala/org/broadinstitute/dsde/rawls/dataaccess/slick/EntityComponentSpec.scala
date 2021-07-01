@@ -520,6 +520,35 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
+  it should "update a workspace's lastModified date when saving an entity" in withDefaultTestDatabase {
+
+    withWorkspaceContext(testData.workspace) { context =>
+
+      // get the workspace prior to saving the entity
+      val workspaceBefore = runAndWait(workspaceQuery.findById(context.workspaceId))
+        .getOrElse(fail(s"could not retrieve workspace ${context.workspaceId} before saving entity"))
+
+      // save the entity, assert it saved correctly
+      val pair2 = Entity("pair2", "Pair",
+        Map(
+          AttributeName.withDefaultNS("case") -> AttributeEntityReference("Sample", "sample3"),
+          AttributeName.withDefaultNS("control") -> AttributeEntityReference("Sample", "sample1")))
+      runAndWait(entityQuery.save(context, pair2))
+      assert {
+        runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
+      }
+
+      // get the workspace after to saving the entity
+      val workspaceAfter = runAndWait(workspaceQuery.findById(context.workspaceId))
+        .getOrElse(fail(s"could not retrieve workspace ${context.workspaceId} after saving entity"))
+
+      assert(workspaceAfter.lastModified.isAfter(workspaceBefore.lastModified),
+        s"workspace lastModified of ${workspaceAfter.lastModified} should be after lastModified of ${workspaceBefore.lastModified}, " +
+          s"since we saved an entity to that workspace.")
+    }
+
+  }
+
   it should "not re-update an entity's attributes over many writes if attribute do not change" in withDefaultTestDatabase {
     val pair2 = Entity("pair2", "Pair",
       Map(
