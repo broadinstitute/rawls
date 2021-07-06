@@ -138,5 +138,4 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
     defaultIamRoles + samAclBindings
   }
 
-
 }
