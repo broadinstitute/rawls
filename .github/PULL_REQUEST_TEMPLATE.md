@@ -2,6 +2,7 @@
 - [ ] **Submitter**: Check that the **Product Owner** has signed off on any user-facing changes
 - [ ] **Submitter**: Make sure Swagger is updated if API changes
   - [ ] **...and Orchestration's Swagger too!**
+- [ ] **Submitter**: If you changed anything in `model/`, then you should [publish a new official `rawls-model`](https://github.com/broadinstitute/rawls/blob/develop/README.md) and update `rawls-model` in [Orchestration's dependencies](https://github.com/broadinstitute/firecloud-orchestration/blob/develop/project/Dependencies.scala).
 - [ ] **Submitter**: If updating admin endpoints, also update [firecloud-admin-cli](https://github.com/broadinstitute/firecloud-admin-cli)
 - [ ] **Submitter**: Check documentation and code comments. Add explanatory PR comments if helpful.
 - [ ] **Submitter**: JIRA ticket checks:
