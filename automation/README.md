@@ -52,7 +52,7 @@ Now, simply open the test spec, right-click on the class name or a specific test
 To run all tests:
 
 ```bash
-sbt test
+sbt test -l ExcludeInFiab
 ```
 
 To run a single suite:
