@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
@@ -69,7 +70,6 @@ trait SnapshotApiService extends UserInfoDirectives {
         parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
           complete {
             snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit)
-              .map(resourceListToDataReferenceList)
               .map(StatusCodes.OK -> _)
           }
         }
