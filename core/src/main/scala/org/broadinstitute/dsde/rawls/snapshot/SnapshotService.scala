@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedD
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import spray.json.DefaultJsonProtocol._
 
 import java.util.UUID
 import scala.collection.mutable.ListBuffer

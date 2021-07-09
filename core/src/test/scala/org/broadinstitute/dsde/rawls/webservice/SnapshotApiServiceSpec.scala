@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDat
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
+import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 
@@ -240,15 +241,15 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
             Get(s"${v2BaseSnapshotsPath}?offset=0&limit=10") ~>
               sealRoute(services.snapshotRoutes) ~>
               check {
-                val response = responseAs[ResourceList]
+                val response = responseAs[Seq[DataRepoSnapshotResource]]
                 assertResult(StatusCodes.OK) {
                   status
                 }
                 // Our mock doesn't guarantee order, so we just check that there are two
                 // elements, that one is named "foo", and that one is named "bar"
-                assert(response.getResources.size == 2)
+                assert(response.size == 2)
                 assertResult(Set("foo", "bar")) {
-                  response.getResources.asScala.map(_.getMetadata.getName).toSet
+                  response.map(_.getMetadata.getName).toSet
                 }
               }
           }
@@ -282,11 +283,11 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceTerminatedSubmissions.path}/snapshots/v2?offset=0&limit=10") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
-        val response = responseAs[ResourceList]
+        val response = responseAs[Seq[DataRepoSnapshotResource]]
         assertResult(StatusCodes.OK) {
           status
         }
-        assert(response.getResources.isEmpty)
+        assert(response.isEmpty)
       }
   }
 
@@ -584,15 +585,15 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
             Get(s"${baseSnapshotsPath}?offset=0&limit=10") ~>
               sealRoute(services.snapshotRoutes) ~>
               check {
-                val response = responseAs[DataReferenceList]
+                val response = responseAs[Seq[DataRepoSnapshotResource]]
                 assertResult(StatusCodes.OK) {
                   status
                 }
                 // Our mock doesn't guarantee order, so we just check that there are two
                 // elements, that one is named "foo", and that one is named "bar"
-                assert(response.getResources.size == 2)
+                assert(response.size == 2)
                 assertResult(Set("foo", "bar")) {
-                  response.getResources.asScala.map(_.getName).toSet
+                  response.map(_.getMetadata.getName).toSet
                 }
               }
           }
@@ -626,11 +627,11 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceTerminatedSubmissions.path}/snapshots?offset=0&limit=10") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
-        val response = responseAs[DataReferenceList]
+        val response = responseAs[Seq[DataRepoSnapshotResource]]
         assertResult(StatusCodes.OK) {
           status
         }
-        assert(response.getResources.isEmpty)
+        assert(response.isEmpty)
       }
   }
 
