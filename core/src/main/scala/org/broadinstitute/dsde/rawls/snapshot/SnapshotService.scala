@@ -16,9 +16,9 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.DefaultJsonProtocol._
+import scala.collection.JavaConverters._
 
 import java.util.UUID
-import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -89,14 +89,14 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
+  //AS-787 - rework the data so that it's in the same place in the JSON with a list and get snapshot responses
   def massageSnapshots(references: ResourceList): Seq[DataRepoSnapshotResource] = {
-    val res = new ListBuffer[DataRepoSnapshotResource]()
-    references.getResources.forEach(r => { val massaged = new DataRepoSnapshotResource
-                                          massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
-                                          massaged.setMetadata(r.getMetadata)
-                                          res += massaged
-    } )
-    res
+    references.getResources.asScala.map{r =>
+      val massaged = new DataRepoSnapshotResource
+      massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
+      massaged.setMetadata(r.getMetadata)
+      massaged
+    }
   }
 
   def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[Seq[DataRepoSnapshotResource]] = {
@@ -105,7 +105,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         case Success(references) => massageSnapshots(references)
         // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
         // to having no references, so return the empty list.
-        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => List()
+        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => Seq.empty[DataRepoSnapshotResource]
         // but if we hit a different error, it's a valid error; rethrow it
         case Failure(ex: bio.terra.workspace.client.ApiException) =>
           throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
