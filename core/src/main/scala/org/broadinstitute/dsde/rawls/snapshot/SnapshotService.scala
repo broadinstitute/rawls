@@ -16,7 +16,9 @@ import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedD
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -87,13 +89,23 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
-  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[ResourceList] = {
+  def massageSnapshots(references: ResourceList): Seq[DataRepoSnapshotResource] = {
+    val res = new ListBuffer[DataRepoSnapshotResource]()
+    references.getResources.forEach(r => { val massaged = new DataRepoSnapshotResource
+                                          massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
+                                          massaged.setMetadata(r.getMetadata)
+                                          res += massaged
+    } )
+    res
+  }
+
+  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[Seq[DataRepoSnapshotResource]] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       Try(workspaceManagerDAO.enumerateDataRepoSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit, userInfo.accessToken)) match {
-        case Success(references) => references
+        case Success(references) => massageSnapshots(references)
         // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
         // to having no references, so return the empty list.
-        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => new ResourceList()
+        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => List()
         // but if we hit a different error, it's a valid error; rethrow it
         case Failure(ex: bio.terra.workspace.client.ApiException) =>
           throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
