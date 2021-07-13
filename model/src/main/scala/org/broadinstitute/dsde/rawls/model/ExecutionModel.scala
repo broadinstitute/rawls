@@ -284,6 +284,8 @@ case class SubmissionWorkflowStatusResponse(
                                              workflowStatus: String,
                                              count: Int)
 
+case class UserCommentUpdateOperation(userComment: String)
+
 //noinspection TypeAnnotation,ScalaUnusedSymbol
 trait ExecutionJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
@@ -431,6 +433,8 @@ trait ExecutionJsonSupport extends JsonSupport {
   implicit val ActiveSubmissionFormat = jsonFormat3(ActiveSubmission)
 
   implicit val WorkflowQueueStatusResponseFormat = jsonFormat3(WorkflowQueueStatusResponse)
+
+  implicit val UserCommentUpdateOperationFormat = jsonFormat1(UserCommentUpdateOperation)
 
   implicit object WorkflowQueueStatusByUserResponseFormat extends RootJsonFormat[WorkflowQueueStatusByUserResponse] {
     def write(r: WorkflowQueueStatusByUserResponse) = JsObject(

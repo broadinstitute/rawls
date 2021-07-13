@@ -216,6 +216,10 @@ trait SubmissionComponent {
         }
     }
 
+    def updateSubmissionUserComment(submissionId: UUID, newComment: String): ReadWriteAction[Int] = {
+      findById(submissionId).map(_.userComment).update(Option(newComment))
+    }
+
     /* deletes a submission and all associated records */
     def delete(workspaceContext: Workspace, submissionId: String): ReadWriteAction[Boolean] = {
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submissionId))) flatMap {

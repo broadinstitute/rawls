@@ -1448,6 +1448,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  def updateSubmissionUserComment(workspaceName: WorkspaceName, submissionId: String, newComment: UserCommentUpdateOperation): Future[PerRequestMessage] = {
+    // TODO: Saloni - validate userComment. Also check it's length <= 1000
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
+          dataAccess.submissionQuery.updateSubmissionUserComment(submissionId, newComment.userComment) map { rows =>
+            if (rows == 1) RequestComplete(StatusCodes.NoContent)
+            else RequestComplete(ErrorReport(StatusCodes.NotFound, s"Unable to update userComment for submission. Submission ${submissionId} could not be found."))
+          }
+        }
+      }
+    }
+  }
+
   def abortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
