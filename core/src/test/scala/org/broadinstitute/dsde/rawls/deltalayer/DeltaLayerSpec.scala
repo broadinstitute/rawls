@@ -360,8 +360,62 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
         }
       }
     }
+    // end tests common to both createDatasetIfNotExist and createDataset
+
+    "deleteDataset method" - {
+      List(true, false) foreach { expectedStatus =>
+        s"should return $expectedStatus when the underlying cloud call returns $expectedStatus" in {
+          // mock GoogleBigQueryService that throws error on deleteDataset
+          val successfulBQService = mock[GoogleBigQueryService[IO]]
+          when(successfulBQService.deleteDataset(any())).thenReturn(IO.pure(expectedStatus))
+          // mock GoogleBigQueryServiceFactory that returns the mock GoogleBigQueryService
+          val mockBQFactory = mock[GoogleBigQueryServiceFactory]
+          when(mockBQFactory.getServiceForProject(any())).thenReturn(Resource.pure[IO, GoogleBigQueryService[IO]](successfulBQService))
+
+          val deltaLayer = testDeltaLayer(mockBQFactory)
+
+          deltaLayer.deleteDataset(constantData.workspace) map { deletionStatus =>
+            deletionStatus shouldBe expectedStatus
+          }
+        }
+      }
+
+      "should bubble up synchronous GoogleBigQueryServiceFactory exceptions" in {
+        // mock GoogleBigQueryServiceFactory that returns the mock GoogleBigQueryService
+        val mockBQFactory = mock[GoogleBigQueryServiceFactory]
+        when(mockBQFactory.getServiceForProject(any())).thenThrow(new RuntimeException(s"Errors getting the GoogleBigQueryService via deleteDataset should bubble up"))
+
+        val deltaLayer = testDeltaLayer(mockBQFactory)
+
+        val caught = intercept[RuntimeException] {
+          deltaLayer.deleteDataset(constantData.workspace)
+        }
+
+        caught.getMessage shouldBe s"Errors getting the GoogleBigQueryService via deleteDataset should bubble up"
+      }
+
+      "should bubble up BigQuery async exceptions" in {
+        // mock GoogleBigQueryService that throws error on deleteDataset
+        val throwingBQService = mock[GoogleBigQueryService[IO]]
+        when(throwingBQService.deleteDataset(any())).thenThrow(new BigQueryException(444, "BigQuery errors via deleteDataset should bubble up"))
+        // mock GoogleBigQueryServiceFactory that returns the mock GoogleBigQueryService
+        val mockBQFactory = mock[GoogleBigQueryServiceFactory]
+        when(mockBQFactory.getServiceForProject(any())).thenReturn(Resource.pure[IO, GoogleBigQueryService[IO]](throwingBQService))
+
+        val deltaLayer = testDeltaLayer(mockBQFactory)
+
+        val futureEx = recoverToExceptionIf[BigQueryException] {
+          deltaLayer.deleteDataset(constantData.workspace)
+        }
+
+        futureEx map { caught =>
+          caught.getMessage shouldBe "BigQuery errors via deleteDataset should bubble up"
+          caught.getCode shouldBe 444
+        }
+      }
+    }
   }
-  // end tests common to both createDatasetIfNotExist and createDataset
+
 
 
   private def testDeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory,

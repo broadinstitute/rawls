@@ -66,7 +66,7 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
                        datasetLabels: Map[String, String], aclBindings: Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]): IO[DatasetId] = {
     val bqServiceResource = bqServiceFactory.getServiceForProject(googleProjectId)
     bqServiceResource.use(_.createDataset(datasetName, datasetLabels, aclBindings))
-    // TODO: AS-724: the GoogleBigQueryService.createDataset method, inside workbench-libs, always returns null for the DatasetId's project.
+    // the GoogleBigQueryService.createDataset method, inside workbench-libs, always returns null for the DatasetId's project.
     // the dataset is created in the correct project, but the return value is misleading; it results in "null" where
     // we expect something more informative, such as the log message "successfully created Delta Layer companion
     // BigQuery dataset my-dataset-name in project null" in createDatasetIfNotExist below.
@@ -116,28 +116,14 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
   /**
     * Deletes the Delta Layer companion dataset from a given workspace.
     * @param workspace the workspace from which to delete the companion dataset
-    * @return status of dataset deletion
+    * @return true if dataset was deleted, false if it was not found (and throws on other errors)
     */
   def deleteDataset(workspace: Workspace): Future[Boolean] = {
     val bqService = bqServiceFactory.getServiceForProject(workspace.googleProject)
     val datasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
+    // the GoogleBigQueryService.deleteDataset call below is already 404-safe; no need to trap
+    // for the case where the dataset doesn't exist
     bqService.use(_.deleteDataset(datasetName)).unsafeToFuture()
-  }
-
-  def deleteDatasetIfExist(workspace: Workspace): Future[Boolean] = {
-    deleteDataset(workspace).map { deleted =>
-      // dataset was deleted
-      logger.info(s"successfully deleted Delta Layer companion BigQuery dataset for workspace ${workspace.briefName} (${workspace.workspaceId})")
-      deleted
-    }.recover {
-      case bqe: BigQueryException if bqe.getCode == 404 =>
-        // dataset did not exist, this is a noop
-        logger.info(s"Delta Layer companion dataset did not exist; deleteDatasetIfExist ignoring BigQuery 404 for workspace ${workspace.briefName} (${workspace.workspaceId})")
-        false
-      case err  =>
-        // some other error occurred; rethrow that error
-        throw err
-    }
   }
 
   /**

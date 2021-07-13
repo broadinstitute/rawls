@@ -366,7 +366,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
       // Delete the Delta Layer companion dataset, if it exists
-      _ <- deltaLayer.deleteDatasetIfExist(workspaceContext)
+      _ <- deltaLayer.deleteDataset(workspaceContext)
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo)
     } yield {
       aborts.onComplete {
