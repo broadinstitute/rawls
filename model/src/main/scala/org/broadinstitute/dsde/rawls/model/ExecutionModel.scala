@@ -30,7 +30,8 @@ case class SubmissionRequest(
   deleteIntermediateOutputFiles: Boolean,
   useReferenceDisks: Boolean = false,
   memoryRetryMultiplier: Double = 1.0,
-  workflowFailureMode: Option[String] = None
+  workflowFailureMode: Option[String] = None,
+  userComment: Option[String] = None
 )
 
 // Cromwell's response to workflow submission
@@ -137,7 +138,8 @@ case class Submission(
   memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None,
-  externalEntityInfo: Option[ExternalEntityInfo] = None
+  externalEntityInfo: Option[ExternalEntityInfo] = None,
+  userComment: Option[String] = None
 )
 
 case class SubmissionListResponse(
@@ -155,9 +157,10 @@ case class SubmissionListResponse(
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   workflowIds: Option[Seq[String]],
   cost: Option[Float] = None,
-  externalEntityInfo: Option[ExternalEntityInfo] = None
+  externalEntityInfo: Option[ExternalEntityInfo] = None,
+  userComment: Option[String] = None
+)
 
-                                 )
 object SubmissionListResponse {
   def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts, methodConfigurationDeleted: Boolean): SubmissionListResponse =
     SubmissionListResponse(
@@ -174,7 +177,8 @@ object SubmissionListResponse {
       deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
       workflowFailureMode = submission.workflowFailureMode,
       workflowIds = workflowIds,
-      externalEntityInfo = submission.externalEntityInfo
+      externalEntityInfo = submission.externalEntityInfo,
+      userComment = submission.userComment
     )
 }
 
@@ -342,7 +346,8 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("deleteIntermediateOutputFiles" -> obj.deleteIntermediateOutputFiles.toJson),
           Option("useReferenceDisks" -> obj.useReferenceDisks.toJson),
           Option("memoryRetryMultiplier" -> obj.memoryRetryMultiplier.toJson),
-          obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson)
+          obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson),
+          Option("userComment" -> obj.userComment.toJson)
         ).flatten: _*
       )
     }
@@ -365,7 +370,8 @@ trait ExecutionJsonSupport extends JsonSupport {
         deleteIntermediateOutputFiles = fields.get("deleteIntermediateOutputFiles").fold(false)(_.convertTo[Boolean]),
         useReferenceDisks = fields.get("useReferenceDisks").fold(false)(_.convertTo[Boolean]),
         memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
-        workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]])
+        workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
+        userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
@@ -412,11 +418,11 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat = jsonFormat15(Submission)
+  implicit val SubmissionFormat = jsonFormat16(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionListResponseFormat = jsonFormat15(SubmissionListResponse.apply)
+  implicit val SubmissionListResponseFormat = jsonFormat16(SubmissionListResponse.apply)
 
   implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
 

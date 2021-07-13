@@ -1298,6 +1298,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
 
+      // TODO: Saloni - somewhere here validate userComment value. Also maximum length should be 1000
+
       gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
 
       validationResult <- entityProvider.expressionValidator.validateExpressionsForSubmission(methodConfig, gatherInputsResult)
@@ -1389,7 +1391,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         externalEntityInfo = for {
           entityType <- header.entityType
           dataStoreId <- header.entityStoreId
-        } yield ExternalEntityInfo(dataStoreId, entityType)
+        } yield ExternalEntityInfo(dataStoreId, entityType),
+        userComment = submissionRequest.userComment
       )
 
       // implicitly passed to SubmissionComponent.create

@@ -31,7 +31,8 @@ case class SubmissionRecord(id: UUID,
                             memoryRetryMultiplier: Double,
                             workflowFailureMode: Option[String],
                             entityStoreId: Option[String],
-                            rootEntityType: Option[String]
+                            rootEntityType: Option[String],
+                            userComment: Option[String]
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -68,6 +69,7 @@ trait SubmissionComponent {
     def workflowFailureMode = column[Option[String]]("WORKFLOW_FAILURE_MODE", O.Length(32))
     def entityStoreId = column[Option[String]]("ENTITY_STORE_ID")
     def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")
+    def userComment = column[Option[String]]("USER_COMMENT")
 
     def * = (
       id,
@@ -83,7 +85,8 @@ trait SubmissionComponent {
       memoryRetryMultiplier,
       workflowFailureMode,
       entityStoreId,
-      rootEntityType
+      rootEntityType,
+      userComment
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -408,7 +411,8 @@ trait SubmissionComponent {
         submission.memoryRetryMultiplier,
         submission.workflowFailureMode.map(_.toString),
         submission.externalEntityInfo.map(_.dataStoreId),
-        submission.externalEntityInfo.map(_.rootEntityType)
+        submission.externalEntityInfo.map(_.rootEntityType),
+        submission.userComment
       )
     }
 
@@ -430,7 +434,9 @@ trait SubmissionComponent {
         externalEntityInfo = for {
           entityStoreId <- submissionRec.entityStoreId
           rootEntityType <- submissionRec.rootEntityType
-        } yield ExternalEntityInfo(entityStoreId, rootEntityType))
+        } yield ExternalEntityInfo(entityStoreId, rootEntityType),
+        userComment = submissionRec.userComment
+      )
     }
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: Option[AttributeEntityReference], workflows: Seq[Workflow]): ActiveSubmission = {
