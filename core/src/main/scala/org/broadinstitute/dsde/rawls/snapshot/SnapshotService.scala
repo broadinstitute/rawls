@@ -17,6 +17,8 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
+import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -85,20 +87,77 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
+  /*
+    internal method to query WSM for a list of snapshot references; used by enumerateSnapshots and findBySnapshotId
+   */
+  protected[snapshot] def retrieveSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int): ResourceList = {
+    Try(workspaceManagerDAO.enumerateDataRepoSnapshotReferences(workspaceId, offset, limit, userInfo.accessToken)) match {
+      case Success(references) => references
+      // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
+      // to having no references, so return the empty list.
+      case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => new ResourceList()
+      // but if we hit a different error, it's a valid error; rethrow it
+      case Failure(ex: bio.terra.workspace.client.ApiException) =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
+      case Failure(other) =>
+        logger.warn(s"Unexpected error when enumerating snapshots: ${other.getMessage}")
+        throw new RawlsExceptionWithErrorReport(ErrorReport(other))
+    }
+  }
+
+  /**
+    * return a given page of snapshot references from Workspace Manager.
+    *
+    * @param workspaceName the workspace owning the snapshot references
+    * @param offset pagination offset for the list
+    * @param limit pagination limit for the list
+    * @return the list of snapshot references
+    */
   def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[ResourceList] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
-      Try(workspaceManagerDAO.enumerateDataRepoSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit, userInfo.accessToken)) match {
-        case Success(references) => references
-        // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
-        // to having no references, so return the empty list.
-        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => new ResourceList()
-        // but if we hit a different error, it's a valid error; rethrow it
-        case Failure(ex: bio.terra.workspace.client.ApiException) =>
-          throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
-        case Failure(other) =>
-          logger.warn(s"Unexpected error when enumerating snapshots: ${other.getMessage}")
-          throw new RawlsExceptionWithErrorReport(ErrorReport(other))
+      retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit)
+    }
+  }
+
+  /**
+    * Returns all snapshot references from Workspace Manager that refer to a specified snapshotId.
+    * Does not support pagination; returns the entire list of matching references.
+    *
+    * @param workspaceName the workspace owning the snapshot references
+    * @param snapshotId the snapshotId to look for
+    * @param batchSize optional, default 200: internal param exposed for unit-testing purposes that controls
+    *                  the size of pages requested from Workspace Manager while looking for the specified
+    *                  snapshotId.
+    * @return the list of all snapshot references that refer to the specified snapshotId
+    */
+  def findBySnapshotId(workspaceName: WorkspaceName, snapshotId: UUID, batchSize: Int = 200): Future[List[ResourceDescription]] = {
+
+    val snapshotIdCriteria = snapshotId.toString // just so we're not calling toString on every iteration through loops
+
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
+
+      @tailrec
+      def findInPage(offset: Int, alreadyFound: List[ResourceDescription]): List[ResourceDescription] = {
+        // get this page of references from WSM
+        val newPage = retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, batchSize)
+        // filter the page to just those with a matching snapshotId
+        val found = newPage.getResources.asScala.filter{ res =>
+          Try(res.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot.equals(snapshotIdCriteria)).toOption.getOrElse(false)
+        }
+        // append the ones we just found to those found on previous pages
+        val accum = alreadyFound ++ found
+
+        if (newPage.getResources.size() < batchSize) {
+          // the page we retrieved from WSM was the last page; return everything we found so far
+          accum
+        } else {
+          // the page we retrieved from WSM was NOT the last page; continue looping through the next page
+          findInPage(offset + batchSize, accum)
+        }
       }
+
+      findInPage(0, List.empty[ResourceDescription])
+      // TODO: this should be massaged to return a list of snapshots, not a list of resourcedescriptions
     }
   }
 
