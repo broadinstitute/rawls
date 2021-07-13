@@ -29,6 +29,8 @@ object SnapshotService {
     new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, bqServiceFactory, terraDataRepoUrl, pathToCredentialJson, clientEmail, deltaLayerStreamerEmail)
   }
 
+  val GCP_SNAPSHOTS_KEY = "gcpDataRepoSnapshots"
+
 }
 
 class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoInstanceName: String, pathToCredentialJson: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
@@ -90,22 +92,23 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   }
 
   //AS-787 - rework the data so that it's in the same place in the JSON with a list and get snapshot responses
-  def massageSnapshots(references: ResourceList): Seq[DataRepoSnapshotResource] = {
-    references.getResources.asScala.map{r =>
+  def massageSnapshots(references: ResourceList): Map[String, Seq[DataRepoSnapshotResource]] = {
+    val snapshots = references.getResources.asScala.map { r =>
       val massaged = new DataRepoSnapshotResource
       massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
       massaged.setMetadata(r.getMetadata)
       massaged
     }
+    Map(SnapshotService.GCP_SNAPSHOTS_KEY -> snapshots)
   }
 
-  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[Seq[DataRepoSnapshotResource]] = {
+  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[Map[String, Seq[DataRepoSnapshotResource]]] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       Try(workspaceManagerDAO.enumerateDataRepoSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit, userInfo.accessToken)) match {
         case Success(references) => massageSnapshots(references)
         // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
         // to having no references, so return the empty list.
-        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => Seq.empty[DataRepoSnapshotResource]
+        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => Map(SnapshotService.GCP_SNAPSHOTS_KEY -> Seq.empty[DataRepoSnapshotResource])
         // but if we hit a different error, it's a valid error; rethrow it
         case Failure(ex: bio.terra.workspace.client.ApiException) =>
           throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
