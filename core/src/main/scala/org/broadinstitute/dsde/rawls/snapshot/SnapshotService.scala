@@ -64,7 +64,10 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
               case t: Throwable =>
                 //fire and forget these undos, we've made our best effort to fix things at this point
                 for {
-                  _ <- deltaLayer.deleteDataset(workspaceContext).unsafeToFuture()
+                  // TODO: AS-724 is it worth deleting the companion and its ref here? If the user attempted to add a snapref,
+                  // they are likely to do so again, and we can just reuse whatever companion was already created.
+                  // This will prevent continual creation/deletion of the same-named dataset.
+                  _ <- deltaLayer.deleteDataset(workspaceContext)
                   _ <- Future(workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, referenceId, userInfo.accessToken))
                 } yield {}
                 throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))

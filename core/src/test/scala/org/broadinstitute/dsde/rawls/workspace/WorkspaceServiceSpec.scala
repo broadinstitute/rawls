@@ -24,11 +24,12 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.BeforeAndAfterAll
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
@@ -43,6 +44,8 @@ import scala.language.postfixOps
 import scala.util.Try
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import scala.concurrent.ExecutionContext.global
 
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -117,6 +120,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
     )_
 
+    val deltaLayer = new DeltaLayer(MockBigQueryServiceFactory.ioFactory(), new MockDeltaLayerWriter, samDAO,
+      WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global))
+
     val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
       gcsDAO
@@ -148,7 +155,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      dataRepoDAO,
+      deltaLayer,
       methodConfigResolver,
       gcsDAO,
       samDAO,
