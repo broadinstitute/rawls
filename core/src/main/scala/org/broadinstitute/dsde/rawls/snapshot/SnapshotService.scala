@@ -29,7 +29,7 @@ object SnapshotService {
     new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, bqServiceFactory, terraDataRepoUrl, pathToCredentialJson, clientEmail, deltaLayerStreamerEmail)
   }
 
-  val GCP_SNAPSHOTS_KEY = "gcpDataRepoSnapshots"
+  final val GCP_SNAPSHOTS_KEY = "gcpDataRepoSnapshots"
 
 }
 
