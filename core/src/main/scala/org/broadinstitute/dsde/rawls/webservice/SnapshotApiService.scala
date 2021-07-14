@@ -111,18 +111,4 @@ trait SnapshotApiService extends UserInfoDirectives {
       .cloningInstructions(resource.getMetadata.getCloningInstructions)
   }
 
-  private def resourceListToDataReferenceList(refList: ResourceList): DataReferenceList= {
-    import scala.collection.JavaConverters._
-    val resources = refList.getResources.asScala.map{ res =>
-      new DataReferenceDescription()
-        .name(res.getMetadata.getName)
-        .description(res.getMetadata.getDescription)
-        .referenceId(res.getMetadata.getResourceId)
-        .referenceType(ReferenceTypeEnum.fromValue(res.getMetadata.getResourceType.getValue))
-        .workspaceId(res.getMetadata.getWorkspaceId)
-        .reference(new DataRepoSnapshot().instanceName(res.getResourceAttributes.getGcpDataRepoSnapshot.getInstanceName).snapshot(res.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot))
-        .cloningInstructions(res.getMetadata.getCloningInstructions)
-    }.asJava
-    new DataReferenceList().resources(resources)
-  }
 }
