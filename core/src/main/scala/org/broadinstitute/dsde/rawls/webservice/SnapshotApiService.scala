@@ -7,7 +7,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import bio.terra.workspace.model.{DataReferenceDescription, DataReferenceList, DataRepoSnapshot, DataRepoSnapshotResource, ReferenceTypeEnum, ResourceList, UpdateDataReferenceRequestBody}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, SnapshotListResponse, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 
@@ -70,6 +70,7 @@ trait SnapshotApiService extends UserInfoDirectives {
         parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
           complete {
             snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit)
+              .map(snapshotListResponseToDataReferenceList)
               .map(StatusCodes.OK -> _)
           }
         }
@@ -109,6 +110,21 @@ trait SnapshotApiService extends UserInfoDirectives {
       .workspaceId(resource.getMetadata.getWorkspaceId)
       .reference(new DataRepoSnapshot().instanceName(resource.getAttributes.getInstanceName).snapshot(resource.getAttributes.getSnapshot))
       .cloningInstructions(resource.getMetadata.getCloningInstructions)
+  }
+
+  private def snapshotListResponseToDataReferenceList(snapshotResponse: SnapshotListResponse): DataReferenceList= {
+    import scala.collection.JavaConverters._
+    val snaps = snapshotResponse.gcpDataRepoSnapshots.map{ res =>
+      new DataReferenceDescription()
+        .name(res.getMetadata.getName)
+        .description(res.getMetadata.getDescription)
+        .referenceId(res.getMetadata.getResourceId)
+        .referenceType(ReferenceTypeEnum.fromValue(res.getMetadata.getResourceType.getValue))
+        .workspaceId(res.getMetadata.getWorkspaceId)
+        .reference(new DataRepoSnapshot().instanceName(res.getAttributes.getInstanceName).snapshot(res.getAttributes.getSnapshot))
+        .cloningInstructions(res.getMetadata.getCloningInstructions)
+    }.asJava
+    new DataReferenceList().resources(snaps)
   }
 
 }
