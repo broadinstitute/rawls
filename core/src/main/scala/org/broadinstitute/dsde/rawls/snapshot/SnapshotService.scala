@@ -130,7 +130,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     *                  snapshotId.
     * @return the list of all snapshot references that refer to the specified snapshotId
     */
-  def findBySnapshotId(workspaceName: WorkspaceName, snapshotId: UUID, batchSize: Int = 200): Future[List[ResourceDescription]] = {
+  def findBySnapshotId(workspaceName: WorkspaceName, snapshotId: UUID, batchSize: Int = 200): Future[ResourceList] = {
 
     val snapshotIdCriteria = snapshotId.toString // just so we're not calling toString on every iteration through loops
 
@@ -156,8 +156,12 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         }
       }
 
-      findInPage(0, List.empty[ResourceDescription])
-      // TODO: this should be massaged to return a list of snapshots, not a list of resourcedescriptions
+      val resources = findInPage(0, List.empty[ResourceDescription])
+      // TODO: this should return a list of snapshots, not a ResourceList. When AS-787 lands, use that format/functions
+
+      val res = new ResourceList()
+      res.setResources(resources.asJava)
+      res
     }
   }
 

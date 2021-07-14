@@ -4295,6 +4295,43 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/query/{referencedSnapshotId}:
+    get:
+      tags:
+        - snapshots_v2
+      summary: Query snapshots by referenced id
+      description: Return all snapshot references that refer to a given Data Repo snapshot id
+      operationId: queryDataRepoSnapshot_v2
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - name: referencedSnapshotId
+          in: path
+          description: ID of the Data Repo snapshot being referenced
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResourceList'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/{snapshotId}:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'

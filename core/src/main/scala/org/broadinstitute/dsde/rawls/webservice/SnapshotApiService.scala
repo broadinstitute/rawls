@@ -35,6 +35,13 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       }
     } ~
+    path("workspaces" / Segment / Segment / "snapshots" / "v2" / "query" / Segment) { (workspaceNamespace, workspaceName, referencedSnapshotId) =>
+      get {
+        complete {
+          snapshotServiceConstructor(userInfo).findBySnapshotId(WorkspaceName(workspaceNamespace, workspaceName), java.util.UUID.fromString(referencedSnapshotId)).map(StatusCodes.OK -> _)
+        }
+      }
+    } ~
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
       get {
         complete {
