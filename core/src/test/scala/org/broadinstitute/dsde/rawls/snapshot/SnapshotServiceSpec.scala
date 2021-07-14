@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import org.scalatestplus.mockito.MockitoSugar
@@ -27,15 +26,15 @@ import scala.concurrent.duration.Duration
 
 class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSugar with TestDriverComponent {
 
-  implicit val cs = IO.contextShift(global)
+  implicit val cs: ContextShift[IO] = IO.contextShift(global)
 
   //test constants
-  val fakeRawlsClientEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
-  val fakeDeltaLayerStreamerEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
+  val fakeRawlsClientEmail: WorkbenchEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
+  val fakeDeltaLayerStreamerEmail: WorkbenchEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
 
 
   "SnapshotService" should {
-    "create a new snapshot reference to a TDR snapshot" in withMinimalTestDatabase { dataSource =>
+    "create a new snapshot reference to a TDR snapshot" in withMinimalTestDatabase { _ =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
       when(mockSamDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])).thenReturn(Future.successful(Set(SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner, SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set.empty), WorkbenchEmail("")))))
@@ -68,7 +67,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken])
     }
 
-    "not leave an orphaned bq dataset if creating a snapshot reference fails" in withMinimalTestDatabase { dataSource =>
+    "not leave an orphaned bq dataset if creating a snapshot reference fails" in withMinimalTestDatabase { _ =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
       when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
@@ -108,7 +107,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDatasetReference(any[UUID], any[ReferenceResourceCommonFields], any[GcpBigQueryDatasetAttributes], any[OAuth2BearerToken])
     }
 
-    "not leave an orphaned snapshot data reference if creating a BQ dataset in Google fails" in withMinimalTestDatabase { dataSource =>
+    "not leave an orphaned snapshot data reference if creating a BQ dataset in Google fails" in withMinimalTestDatabase { _ =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
       when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
@@ -151,7 +150,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDatasetReference(any[UUID], any[ReferenceResourceCommonFields], any[GcpBigQueryDatasetAttributes], any[OAuth2BearerToken])
     }
 
-    "remove all resources when a snapshot reference is deleted" in withMinimalTestDatabase { dataSource =>
+    "remove all resources when a snapshot reference is deleted" in withMinimalTestDatabase { _ =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
       when(mockSamDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])).thenReturn(Future.successful(Set(SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner, SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set.empty), WorkbenchEmail("")))))

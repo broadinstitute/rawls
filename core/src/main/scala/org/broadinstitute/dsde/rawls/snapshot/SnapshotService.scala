@@ -1,22 +1,18 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
-import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
 import cats.effect.{ContextShift, IO}
-import com.google.cloud.bigquery.Acl
-import com.google.cloud.bigquery.Acl.Entity
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspaceActions, SamWorkspacePolicyNames, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, NamedDataRepoSnapshot, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -48,7 +44,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       deltaLayer.createDatasetIfNotExist(workspaceContext, userInfo).recover {
         case t: Throwable =>
           // something went wrong creating the companion dataset
-          logger.warn(s"Error creating Delta Layer companion dataset for workspace ${workspaceName}: ${t.getMessage}")
+          logger.warn(s"Error creating Delta Layer companion dataset for workspace $workspaceName: ${t.getMessage}")
           // since companion dataset creation failed, try to clean up this snapshot reference so the user can try again
           Try(workspaceManagerDAO.deleteDataRepoSnapshotReference(wsid, snapshotRef.getMetadata.getResourceId, userInfo.accessToken)) match {
             case Success(_) =>
@@ -107,7 +103,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       // check that snapshot exists before deleting it. If the snapshot does not exist, the GET attempt will throw a 404
-      val snapshotRef = workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
+      workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
       workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
     }
   }
