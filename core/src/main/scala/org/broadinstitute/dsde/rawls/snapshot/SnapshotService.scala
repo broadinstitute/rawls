@@ -11,13 +11,13 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspaceActions, SamWorkspacePolicyNames, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspaceActions, SamWorkspacePolicyNames, SnapshotListResponse, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.DefaultJsonProtocol._
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -28,9 +28,6 @@ object SnapshotService {
                  (implicit executionContext: ExecutionContext, contextShift: ContextShift[IO]): SnapshotService = {
     new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, bqServiceFactory, terraDataRepoUrl, pathToCredentialJson, clientEmail, deltaLayerStreamerEmail)
   }
-
-  final val GCP_SNAPSHOTS_KEY = "gcpDataRepoSnapshots"
-
 }
 
 class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoInstanceName: String, pathToCredentialJson: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
@@ -92,23 +89,23 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   }
 
   //AS-787 - rework the data so that it's in the same place in the JSON with a list and get snapshot responses
-  def massageSnapshots(references: ResourceList): Map[String, Seq[DataRepoSnapshotResource]] = {
+  def massageSnapshots(references: ResourceList): SnapshotListResponse = {
     val snapshots = references.getResources.asScala.map { r =>
       val massaged = new DataRepoSnapshotResource
       massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
       massaged.setMetadata(r.getMetadata)
       massaged
     }
-    Map(SnapshotService.GCP_SNAPSHOTS_KEY -> snapshots)
+    SnapshotListResponse(snapshots)
   }
 
-  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[Map[String, Seq[DataRepoSnapshotResource]]] = {
+  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[SnapshotListResponse] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       Try(workspaceManagerDAO.enumerateDataRepoSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit, userInfo.accessToken)) match {
         case Success(references) => massageSnapshots(references)
         // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
         // to having no references, so return the empty list.
-        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => Map(SnapshotService.GCP_SNAPSHOTS_KEY -> Seq.empty[DataRepoSnapshotResource])
+        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => SnapshotListResponse(Seq.empty[DataRepoSnapshotResource])
         // but if we hit a different error, it's a valid error; rethrow it
         case Failure(ex: bio.terra.workspace.client.ApiException) =>
           throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))

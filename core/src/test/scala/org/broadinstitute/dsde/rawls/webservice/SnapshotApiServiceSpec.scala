@@ -241,13 +241,13 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
             Get(s"${v2BaseSnapshotsPath}?offset=0&limit=10") ~>
               sealRoute(services.snapshotRoutes) ~>
               check {
-                val response = responseAs[Map[String, Seq[DataRepoSnapshotResource]]]
+                val response = responseAs[SnapshotListResponse]
                 assertResult(StatusCodes.OK) {
                   status
                 }
                 // Our mock doesn't guarantee order, so we just check that there are two
                 // elements, that one is named "foo", and that one is named "bar"
-                val resources = response(SnapshotService.GCP_SNAPSHOTS_KEY)
+                val resources = response.gcpDataRepoSnapshots
                 assert(resources.size == 2)
                 assertResult(Set("foo", "bar")) {
                   resources.map(_.getMetadata.getName).toSet
@@ -284,11 +284,11 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceTerminatedSubmissions.path}/snapshots/v2?offset=0&limit=10") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
-        val response = responseAs[Map[String, Seq[DataRepoSnapshotResource]]]
+        val response = responseAs[SnapshotListResponse]
         assertResult(StatusCodes.OK) {
           status
         }
-        assert(response(SnapshotService.GCP_SNAPSHOTS_KEY).isEmpty)
+        assert(response.gcpDataRepoSnapshots.isEmpty)
       }
   }
 
@@ -586,13 +586,13 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
             Get(s"${baseSnapshotsPath}?offset=0&limit=10") ~>
               sealRoute(services.snapshotRoutes) ~>
               check {
-                val response = responseAs[Map[String, Seq[DataRepoSnapshotResource]]]
+                val response = responseAs[SnapshotListResponse]
                 assertResult(StatusCodes.OK) {
                   status
                 }
                 // Our mock doesn't guarantee order, so we just check that there are two
                 // elements, that one is named "foo", and that one is named "bar"
-                val snaps = response(SnapshotService.GCP_SNAPSHOTS_KEY)
+                val snaps = response.gcpDataRepoSnapshots
                 assert(snaps.size == 2)
                 assertResult(Set("foo", "bar")) {
                   snaps.map(_.getMetadata.getName).toSet
@@ -629,11 +629,11 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceTerminatedSubmissions.path}/snapshots?offset=0&limit=10") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
-        val response = responseAs[Map[String, Seq[DataRepoSnapshotResource]]]
+        val response = responseAs[SnapshotListResponse]
         assertResult(StatusCodes.OK) {
           status
         }
-        assert(response(SnapshotService.GCP_SNAPSHOTS_KEY).isEmpty)
+        assert(response.gcpDataRepoSnapshots.isEmpty)
       }
   }
 
