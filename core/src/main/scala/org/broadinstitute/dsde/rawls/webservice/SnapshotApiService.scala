@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
@@ -38,7 +40,7 @@ trait SnapshotApiService extends UserInfoDirectives {
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / "query" / Segment) { (workspaceNamespace, workspaceName, referencedSnapshotId) =>
       get {
         complete {
-          snapshotServiceConstructor(userInfo).findBySnapshotId(WorkspaceName(workspaceNamespace, workspaceName), java.util.UUID.fromString(referencedSnapshotId)).map(StatusCodes.OK -> _)
+          snapshotServiceConstructor(userInfo).findBySnapshotId(WorkspaceName(workspaceNamespace, workspaceName), UUID.fromString(referencedSnapshotId)).map(StatusCodes.OK -> _)
         }
       }
     } ~

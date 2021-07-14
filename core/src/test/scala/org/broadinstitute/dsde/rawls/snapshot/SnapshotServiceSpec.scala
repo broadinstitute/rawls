@@ -301,7 +301,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // search for one of the snapshotIds that should be in the list
       val criteria = "00000000-0000-0000-0000-000000000012"
-      val found = Await.result(snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria)), Duration.Inf)
+      val found = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria)),
+        Duration.Inf).getResources.asScala
 
       found should have size 1
       found.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe criteria
@@ -315,7 +317,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // search for one of the snapshotIds that should be duplicated
       val criteria1 = "00000000-0000-0000-0000-000000000005"
-      val found1 = Await.result(snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria1)), Duration.Inf)
+      val found1 = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria1)),
+        Duration.Inf).getResources.asScala
 
       found1 should have size 2
       found1.foreach { x =>
@@ -324,7 +328,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // now search for one of the snapshotIds that should NOT be duplicated, to be sure
       val criteria2 = "00000000-0000-0000-0000-000000000015"
-      val found2 = Await.result(snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria2)), Duration.Inf)
+      val found2 = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria2)),
+        Duration.Inf).getResources.asScala
 
       found2 should have size 1
       found2.foreach { x =>
@@ -341,7 +347,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // search for one of the snapshotIds that should NOT be in the list
       val criteria = "00000000-0000-0000-0000-000000000099"
-      val found = Await.result(snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria)), Duration.Inf)
+      val found = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria)),
+        Duration.Inf).getResources.asScala
 
       found should have size 0
     }
@@ -356,8 +364,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // search for one of the snapshotIds that should be in the list
       val criteria = "00000000-0000-0000-0000-000000000006"
-      val found = Await.result(snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria),
-        batchSize), Duration.Inf)
+      val found = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), batchSize),
+        Duration.Inf).getResources.asScala
 
       found should have size 1
       found.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe criteria
@@ -379,8 +388,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // search for one of the snapshotIds that should be in the list
       val criteria = "00000000-0000-0000-0000-000000000006"
-      val found = Await.result(snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria),
-        batchSize), Duration.Inf)
+      val found = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), batchSize),
+        Duration.Inf).getResources.asScala
 
       found should have size 2
       found.foreach { x =>
@@ -402,8 +412,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       // search for one of the snapshotIds that should be in the list
       val criteria = "00000000-0000-0000-0000-000000000099"
-      val found = Await.result(snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria),
-        batchSize), Duration.Inf)
+      val found = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), batchSize),
+        Duration.Inf).getResources.asScala
 
       found should have size 0
 
@@ -439,7 +450,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     }
   }
 
-  def mockSnapshotServiceForReferences(resources: List[ResourceDescription]) = {
+  def mockSnapshotServiceForReferences(resources: List[ResourceDescription]): SnapshotService = {
     // mock sam that always says we have permission
     val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
