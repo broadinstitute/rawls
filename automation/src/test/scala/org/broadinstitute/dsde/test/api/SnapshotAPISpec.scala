@@ -1,11 +1,5 @@
 package org.broadinstitute.dsde.test.api
 
-
-import org.apache.commons.io.IOUtils
-import java.nio.charset.Charset
-import java.util.UUID
-import scala.concurrent.ExecutionContext
-import scala.concurrent.ExecutionContext.Implicits.global
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.Uri.{Path, Query}
 import akka.http.scaladsl.model.{StatusCodes, Uri}
@@ -15,34 +9,39 @@ import bio.terra.datarepo.model.{EnumerateSnapshotModel, SnapshotModel}
 import bio.terra.workspace.model._
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
-import com.typesafe.scalalogging.LazyLogging
+import com.google.api.services.compute.ComputeScopes
+import com.google.auth.oauth2.{AccessToken, GoogleCredentials, ServiceAccountCredentials}
+import java.nio.charset.Charset
+import java.util.UUID
+import org.apache.commons.io.IOUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import spray.json._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.userLoginScopes
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
+import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import com.google.cloud.bigquery.BigQuery
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.time.{Minutes, Seconds, Span}
-import spray.json.DefaultJsonProtocol._
-import com.google.auth.oauth2.ServiceAccountCredentials
-import cats.effect.{Blocker, ContextShift, IO, Timer}
-import scala.concurrent.Await
-import scala.concurrent.duration._
-import scala.language.postfixOps
-import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
-
+import org.scalatest.time.{Minutes, Seconds, Span}
+import com.typesafe.scalalogging.LazyLogging
+import cats.effect.{Blocker, ContextShift, IO, Timer}
 import scala.collection.JavaConverters._
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
+import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 
 class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterAll
@@ -175,8 +174,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
 
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
-
-      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
 
       withCleanBillingProject(owner) { projectName =>
         withWorkspace(projectName, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
@@ -193,12 +191,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           val listResponse = listSnapshotReferences(projectName, workspaceName)
           val resources = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
           resources.size shouldBe 1
-          val resourceId = resources.head.getMetadata.getResourceId
 
           // check that the bq dataset has been created
-          val dataset = getDataset("deltalayer_" + resourceId.toString.replace('-', '_'), projectName, ownerAuthToken)
-          dataset shouldBe 1
-          logger.info("DATASET: " + dataset.toString)
+          val resourceId = resources.head.getMetadata.getWorkspaceId
+          val dataset = getDataset("deltalayer_forworkspace_" + resourceId.toString.replace('-', '_'), projectName, ownerAuthToken)
+          dataset.size shouldBe 1
         }
       }
     }
@@ -373,15 +370,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     }
   }
 
-  //    GoogleBigQueryService.resource(
-  //      RawlsConfig.pathToQAJson,
-  //      Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global),
-  //      projectId
-  //    )
-
-  //    new GoogleBigQueryServiceFactory(Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global))(scala.concurrent.ExecutionContext.global)
-  //      .getServiceFromCredentialPath(RawlsConfig.pathToQAJson, GoogleProject(projectId))
-
   private def getDataset(datasetName: String, projectId: String, authToken: AuthToken)(implicit executionContext: ExecutionContext) = {
     import org.typelevel.log4cats.Logger
     import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -391,7 +379,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     implicit val logger: org.typelevel.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
     val bqService = GoogleBigQueryService.resource[IO](
-      ServiceAccountCredentials.fromStream(IOUtils.toInputStream(RawlsConfig.pathToQAJson, Charset.defaultCharset)),
+      GoogleCredentials.create(new AccessToken(authToken.value, null)),
       Blocker.liftExecutionContext(executionContext),
       GoogleProject(projectId)
     )
@@ -399,7 +387,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     bqService.use {
       bq =>
         for {
-          // policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError
           dataset <- bq.getDataset(datasetName)
         } yield {
           dataset
