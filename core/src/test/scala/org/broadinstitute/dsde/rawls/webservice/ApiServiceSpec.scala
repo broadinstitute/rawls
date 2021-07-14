@@ -37,7 +37,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
@@ -164,13 +164,16 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
     )_
 
+    val deltaLayer = new DeltaLayer(bigQueryServiceFactory, new MockDeltaLayerWriter, samDAO,
+      WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global))
+
     override val snapshotServiceConstructor = SnapshotService.constructor(
       slickDataSource,
       samDAO,
       workspaceManagerDAO,
-      bigQueryServiceFactory,
+      deltaLayer,
       mockServer.mockServerBaseUrl,
-      "fakeCredentialPath",
       WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
       WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com")
     )
@@ -211,7 +214,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      dataRepoDAO,
+      deltaLayer,
       methodConfigResolver,
       gcsDAO,
       samDAO,

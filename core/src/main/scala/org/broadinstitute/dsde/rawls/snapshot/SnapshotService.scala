@@ -1,82 +1,67 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
 import cats.effect.{ContextShift, IO}
-import com.google.cloud.bigquery.Acl
-import com.google.cloud.bigquery.Acl.Entity
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspaceActions, SamWorkspacePolicyNames, SnapshotListResponse, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, NamedDataRepoSnapshot, SamWorkspaceActions, SnapshotListResponse, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import spray.json.DefaultJsonProtocol._
-
 import scala.collection.JavaConverters._
+
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object SnapshotService {
 
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoUrl: String, pathToCredentialJson: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)(userInfo: UserInfo)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, deltaLayer: DeltaLayer, terraDataRepoUrl: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)(userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext, contextShift: ContextShift[IO]): SnapshotService = {
-    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, bqServiceFactory, terraDataRepoUrl, pathToCredentialJson, clientEmail, deltaLayerStreamerEmail)
+    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, deltaLayer, terraDataRepoUrl, clientEmail, deltaLayerStreamerEmail)
   }
+
 }
 
-class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, bqServiceFactory: GoogleBigQueryServiceFactory, terraDataRepoInstanceName: String, pathToCredentialJson: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
+class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, deltaLayer: DeltaLayer, terraDataRepoInstanceName: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
                      (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO])
   extends FutureSupport with WorkspaceSupport with LazyLogging {
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: NamedDataRepoSnapshot): Future[DataRepoSnapshotResource] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
-      if(!workspaceStubExists(workspaceContext.workspaceIdAsUUID, userInfo)) {
-        workspaceManagerDAO.createWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)
+      val wsid = workspaceContext.workspaceIdAsUUID // to avoid UUID parsing multiple times
+      // create the stub workspace in WSM if it does not already exist
+      if(!workspaceStubExists(wsid, userInfo)) {
+        workspaceManagerDAO.createWorkspace(wsid, userInfo.accessToken)
       }
+      // create the requested snapshot reference
+      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(wsid, snapshot.snapshotId, snapshot.name,
+        snapshot.description, terraDataRepoInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
-      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshot.snapshotId, snapshot.name, snapshot.description, terraDataRepoInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
-
-      val referenceId = snapshotRef.getMetadata.getResourceId
-      val datasetName = DeltaLayer.generateDatasetName(referenceId)
-
-      val datasetLabels = Map("workspace_id" -> workspaceContext.workspaceId, "snapshot_id" -> snapshot.snapshotId.toString)
-
-      // create BQ dataset, get workspace policies from Sam, and add those Sam policies to the dataset IAM
-      val createDatasetIO = for {
-        samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)))
-        aclBindings = calculateDatasetAcl(samPolicies)
-        bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
-        _ <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings))
-      } yield { }
-
-      createDatasetIO.unsafeToFuture().recover {
+      // attempt to create the BQ dataset, which might already exist
+      deltaLayer.createDatasetIfNotExist(workspaceContext, userInfo).recover {
         case t: Throwable =>
-          //fire and forget this undo, we've made our best effort to fix things at this point
-          IO.pure(workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, referenceId, userInfo.accessToken)).unsafeToFuture()
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
-      }.flatMap { _ =>
-
-        val createBQReferenceFuture = for {
-          petToken <- samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryReadOnlyScope, userInfo)
-          bigQueryRef = workspaceManagerDAO.createBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, new ReferenceResourceCommonFields().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GcpBigQueryDatasetAttributes().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
-        } yield { bigQueryRef }
-
-        createBQReferenceFuture.recover {
-          case t: Throwable =>
-            //fire and forget these undos, we've made our best effort to fix things at this point
-            for {
-              _ <- deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture()
-              _ <- IO.pure(workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, referenceId, userInfo.accessToken)).unsafeToFuture()
-            } yield {}
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
-        }
-      }.map { _ => snapshotRef}
+          // something went wrong creating the companion dataset
+          logger.warn(s"Error creating Delta Layer companion dataset for workspace $workspaceName: ${t.getMessage}")
+          // since companion dataset creation failed, try to clean up this snapshot reference so the user can try again
+          Try(workspaceManagerDAO.deleteDataRepoSnapshotReference(wsid, snapshotRef.getMetadata.getResourceId, userInfo.accessToken)) match {
+            case Success(_) =>
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError,
+                s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId} due to problems creating " +
+                  s"the Delta Layer companion dataset. Error: [${t.getMessage}]"))
+            case Failure(ex) =>
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError,
+                s"Error while creating snapshot reference in workspace ${workspaceContext.workspaceId}. Additionally, there " +
+                  s"was an error cleaning up the snapshot reference. The reference may be in an unusable state. Original error " +
+                  s"during Delta Layer companion dataset creation was: [${t.getMessage}]. " +
+                  s"Error during snapshot reference cleanup: [${ex.getMessage}]."))
+          }
+      }.map { _ =>
+        snapshotRef
+      }
     }
   }
 
@@ -130,18 +115,8 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       // check that snapshot exists before deleting it. If the snapshot does not exist, the GET attempt will throw a 404
-      val snapshotRef = workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
+      workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
       workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
-
-      val datasetName = DeltaLayer.generateDatasetName(snapshotRef.getMetadata.getResourceId)
-      deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture().map { _ =>
-        val datasetRef = workspaceManagerDAO.getBigQueryDatasetReferenceByName(workspaceContext.workspaceIdAsUUID, datasetName, userInfo.accessToken)
-        workspaceManagerDAO.deleteBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, datasetRef.getMetadata.getResourceId, userInfo.accessToken)
-      }.recover {
-        case t: Throwable =>
-          logger.warn(s"A snapshot reference was deleted, but an error occurred while deleting its Delta Layer companion dataset: snapshot ref ID: ${snapshotRef.getMetadata.getResourceId}, dataset name: ${datasetName}")
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Your snapshot reference was deleted, but an error occurred while deleting its Delta Layer companion dataset. Error: ${t.getMessage}"))
-      }
     }
   }
 
@@ -155,26 +130,6 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       case Failure(_) =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "SnapshotId must be a valid UUID."))
     }
-  }
-
-  private def deleteBigQueryDataset(workspaceName: WorkspaceName, datasetName: String) = {
-    val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
-    bqService.use(_.deleteDataset(datasetName))
-  }
-
-  private def calculateDatasetAcl(samPolicies: Set[SamPolicyWithNameAndEmail]): Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]] = {
-
-    val accessPolicies = Seq(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader)
-
-    val defaultIamRoles = Map(Acl.Role.OWNER -> Seq((clientEmail, Acl.Entity.Type.USER)), Acl.Role.WRITER -> Seq((deltaLayerStreamerEmail, Acl.Entity.Type.USER)))
-
-    val projectOwnerPolicy = samPolicies.filter(_.policyName == SamWorkspacePolicyNames.projectOwner).head.policy.memberEmails
-
-    val filteredSamPolicies = samPolicies.filter(samPolicy => accessPolicies.contains(samPolicy.policyName)).map(_.email) ++ projectOwnerPolicy
-
-    val samAclBindings = Acl.Role.READER -> filteredSamPolicies.map{ filteredSamPolicyEmail =>(filteredSamPolicyEmail, Acl.Entity.Type.GROUP) }.toSeq
-
-    defaultIamRoles + samAclBindings
   }
 
 }
