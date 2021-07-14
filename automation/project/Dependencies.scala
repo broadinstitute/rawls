@@ -29,10 +29,7 @@ object Dependencies {
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
   val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
 
-  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
-
   val rootDependencies = Seq(
-    apacheCommonsIO,
     // proactively pull in latest versions of Jackson libs, instead of relying on the versions
     // specified as transitive dependencies, due to OWASP DependencyCheck warnings for earlier versions.
     "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonV,
