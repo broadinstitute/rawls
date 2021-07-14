@@ -1302,7 +1302,7 @@ paths:
           schema:
             type: string
       requestBody:
-        description: Updated user comment
+        description: User comment to be updated
         content:
           'application/json':
             schema:
@@ -5170,7 +5170,7 @@ components:
       properties:
         userComment:
           type: string
-          description: The updated user comment
+          description: The updated value for user comment
       description: User comment update value
     WorkflowCost:
       type: object

@@ -10,7 +10,7 @@ import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -110,10 +110,40 @@ object WorkspaceService {
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val deltaLayer: DeltaLayer, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)(implicit protected val executionContext: ExecutionContext)
-  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport {
+class WorkspaceService(protected val userInfo: UserInfo,
+                       val dataSource: SlickDataSource,
+                       val entityManager: EntityManager,
+                       val methodRepoDAO: MethodRepoDAO,
+                       cromiamDAO: ExecutionServiceDAO,
+                       executionServiceCluster: ExecutionServiceCluster,
+                       execServiceBatchSize: Int,
+                       val workspaceManagerDAO: WorkspaceManagerDAO,
+                       val deltaLayer: DeltaLayer,
+                       val methodConfigResolver: MethodConfigResolver,
+                       protected val gcsDAO: GoogleServicesDAO,
+                       val samDAO: SamDAO, notificationDAO: NotificationDAO,
+                       userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
+                       maxActiveWorkflowsPerUser: Int,
+                       override val workbenchMetricBaseName: String,
+                       submissionCostService: SubmissionCostService,
+                       config: WorkspaceServiceConfig,
+                       requesterPaysSetupService: RequesterPaysSetupService)
+                      (implicit protected val executionContext: ExecutionContext) extends RoleSupport
+  with LibraryPermissionsSupport
+  with FutureSupport
+  with MethodWiths
+  with UserWiths
+  with LazyLogging
+  with RawlsInstrumented
+  with JsonFilterUtils
+  with WorkspaceSupport
+  with EntitySupport
+  with AttributeSupport
+  with StringValidationUtils {
 
   import dataSource.dataAccess.driver.api._
+
+  implicit val errorReportSource = ErrorReportSource("rawls")
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
@@ -1298,7 +1328,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
 
-      // TODO: Saloni - somewhere here validate userComment value. Also maximum length should be 1000
+      // TODO: Saloni - maybe add escaping here as well?
+      _ = submissionRequest.userComment.map(validateMaxStringLength(_, "userComment", 1000))
 
       gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
 
@@ -1449,7 +1480,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def updateSubmissionUserComment(workspaceName: WorkspaceName, submissionId: String, newComment: UserCommentUpdateOperation): Future[PerRequestMessage] = {
-    // TODO: Saloni - validate userComment. Also check it's length <= 1000
+    // TODO: Saloni - maybe add escaping here as well?
+    validateMaxStringLength(newComment.userComment, "userComment", 1000)
+
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
