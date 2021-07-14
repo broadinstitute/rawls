@@ -35,48 +35,36 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: NamedDataRepoSnapshot): Future[DataRepoSnapshotResource] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
-      if(!workspaceStubExists(workspaceContext.workspaceIdAsUUID, userInfo)) {
-        workspaceManagerDAO.createWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)
+      val wsid = workspaceContext.workspaceIdAsUUID // to avoid UUID parsing multiple times
+      // create the stub workspace in WSM if it does not already exist
+      if(!workspaceStubExists(wsid, userInfo)) {
+        workspaceManagerDAO.createWorkspace(wsid, userInfo.accessToken)
       }
-
-      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshot.snapshotId, snapshot.name, snapshot.description, terraDataRepoInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
-
-      val referenceId = snapshotRef.getMetadata.getResourceId
+      // create the requested snapshot reference
+      val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(wsid, snapshot.snapshotId, snapshot.name,
+        snapshot.description, terraDataRepoInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
 
       // attempt to create the BQ dataset, which might already exist
-      val createDatasetIO = IO.fromFuture(IO(deltaLayer.createDatasetIfNotExist(workspaceContext, userInfo)))
-
-      createDatasetIO.unsafeToFuture().recover {
+      deltaLayer.createDatasetIfNotExist(workspaceContext, userInfo).recover {
         case t: Throwable =>
-          //fire and forget this undo, we've made our best effort to fix things at this point
-          IO.pure(workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, referenceId, userInfo.accessToken)).unsafeToFuture()
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
-      }.flatMap {
-        case (justCreated, datasetId) =>
-          // if we just created the companion dataset - because it didn't exist - then also create a WSM reference to it
-          if (justCreated) {
-            val createBQReferenceFuture = for {
-              petToken <- samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryReadOnlyScope, userInfo)
-              bigQueryRef = workspaceManagerDAO.createBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, new ReferenceResourceCommonFields().name(datasetId.getDataset).cloningInstructions(CloningInstructionsEnum.NOTHING), new GcpBigQueryDatasetAttributes().projectId(workspaceContext.namespace).datasetId(datasetId.getDataset), OAuth2BearerToken(petToken))
-            } yield { bigQueryRef }
-
-            createBQReferenceFuture.recover {
-              case t: Throwable =>
-                //fire and forget these undos, we've made our best effort to fix things at this point
-                for {
-                  // TODO: AS-724 is it worth deleting the companion and its ref here? If the user attempted to add a snapref,
-                  // they are likely to do so again, and we can just reuse whatever companion was already created.
-                  // This will prevent continual creation/deletion of the same-named dataset.
-                  _ <- deltaLayer.deleteDataset(workspaceContext)
-                  _ <- Future(workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, referenceId, userInfo.accessToken))
-                } yield {}
-                throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
-            }
-          } else {
-            Future(workspaceManagerDAO.getBigQueryDatasetReferenceByName(workspaceContext.workspaceIdAsUUID, datasetId.getDataset, userInfo.accessToken))
-            // retrieve existing dataset reference
+          // something went wrong creating the companion dataset
+          logger.warn(s"Error creating Delta Layer companion dataset for workspace ${workspaceName}: ${t.getMessage}")
+          // since companion dataset creation failed, try to clean up this snapshot reference so the user can try again
+          Try(workspaceManagerDAO.deleteDataRepoSnapshotReference(wsid, snapshotRef.getMetadata.getResourceId, userInfo.accessToken)) match {
+            case Success(_) =>
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError,
+                s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId} due to problems creating " +
+                  s"the Delta Layer companion dataset. Error: [${t.getMessage}]"))
+            case Failure(ex) =>
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError,
+                s"Error while creating snapshot reference in workspace ${workspaceContext.workspaceId}. Additionally, there " +
+                  s"was an error cleaning up the snapshot reference. The reference may be in an unusable state. Original error " +
+                  s"during Delta Layer companion dataset creation was: [${t.getMessage}]. " +
+                  s"Error during snapshot reference cleanup: [${ex.getMessage}]."))
           }
-      }.map { _ => snapshotRef}
+      }.map { _ =>
+        snapshotRef
+      }
     }
   }
 
