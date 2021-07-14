@@ -4587,21 +4587,6 @@ components:
           $ref: '#/components/schemas/ResourceMetadata'
         attributes:
           $ref: '#/components/schemas/DataRepoSnapshotAttributes'
-    ResourceAttributesUnion:
-      type: object
-      required: [ gcpDataRepoSnapshot ]
-      properties:
-        gcpDataRepoSnapshot:
-          $ref: '#/components/schemas/DataRepoSnapshotAttributes'
-    ResourceDescription:
-      type: object
-      required: [ metadata, resourceAttributes ]
-      properties:
-        metadata:
-          $ref: '#/components/schemas/ResourceMetadata'
-        resourceAttributes:
-          $ref: '#/components/schemas/ResourceAttributesUnion'
-      description: resource description
     SnapshotListResponse:
       type: object
       required: [ gcpDataRepoSnapshots ]
