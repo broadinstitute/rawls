@@ -77,11 +77,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
           // if we can successfully list snapshot references, it means WSM created its copy of the workspace
           val firstListResponse = listSnapshotReferences(projectName, workspaceName)
-          val firstResources = Rawls.parseResponseAs[ResourceList](firstListResponse).getResources.asScala
+          val firstResources = Rawls.parseResponseAs[SnapshotListResponse](firstListResponse).gcpDataRepoSnapshots
           firstResources.size shouldBe 1
           firstResources.head.getMetadata.getName shouldBe "firstSnapshot"
           firstResources.head.getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
-          firstResources.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe dataRepoSnapshotId
+          firstResources.head.getAttributes.getSnapshot shouldBe dataRepoSnapshotId
 
           // add a second snapshot reference to the workspace. Under the covers, this recognizes the workspace
           // already exists in WSM, so it just adds the ref
@@ -90,14 +90,14 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // validate the second snapshot was added correctly: list snapshots in Rawls, should return 2, which we just added
           val secondListResponse = listSnapshotReferences(projectName, workspaceName)
           // sort by reference name for easy predictability inside this test: "firstSnapshot" is before "secondSnapshot"
-          val secondResources = Rawls.parseResponseAs[ResourceList](secondListResponse)
-            .getResources.asScala.sortBy(_.getMetadata.getName)
+          val secondResources = Rawls.parseResponseAs[SnapshotListResponse](secondListResponse)
+            .gcpDataRepoSnapshots.sortBy(_.getMetadata.getName)
           secondResources.size shouldBe 2
           secondResources.head.getMetadata.getName shouldBe "firstSnapshot"
-          secondResources.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe dataRepoSnapshotId
+          secondResources.head.getAttributes.getSnapshot shouldBe dataRepoSnapshotId
           secondResources.head.getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
           secondResources(1).getMetadata.getName shouldBe "secondSnapshot"
-          secondResources(1).getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe anotherDataRepoSnapshotId
+          secondResources(1).getAttributes.getSnapshot shouldBe anotherDataRepoSnapshotId
           secondResources(1).getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
         }
       }
@@ -175,11 +175,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // if we can successfully list snapshot references, it means WSM created its copy of the workspace
           val listResponse = listSnapshotReferences(projectName, workspaceName)
 
-          val resources = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
+          val resources = Rawls.parseResponseAs[SnapshotListResponse](listResponse).gcpDataRepoSnapshots
           resources.size shouldBe 1
           resources.head.getMetadata.getName shouldBe snapshotName
           resources.head.getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
-          resources.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe dataRepoSnapshotId
+          resources.head.getAttributes.getSnapshot shouldBe dataRepoSnapshotId
 
           // create method config in a workspace
           val createMethodConfigUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/methodconfigs"))
