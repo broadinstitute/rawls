@@ -182,7 +182,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
           val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
 
-          val snapshotName = "snapshotReferenceForAnalysis"
+          val snapshotName = "snapshotReferenceAddBQDataset"
           // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
           createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)
 
@@ -194,7 +194,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // check that the bq dataset has been created
           val workspaceId = resources.head.getMetadata.getWorkspaceId
           val dataset = getDataset("deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_'), projectName, ownerAuthToken)
-          logger.info("DATASETTT: " + dataset)
           dataset should not be empty
         }
       }
