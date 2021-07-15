@@ -187,15 +187,15 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)
 
           // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
-          // if we can successfully list snapshot references, it means WSM created its copy of the workspace
           val listResponse = listSnapshotReferences(projectName, workspaceName)
           val resources = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
-          resources.size shouldBe 1
+          resources should have size 1
 
           // check that the bq dataset has been created
-          val resourceId = resources.head.getMetadata.getWorkspaceId
-          val dataset = getDataset("deltalayer_forworkspace_" + resourceId.toString.replace('-', '_'), projectName, ownerAuthToken)
-          dataset.size shouldBe 1
+          val workspaceId = resources.head.getMetadata.getWorkspaceId
+          val dataset = getDataset("deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_'), projectName, ownerAuthToken)
+          logger.info("DATASETTT: " + dataset)
+          dataset should not be empty
         }
       }
     }
@@ -384,14 +384,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       GoogleProject(projectId)
     )
 
-    bqService.use {
-      bq =>
-        for {
-          dataset <- bq.getDataset(datasetName)
-        } yield {
-          dataset
-        }.toList
-    }.unsafeRunSync()
+    bqService.use(_.getDataset(datasetName)).unsafeRunSync()
   }
 
 
