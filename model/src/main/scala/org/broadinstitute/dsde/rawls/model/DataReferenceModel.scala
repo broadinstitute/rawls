@@ -12,6 +12,7 @@ import scala.collection.JavaConverters._
 case class DataReferenceName(value: String) extends ValueObject
 case class DataReferenceDescriptionField(value: String = "") extends ValueObject
 case class NamedDataRepoSnapshot(name: DataReferenceName, description: Option[DataReferenceDescriptionField], snapshotId: UUID)
+case class SnapshotListResponse(gcpDataRepoSnapshots: Seq[DataRepoSnapshotResource])
 
 object DataReferenceModelJsonSupport extends JsonSupport {
   def stringOrNull(in: Any): JsValue = Option(in) match {
@@ -259,4 +260,5 @@ object DataReferenceModelJsonSupport extends JsonSupport {
   implicit val DataReferenceNameFormat = ValueObjectFormat(DataReferenceName)
   implicit val dataReferenceDescriptionFieldFormat = ValueObjectFormat(DataReferenceDescriptionField)
   implicit val NamedDataRepoSnapshotFormat = jsonFormat3(NamedDataRepoSnapshot)
+  implicit val SnapshotListResponseFormat = jsonFormat1(SnapshotListResponse)
 }
