@@ -54,6 +54,11 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       }
     } ~
+    path("workspaces" / Segment / Segment / "snapshots" / "v2" / "name" / Segment) { (workspaceNamespace, workspaceName, referenceName) =>
+      complete {
+        snapshotServiceConstructor(userInfo).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName), referenceName).map(StatusCodes.OK -> _)
+      }
+    } ~
     // ---- SNAPSHOT V1 ----
     path("workspaces" / Segment / Segment / "snapshots") { (workspaceNamespace, workspaceName) =>
       post {
