@@ -281,7 +281,7 @@ case class SubmissionWorkflowStatusResponse(
                                              count: Int)
 
 //noinspection TypeAnnotation,ScalaUnusedSymbol
-class ExecutionJsonSupport extends JsonSupport {
+trait ExecutionJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
   type OutputType = Either[Attribute, UnsupportedOutputType]
