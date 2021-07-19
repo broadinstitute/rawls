@@ -12,9 +12,9 @@ import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, Name
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
+import java.util.UUID
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
