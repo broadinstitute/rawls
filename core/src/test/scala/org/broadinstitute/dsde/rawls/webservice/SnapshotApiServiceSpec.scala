@@ -184,6 +184,55 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 200 when getting a reference to a snapshot-by-name" in withTestDataApiServices { services =>
+    Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
+      sealRoute(services.snapshotRoutes) ~>
+      check {
+        val response = responseAs[DataRepoSnapshotResource]
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        Get(s"${v2BaseSnapshotsPath}/name/${response.getMetadata.getName}") ~>
+          sealRoute(services.snapshotRoutes) ~>
+          check {
+            assertResult(StatusCodes.OK) {
+              status
+            }
+          }
+      }
+  }
+
+  it should "return 404 when getting a reference to a snapshot-by-name that doesn't exist" in withTestDataApiServices { services =>
+    Get(s"${v2BaseSnapshotsPath}/name/reference-intentionally-does-not-exist") ~>
+      sealRoute(services.snapshotRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when getting a reference to a snapshot-by-name in a workspace that doesn't exist" in withTestDataApiServices { services =>
+    Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
+      sealRoute(services.snapshotRoutes) ~>
+      check {
+        val response = responseAs[DataRepoSnapshotResource]
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        Get(s"/workspaces/foo/bar/snapshots/v2/name/${response.getMetadata.getName}") ~>
+          sealRoute(services.snapshotRoutes) ~>
+          check {
+            assertResult(StatusCodes.NotFound) {
+              status
+            }
+          }
+      }
+  }
+
+
   it should "return 403 when a user can only read a workspace and tries to add a snapshot" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
     Post(v2BaseSnapshotsPath, defaultNamedSnapshotJson) ~>
       sealRoute(services.snapshotRoutes) ~>

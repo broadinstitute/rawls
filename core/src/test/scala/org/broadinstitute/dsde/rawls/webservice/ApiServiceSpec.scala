@@ -166,7 +166,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val deltaLayer = new DeltaLayer(bigQueryServiceFactory, new MockDeltaLayerWriter, samDAO,
       WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
-      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global))
+
     override val snapshotServiceConstructor = SnapshotService.constructor(
       slickDataSource,
       samDAO,
@@ -213,7 +214,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      dataRepoDAO,
+      deltaLayer,
       methodConfigResolver,
       gcsDAO,
       samDAO,
