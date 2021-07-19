@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspaceActions, SamWorkspacePolicyNames, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, NamedDataRepoSnapshot, SamPolicyWithNameAndEmail, SamResourceTypeNames, SamWorkspaceActions, SamWorkspacePolicyNames, SnapshotListResponse, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -87,6 +87,17 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
+  //AS-787 - rework the data so that it's in the same place in the JSON with a list and get snapshot responses
+  def massageSnapshots(references: ResourceList): SnapshotListResponse = {
+    val snapshots = references.getResources.asScala.map { r =>
+      val massaged = new DataRepoSnapshotResource
+      massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
+      massaged.setMetadata(r.getMetadata)
+      massaged
+    }
+    SnapshotListResponse(snapshots)
+  }
+
   /*
     internal method to query WSM for a list of snapshot references; used by enumerateSnapshots and findBySnapshotId
    */
@@ -130,7 +141,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     *                  snapshotId.
     * @return the list of all snapshot references that refer to the specified snapshotId
     */
-  def findBySnapshotId(workspaceName: WorkspaceName, snapshotId: UUID, batchSize: Int = 200): Future[ResourceList] = {
+  def findBySnapshotId(workspaceName: WorkspaceName, snapshotId: UUID, batchSize: Int = 200): Future[SnapshotListResponse] = {
 
     val snapshotIdCriteria = snapshotId.toString // just so we're not calling toString on every iteration through loops
 
@@ -157,11 +168,10 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       }
 
       val resources = findInPage(0, List.empty[ResourceDescription])
-      // TODO: this should return a list of snapshots, not a ResourceList. When AS-787 lands, use that format/functions
 
       val res = new ResourceList()
       res.setResources(resources.asJava)
-      res
+      massageSnapshots(res)
     }
   }
 

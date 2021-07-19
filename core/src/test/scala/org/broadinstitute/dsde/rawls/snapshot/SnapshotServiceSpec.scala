@@ -303,10 +303,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val criteria = "00000000-0000-0000-0000-000000000012"
       val found = Await.result(
         snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria)),
-        Duration.Inf).getResources.asScala
+        Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 1
-      found.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe criteria
+      found.head.getAttributes.getSnapshot shouldBe criteria
     }
 
     "find multiple matching snapshot references by referenced snapshotId if one page of references" in withMinimalTestDatabase { _ =>
@@ -319,22 +319,22 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val criteria1 = "00000000-0000-0000-0000-000000000005"
       val found1 = Await.result(
         snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria1)),
-        Duration.Inf).getResources.asScala
+        Duration.Inf).gcpDataRepoSnapshots
 
       found1 should have size 2
       found1.foreach { x =>
-        x.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe criteria1
+        x.getAttributes.getSnapshot shouldBe criteria1
       }
 
       // now search for one of the snapshotIds that should NOT be duplicated, to be sure
       val criteria2 = "00000000-0000-0000-0000-000000000015"
       val found2 = Await.result(
         snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria2)),
-        Duration.Inf).getResources.asScala
+        Duration.Inf).gcpDataRepoSnapshots
 
       found2 should have size 1
       found2.foreach { x =>
-        x.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe criteria2
+        x.getAttributes.getSnapshot shouldBe criteria2
       }
 
     }
@@ -349,7 +349,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val criteria = "00000000-0000-0000-0000-000000000099"
       val found = Await.result(
         snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria)),
-        Duration.Inf).getResources.asScala
+        Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 0
     }
@@ -366,10 +366,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val criteria = "00000000-0000-0000-0000-000000000006"
       val found = Await.result(
         snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), batchSize),
-        Duration.Inf).getResources.asScala
+        Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 1
-      found.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe criteria
+      found.head.getAttributes.getSnapshot shouldBe criteria
 
       // ensure we paged through the resources properly
       verify(snapshotService, times(4))
@@ -390,11 +390,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val criteria = "00000000-0000-0000-0000-000000000006"
       val found = Await.result(
         snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), batchSize),
-        Duration.Inf).getResources.asScala
+        Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 2
       found.foreach { x =>
-        x.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe criteria
+        x.getAttributes.getSnapshot shouldBe criteria
       }
 
       // ensure we paged through the resources properly
@@ -414,7 +414,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val criteria = "00000000-0000-0000-0000-000000000099"
       val found = Await.result(
         snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), batchSize),
-        Duration.Inf).getResources.asScala
+        Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 0
 
