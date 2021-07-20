@@ -4373,6 +4373,38 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/name/{referenceName}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+      - $ref: '#/components/parameters/referenceNamePathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: Get a snapshot by name
+      description: Get a reference to a snapshot in the Terra Data Repo by its name
+      operationId: getDataRepoSnapshotByName_v2
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
+
 
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
@@ -6247,6 +6279,21 @@ components:
           items:
             type: string
           description: the roles the caller has on the project
+        workspacesWithIncorrectBillingAccount:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceBillingAccount'
+    WorkspaceBillingAccount:
+      required:
+        - workspaceName
+      type: object
+      properties:
+        workspaceName:
+          type: string
+          description: the name of the workspace
+        currentBillingAccountOnGoogleProject:
+          type: string
+          description: the billing project associated with the workspace
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount
@@ -6385,6 +6432,13 @@ components:
       name: snapshotId
       in: path
       description: The snapshot's referenceId
+      required: true
+      schema:
+        type: string
+    referenceNamePathParam:
+      name: referenceName
+      in: path
+      description: The snapshot reference's name
       required: true
       schema:
         type: string
