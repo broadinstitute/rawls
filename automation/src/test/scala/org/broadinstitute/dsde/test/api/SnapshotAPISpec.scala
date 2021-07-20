@@ -23,7 +23,7 @@ import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import org.broadinstitute.dsde.workbench.service.Rawls
+import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -199,21 +199,25 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       }
     }
 
-    "should delete BigQuery dataset when a snapshot reference is deleted" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+    "should delete BigQuery dataset when a workspace is deleted" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
 
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
 
       withCleanBillingProject(owner) { projectName =>
-        withWorkspace(projectName, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
-
+        withCleanUp {
+          // get the snapshot
           val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
           val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
 
-          val snapshotName = "snapshotReferenceDeleteBQDataset"
+          // create workspace
+          val workspaceName = s"${UUID.randomUUID().toString}-delete-bq-dataset"
+          Rawls.workspaces.create(projectName, workspaceName)
+
+          val snapshotName = "deleteWorkspaceDeleteBQDataset"
           // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
-          createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)
+          createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)(owner.makeAuthToken())
 
           // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
           val listResponse = listSnapshotReferences(projectName, workspaceName)
@@ -226,13 +230,12 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           val datasetAfterCreation = getDataset(datasetName, projectName, ownerAuthToken)
           datasetAfterCreation should not be empty
 
-          // delete snapshot reference
-          val resourceId = resources.head.getMetadata.getResourceId
-          deleteSnapshotReference(projectName, workspaceName, resourceId.toString)
+          // delete workspace
+          Rawls.workspaces.delete(projectName, workspaceName)(owner.makeAuthToken())
 
           // check that the bq dataset has been deleted
           val datasetAfterDeletion = getDataset(datasetName, projectName, ownerAuthToken)
-          datasetAfterDeletion should be None
+          datasetAfterDeletion should be(None)
         }
       }
     }
