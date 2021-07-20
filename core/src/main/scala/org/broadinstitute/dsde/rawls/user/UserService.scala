@@ -468,9 +468,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield result
   }
 
-  def createBillingProjectV2(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
+  def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
-      _ <- validateCreateProjectRequest(createProjectRequest)
+      _ <- validateBillingProjectName(createProjectRequest.projectName.value)
       _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter)
       hasAccess <- gcsDAO.testBillingAccountAccess(createProjectRequest.billingAccount, userInfo)
       _ = if (!hasAccess) {
@@ -480,6 +480,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield result
   }
 
+  // This is only used for v1 billing projects. v2 assumes flow logs, high security network, and privateIpGoogleAccess
   private def validateCreateProjectRequest(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
     for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
@@ -560,7 +561,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     )
   }
 
-  private def createBillingProjectInternal(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
+  // This method is used for v2 billing projects, not for v1 projects
+  private def createBillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
       maybeProject <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(createProjectRequest.projectName)

@@ -106,6 +106,11 @@ object CreationStatuses {
   val terminal: Set[CreationStatus] = Set(Ready, Error)
 }
 
+case class CreateRawlsV2BillingProjectFullRequest(
+  projectName: RawlsBillingProjectName,
+  billingAccount: RawlsBillingAccountName,
+  servicePerimeter: Option[ServicePerimeterName])
+
 case class CreateRawlsBillingProjectFullRequest(
   projectName: RawlsBillingProjectName,
   billingAccount: RawlsBillingAccountName,
