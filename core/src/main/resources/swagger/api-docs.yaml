@@ -6294,6 +6294,21 @@ components:
           items:
             type: string
           description: the roles the caller has on the project
+        workspacesWithIncorrectBillingAccount:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceBillingAccount'
+    WorkspaceBillingAccount:
+      required:
+        - workspaceName
+      type: object
+      properties:
+        workspaceName:
+          type: string
+          description: the name of the workspace
+        currentBillingAccountOnGoogleProject:
+          type: string
+          description: the billing project associated with the workspace
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount
