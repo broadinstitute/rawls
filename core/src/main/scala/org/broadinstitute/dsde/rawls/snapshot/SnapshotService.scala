@@ -8,11 +8,11 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, NamedDataRepoSnapshot, SamWorkspaceActions, SnapshotListResponse, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, SamWorkspaceActions, SnapshotListResponse, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -91,7 +91,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
-  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[ResourceList] = {
+  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[SnapshotListResponse] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       Try(workspaceManagerDAO.enumerateDataRepoSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit, userInfo.accessToken)) match {
         case Success(references) => massageSnapshots(references)
