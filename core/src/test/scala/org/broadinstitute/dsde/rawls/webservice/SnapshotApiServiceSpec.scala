@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
@@ -11,8 +10,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDat
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
+import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -289,15 +290,16 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
             Get(s"${v2BaseSnapshotsPath}?offset=0&limit=10") ~>
               sealRoute(services.snapshotRoutes) ~>
               check {
-                val response = responseAs[ResourceList]
+                val response = responseAs[SnapshotListResponse]
                 assertResult(StatusCodes.OK) {
                   status
                 }
                 // Our mock doesn't guarantee order, so we just check that there are two
                 // elements, that one is named "foo", and that one is named "bar"
-                assert(response.getResources.size == 2)
+                val resources = response.gcpDataRepoSnapshots
+                assert(resources.size == 2)
                 assertResult(Set("foo", "bar")) {
-                  response.getResources.asScala.map(_.getMetadata.getName).toSet
+                  resources.map(_.getMetadata.getName).toSet
                 }
               }
           }
@@ -331,11 +333,11 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceTerminatedSubmissions.path}/snapshots/v2?offset=0&limit=10") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
-        val response = responseAs[ResourceList]
+        val response = responseAs[SnapshotListResponse]
         assertResult(StatusCodes.OK) {
           status
         }
-        assert(response.getResources.isEmpty)
+        assert(response.gcpDataRepoSnapshots.isEmpty)
       }
   }
 
