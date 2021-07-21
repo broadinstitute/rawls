@@ -179,6 +179,8 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val SyncReportFormat = jsonFormat2(SyncReport)
 
+  implicit val createRawlsV2BillingProjectFullRequestFormat = jsonFormat3(CreateRawlsV2BillingProjectFullRequest)
+
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
   implicit val UpdateRawlsBillingAccountRequestFormat = jsonFormat1(UpdateRawlsBillingAccountRequest)
