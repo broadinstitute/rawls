@@ -75,17 +75,6 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
-  //AS-787 - rework the data so that it's in the same place in the JSON with a list and get snapshot responses
-  def massageSnapshots(references: ResourceList): SnapshotListResponse = {
-    val snapshots = references.getResources.asScala.map { r =>
-      val massaged = new DataRepoSnapshotResource
-      massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
-      massaged.setMetadata(r.getMetadata)
-      massaged
-    }
-    SnapshotListResponse(snapshots)
-  }
-
   def getSnapshotByName(workspaceName: WorkspaceName, referenceName: String): Future[DataRepoSnapshotResource] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
       val ref = workspaceManagerDAO.getDataRepoSnapshotReferenceByName(workspaceContext.workspaceIdAsUUID, DataReferenceName(referenceName), userInfo.accessToken)
