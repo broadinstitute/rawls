@@ -23,7 +23,7 @@ import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import org.broadinstitute.dsde.workbench.service.Rawls
+import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -193,8 +193,51 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           // check that the bq dataset has been created
           val workspaceId = resources.head.getMetadata.getWorkspaceId
-          val dataset = getDataset("deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_'), projectName, ownerAuthToken)
+          val dataset = getDataset(generateReferenceName(workspaceId), projectName, ownerAuthToken)
           dataset should not be empty
+        }
+      }
+    }
+
+    "should delete BigQuery dataset when a workspace is deleted" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+
+      val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
+
+      withCleanBillingProject(owner) { projectName =>
+        withCleanUp {
+          // get the snapshot
+          val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
+          val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
+
+          // create workspace
+          val workspaceName = s"${UUID.randomUUID().toString}-delete-bq-dataset"
+          Rawls.workspaces.create(projectName, workspaceName)
+
+          val snapshotName = "deleteWorkspaceDeleteBQDataset"
+          // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
+          createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)(owner.makeAuthToken())
+
+          // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
+          val listResponse = listSnapshotReferences(projectName, workspaceName)
+          val resources = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
+          resources should have size 1
+
+          // check that the bq dataset has been created
+          val workspaceId = resources.head.getMetadata.getWorkspaceId
+          val datasetName = generateReferenceName(workspaceId)
+          val datasetAfterCreation = getDataset(datasetName, projectName, ownerAuthToken)
+          datasetAfterCreation should not be empty
+
+          // delete workspace
+          Rawls.workspaces.delete(projectName, workspaceName)(owner.makeAuthToken())
+
+          // check that the bq dataset has been deleted
+          val datasetAfterDeletion = getDataset(datasetName, projectName, ownerAuthToken)
+          eventually {
+            datasetAfterDeletion should be(None)
+          }
         }
       }
     }
@@ -314,6 +357,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       content = payload)
   }
 
+  private def deleteSnapshotReference(projectName: String, workspaceName: String, resourceId: String)(implicit authToken: AuthToken) = {
+    val targetRawlsUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/snapshots/v2/$resourceId"))
+    Rawls.deleteRequest(uri = targetRawlsUrl.toString())
+  }
+
   private def getEntityTypeMetadata(projectName: String, workspaceName: String, snapRefName: String)(implicit authToken: AuthToken): Map[String, EntityTypeMetadata] = {
     val targetRawlsUrl  = Uri(Rawls.url)
       .withPath(Path(s"/api/workspaces/$projectName/$workspaceName/entities"))
@@ -401,6 +449,10 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     def getRepositoryApi(accessToken: AuthToken): RepositoryApi = {
       new RepositoryApi(getApiClient(accessToken.value))
     }
+  }
+
+  def generateReferenceName(workspaceId: UUID) = {
+    "deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_')
   }
 
 
