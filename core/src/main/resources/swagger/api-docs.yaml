@@ -4226,7 +4226,7 @@ paths:
       tags:
         - snapshots_v2
       summary: List snapshots
-      description: Enumerate references to snapshots in the Terra Data Repo
+      description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
       operationId: enumerateDataRepoSnapshot_v2
       parameters:
         - name: offset
@@ -4244,6 +4244,12 @@ paths:
           schema:
             type: integer
           example: 10
+        - name: referencedSnapshotId
+          in: query
+          description: Optional; UUID of the Data Repo snapshot being referenced
+          required: false
+          schema:
+            type: string
       responses:
         200:
           description: OK
