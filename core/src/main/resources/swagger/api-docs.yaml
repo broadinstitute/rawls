@@ -4250,7 +4250,7 @@ paths:
           content:
             '*/*':
               schema:
-                $ref: '#/components/schemas/DataRepoSnapshotResourceList'
+                $ref: '#/components/schemas/SnapshotListResponse'
         404:
           description: Workspace not found or user lacks permissions
           content:
@@ -4666,31 +4666,6 @@ components:
           items:
             $ref: '#/components/schemas/DataRepoSnapshotResource'
             description: List of snapshot resources
-    ResourceAttributesUnion:
-      type: object
-      required: [ gcpDataRepoSnapshot ]
-      properties:
-        gcpDataRepoSnapshot:
-          $ref: '#/components/schemas/DataRepoSnapshotAttributes'
-    ResourceDescription:
-      type: object
-      required: [ metadata, resourceAttributes ]
-      properties:
-        metadata:
-          $ref: '#/components/schemas/ResourceMetadata'
-        resourceAttributes:
-          $ref: '#/components/schemas/ResourceAttributesUnion'
-      description: resource description
-    DataRepoSnapshotResourceList:
-      type: object
-      required: [ resources ]
-      properties:
-        resources:
-          type: array
-          description: A list of snapshot Data Resource definitions from Workspace Manager
-          items:
-            $ref: '#/components/schemas/ResourceDescription'
-      description: List of snapshot resources
     ErrorReport:
       required:
         - causes
@@ -6341,6 +6316,21 @@ components:
           items:
             type: string
           description: the roles the caller has on the project
+        workspacesWithIncorrectBillingAccount:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceBillingAccount'
+    WorkspaceBillingAccount:
+      required:
+        - workspaceName
+      type: object
+      properties:
+        workspaceName:
+          type: string
+          description: the name of the workspace
+        currentBillingAccountOnGoogleProject:
+          type: string
+          description: the billing project associated with the workspace
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount

@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, Name
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
+import scala.collection.JavaConverters._
 import java.util.UUID
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -74,6 +75,17 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
+  //AS-787 - rework the data so that it's in the same place in the JSON with a list and get snapshot responses
+  def massageSnapshots(references: ResourceList): SnapshotListResponse = {
+    val snapshots = references.getResources.asScala.map { r =>
+      val massaged = new DataRepoSnapshotResource
+      massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
+      massaged.setMetadata(r.getMetadata)
+      massaged
+    }
+    SnapshotListResponse(snapshots)
+  }
+
   def getSnapshotByName(workspaceName: WorkspaceName, referenceName: String): Future[DataRepoSnapshotResource] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
       val ref = workspaceManagerDAO.getDataRepoSnapshotReferenceByName(workspaceContext.workspaceIdAsUUID, DataReferenceName(referenceName), userInfo.accessToken)
@@ -95,12 +107,12 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   /*
     internal method to query WSM for a list of snapshot references; used by enumerateSnapshots and findBySnapshotId
    */
-  protected[snapshot] def retrieveSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int): ResourceList = {
+  protected[snapshot] def retrieveSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int): SnapshotListResponse = {
     Try(workspaceManagerDAO.enumerateDataRepoSnapshotReferences(workspaceId, offset, limit, userInfo.accessToken)) match {
-      case Success(references) => references
+      case Success(references) => massageSnapshots(references)
       // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
       // to having no references, so return the empty list.
-      case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => new ResourceList()
+      case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => new SnapshotListResponse(Seq.empty[DataRepoSnapshotResource])
       // but if we hit a different error, it's a valid error; rethrow it
       case Failure(ex: bio.terra.workspace.client.ApiException) =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
@@ -118,7 +130,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     * @param limit pagination limit for the list
     * @return the list of snapshot references
     */
-  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[ResourceList] = {
+  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[SnapshotListResponse] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit)
     }
@@ -142,17 +154,17 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
 
       @tailrec
-      def findInPage(offset: Int, alreadyFound: List[ResourceDescription]): List[ResourceDescription] = {
+      def findInPage(offset: Int, alreadyFound: List[DataRepoSnapshotResource]): List[DataRepoSnapshotResource] = {
         // get this page of references from WSM
         val newPage = retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, batchSize)
         // filter the page to just those with a matching snapshotId
-        val found = newPage.getResources.asScala.filter{ res =>
-          Try(res.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot.equals(snapshotIdCriteria)).toOption.getOrElse(false)
+        val found = newPage.gcpDataRepoSnapshots.filter{ res =>
+          Try(res.getAttributes.getSnapshot.equals(snapshotIdCriteria)).toOption.getOrElse(false)
         }
         // append the ones we just found to those found on previous pages
         val accum = alreadyFound ++ found
 
-        if (newPage.getResources.size() < batchSize) {
+        if (newPage.gcpDataRepoSnapshots.size < batchSize) {
           // the page we retrieved from WSM was the last page; return everything we found so far
           accum
         } else {
@@ -161,11 +173,9 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         }
       }
 
-      val resources = findInPage(0, List.empty[ResourceDescription])
+      val refs = findInPage(0, List.empty[DataRepoSnapshotResource])
 
-      val res = new ResourceList()
-      res.setResources(resources.asJava)
-      massageSnapshots(res)
+      SnapshotListResponse(refs)
     }
   }
 
