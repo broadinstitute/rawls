@@ -4250,7 +4250,7 @@ paths:
           content:
             '*/*':
               schema:
-                $ref: '#/components/schemas/DataRepoSnapshotResourceList'
+                $ref: '#/components/schemas/SnapshotListResponse'
         404:
           description: Workspace not found or user lacks permissions
           content:
@@ -4619,30 +4619,15 @@ components:
           $ref: '#/components/schemas/ResourceMetadata'
         attributes:
           $ref: '#/components/schemas/DataRepoSnapshotAttributes'
-    ResourceAttributesUnion:
+    SnapshotListResponse:
       type: object
-      required: [ gcpDataRepoSnapshot ]
+      required: [ gcpDataRepoSnapshots ]
       properties:
-        gcpDataRepoSnapshot:
-          $ref: '#/components/schemas/DataRepoSnapshotAttributes'
-    ResourceDescription:
-      type: object
-      required: [ metadata, resourceAttributes ]
-      properties:
-        metadata:
-          $ref: '#/components/schemas/ResourceMetadata'
-        resourceAttributes:
-          $ref: '#/components/schemas/ResourceAttributesUnion'
-      description: resource description
-    DataRepoSnapshotResourceList:
-      type: object
-      required: [ resources ]
-      properties:
-        resources:
+        gcpDataRepoSnapshots:
           type: array
-          description: A list of snapshot Data Resource definitions from Workspace Manager
+          description: A list of DataRepoSnapshotResources from Workspace Manager
           items:
-            $ref: '#/components/schemas/ResourceDescription'
+            $ref: '#/components/schemas/DataRepoSnapshotResource'
       description: List of snapshot resources
     ErrorReport:
       required:

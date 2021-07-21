@@ -8,10 +8,11 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, SamWorkspaceActions, SnapshotListResponse, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
+import scala.collection.JavaConverters._
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -72,6 +73,17 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
+  //AS-787 - rework the data so that it's in the same place in the JSON with a list and get snapshot responses
+  def massageSnapshots(references: ResourceList): SnapshotListResponse = {
+    val snapshots = references.getResources.asScala.map { r =>
+      val massaged = new DataRepoSnapshotResource
+      massaged.setAttributes(r.getResourceAttributes.getGcpDataRepoSnapshot)
+      massaged.setMetadata(r.getMetadata)
+      massaged
+    }
+    SnapshotListResponse(snapshots)
+  }
+
   def getSnapshotByName(workspaceName: WorkspaceName, referenceName: String): Future[DataRepoSnapshotResource] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
       val ref = workspaceManagerDAO.getDataRepoSnapshotReferenceByName(workspaceContext.workspaceIdAsUUID, DataReferenceName(referenceName), userInfo.accessToken)
@@ -79,13 +91,13 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
-  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[ResourceList] = {
+  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[SnapshotListResponse] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       Try(workspaceManagerDAO.enumerateDataRepoSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit, userInfo.accessToken)) match {
-        case Success(references) => references
+        case Success(references) => massageSnapshots(references)
         // if we fail with a 404, it means we have no stub in WSM yet. This is benign and functionally equivalent
         // to having no references, so return the empty list.
-        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => new ResourceList()
+        case Failure(ex: bio.terra.workspace.client.ApiException) if ex.getCode == 404 => SnapshotListResponse(Seq.empty[DataRepoSnapshotResource])
         // but if we hit a different error, it's a valid error; rethrow it
         case Failure(ex: bio.terra.workspace.client.ApiException) =>
           throw new RawlsExceptionWithErrorReport(ErrorReport(ex.getCode, ex))
