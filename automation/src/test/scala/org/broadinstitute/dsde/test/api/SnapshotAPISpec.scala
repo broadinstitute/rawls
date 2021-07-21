@@ -228,9 +228,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           val workspaceId = resources.head.getMetadata.getWorkspaceId
           val datasetName = generateReferenceName(workspaceId)
           val datasetAfterCreation = getDataset(datasetName, projectName, ownerAuthToken)
-          eventually {
-            datasetAfterCreation should not be empty
-          }
+          datasetAfterCreation should not be empty
 
           // delete workspace
           Rawls.workspaces.delete(projectName, workspaceName)(owner.makeAuthToken())
