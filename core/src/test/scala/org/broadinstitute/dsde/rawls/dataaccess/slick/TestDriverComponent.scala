@@ -1070,7 +1070,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   class MinimalTestData() extends TestData {
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"), CreationStatuses.Ready, None, None)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"), CreationStatuses.Ready, Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")), None)
     val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val wsName2 = WorkspaceName(billingProject.projectName.value, "myWorkspace2")
     val v1WsName = WorkspaceName(billingProject.projectName.value, "myV1Workspace")
@@ -1094,7 +1094,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         workspaceQuery.createOrUpdate(workspace2),
         // TODO (CA-1235): Remove these after PPW Migration is complete
         workspaceQuery.createOrUpdate(v1Workspace),
-        workspaceQuery.createOrUpdate(v1Workspace2)
+        workspaceQuery.createOrUpdate(v1Workspace2),
+        rawlsBillingProjectQuery.create(billingProject)
       )
     }
   }
