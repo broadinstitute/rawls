@@ -193,7 +193,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           // check that the bq dataset has been created
           val workspaceId = resources.head.getMetadata.getWorkspaceId
-          val dataset = getDataset("deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_'), projectName, ownerAuthToken)
+          val dataset = getDataset(generateReferenceName(workspaceId), projectName, ownerAuthToken)
           dataset should not be empty
         }
       }
@@ -226,9 +226,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           // check that the bq dataset has been created
           val workspaceId = resources.head.getMetadata.getWorkspaceId
-          val datasetName = "deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_')
+          val datasetName = generateReferenceName(workspaceId)
           val datasetAfterCreation = getDataset(datasetName, projectName, ownerAuthToken)
-          datasetAfterCreation should not be empty
+          eventually {
+            datasetAfterCreation should not be empty
+          }
 
           // delete workspace
           Rawls.workspaces.delete(projectName, workspaceName)(owner.makeAuthToken())
@@ -447,6 +449,10 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     def getRepositoryApi(accessToken: AuthToken): RepositoryApi = {
       new RepositoryApi(getApiClient(accessToken.value))
     }
+  }
+
+  def generateReferenceName(workspaceId: UUID) = {
+    "deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_')
   }
 
 
