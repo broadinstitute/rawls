@@ -4301,7 +4301,6 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/{snapshotId}:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -4635,7 +4634,7 @@ components:
           description: A list of DataRepoSnapshotResources from Workspace Manager
           items:
             $ref: '#/components/schemas/DataRepoSnapshotResource'
-            description: List of snapshot resources
+      description: List of snapshot resources
     ErrorReport:
       required:
         - causes

@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, Name
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
-import scala.collection.JavaConverters._
 import java.util.UUID
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -112,11 +111,13 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   }
 
   /**
-    * return a given page of snapshot references from Workspace Manager.
+    * return a given page of snapshot references from Workspace Manager, optionally returning only those
+    * snapshot references that refer to a supplied TDR snapshotId.
     *
     * @param workspaceName the workspace owning the snapshot references
     * @param offset pagination offset for the list
     * @param limit pagination limit for the list
+    * @param referencedSnapshotId the TDR snapshotId for which to return matching references
     * @return the list of snapshot references
     */
   def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int, referencedSnapshotId: Option[UUID] = None): Future[SnapshotListResponse] = {
