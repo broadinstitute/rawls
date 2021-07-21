@@ -131,12 +131,14 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     *
     * @param workspaceName the workspace owning the snapshot references
     * @param snapshotId the snapshotId to look for
+    * @param userOffset pagination offset for the final list of results
+    * @param userLimit pagination limit for the final list of results
     * @param batchSize optional, default 200: internal param exposed for unit-testing purposes that controls
     *                  the size of pages requested from Workspace Manager while looking for the specified
     *                  snapshotId.
     * @return the list of all snapshot references that refer to the specified snapshotId
     */
-  def findBySnapshotId(workspaceName: WorkspaceName, snapshotId: UUID, batchSize: Int = 200): Future[SnapshotListResponse] = {
+  def findBySnapshotId(workspaceName: WorkspaceName, snapshotId: UUID, userOffset: Int, userLimit: Int, batchSize: Int = 200): Future[SnapshotListResponse] = {
 
     val snapshotIdCriteria = snapshotId.toString // just so we're not calling toString on every iteration through loops
 
@@ -153,9 +155,10 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
         // append the ones we just found to those found on previous pages
         val accum = alreadyFound ++ found
 
-        if (newPage.gcpDataRepoSnapshots.size < batchSize) {
-          // the page we retrieved from WSM was the last page; return everything we found so far
-          accum
+        if (newPage.gcpDataRepoSnapshots.size < batchSize || accum.size >= userOffset+userLimit) {
+          // the page we retrieved from WSM was the last page, OR we have already found enough results
+          // to satisfy the user's requested pagination criteria; return everything we found so far
+          accum.slice(userOffset, userOffset+userLimit)
         } else {
           // the page we retrieved from WSM was NOT the last page; continue looping through the next page
           findInPage(offset + batchSize, accum)

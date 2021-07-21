@@ -205,7 +205,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // search for one of the snapshotIds that should be in the list
       val criteria = "00000000-0000-0000-0000-000000000012"
       val found = Await.result(
-        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria)),
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), 0, 10),
         Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 1
@@ -221,7 +221,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // search for one of the snapshotIds that should be duplicated
       val criteria1 = "00000000-0000-0000-0000-000000000005"
       val found1 = Await.result(
-        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria1)),
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria1), 0, 10),
         Duration.Inf).gcpDataRepoSnapshots
 
       found1 should have size 2
@@ -232,7 +232,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // now search for one of the snapshotIds that should NOT be duplicated, to be sure
       val criteria2 = "00000000-0000-0000-0000-000000000015"
       val found2 = Await.result(
-        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria2)),
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria2), 0, 10),
         Duration.Inf).gcpDataRepoSnapshots
 
       found2 should have size 1
@@ -251,7 +251,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // search for one of the snapshotIds that should NOT be in the list
       val criteria = "00000000-0000-0000-0000-000000000099"
       val found = Await.result(
-        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria)),
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), 0, 10),
         Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 0
@@ -268,7 +268,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // search for one of the snapshotIds that should be in the list
       val criteria = "00000000-0000-0000-0000-000000000006"
       val found = Await.result(
-        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), batchSize),
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), 0, 10, batchSize),
         Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 1
@@ -292,7 +292,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // search for one of the snapshotIds that should be in the list
       val criteria = "00000000-0000-0000-0000-000000000006"
       val found = Await.result(
-        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), batchSize),
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), 0, 10, batchSize),
         Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 2
@@ -316,7 +316,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       // search for one of the snapshotIds that should be in the list
       val criteria = "00000000-0000-0000-0000-000000000099"
       val found = Await.result(
-        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), batchSize),
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria), 0, 10, batchSize),
         Duration.Inf).gcpDataRepoSnapshots
 
       found should have size 0
@@ -325,6 +325,81 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(snapshotService, times(4))
         .retrieveSnapshotReferences(ArgumentMatchers.eq(minimalTestData.workspace.workspaceIdAsUUID), any[Int], ArgumentMatchers.eq(batchSize))
     }
+
+    "return paginated results (first page) when listing snapshot references by referenced snapshotId" in {
+      // should result in 25 references to each of four snapshotIds, for a total of 100 references
+      val resources: List[ResourceDescription] = (1 to 25).toList flatMap { _ => generateTestReferences(4) }
+
+      val pageOffset = 0
+      val pageLimit = 11 // 11, not 10, just to be sure we're not relying on a default of "10" anywhere
+
+      val snapshotService = mockSnapshotServiceForReferences(resources)
+
+      // search for one of the snapshotIds that should be duplicated
+      val criteria1 = "00000000-0000-0000-0000-000000000002"
+      val found1 = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria1), pageOffset, pageLimit),
+        Duration.Inf).gcpDataRepoSnapshots
+
+      found1 should have size 11
+      found1.foreach { x =>
+        x.getAttributes.getSnapshot shouldBe criteria1
+      }
+    }
+
+    "return paginated results (second page) when listing snapshot references by referenced snapshotId"  in {
+      // should result in 25 references to each of four snapshotIds, for a total of 100 references
+      val resources: List[ResourceDescription] = (1 to 25).toList flatMap { _ => generateTestReferences(4) }
+
+      val snapshotService = mockSnapshotServiceForReferences(resources)
+
+      // return the first 8 results for one of the snapshotIds that should be duplicated
+      val criteria1 = "00000000-0000-0000-0000-000000000003"
+      val found1 = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria1), 0, 8),
+        Duration.Inf).gcpDataRepoSnapshots
+
+      found1 should have size 8
+      found1.foreach { x =>
+        x.getAttributes.getSnapshot shouldBe criteria1
+      }
+
+      // now, perform the same search but with an offset of 4 and limit of 3
+      val found2 = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria1), 4, 3),
+        Duration.Inf).gcpDataRepoSnapshots
+
+      found2 should have size 3
+      found2.foreach { x =>
+        x.getAttributes.getSnapshot shouldBe criteria1
+      }
+
+      // the second search (offset 4, limit 3) should return a slice of the first search
+      found1.slice(4, 7) shouldBe found2
+
+    }
+
+    "return paginated results (last page) when listing snapshot references by referenced snapshotId"  in {
+      // should result in 25 references to each of four snapshotIds, for a total of 100 references
+      val resources: List[ResourceDescription] = (1 to 25).toList flatMap { _ => generateTestReferences(4) }
+
+      val pageOffset = 20
+      val pageLimit = 11 // 11, not 10, just to be sure we're not relying on a default of "10" anywhere
+
+      val snapshotService = mockSnapshotServiceForReferences(resources)
+
+      // search for one of the snapshotIds that should be duplicated
+      val criteria1 = "00000000-0000-0000-0000-000000000002"
+      val found1 = Await.result(
+        snapshotService.findBySnapshotId(minimalTestData.workspace.toWorkspaceName, UUID.fromString(criteria1), pageOffset, pageLimit),
+        Duration.Inf).gcpDataRepoSnapshots
+
+      found1 should have size 5
+      found1.foreach { x =>
+        x.getAttributes.getSnapshot shouldBe criteria1
+      }
+    }
+
 
   }
 
