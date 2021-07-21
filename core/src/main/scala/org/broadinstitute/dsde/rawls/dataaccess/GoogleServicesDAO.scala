@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import spray.json.JsObject
 

@@ -18,6 +18,7 @@ tags:
   - name: notifications
   - name: servicePerimeters
   - name: snapshots
+  - name: snapshots_v2
   - name: status
   - name: submissions
   - name: users
@@ -459,6 +460,121 @@ paths:
                   $ref: '#/components/schemas/RawlsBillingProjectMember'
         403:
           description: You must be a project owner to view the members of a project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+  /api/billing/v2/{projectId}/spendReportConfiguration:
+    get:
+      tags:
+        - billing_v2
+      summary: get the spend report configuration for the billing project
+      description: get the spend report configuration for the billing project
+      operationId: getSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successfully retrieved spend report configuration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/SpendReportConfiguration'
+        204:
+          description: The specified billing project exists but does not have spend reporting configured
+        403:
+          description: You must be a billing project owner to view the spend report configuration of the billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: The specified billing project could not be found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    put:
+      tags:
+        - billing_v2
+      summary: set the spend configuration for the billing project
+      description: set the spend configuration for the billing project
+      operationId: setSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: billing project spend configuration information
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/SpendReportConfiguration'
+      responses:
+        204:
+          description: Successfully updated spend configuration
+        400:
+          description: Either the billing project does not have an active billing account, the specified dataset does not exist, or the specified table does not exist
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be a billing project owner to alter the spend configuration of the billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: The specified billing project could not be found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - billing_v2
+      summary: clear the spend configuration for the billing project
+      description: clear the spend configuration for the billing project
+      operationId: clearSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Successfully cleared spend configuration
+        403:
+          description: You must be a billing project owner to alter the spend configuration of the billing project
           content:
             'application/json':
               schema:
@@ -3954,6 +4070,7 @@ paths:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
       - $ref: '#/components/parameters/workspaceNamePathParam'
     get:
+      deprecated: true
       tags:
         - snapshots
       summary: List snapshots
@@ -3995,6 +4112,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
     post:
+      deprecated: true
       tags:
         - snapshots
       summary: Create a snapshot
@@ -4026,13 +4144,13 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-      x-codegen-request-body-name: namedDataRepoSnapshot
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
       - $ref: '#/components/parameters/workspaceNamePathParam'
       - $ref: '#/components/parameters/snapshotIdPathParam'
     get:
+      deprecated: true
       tags:
         - snapshots
       summary: Get a snapshot
@@ -4058,6 +4176,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
     patch:
+      deprecated: true
       summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
       operationId: updateDataRepoSnapshot
       tags:
@@ -4084,6 +4203,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
     delete:
+      deprecated: true
       tags:
         - snapshots
       summary: Delete a snapshot
@@ -4105,6 +4225,163 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: List snapshots
+      description: Enumerate references to snapshots in the Terra Data Repo
+      operationId: enumerateDataRepoSnapshot_v2
+      parameters:
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+            set.
+          required: true
+          schema:
+            type: integer
+          example: 0
+        - name: limit
+          in: query
+          description: The number of items to return.
+          required: true
+          schema:
+            type: integer
+          example: 10
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResourceList'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    post:
+      tags:
+        - snapshots_v2
+      summary: Create a snapshot
+      description: Add a reference to a snapshot in the Terra Data Repo
+      operationId: createDataRepoSnapshot_v2
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/NamedDataRepoSnapshot'
+        required: true
+      responses:
+        201:
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/{snapshotId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+      - $ref: '#/components/parameters/snapshotIdPathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: Get a snapshot
+      description: Get a reference to a snapshot in the Terra Data Repo
+      operationId: getDataRepoSnapshot_v2
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    patch:
+      summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
+      operationId: updateDataRepoSnapshot_v2
+      tags:
+        - snapshots_v2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDataReferenceRequestBody'
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - snapshots_v2
+      summary: Delete a snapshot
+      description: Delete a workspace's reference to a snapshot in the Terra Data
+        Repo
+      operationId: deleteDataRepoSnapshot_v2
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -4281,6 +4558,68 @@ components:
           items:
             $ref: '#/components/schemas/DataRepoSnapshotReference'
       description: A list of DataRepoSnapshotReferences
+    ResourceMetadata:
+      type: object
+      required: [ workspaceId, resourceId, name, description, resourceType, stewardshipType, cloudPlatform, cloningIntructions ]
+      properties:
+        workspaceId:
+          type: string
+        resourceId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        resourceType:
+          type: string
+        stewardshipType:
+          type: string
+        cloudPlatform:
+          type: string
+        cloningInstructions:
+          type: string
+    DataRepoSnapshotAttributes:
+      type: object
+      required: [ instanceName, snapshot ]
+      properties:
+        instanceName:
+          type: string
+        snapshot:
+          description: The snapshot id
+          type: string
+    DataRepoSnapshotResource:
+      type: object
+      required: [ metadata, attributes ]
+      properties:
+        metadata:
+          $ref: '#/components/schemas/ResourceMetadata'
+        attributes:
+          $ref: '#/components/schemas/DataRepoSnapshotAttributes'
+    ResourceAttributesUnion:
+      type: object
+      required: [ gcpDataRepoSnapshot ]
+      properties:
+        gcpDataRepoSnapshot:
+          $ref: '#/components/schemas/DataRepoSnapshotAttributes'
+    ResourceDescription:
+      type: object
+      required: [ metadata, resourceAttributes ]
+      properties:
+        metadata:
+          $ref: '#/components/schemas/ResourceMetadata'
+        resourceAttributes:
+          $ref: '#/components/schemas/ResourceAttributesUnion'
+      description: resource description
+    DataRepoSnapshotResourceList:
+      type: object
+      required: [ resources ]
+      properties:
+        resources:
+          type: array
+          description: A list of snapshot Data Resource definitions from Workspace Manager
+          items:
+            $ref: '#/components/schemas/ResourceDescription'
+      description: List of snapshot resources
     ErrorReport:
       required:
         - causes
@@ -4591,6 +4930,12 @@ components:
           description: Whether or not to delete intermediate output files when the
             workflow completes. See [Cromwell docs](https://cromwell.readthedocs.io/en/stable/wf_options/Google#google-pipelines-api-workflow-options)
             for more information.
+        memoryRetryMultiplier:
+          type: number
+          description: If a task fails due to running out of memory and the `stderr` of the task contains one of error keys that is set in Cromwell config along with `maxRetries` in its runtime attributes,
+            then it will be retried with its memory multiplied by this amount.  See [Cromwell docs](https://cromwell.readthedocs.io/en/develop/cromwell_features/RetryWithMoreMemory/#retry-with-more-memory)
+            for more information.
+          default: 1.0
         workflowFailureMode:
           type: string
           description: What happens after a task fails. Choose from ContinueWhilePossible
@@ -5844,6 +6189,19 @@ components:
             this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
             Caller must have the add_project action for this service perimeter in
             Sam.
+      description: ""
+    SpendReportConfiguration:
+      required:
+        - datasetGoogleProject
+        - datasetName
+      type: object
+      properties:
+        datasetGoogleProject:
+          type: string
+          description: the name of the Google Project where the BigQuery dataset resides
+        datasetName:
+          type: string
+          description: the name of the BigQuery dataset containing project spend data
       description: ""
     RawlsBillingProjectMembership:
       required:

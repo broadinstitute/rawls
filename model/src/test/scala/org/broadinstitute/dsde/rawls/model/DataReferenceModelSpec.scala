@@ -4,7 +4,7 @@ import java.util.UUID
 
 import bio.terra.workspace.model.CloningInstructionsEnum.NOTHING
 import bio.terra.workspace.model.ReferenceTypeEnum.DATA_REPO_SNAPSHOT
-import bio.terra.workspace.model.{DataReferenceDescription, DataReferenceList, DataRepoSnapshot, UpdateDataReferenceRequestBody}
+import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, DataRepoSnapshotAttributes, DataRepoSnapshotResource, ResourceAttributesUnion, ResourceDescription, ResourceList, ResourceMetadata, ResourceType, StewardshipType, UpdateDataReferenceRequestBody}
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import spray.json._
 
@@ -52,6 +52,186 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
       "DataReferenceDescription with bad UUID's should fail" in {
         assertThrows[DeserializationException] {
           s"""{"referenceId": "abcd","name":"test-ref","workspaceId":"abcd","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"cloningInstructions":"$NOTHING"}""".parseJson.convertTo[DataReferenceDescription]
+        }
+      }
+
+      "DataRepoSnapshotResource, ResourceMetadata, DataRepoSnapshotAttributes" in {
+        val resourceId = UUID.randomUUID()
+        val workspaceId = UUID.randomUUID()
+        val snapshotId = UUID.randomUUID()
+        assertResult {
+          s"""{
+                "attributes": {
+                  "instanceName": "test-instance",
+                  "snapshot": "$snapshotId"
+                },
+                "metadata": {
+                  "workspaceId": "$workspaceId",
+                  "resourceId": "$resourceId",
+                  "name": "testReference",
+                  "description": "hello",
+                  "resourceType": "DATA_REPO_SNAPSHOT",
+                  "stewardshipType": "REFERENCED",
+                  "cloningInstructions": "COPY_NOTHING"
+                }
+             }
+          """.parseJson
+        } {
+          new DataRepoSnapshotResource()
+            .metadata(
+              new ResourceMetadata()
+                .name("testReference")
+                .resourceId(resourceId)
+                .workspaceId(workspaceId)
+                .description("hello")
+                .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
+                .stewardshipType(StewardshipType.REFERENCED)
+                .cloningInstructions(CloningInstructionsEnum.NOTHING)
+            )
+            .attributes(
+              new DataRepoSnapshotAttributes()
+                .instanceName("test-instance")
+                .snapshot(snapshotId.toString)
+            ).toJson
+        }
+
+      }
+
+      "ResourceList, ResourceDescription, ResourceMetadata, ResourceAttributesUnion, DataRepoSnapshotAttributes" in {
+        val snapshotResourceId = UUID.randomUUID()
+        val workspaceId = UUID.randomUUID()
+        val snapshotId = UUID.randomUUID()
+        assertResult {
+          s"""
+             {
+               "resources": [
+                 {
+                   "metadata": {
+                     "cloningInstructions":"COPY_NOTHING",
+                     "description":"im a lil snapshot",
+                     "name":"snapshot1",
+                     "resourceId":"$snapshotResourceId",
+                     "resourceType":"DATA_REPO_SNAPSHOT",
+                     "stewardshipType":"REFERENCED",
+                     "workspaceId":"$workspaceId"
+                   },
+                   "resourceAttributes": {
+                     "gcpDataRepoSnapshot": {
+                        "instanceName":"test-instance",
+                        "snapshot":"$snapshotId"
+                     }
+                   }
+                 }
+               ]
+             }
+             """.parseJson
+        } {
+          new ResourceList().resources(
+            List(
+              new ResourceDescription()
+                .metadata(
+                  new ResourceMetadata()
+                    .name("snapshot1")
+                    .description("im a lil snapshot")
+                    .resourceId(snapshotResourceId)
+                    .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
+                    .stewardshipType(StewardshipType.REFERENCED)
+                    .workspaceId(workspaceId)
+                    .cloningInstructions(CloningInstructionsEnum.NOTHING)
+
+                )
+                .resourceAttributes(
+                  new ResourceAttributesUnion()
+                    .gcpDataRepoSnapshot(
+                      new DataRepoSnapshotAttributes()
+                        .instanceName("test-instance")
+                        .snapshot(snapshotId.toString)
+                    ))
+            ).asJava
+          ).toJson
+        }
+      }
+
+      "Parsing ResourceMetadata should fail if resource id string is not a UUID" in {
+        val workspaceId = UUID.randomUUID()
+        assertThrows[DeserializationException] {
+          s"""
+             {
+               "cloningInstructions": "COPY_NOTHING",
+               "description": "im a lil snapshot",
+               "name": "snapshot1",
+               "resourceId": "not-an-id",
+               "resourceType": "DATA_REPO_SNAPSHOT",
+               "stewardshipType": "REFERENCED",
+               "workspaceId": "$workspaceId"
+              }""".parseJson.convertTo[ResourceMetadata]
+        }
+      }
+
+      "should fail if workspace id string is not a UUID" in {
+        val resourceId = UUID.randomUUID()
+        assertThrows[DeserializationException] {
+          s"""
+             {
+               "cloningInstructions":"COPY_NOTHING",
+               "description": "im a lil snapshot",
+               "name": "snapshot1",
+               "resourceId": "$resourceId",
+               "resourceType": "DATA_REPO_SNAPSHOT",
+               "stewardshipType": "REFERENCED",
+               "workspaceId": "not-an-id"
+              }""".parseJson.convertTo[ResourceMetadata]
+        }
+      }
+
+      "DataRepoSnapshotAttributes should fail with nulls" in {
+        val snapshotId = UUID.randomUUID()
+        assertThrows[DeserializationException] {
+          s"""{"instanceName": null, "snapshot": "$snapshotId"}""".parseJson.convertTo[DataRepoSnapshotAttributes]
+        }
+
+        assertThrows[DeserializationException] {
+          s"""{"instanceName": "fake-instance", "snapshot": null}""".parseJson.convertTo[DataRepoSnapshotAttributes]
+        }
+      }
+
+      "ResourceMetadata should fail with nulls" in {
+        val workspaceId = UUID.randomUUID()
+        val resourceId = UUID.randomUUID()
+        assertThrows[DeserializationException] {
+          s"""{ "workspaceId": "$workspaceId",
+                "resourceId": "resourceId",
+                "name": null,
+                "description": "this is my snapshot",
+                "resourceType": "DATA_REPO_SNAPSHOT",
+                "resourceId": "$resourceId",
+                "stewardshipType": "REFERENCED",
+                "cloningInstructions": "COPY_NOTHING"
+             }""".parseJson.convertTo[ResourceMetadata]
+        }
+      }
+
+      "ResourceMetadata should succeed with nulls on fields we are not translating" in {
+        val workspaceId = UUID.randomUUID()
+        val resourceId = UUID.randomUUID()
+        assertResult { s"""{ "workspaceId": "$workspaceId",
+                             "resourceId": "resourceId",
+                             "name": "mysnapshot",
+                             "description": "this is my snapshot",
+                             "resourceType": "DATA_REPO_SNAPSHOT",
+                             "resourceId": "$resourceId",
+                             "stewardshipType": "REFERENCED",
+                             "cloudPlatform": null,
+                             "cloningInstructions": "COPY_NOTHING" } """.parseJson.convertTo[ResourceMetadata]
+        } {
+          new ResourceMetadata()
+            .name("mysnapshot")
+            .description("this is my snapshot")
+            .resourceId(resourceId)
+            .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
+            .stewardshipType(StewardshipType.REFERENCED)
+            .workspaceId(workspaceId)
+            .cloningInstructions(CloningInstructionsEnum.NOTHING)
         }
       }
 

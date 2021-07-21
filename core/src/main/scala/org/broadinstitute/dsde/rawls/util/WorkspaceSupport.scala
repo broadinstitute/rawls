@@ -5,7 +5,7 @@ import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -73,8 +73,20 @@ trait WorkspaceSupport {
     for {
       userHasAction <- traceDBIOWithParent("userHasAction", parentSpan)(_ => DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, userInfo)))
       response <- userHasAction match {
-        case true => op
-        case false => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
+        case true =>
+          traceDBIOWithParent("loadBillingProject", parentSpan)( _ => dataAccess.rawlsBillingProjectQuery.load(projectName)).flatMap {
+            case Some(RawlsBillingProject(_, CreationStatuses.Ready, _, _, _, _, _, _, _, _, _)) => op //Sam will check to make sure the Auth Domain selection is valid
+            case Some(RawlsBillingProject(RawlsBillingProjectName(name), CreationStatuses.Creating, _, _, _, _, _, _, _, _, _)) =>
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${name} is still being created")))
+
+            case Some(RawlsBillingProject(RawlsBillingProjectName(name), CreationStatuses.Error, _, messageOp, _, _, _, _, _, _, _)) =>
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Error creating ${name}: ${messageOp.getOrElse("no message")}")))
+            case Some(_) | None =>
+              // this can't happen with the current code but a 404 would be the correct response
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${workspaceRequest.toWorkspaceName.namespace} does not exist")))
+          }
+        case false =>
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
       }
     } yield response
   }
