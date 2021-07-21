@@ -4,7 +4,7 @@ import java.util.UUID
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.workspace.api.{ReferencedGcpResourceApi, WorkspaceApi}
+import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
@@ -29,6 +29,10 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     new ReferencedGcpResourceApi(getApiClient(accessToken.token))
   }
 
+  private def getResourceApi(accessToken: OAuth2BearerToken): ResourceApi = {
+    new ResourceApi(getApiClient(accessToken.token))
+  }
+
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = {
     getWorkspaceApi(accessToken).getWorkspace(workspaceId)
   }
@@ -41,35 +45,36 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(accessToken).deleteWorkspace(workspaceId)
   }
 
-  override def createDataReference(workspaceId: UUID, name: DataReferenceName, description: Option[DataReferenceDescriptionField], referenceType: ReferenceTypeEnum, reference: DataRepoSnapshot, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataReferenceDescription = {
-    val request = new CreateDataReferenceRequestBody().name(name.value).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions)
-    description.map(d => request.description(d.value))
-
-    getWorkspaceApi(accessToken).createDataReference(request, workspaceId)
+  override def createDataRepoSnapshotReference(workspaceId: UUID, snapshotId: UUID, name: DataReferenceName, description: Option[DataReferenceDescriptionField], instanceName: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
+    val snapshot = new DataRepoSnapshotAttributes().instanceName(instanceName).snapshot(snapshotId.toString)
+    val commonFields = new ReferenceResourceCommonFields().name(name.value).cloningInstructions(CloningInstructionsEnum.NOTHING)
+    description.map(d => commonFields.description(d.value))
+    val request = new CreateDataRepoSnapshotReferenceRequestBody().snapshot(snapshot).metadata(commonFields)
+    getReferencedGcpResourceApi(accessToken).createDataRepoSnapshotReference(request, workspaceId)
   }
 
-  override def updateDataReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
-    getWorkspaceApi(accessToken).updateDataReference(updateInfo, workspaceId, referenceId)
+  override def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
+    getReferencedGcpResourceApi(accessToken).updateDataRepoSnapshotReference(updateInfo, workspaceId, referenceId)
   }
 
-  override def deleteDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {
-    getWorkspaceApi(accessToken).deleteDataReference(workspaceId, referenceId)
+  override def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {
+    getReferencedGcpResourceApi(accessToken).deleteDataRepoSnapshotReference(workspaceId, referenceId)
   }
 
-  override def getDataReference(workspaceId: UUID, snapshotId: UUID, accessToken: OAuth2BearerToken): DataReferenceDescription = {
-    getWorkspaceApi(accessToken).getDataReference(workspaceId, snapshotId)
+  override def getDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
+    getReferencedGcpResourceApi(accessToken).getDataRepoSnapshotReference(workspaceId, referenceId)
   }
 
-  override def getDataReferenceByName(workspaceId: UUID, refType: ReferenceTypeEnum, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataReferenceDescription = {
-    getWorkspaceApi(accessToken).getDataReferenceByName(workspaceId, refType, refName.value)
+  override def getDataRepoSnapshotReferenceByName(workspaceId: UUID, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
+    getReferencedGcpResourceApi(accessToken).getDataRepoSnapshotReferenceByName(workspaceId, refName.value)
   }
 
-  override def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList = {
-    getWorkspaceApi(accessToken).enumerateReferences(workspaceId, offset, limit)
+  override def enumerateDataRepoSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): ResourceList = {
+    getResourceApi(accessToken).enumerateResources(workspaceId, offset, limit, ResourceType.DATA_REPO_SNAPSHOT, StewardshipType.REFERENCED)
   }
 
-  override def createBigQueryDatasetReference(workspaceId: UUID, metadata: DataReferenceRequestMetadata, dataset: GoogleBigQueryDatasetUid, accessToken: OAuth2BearerToken): BigQueryDatasetReference = {
-    val createBigQueryDatasetReference = new CreateBigQueryDatasetReferenceRequestBody().dataset(dataset).metadata(metadata)
+  override def createBigQueryDatasetReference(workspaceId: UUID, metadata: ReferenceResourceCommonFields, dataset: GcpBigQueryDatasetAttributes, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource = {
+    val createBigQueryDatasetReference = new CreateGcpBigQueryDatasetReferenceRequestBody().dataset(dataset).metadata(metadata)
     getReferencedGcpResourceApi(accessToken).createBigQueryDatasetReference(createBigQueryDatasetReference, workspaceId)
   }
 
@@ -77,7 +82,7 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getReferencedGcpResourceApi(accessToken).deleteBigQueryDatasetReference(workspaceId, resourceId)
   }
 
-  override def getBigQueryDatasetReferenceByName(workspaceId: UUID, name: String, accessToken: OAuth2BearerToken): BigQueryDatasetReference = {
+  override def getBigQueryDatasetReferenceByName(workspaceId: UUID, name: String, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource = {
     getReferencedGcpResourceApi(accessToken).getBigQueryDatasetReferenceByName(workspaceId, name)
   }
 

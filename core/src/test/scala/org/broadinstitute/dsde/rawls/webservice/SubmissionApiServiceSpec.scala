@@ -902,7 +902,63 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             }
         }
       }
+  }
 
+  private val validMemoryRetryMultiplierCases = Table(
+    ("description", "memoryRetryMultiplierOption", "memoryRetryMultiplierResult"),
+    ("allow submission with memoryRetryMultiplier unset", None, 1.0),
+    ("allow submission with memoryRetryMultiplier set to the default", Option(1.0), 1.0),
+    ("allow submission with memoryRetryMultiplier set to something different", Option(1.618), 1.618),
+  )
+
+  forAll(validMemoryRetryMultiplierCases) {
+    (description, memoryRetryMultiplierOption, memoryRetryMultiplierResult) =>
+      it should description in {
+        withTestDataApiServices { services =>
+          val workspaceName = testData.wsName
+          val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+          ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+          Post(
+            s"${workspaceName.path}/submissions",
+            JsObject(
+              requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+                List(
+                  memoryRetryMultiplierOption.map(x => "memoryRetryMultiplier" -> x.toJson),
+                ).flatten: _*
+            )
+          ) ~>
+            sealRoute(services.submissionRoutes) ~>
+            check {
+              val response = responseAs[String]
+              status should be(StatusCodes.Created)
+              val requestMemoryRetryMultiplier = getResponseField(response, "memoryRetryMultiplier")
+              requestMemoryRetryMultiplier should be(Option(JsNumber(memoryRetryMultiplierResult)))
+            }
+        }
+      }
+  }
+
+  it should "return a parameter error if the memoryRetryMultiplier is invalid" in {
+    withTestDataApiServices { services =>
+      val workspaceName = testData.wsName
+      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+      Post(
+        s"${workspaceName.path}/submissions",
+        JsObject(
+          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+            List("memoryRetryMultiplier" -> "oh gosh, I don't know... maybe seven?".toJson): _*
+        )
+      ) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          val response = responseAs[String]
+          status should be(StatusCodes.BadRequest)
+          response should be("The request content was malformed:\nExpected Double as JsNumber, but got \"oh gosh, I don't know... maybe seven?\"")
+        }
+    }
   }
 
   it should "return 400 Bad Request when deleteIntermediateOutputFiles is an integer" in {

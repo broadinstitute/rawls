@@ -170,6 +170,27 @@ trait EntityComponent {
           concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
         }
       }
+
+      def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
+        // get unique suffix for renaming
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entities
+        val baseUpdate = sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where deleted=0 AND workspace_id=$workspaceId and (entity_type, name) in ("""
+        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
+        concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
+      }
+
+      def activeActionForRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
+        if( entities.isEmpty ) {
+          DBIO.successful(Seq.empty[AttributeEntityReference])
+        } else {
+          val baseSelect = sql"select entity_type, name from ENTITY where workspace_id = $workspaceId and deleted = 0 and (entity_type, name) in ("
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
+          concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[(String, String)].map { vect => vect.map { pair => AttributeEntityReference(pair._1, pair._2) } }
+        }
+      }
+
     }
 
     //noinspection ScalaDocMissingParameterDescription,SqlDialectInspection,RedundantBlock,DuplicatedCode
@@ -312,6 +333,19 @@ trait EntityComponent {
       def actionForWorkspace(workspaceContext: Workspace): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
+
+      def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
+        // get unique suffix for renaming
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entity attributes, given a set of entities
+        val baseUpdate =
+          sql"""update ENTITY_ATTRIBUTE ea join ENTITY e on ea.owner_id = e.id
+                set ea.deleted=1, ea.deleted_date=$deletedDate, ea.name=CONCAT(ea.name, $renameSuffix)
+                where e.workspace_id=$workspaceId and ea.deleted=0 and (e.entity_type, e.name) in ("""
+        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
+        concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
+      }
     }
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
@@ -338,6 +372,19 @@ trait EntityComponent {
 
     def findActiveEntityByWorkspace(workspaceId: UUID): EntityQuery = {
       filter(entRec => entRec.workspaceId === workspaceId && ! entRec.deleted)
+    }
+
+    /**
+      * given a set of AttributeEntityReference, query the db and return those refs that
+      * are 1) active and 2) exist in the specified workspace. Use this method to validate user input
+      * with the lightest SQL query; it does not fetch attributes or extraneous columns
+      *
+      * @param workspaceId the workspace to query for entity refs
+      * @param entities the refs for which to query
+      * @return the subset of refs that are active and found in the workspace
+      */
+    def getActiveRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
+      EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
     }
 
     private def findActiveAttributesByEntityId(entityId: Rep[Long]): EntityAttributeQuery = for {
@@ -443,15 +490,16 @@ trait EntityComponent {
     }
 
     def save(workspaceContext: Workspace, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
       entities.foreach(validateEntity)
 
       for {
+        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
         preExistingEntityRecs <- getEntityRecords(workspaceContext.workspaceIdAsUUID, entities.map(_.toReference).toSet)
         savingEntityRecs <- entityQueryWithInlineAttributes.insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference)).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs.map(_.toReference)).map(_ ++ savingEntityRecs)
-        _ <- rewriteAttributes(entities, savingEntityRecs.map(_.id), referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap)
-        _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(preExistingEntityRecs, entities)
+        actuallyUpdatedEntityIds <- rewriteAttributes(entities, savingEntityRecs.map(_.id), referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap)
+        actuallyUpdatedPreExistingEntityRecs = preExistingEntityRecs.filter(e => actuallyUpdatedEntityIds.contains(e.id))
+        _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(actuallyUpdatedPreExistingEntityRecs, entities)
       } yield entities
     }
 
@@ -598,7 +646,7 @@ trait EntityComponent {
       }
     }
 
-    private def rewriteAttributes(entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]): ReadWriteAction[Int] = {
+    private def rewriteAttributes(entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]) = {
       val attributesToSave = for {
         entity <- entitiesToSave
         (attributeName, attribute) <- entity.attributes
@@ -610,33 +658,16 @@ trait EntityComponent {
       }
     }
 
-    // "delete" entities by hiding and renaming
-
+    // "delete" entities by hiding and renaming. we must rename the entity to avoid future name collisions if the user
+    // attempts to create a new entity of the same name.
     def hide(workspaceContext: Workspace, entRefs: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
+      // N.B. we must hide both the entity attributes and the entity itself. Other queries, such
+      // as baseEntityAndAttributeSql, use "where ENTITY.deleted = ENTITY_ATTRIBUTE.deleted" during joins.
+      // Thus, we need to keep the "deleted" value for attributes in sync with their parent entity,
+      // when hiding that entity.
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
-        getEntityRecords(workspaceContext.workspaceIdAsUUID, entRefs.toSet) flatMap { entRecs =>
-          val hideAction = entRecs map { rec =>
-            hideEntityAttributes(rec.id) andThen
-              hideEntityAction(rec)
-          }
-          DBIO.sequence(hideAction).map(_.sum)
-        }
-    }
-
-    private def hideEntityAttributes(entityId: Long): ReadWriteAction[Seq[Int]] = {
-      findActiveAttributesByEntityId(entityId).result flatMap { attrRecs =>
-        DBIO.sequence(attrRecs map hideEntityAttribute)
-      }
-    }
-
-    private def hideEntityAttribute(attrRec: EntityAttributeRecord): WriteAction[Int] = {
-      val currentTime = new Timestamp(new Date().getTime)
-      entityAttributeQuery.filter(_.id === attrRec.id).map(rec => (rec.deleted, rec.name, rec.deletedDate)).update(true, renameForHiding(attrRec.id, attrRec.name), Option(currentTime))
-    }
-
-    private def hideEntityAction(entRec: EntityRecord): WriteAction[Int] = {
-      val currentTime = new Timestamp(new Date().getTime)
-      findEntityById(entRec.id).map(rec => (rec.deleted, rec.name, rec.deletedDate)).update(true, renameForHiding(entRec.id, entRec.name), Option(currentTime))
+        EntityAndAttributesRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs) andThen
+        EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map( res => res.sum)
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace

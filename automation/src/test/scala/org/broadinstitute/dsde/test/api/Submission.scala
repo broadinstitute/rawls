@@ -16,6 +16,7 @@ object Submission extends LazyLogging with Eventually with RandomUtil {
 
   private val SUBMISSION_COMPLETED_STATES = List(DONE_STATUS, ABORTED_STATUS)
 
+  // N.B. currently not used anywhere
   def isSubmissionDone(status: String): Boolean = {
     SUBMISSION_COMPLETED_STATES.contains(status)
   }
@@ -31,8 +32,12 @@ object Submission extends LazyLogging with Eventually with RandomUtil {
     * see Rawls' SubmissionStatuses object for canonical submission status values.
     */
   def getSubmissionStatus(billingProject: String, workspaceName: String, submissionId: String)(implicit token: AuthToken): String = {
-    val (status, _) = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
+    val (status, _) = getSubmissionStatusAndWorkflowIds(billingProject, workspaceName, submissionId)
     status
+  }
+
+  def getSubmissionStatusAndWorkflowIds(billingProject: String, workspaceName: String, submissionId: String)(implicit token: AuthToken): (String, List[String]) = {
+    Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
   }
 
   /*
@@ -42,9 +47,11 @@ object Submission extends LazyLogging with Eventually with RandomUtil {
     implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(20, Minutes)), interval = scaled(Span(30, Seconds)))
 
     eventually {
-      val actualStatus = getSubmissionStatus(billingProjectName, workspaceName, submissionId)
-      withClue(s"Monitoring submission $billingProjectName/$workspaceName/$submissionId until finish") {
-        isSubmissionDone(actualStatus) shouldBe true
+      val (actualStatus, workflowIds) = getSubmissionStatusAndWorkflowIds(billingProjectName, workspaceName, submissionId)
+      withClue(s"Monitoring submission [$billingProjectName/$workspaceName/$submissionId] until finish; " +
+                     s"actual status was [$actualStatus] with first 10 workflow ids [${workflowIds.take(10).mkString(", ")}]. " +
+                     s"Scalatest-generated error message is:") {
+        SUBMISSION_COMPLETED_STATES should contain (actualStatus)
       }
     }
   }

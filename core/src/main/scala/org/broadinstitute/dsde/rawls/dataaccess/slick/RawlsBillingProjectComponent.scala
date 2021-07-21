@@ -6,8 +6,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 
-case class RawlsBillingProjectRecord(projectName: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String], invalidBillingAccount: Boolean)
+case class RawlsBillingProjectRecord(projectName: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String], invalidBillingAccount: Boolean, spendReportDataset: Option[String], spendReportTable: Option[String], spendReportDatasetGoogleProject: Option[String])
 case class RawlsBillingProjectOperationRecord(projectName: String, operationName: GoogleOperationName, operationId: String, done: Boolean, errorMessage: Option[String], api: GoogleApiType)
 
 trait RawlsBillingProjectComponent {
@@ -24,8 +25,11 @@ trait RawlsBillingProjectComponent {
     def servicePerimeter = column[Option[String]]("SERVICE_PERIMETER")
     def googleProjectNumber = column[Option[String]]("GOOGLE_PROJECT_NUMBER")
     def invalidBillingAccount = column[Boolean]("INVALID_BILLING_ACCT")
+    def spendReportDataset = column[Option[String]]("SPEND_REPORT_DATASET", O.Length(1024))
+    def spendReportTable = column[Option[String]]("SPEND_REPORT_TABLE", O.Length(1024))
+    def spendReportDatasetGoogleProject = column[Option[String]]("SPEND_REPORT_DATASET_GOOGLE_PROJECT", O.Length(1024))
 
-    def * = (projectName, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber, invalidBillingAccount) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
+    def * = (projectName, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber, invalidBillingAccount, spendReportDataset, spendReportTable, spendReportDatasetGoogleProject) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
   // these 2 implicits are lazy because there is a timing problem initializing MappedColumnType, if they are not lazy
@@ -134,6 +138,17 @@ trait RawlsBillingProjectComponent {
       }.toMap)
     }
 
+    def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, datasetName: Option[BigQueryDatasetName], tableName: Option[BigQueryTableName], datasetGoogleProject: Option[GoogleProject]): WriteAction[Int] = {
+      rawlsBillingProjectQuery
+        .filter(_.projectName === billingProjectName.value)
+        .map(bp => (bp.spendReportDataset, bp.spendReportTable, bp.spendReportDatasetGoogleProject))
+        .update(datasetName.map(_.value), tableName.map(_.value), datasetGoogleProject.map(_.value))
+    }
+
+    def clearBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): WriteAction[Int] = {
+      setBillingProjectSpendConfiguration(billingProjectName, None, None, None)
+    }
+
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] = {
       (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())
     }
@@ -147,11 +162,11 @@ trait RawlsBillingProjectComponent {
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
-      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message, billingProject.cromwellBackend.map(_.value), billingProject.servicePerimeter.map(_.value), billingProject.googleProjectNumber.map(_.value), billingProject.invalidBillingAccount)
+      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message, billingProject.cromwellBackend.map(_.value), billingProject.servicePerimeter.map(_.value), billingProject.googleProjectNumber.map(_.value), billingProject.invalidBillingAccount, billingProject.spendReportDataset.map(_.value), billingProject.spendReportTable.map(_.value), billingProject.spendReportDatasetGoogleProject.map(_.value))
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber), projectRecord.invalidBillingAccount)
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber), projectRecord.invalidBillingAccount, projectRecord.spendReportDataset.map(BigQueryDatasetName), projectRecord.spendReportTable.map(BigQueryTableName), projectRecord.spendReportDatasetGoogleProject.map(GoogleProject))
     }
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {

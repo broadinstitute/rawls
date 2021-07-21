@@ -48,7 +48,7 @@ class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisor
   def withSupervisor[T](trackDetailedMetrics: Boolean = true)(op: ActorRef => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
     val execCluster = MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, slickDataSource)
-    val config = SubmissionMonitorConfig(20 minutes, trackDetailedMetrics)
+    val config = SubmissionMonitorConfig(20 minutes, trackDetailedMetrics, 20000)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       execCluster,
       new UncoordinatedDataSourceAccess(slickDataSource),
