@@ -79,7 +79,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
           complete { userServiceConstructor(userInfo).listBillingProjectsV2() }
         } ~
         post {
-          entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
+          entity(as[CreateRawlsV2BillingProjectFullRequest]) { createProjectRequest =>
             complete {
               userServiceConstructor(userInfo).createBillingProjectV2(createProjectRequest)
             }
