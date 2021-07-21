@@ -119,15 +119,18 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     * @param limit pagination limit for the list
     * @return the list of snapshot references
     */
-  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[SnapshotListResponse] = {
+  def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int, referencedSnapshotId: Option[UUID] = None): Future[SnapshotListResponse] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
-      retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit)
+      referencedSnapshotId match {
+        case None => retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit)
+        case Some(id) => findBySnapshotId(workspaceContext.workspaceIdAsUUID, id, offset, limit)
+      }
     }
   }
 
-  /**
+   /*
     * Returns all snapshot references from Workspace Manager that refer to a specified snapshotId.
-    * Does not support pagination; returns the entire list of matching references.
+    * Internal method; does not check authorization for the given workspace.
     *
     * @param workspaceName the workspace owning the snapshot references
     * @param snapshotId the snapshotId to look for
@@ -138,37 +141,34 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     *                  snapshotId.
     * @return the list of all snapshot references that refer to the specified snapshotId
     */
-  def findBySnapshotId(workspaceName: WorkspaceName, snapshotId: UUID, userOffset: Int, userLimit: Int, batchSize: Int = 200): Future[SnapshotListResponse] = {
+  protected[snapshot] def findBySnapshotId(workspaceId: UUID, snapshotId: UUID, userOffset: Int, userLimit: Int, batchSize: Int = 200): SnapshotListResponse = {
 
     val snapshotIdCriteria = snapshotId.toString // just so we're not calling toString on every iteration through loops
 
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
-
-      @tailrec
-      def findInPage(offset: Int, alreadyFound: List[DataRepoSnapshotResource]): List[DataRepoSnapshotResource] = {
-        // get this page of references from WSM
-        val newPage = retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, batchSize)
-        // filter the page to just those with a matching snapshotId
-        val found = newPage.gcpDataRepoSnapshots.filter{ res =>
-          Try(res.getAttributes.getSnapshot.equals(snapshotIdCriteria)).toOption.getOrElse(false)
-        }
-        // append the ones we just found to those found on previous pages
-        val accum = alreadyFound ++ found
-
-        if (newPage.gcpDataRepoSnapshots.size < batchSize || accum.size >= userOffset+userLimit) {
-          // the page we retrieved from WSM was the last page, OR we have already found enough results
-          // to satisfy the user's requested pagination criteria; return everything we found so far
-          accum.slice(userOffset, userOffset+userLimit)
-        } else {
-          // the page we retrieved from WSM was NOT the last page; continue looping through the next page
-          findInPage(offset + batchSize, accum)
-        }
+    @tailrec
+    def findInPage(offset: Int, alreadyFound: List[DataRepoSnapshotResource]): List[DataRepoSnapshotResource] = {
+      // get this page of references from WSM
+      val newPage = retrieveSnapshotReferences(workspaceId, offset, batchSize)
+      // filter the page to just those with a matching snapshotId
+      val found = newPage.gcpDataRepoSnapshots.filter{ res =>
+        Try(res.getAttributes.getSnapshot.equals(snapshotIdCriteria)).toOption.getOrElse(false)
       }
+      // append the ones we just found to those found on previous pages
+      val accum = alreadyFound ++ found
 
-      val refs = findInPage(0, List.empty[DataRepoSnapshotResource])
-
-      SnapshotListResponse(refs)
+      if (newPage.gcpDataRepoSnapshots.size < batchSize || accum.size >= userOffset+userLimit) {
+        // the page we retrieved from WSM was the last page, OR we have already found enough results
+        // to satisfy the user's requested pagination criteria; return everything we found so far
+        accum.slice(userOffset, userOffset+userLimit)
+      } else {
+        // the page we retrieved from WSM was NOT the last page; continue looping through the next page
+        findInPage(offset + batchSize, accum)
+      }
     }
+
+    val refs = findInPage(0, List.empty[DataRepoSnapshotResource])
+
+    SnapshotListResponse(refs)
   }
 
   def updateSnapshot(workspaceName: WorkspaceName, snapshotId: String, updateInfo: UpdateDataReferenceRequestBody): Future[Unit] = {

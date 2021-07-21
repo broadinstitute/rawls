@@ -31,17 +31,12 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       } ~
       get {
-        parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
+        // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
+        // that method provides a 400 Bad Request response and nice error message
+        parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) { (offset, limit, referencedSnapshotId) =>
           complete {
-            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit).map(StatusCodes.OK -> _)
+            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit, referencedSnapshotId).map(StatusCodes.OK -> _)
           }
-        }
-      }
-    } ~
-    path("workspaces" / Segment / Segment / "snapshots" / "v2" / "query" / Segment) { (workspaceNamespace, workspaceName, referencedSnapshotId) =>
-      get {
-        complete {
-          snapshotServiceConstructor(userInfo).findBySnapshotId(WorkspaceName(workspaceNamespace, workspaceName), UUID.fromString(referencedSnapshotId), 0, 10).map(StatusCodes.OK -> _)
         }
       }
     } ~
