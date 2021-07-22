@@ -188,7 +188,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
           val listResponse = listSnapshotReferences(projectName, workspaceName)
-          val resources = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
+          val resources = Rawls.parseResponseAs[SnapshotListResponse](listResponse).gcpDataRepoSnapshots
           resources should have size 1
 
           // check that the bq dataset has been created
@@ -221,7 +221,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
           val listResponse = listSnapshotReferences(projectName, workspaceName)
-          val resources = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
+          val resources = Rawls.parseResponseAs[SnapshotListResponse](listResponse).gcpDataRepoSnapshots
           resources should have size 1
 
           // check that the bq dataset has been created
