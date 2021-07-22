@@ -20,10 +20,11 @@ object Dependencies {
     ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-util_" + scalaV),
     ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-metrics_" + scalaV)
   )
+  val rawlsModelExclusion = ExclusionRule(organization = "org.broadinstitute.dsde", name = "rawls-model_" + scalaV)
 
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(workbenchExclusions:_*)
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
-  val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions:_*)
+  val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
   val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.5-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
@@ -53,7 +54,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % "test",
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % "test",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-8223bdce-SNAP"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-90eae81cd"
       exclude("com.typesafe.scala-logging", "scala-logging_2.11")
       exclude("com.typesafe.akka", "akka-stream_2.11")
       exclude("bio.terra", "workspace-manager-client"),
