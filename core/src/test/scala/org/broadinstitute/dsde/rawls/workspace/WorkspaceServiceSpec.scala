@@ -1281,7 +1281,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
     // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
 
-    val billingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+    val billingAccountName = services.gcsDAO.inaccessibleBillingAccountName
     runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
     val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
     originalBillingProject.value.invalidBillingAccount shouldBe false
@@ -1497,7 +1497,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices { services =>
     // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
     // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
-    val billingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+    val billingAccountName = services.gcsDAO.inaccessibleBillingAccountName
     runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
     val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
     originalBillingProject.value.invalidBillingAccount shouldBe false
