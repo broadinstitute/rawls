@@ -263,6 +263,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
     override def save() = {
       DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
