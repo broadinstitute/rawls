@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.model.StatusCodes
@@ -29,9 +31,11 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       } ~
       get {
-        parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
+        // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
+        // that method provides a 400 Bad Request response and nice error message
+        parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) { (offset, limit, referencedSnapshotId) =>
           complete {
-            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit).map(StatusCodes.OK -> _)
+            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit, referencedSnapshotId).map(StatusCodes.OK -> _)
           }
         }
       }
