@@ -167,7 +167,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -269,7 +271,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
 
             logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
@@ -381,7 +385,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
 
             logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
@@ -705,7 +711,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -863,6 +871,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               expression = "this",
               useCallCache = false,
               deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
 
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -947,6 +957,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
                   expression = "this",
                   useCallCache = false,
                   deleteIntermediateOutputFiles = false,
+                  useReferenceDisks = false,
+                  memoryRetryMultiplier = 1.0
                 )
               )
 

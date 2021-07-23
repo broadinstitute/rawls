@@ -395,7 +395,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
                     entityName = "participant1",
                     expression = "this",
                     useCallCache = false,
-                    deleteIntermediateOutputFiles = false
+                    deleteIntermediateOutputFiles = false,
+                    useReferenceDisks = false,
+                    memoryRetryMultiplier = 1.0
                   )(studentAToken)
                 }
                 assertExceptionStatusCode(submissionException, 403)
@@ -436,7 +438,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
                 entityName = "participant1",
                 expression = "this",
                 useCallCache = false,
-                deleteIntermediateOutputFiles = false
+                deleteIntermediateOutputFiles = false,
+                useReferenceDisks = false,
+                memoryRetryMultiplier = 1.0
               )(studentAToken)
               // make sure the submission has not errored out
               eventually {
@@ -480,7 +484,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
                   entityName = "participant1",
                   expression = "this",
                   useCallCache = false,
-                  deleteIntermediateOutputFiles = false
+                  deleteIntermediateOutputFiles = false,
+                  useReferenceDisks = false,
+                  memoryRetryMultiplier = 1.0
                 )(studentAToken)
               }
               assertExceptionStatusCode(submissionException, 403)
