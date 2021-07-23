@@ -480,7 +480,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield result
   }
 
-  // This is only used for v1 billing projects. v2 assumes flow logs, high security network, and privateIpGoogleAccess
+  // This is only used for v1 billing projects. v2 assumes high security network and privateIpGoogleAccess
   private def validateCreateProjectRequest(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
     for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
