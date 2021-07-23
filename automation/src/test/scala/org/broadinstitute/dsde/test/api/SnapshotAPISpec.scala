@@ -234,8 +234,8 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           Rawls.workspaces.delete(projectName, workspaceName)(owner.makeAuthToken())
 
           // check that the bq dataset has been deleted
-          val datasetAfterDeletion = getDataset(datasetName, projectName, ownerAuthToken)
           eventually {
+            val datasetAfterDeletion = getDataset(datasetName, projectName, ownerAuthToken)
             datasetAfterDeletion should be(None)
           }
         }
