@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
@@ -35,6 +34,7 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
@@ -94,7 +94,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new MockGooglePubSubDAO
     val workspaceManagerDAO = mock[MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
@@ -108,7 +108,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
-      SubmissionMonitorConfig(1 second, true),
+      SubmissionMonitorConfig(1 second, true, 20000),
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))
 
@@ -122,6 +122,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       gcsDAO,
       notificationDAO,
       samDAO,
+      MockBigQueryServiceFactory.ioFactory(),
+      testConf.getString("gcs.pathToCredentialJson"),
       "requesterPaysRole",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
@@ -1279,7 +1281,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
     // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
 
-    val billingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+    val billingAccountName = services.gcsDAO.inaccessibleBillingAccountName
     runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
     val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
     originalBillingProject.value.invalidBillingAccount shouldBe false
@@ -1495,7 +1497,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices { services =>
     // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
     // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
-    val billingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+    val billingAccountName = services.gcsDAO.inaccessibleBillingAccountName
     runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
     val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
     originalBillingProject.value.invalidBillingAccount shouldBe false
@@ -1632,5 +1634,35 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     // verify that we set the folder for the perimeter
     verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProjectId), any[String])
+  }
+
+  "getSpendReportTableName" should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices { services =>
+    val billingProjectName = RawlsBillingProjectName("test-project")
+    val billingProject = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None, None, None, None, false, Some(BigQueryDatasetName("bar")), Some(BigQueryTableName("baz")), Some(GoogleProject("foo")))
+    runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
+
+    val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+
+    result shouldBe Some("foo.bar.baz")
+  }
+
+  it should "return None if the spend report config is not set" in withTestDataServices { services =>
+    val billingProjectName = RawlsBillingProjectName("test-project")
+    val billingProject = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None, None, None, None, false, None, None, None)
+    runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
+
+    val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+
+    result shouldBe None
+  }
+
+  it should "throw a RawlsExceptionWithErrorReport if the billing project does not exist" in withTestDataServices { services =>
+    val billingProjectName = RawlsBillingProjectName("test-project")
+
+    val actual = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+    }
+
+    actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
   }
 }

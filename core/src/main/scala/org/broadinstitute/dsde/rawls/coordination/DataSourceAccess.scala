@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.coordination
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import slick.jdbc.TransactionIsolation
 
@@ -40,7 +40,7 @@ class UncoordinatedDataSourceAccess(override val slickDataSource: SlickDataSourc
   override def inTransactionWithAttrTempTable[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
                                           isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
                                          ): Future[A] = {
-    slickDataSource.inTransactionWithAttrTempTable(dataAccessFunction, isolationLevel)
+    slickDataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace))(dataAccessFunction, isolationLevel)
   }
 }
 

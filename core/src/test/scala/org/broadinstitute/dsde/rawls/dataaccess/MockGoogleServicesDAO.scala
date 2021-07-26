@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogle
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import spray.json._
 
@@ -35,8 +36,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   private val groups: TrieMap[RawlsGroupRef, Set[Either[RawlsUser, RawlsGroup]]] = TrieMap()
   val policies: TrieMap[GoogleProjectId, Map[String, Set[String]]] = TrieMap()
 
-  val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
-  val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+  val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/123456-abcdef-789012")
+  val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/badbad-badbad-badbad")
 
   val mockJobIds = Seq("operations/dummy-job-id", "projects/dummy-project/operations/dummy-job-id")
 

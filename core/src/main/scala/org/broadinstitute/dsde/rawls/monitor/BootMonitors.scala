@@ -61,7 +61,11 @@ object BootMonitors extends LazyLogging {
 
     //Boot submission monitor supervisor
     val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
-    val submissionMonitorConfig = SubmissionMonitorConfig(util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")), submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"))
+    val submissionMonitorConfig = SubmissionMonitorConfig(
+      util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")),
+      submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"),
+      submissionmonitorConfigRoot.getInt("attributeUpdatesPerWorkflow")
+    )
     startSubmissionMonitorSupervisor(
       system,
       submissionMonitorConfig,

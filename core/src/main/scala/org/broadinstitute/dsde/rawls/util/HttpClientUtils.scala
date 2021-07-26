@@ -32,19 +32,19 @@ trait HttpClientUtils extends LazyLogging {
 
   def executeRequestUnmarshalResponse[T](http: HttpExt, httpRequest: HttpRequest)(implicit unmarshaller: Unmarshaller[ResponseEntity, T]): Future[T] = {
     executeRequest(http, httpRequest) recover { case t: Throwable =>
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"http call failed: ${httpRequest.uri}: ${t.getMessage}", t))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"HTTP call failed: ${httpRequest.uri}. Response: ${t.getMessage}", t))
     } flatMap { response =>
       if (response.status.isSuccess) {
         Unmarshal(response.entity).to[T]
       } else {
         Unmarshal(response.entity).to[String] map { entityAsString =>
-          logger.debug(s"http error status ${response.status} calling uri ${httpRequest.uri}, response: ${entityAsString}")
+          logger.debug(s"HTTP error status ${response.status} calling URI ${httpRequest.uri}. Response: $entityAsString")
           val message = if (response.status == StatusCodes.Unauthorized)
             s"The service indicated that this call was unauthorized. " +
               s"If you believe this is a mistake, please try your request again. " +
               s"Error occurred calling uri ${httpRequest.uri}"
           else
-            s"http error calling uri ${httpRequest.uri}"
+            s"HTTP error calling URI ${httpRequest.uri}. Response: ${entityAsString.take(1000)}"
           throw new RawlsExceptionWithErrorReport(ErrorReport(response.status, message))
         }
       }
@@ -53,7 +53,7 @@ trait HttpClientUtils extends LazyLogging {
 
   def executeRequestUnmarshalResponseAcceptNoContent[T](http: HttpExt, httpRequest: HttpRequest)(implicit unmarshaller: Unmarshaller[ResponseEntity, T]): Future[Option[T]] = {
     executeRequest(http, httpRequest) recover { case t: Throwable =>
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"http call failed: ${httpRequest.uri}: ${t.getMessage}", t))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"HTTP call failed: ${httpRequest.uri}. Response: ${t.getMessage}", t))
     } flatMap { response =>
       if (response.status.isSuccess) {
         if (response.status == StatusCodes.NoContent) {
@@ -65,8 +65,8 @@ trait HttpClientUtils extends LazyLogging {
         }
       } else {
         Unmarshal(response.entity).to[String] map { entityAsString =>
-          logger.debug(s"http error status ${response.status} calling uri ${httpRequest.uri}, response: ${entityAsString}")
-          throw new RawlsExceptionWithErrorReport(ErrorReport(response.status, s"http error calling uri ${httpRequest.uri}"))
+          logger.debug(s"HTTP error status ${response.status} calling URI ${httpRequest.uri}. Response: $entityAsString")
+          throw new RawlsExceptionWithErrorReport(ErrorReport(response.status, s"HTTP error calling URI ${httpRequest.uri}. Response: ${entityAsString.take(1000)}"))
         }
       }
     }
