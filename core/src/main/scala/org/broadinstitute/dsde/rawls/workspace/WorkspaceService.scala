@@ -1870,6 +1870,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                                   billingProjectOwnerPolicyEmail: WorkbenchEmail,
                                   span: Span = null) = {
     val projectPoolType = billingProject.servicePerimeter match {
+      // All service perimeter projects will have flow logs on by default.
       case Some(_) => ProjectPoolType.ExfiltrationControlled
       case _ => ProjectPoolType.Regular
     }
