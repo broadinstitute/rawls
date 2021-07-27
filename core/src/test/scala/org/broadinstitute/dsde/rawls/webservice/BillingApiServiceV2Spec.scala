@@ -170,7 +170,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
     mockPositiveBillingProjectCreation(services, projectName)
 
-    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None)) ~>
+    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
@@ -189,7 +189,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None, None)) ~>
+    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
@@ -199,7 +199,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with a name that is too short" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("short"), services.gcsDAO.accessibleBillingAccountName, None, None)) ~>
+    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("short"), services.gcsDAO.accessibleBillingAccountName, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -209,7 +209,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with a name that is too long" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"), services.gcsDAO.accessibleBillingAccountName, None, None)) ~>
+    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"), services.gcsDAO.accessibleBillingAccountName, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -219,23 +219,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with a name that contains invalid characters" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("!@#$%^&*()=+,. "), services.gcsDAO.accessibleBillingAccountName, None, None)) ~>
+    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("!@#$%^&*()=+,. "), services.gcsDAO.accessibleBillingAccountName, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
-          status
-        }
-      }
-  }
-
-  it should "return 201 when creating a project with a enableFlowLogs turned on" in withEmptyDatabaseAndApiServices { services =>
-    val projectName = RawlsBillingProjectName("test_good")
-    mockPositiveBillingProjectCreation(services, projectName)
-
-    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, enableFlowLogs = Some(true), None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.Created) {
           status
         }
       }

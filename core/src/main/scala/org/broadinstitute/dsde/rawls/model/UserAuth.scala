@@ -109,7 +109,6 @@ object CreationStatuses {
 case class CreateRawlsV2BillingProjectFullRequest(
   projectName: RawlsBillingProjectName,
   billingAccount: RawlsBillingAccountName,
-  enableFlowLogs: Option[Boolean],
   servicePerimeter: Option[ServicePerimeterName])
 
 case class CreateRawlsBillingProjectFullRequest(
@@ -180,7 +179,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val SyncReportFormat = jsonFormat2(SyncReport)
 
-  implicit val createRawlsV2BillingProjectFullRequestFormat = jsonFormat4(CreateRawlsV2BillingProjectFullRequest)
+  implicit val createRawlsV2BillingProjectFullRequestFormat = jsonFormat3(CreateRawlsV2BillingProjectFullRequest)
 
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
