@@ -5866,7 +5866,7 @@ components:
         enableFlowLogs:
           type: boolean
           description: Optional, false if not specified. If true, enable flow logs
-            within the high security network. Requires highSecurityNetwork = true.
+            within the high security network.
       description: ""
     RawlsBillingProjectMembership:
       required:
