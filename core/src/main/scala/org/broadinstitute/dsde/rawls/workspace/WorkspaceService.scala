@@ -1328,7 +1328,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
 
-      // TODO: Saloni - maybe add escaping here as well?
       _ = submissionRequest.userComment.map(validateMaxStringLength(_, "userComment", 1000))
 
       gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
@@ -1480,7 +1479,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   def updateSubmissionUserComment(workspaceName: WorkspaceName, submissionId: String, newComment: UserCommentUpdateOperation): Future[PerRequestMessage] = {
-    // TODO: Saloni - maybe add escaping here as well?
     validateMaxStringLength(newComment.userComment, "userComment", 1000)
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>

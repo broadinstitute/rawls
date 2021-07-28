@@ -5171,7 +5171,7 @@ components:
         userComment:
           type: string
           description: The updated value for user comment
-      description: User comment update value
+      description: Update user comment for submission
     WorkflowCost:
       type: object
       properties:
