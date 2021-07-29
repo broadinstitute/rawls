@@ -145,6 +145,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   implicit val errorReportSource = ErrorReportSource("rawls")
 
+  private val UserCommentMaxLength: Int = 1000
+
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
@@ -1328,7 +1330,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
 
-      _ = submissionRequest.userComment.map(validateMaxStringLength(_, "userComment", 1000))
+      _ = submissionRequest.userComment.map(validateMaxStringLength(_, "userComment", UserCommentMaxLength))
 
       gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
 
@@ -1479,7 +1481,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   def updateSubmissionUserComment(workspaceName: WorkspaceName, submissionId: String, newComment: UserCommentUpdateOperation): Future[PerRequestMessage] = {
-    validateMaxStringLength(newComment.userComment, "userComment", 1000)
+    validateMaxStringLength(newComment.userComment, "userComment", UserCommentMaxLength)
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>

@@ -5015,7 +5015,7 @@ components:
             - ContinueWhilePossible
         userComment:
           type: string
-          description: Comment for the submission
+          description: Comment for the submission (max length 1000 characters)
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
@@ -5170,7 +5170,7 @@ components:
       properties:
         userComment:
           type: string
-          description: The updated value for user comment
+          description: The updated value for user comment (max length 1000 characters)
       description: Update user comment for submission
     WorkflowCost:
       type: object

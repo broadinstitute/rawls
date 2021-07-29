@@ -9,6 +9,7 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.testkit.RouteTestTimeout
 import akka.testkit.TestProbe
+import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData, WorkflowAuditStatusRecord}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -986,19 +987,15 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
+  private val userComment1000character = RandomStringUtils.random(1000)
   private val validUserCommentCases = Table(
     ("description", "userCommentInput", "userCommentResult"),
     ("allow submission with userComment unset", None, JsNull),
     ("allow submission with userComment", Option("This submission outputs hello world. Cost: $0.5"), JsString("This submission outputs hello world. Cost: $0.5")),
     ("allow submission with userComment that has special characters", Option("This comment has special characters: `~!@#$%^&*()_+-=[]\\{}|;':\",./<>?"), JsString("""This comment has special characters: `~!@#$%^&*()_+-=[]\{}|;':",./<>?""")),
+    ("allow submission with userComment that has unescaped special characters", Option("""This comment has special characters: `~!@#$%^&*()_+-=[]\{}|;':",./<>?"""), JsString("""This comment has special characters: `~!@#$%^&*()_+-=[]\{}|;':",./<>?""")),
     ("allow submission with userComment containing url", Option("This comment contains url - https://github.com/broadinstitute/rawls/workflows/Scala%20tests%20with%20coverage/badge.svg?branch=develop"), JsString("This comment contains url - https://github.com/broadinstitute/rawls/workflows/Scala%20tests%20with%20coverage/badge.svg?branch=develop")),
-    ("allow submission with userComment containing 1000 characters",
-      Option("This comment has 1000 characters - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean tristique leo purus, non rutrum arcu posuere in. Quisque at venenatis augue. Nullam egestas dapibus lacus, pretium pretium neque semper quis. Cras dictum orci id vestibulum molestie. Duis tincidunt magna et turpis rutrum, in " +
-        "sagittis nibh ornare. Aliquam facilisis interdum diam, eget tempus dolor. Vivamus porta, enim in interdum dictum, arcu nulla maximus nulla, ac lacinia justo quam vel lectus. Donec a nunc in justo vulputate dignissim sit amet ut mi. Donec pulvinar, enim ut bibendum suscipit, leo urna dignissim turpis, at sagittis lorem leo vel ante. " +
-        "Suspendisse viverra quam vel imperdiet congue. Maecenas vitae viverra dolor, semper congue nibh. Duis nec ante facilisis dui tempor fringilla quis sed erat. Praesent eget ipsum id felis accumsan posuere non a magna. Cras risus velit, facilisis in erat eget, auctor malesuada tellus. Proin posuere risus non lectus efficitur consequat. Sed ut."),
-      JsString("This comment has 1000 characters - Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean tristique leo purus, non rutrum arcu posuere in. Quisque at venenatis augue. Nullam egestas dapibus lacus, pretium pretium neque semper quis. Cras dictum orci id vestibulum molestie. Duis tincidunt magna et turpis rutrum, in sagittis nibh ornare. " +
-        "Aliquam facilisis interdum diam, eget tempus dolor. Vivamus porta, enim in interdum dictum, arcu nulla maximus nulla, ac lacinia justo quam vel lectus. Donec a nunc in justo vulputate dignissim sit amet ut mi. Donec pulvinar, enim ut bibendum suscipit, leo urna dignissim turpis, at sagittis lorem leo vel ante. Suspendisse viverra quam vel imperdiet " +
-        "congue. Maecenas vitae viverra dolor, semper congue nibh. Duis nec ante facilisis dui tempor fringilla quis sed erat. Praesent eget ipsum id felis accumsan posuere non a magna. Cras risus velit, facilisis in erat eget, auctor malesuada tellus. Proin posuere risus non lectus efficitur consequat. Sed ut."))
+    ("allow submission with userComment containing 1000 characters", Option(userComment1000character), JsString(userComment1000character))
   )
 
   forAll(validUserCommentCases) {
@@ -1035,17 +1032,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
       ensureMethodConfigs(services, workspaceName, methodConfigurationName)
 
-      val invalidUserComment =
-        """
-          |This comment is invalid since it has more than 1000 characters - Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-          |Fusce fermentum a lectus vel iaculis. Proin egestas eros ipsum, et ullamcorper mi mollis sed. Donec vulputate magna id tellus
-          |ullamcorper, quis aliquam lectus blandit. Sed a nibh non orci sollicitudin consequat quis id neque. Morbi maximus sapien in
-          |erat condimentum, sit amet malesuada enim aliquet. Praesent libero massa, congue eu nisl nec, convallis feugiat massa. Pellentesque
-          |dapibus facilisis quam. Maecenas porttitor lacus sodales eros tincidunt, id porta nisi tristique. Mauris egestas enim at nibh
-          |gravida ornare. Etiam in lobortis augue, eleifend placerat nibh. Sed sed lectus id turpis dictum gravida nec vel lectus.
-          |Nulla sit amet viverra velit, sit amet mollis diam. Maecenas vel dui et enim tempus luctus a vitae augue. In tincidunt nibh
-          |vitae sodales finibus. Vestibulum sed eros hendrerit, vestibulum odio aliquam, dapibus dolor. Interdum et malesuada fames ac augue.
-          |""".stripMargin
+      val invalidUserComment = RandomStringUtils.random(1010)
 
       Post(
         s"${workspaceName.path}/submissions",
