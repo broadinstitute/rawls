@@ -245,58 +245,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         policies.keySet.map(p => SamCreateResourcePolicyResponse(SamCreateResourceAccessPolicyIdResponse(p.value, SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.billingProject.value)), s"${p.value}@foo.com")))))
   }
 
-  it should "return 201 when creating a project with a highSecurityNetwork" in withEmptyDatabaseAndApiServices { services =>
-    val projectName = RawlsBillingProjectName("test_good")
-    mockPositiveBillingProjectCreation(services, projectName)
-
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), None, None, None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-  }
-
-  it should "return 201 when creating a project with a highSecurityNetwork and enableFlowLogs turned on" in withEmptyDatabaseAndApiServices { services =>
-    val projectName = RawlsBillingProjectName("test_good")
-    mockPositiveBillingProjectCreation(services, projectName)
-
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), enableFlowLogs = Some(true), None, None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-  }
-
-  it should "return 201 when creating a project with a highSecurityNetwork with privateIpGoogleAccess turned on" in withEmptyDatabaseAndApiServices { services =>
-    val projectName = RawlsBillingProjectName("test_good")
-    mockPositiveBillingProjectCreation(services, projectName)
-
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), None, privateIpGoogleAccess = Some(true), None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-  }
-
-  it should "return 201 when creating a project with a highSecurityNetwork with enableFlowLogs and privateIpGoogleAccess turned on" in withEmptyDatabaseAndApiServices { services =>
-    val projectName = RawlsBillingProjectName("test_good")
-    mockPositiveBillingProjectCreation(services, projectName)
-
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), enableFlowLogs = Some(true), privateIpGoogleAccess = Some(true), None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-  }
-
   "GET /billing/v2/{projectName}/members" should "return 200 when listing billing project members as owner" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("test_good")
 
