@@ -71,8 +71,8 @@ trait StringValidationUtils {
     }
   }
 
-  def validateMaxStringLength(s: String, maxLength: Int): Unit = {
-    if(s.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: $s. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
+  def validateMaxStringLength(str: String, inputName: String, maxLength: Int): Unit = {
+    if(str.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input $inputName. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
   }
 
   def validateAttributeName(an: AttributeName, entityType: String): Unit = {

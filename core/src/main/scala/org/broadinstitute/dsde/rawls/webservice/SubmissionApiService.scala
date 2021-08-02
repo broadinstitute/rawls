@@ -53,6 +53,13 @@ trait SubmissionApiService extends UserInfoDirectives {
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
+        patch {
+          entity(as[UserCommentUpdateOperation]) { newComment =>
+            complete { workspaceServiceConstructor(userInfo).updateSubmissionUserComment(WorkspaceName(workspaceNamespace, workspaceName), submissionId, newComment) }
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
         delete {
           complete { workspaceServiceConstructor(userInfo).abortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
         }
