@@ -1486,8 +1486,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
-          dataAccess.submissionQuery.updateSubmissionUserComment(submissionId, newComment.userComment) map { rows =>
-            if (rows == 1) RequestComplete(StatusCodes.NoContent)
+          dataAccess.submissionQuery.updateSubmissionUserComment(submissionId, newComment.userComment) map { rowsUpdated =>
+            if (rowsUpdated == 1) RequestComplete(StatusCodes.NoContent)
             else RequestComplete(ErrorReport(StatusCodes.NotFound, s"Unable to update userComment for submission. Submission ${submissionId} could not be found."))
           }
         }

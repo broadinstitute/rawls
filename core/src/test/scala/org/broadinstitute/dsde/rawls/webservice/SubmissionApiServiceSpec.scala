@@ -995,6 +995,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     ("allow submission with userComment that has special characters", Option("This comment has special characters: `~!@#$%^&*()_+-=[]\\{}|;':\",./<>?"), JsString("""This comment has special characters: `~!@#$%^&*()_+-=[]\{}|;':",./<>?""")),
     ("allow submission with userComment that has unescaped special characters", Option("""This comment has special characters: `~!@#$%^&*()_+-=[]\{}|;':",./<>?"""), JsString("""This comment has special characters: `~!@#$%^&*()_+-=[]\{}|;':",./<>?""")),
     ("allow submission with userComment containing url", Option("This comment contains url - https://github.com/broadinstitute/rawls/workflows/Scala%20tests%20with%20coverage/badge.svg?branch=develop"), JsString("This comment contains url - https://github.com/broadinstitute/rawls/workflows/Scala%20tests%20with%20coverage/badge.svg?branch=develop")),
+    ("allow submission with non-ASCII special characters", Option("•ªº§¶œ∑´©˙∆˚˜∫µ˜≤"), JsString("•ªº§¶œ∑´©˙∆˚˜∫µ˜≤")),
     ("allow submission with userComment containing 1000 characters", Option(userComment1000character), JsString(userComment1000character))
   )
 
