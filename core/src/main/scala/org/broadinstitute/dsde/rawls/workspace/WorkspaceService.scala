@@ -348,20 +348,25 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     for {
 
-      workflowsToAbort <- deletionFuture
+      workflowsToAbort <- deletionFuture recoverWith {
+        case t:Throwable => { // logging added as part of investigation into https://broadworkbench.atlassian.net/browse/CA-1206
+          logger.warn(s"Unexpected failure deleting workspace (while running `deletionFuture`) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
 
       // Abort running workflows
-      aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) } recover {
-        case t:Throwable => {
+      aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) } recoverWith {
+        case t:Throwable => { // logging added as part of investigation into https://broadworkbench.atlassian.net/browse/CA-1206
           logger.warn(s"Unexpected failure deleting workspace (while aborting workflows) for workspace `${workspaceName}`", t)
           throw t
         }
       }
 
       // Delete resource in sam outside of DB transaction
-      _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recover {
-        case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
+      _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
+        case t:Throwable => { // logging added as part of investigation into https://broadworkbench.atlassian.net/browse/CA-1206
+          logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
           throw t
         }
       }
@@ -377,14 +382,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
       // Delete the Delta Layer companion dataset, if it exists
-      _ <- deltaLayer.deleteDataset(workspaceContext) recover {
-        case t:Throwable => {
+      _ <- deltaLayer.deleteDataset(workspaceContext) recoverWith {
+        case t:Throwable => { // logging added as part of investigation into https://broadworkbench.atlassian.net/browse/CA-1206
           logger.warn(s"Unexpected failure deleting workspace (while deleting Delta Layer) for workspace `${workspaceName}`", t)
           throw t
         }
       }
-      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recover {
-        case t:Throwable => {
+      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
+        case t:Throwable => { // logging added as part of investigation into https://broadworkbench.atlassian.net/browse/CA-1206
           logger.warn(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`", t)
           throw t
         }
