@@ -361,8 +361,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case e: ApiException => {
           if(e.getCode != StatusCodes.NotFound.intValue) {
             logger.warn(s"Unexpected failure deleting workspace in Workspace Manager. Received ${e.getCode}: [${e.getResponseBody}]")
+            Future.successful()
           }
-          Future.successful()
         }
       }
       // Delete the Delta Layer companion dataset, if it exists
