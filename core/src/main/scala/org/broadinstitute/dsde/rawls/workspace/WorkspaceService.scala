@@ -951,7 +951,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // called from test harness
   private[workspace] def maybeShareProjectComputePolicy(policyAdditions: Set[(SamResourcePolicyName, String)], workspaceName: WorkspaceName): Future[Unit] = {
     val newWriterEmails = policyAdditions.collect {
-      case (SamWorkspacePolicyNames.canCompute, email)  => WorkbenchEmail(email)
+      case (SamWorkspacePolicyNames.canCompute, email)  => email
     }
     Future.traverse(newWriterEmails) { email =>
       samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, SamBillingProjectPolicyNames.canComputeUser, email, userInfo).recoverWith {
