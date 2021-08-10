@@ -951,11 +951,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // called from test harness
   private[workspace] def maybeShareProjectComputePolicy(policyAdditions: Set[(SamResourcePolicyName, String)], workspaceName: WorkspaceName): Future[Unit] = {
     val newWriterEmails = policyAdditions.collect {
-      case (SamWorkspacePolicyNames.canCompute, email)  => email
+      case (SamWorkspacePolicyNames.canCompute, email)  => WorkbenchEmail(email)
     }
-    Future.traverse(newWriterEmails) { email =>
-      samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, SamBillingProjectPolicyNames.canComputeUser, email, userInfo)
-    }.map(_ => ())
+    for {
+      billingProjectPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.billingProject, workspaceName.namespace, userInfo)
+      maybeCanComputePolicy = billingProjectPolicies.filter { policy => policy.policyName == SamBillingProjectPolicyNames.canComputeUser }
+      _ <- maybeCanComputePolicy.headOption match {
+        case Some(canComputePolicy) =>
+          logger.info(s"canCompute policy found for Terra billing project while updating ${workspaceName.toString}, adding new writers to it...")
+          samDAO.overwritePolicyMembership(SamResourceTypeNames.billingProject, workspaceName.namespace, SamBillingProjectPolicyNames.canComputeUser, canComputePolicy.policy.memberEmails ++ newWriterEmails, userInfo)
+        case None =>
+          logger.info(s"no canCompute policy found for Terra billing project while updating ${workspaceName.toString} because it is a v2 project. Proceeding...")
+          Future.successful(())
+      }
+    } yield (())
   }
 
   private def sendACLUpdateNotifications(workspaceName: WorkspaceName, usersModified: Set[WorkspaceACLUpdate]): Unit = {
