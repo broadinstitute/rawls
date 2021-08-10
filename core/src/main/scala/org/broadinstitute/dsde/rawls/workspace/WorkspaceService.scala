@@ -136,12 +136,20 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        val methodConfigResolver: MethodConfigResolver,
                        protected val gcsDAO: GoogleServicesDAO,
                        val samDAO: SamDAO, notificationDAO: NotificationDAO,
-                       userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
+                       userServiceConstructor: UserInfo => UserService,
+                       genomicsServiceConstructor: UserInfo => GenomicsService,
+                       maxActiveWorkflowsTotal: Int,
                        maxActiveWorkflowsPerUser: Int,
                        override val workbenchMetricBaseName: String,
                        submissionCostService: SubmissionCostService,
                        config: WorkspaceServiceConfig,
-                       requesterPaysSetupService: RequesterPaysSetupService)
+                       requesterPaysSetupService: RequesterPaysSetupService,
+                       resourceBufferService: ResourceBufferService,
+                       resourceBufferSaEmail: String,
+                       servicePerimeterService: ServicePerimeterService,
+                       googleIamDao: GoogleIamDAO,
+                       terraBillingProjectOwnerRole: String,
+                       terraWorkspaceCanComputeRole: String)
                       (implicit protected val executionContext: ExecutionContext) extends RoleSupport
   with LibraryPermissionsSupport
   with FutureSupport
@@ -153,8 +161,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   with WorkspaceSupport
   with EntitySupport
   with AttributeSupport
-  with StringValidationUtils
-  with Retry {
+  with StringValidationUtils {
 
   import dataSource.dataAccess.driver.api._
 

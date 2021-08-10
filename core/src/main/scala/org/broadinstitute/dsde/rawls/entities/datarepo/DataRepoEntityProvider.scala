@@ -426,7 +426,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     val insertId = UUID.randomUUID()
     val source = InsertSource(dataReference.getMetadata.getResourceId, requestArguments.userInfo.userSubjectId)
     val destination = InsertDestination(requestArguments.workspace.workspaceIdAsUUID, bqDataset,
-      requestArguments.workspace.googleProject, requestArguments.billingProject)
+      requestArguments.workspace.googleProjectId, requestArguments.billingProject)
     val deltaInsert = DeltaInsert(insertId, Instant.now(), source, destination, inserts)
 
     // consider making this async, so we respond to the user quicker. For now, leave as synchronous

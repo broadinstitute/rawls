@@ -85,7 +85,7 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
 
     samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo) flatMap { samPolicies =>
       val aclBindings = calculateDatasetAcl(samPolicies)
-      bqCreate(workspace.googleProject, datasetName, datasetLabels, aclBindings).unsafeToFuture()
+      bqCreate(workspace.googleProjectId, datasetName, datasetLabels, aclBindings).unsafeToFuture()
     }
   }
 
@@ -104,7 +104,7 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
     }.recover {
       case bqe: BigQueryException if bqe.getCode == 409 =>
         // dataset already exists
-        val ds = DatasetId.of(workspace.googleProject.value, DeltaLayer.generateDatasetNameForWorkspace(workspace))
+        val ds = DatasetId.of(workspace.googleProjectId.value, DeltaLayer.generateDatasetNameForWorkspace(workspace))
         logger.info(s"Delta Layer companion dataset already exists; createDatasetIfNotExist ignoring BigQuery 409 for ${ds.getProject}/${ds.getDataset}")
         (false, ds)
       case err  =>
@@ -119,7 +119,7 @@ class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWrite
     * @return true if dataset was deleted, false if it was not found (and throws on other errors)
     */
   def deleteDataset(workspace: Workspace): Future[Boolean] = {
-    val bqService = bqServiceFactory.getServiceForProject(workspace.googleProject)
+    val bqService = bqServiceFactory.getServiceForProject(workspace.googleProjectId)
     val datasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
     // the GoogleBigQueryService.deleteDataset call below is already 404-safe; no need to trap
     // for the case where the dataset doesn't exist

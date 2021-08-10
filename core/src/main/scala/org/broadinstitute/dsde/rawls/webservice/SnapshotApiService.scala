@@ -119,7 +119,7 @@ trait SnapshotApiService extends UserInfoDirectives {
         parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
           complete {
             snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit)
-              .map(resourceListToDataReferenceList)
+              .map(snapshotListResponseToDataReferenceList)
               .map(StatusCodes.OK -> _)
           }
         }

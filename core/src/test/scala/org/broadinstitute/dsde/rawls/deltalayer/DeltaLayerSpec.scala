@@ -55,40 +55,40 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
       // create unique "clientEmail" and "deltaLayerStreamerEmail" values for this test
       val clientEmailUnderTest = WorkbenchEmail("Hugo")
       val deltaLayerStreamerEmailUnderTest = WorkbenchEmail("Nemo")
-  
+
       // create the Delta Layer object and grab the private method "calculateDatasetAcl"
       val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
       val deltaLayer = testDeltaLayer(bqFactory,
         clientEmail = clientEmailUnderTest,
         deltaLayerStreamerEmail = deltaLayerStreamerEmailUnderTest)
       val methodUnderTest = PrivateMethod[Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]]('calculateDatasetAcl)
-  
+
       // minimal set of existing policies to pass to calculateDatasetAcl() - it will fail without a projectOwner policy
       val existingPolicies = Set(
         SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner, SamPolicy(Set(), Set(), Set()), WorkbenchEmail("dummy-policy-1"))
       )
-  
+
       // assert that the calculated ACLs include OWNER:clientEmail and WRITER:deltaLayerStreamerEmail
       val actual = deltaLayer invokePrivate methodUnderTest(existingPolicies)
       actual should contain (Acl.Role.OWNER -> Seq((clientEmailUnderTest, Acl.Entity.Type.USER)))
       actual should contain (Acl.Role.WRITER -> Seq((deltaLayerStreamerEmailUnderTest, Acl.Entity.Type.USER)))
     }
-  
+
     "should calculate proper ACLs in calculateDatasetAcl" in {
       // create unique "clientEmail" and "deltaLayerStreamerEmail" values for this test
       val clientEmailUnderTest = WorkbenchEmail("George")
       val deltaLayerStreamerEmailUnderTest = WorkbenchEmail("Mugsy")
-  
+
       // create the Delta Layer object and grab the private method "calculateDatasetAcl"
       val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
       val deltaLayer = testDeltaLayer(bqFactory,
         clientEmail = clientEmailUnderTest,
         deltaLayerStreamerEmail = deltaLayerStreamerEmailUnderTest)
       val methodUnderTest = PrivateMethod[Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]]('calculateDatasetAcl)
-  
+
       // minimal set of existing policies to pass to calculateDatasetAcl() - it will fail without a projectOwner policy
       Seq(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader) // included
-  
+
       // these should be dropped from the calculated ACLs
       val ignoredPolicies = Set(
         SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.canCompute, SamPolicy(Set(), Set(), Set()), WorkbenchEmail("can-compute")),
@@ -96,21 +96,21 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
         SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.shareReader, SamPolicy(Set(), Set(), Set()), WorkbenchEmail("share-reader")),
         SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.shareWriter, SamPolicy(Set(), Set(), Set()), WorkbenchEmail("share-writer"))
       )
-  
+
       // these should be included in the calculated ACLs, as readers. The algorithm grabs the _.email, which is the group name
       val propagatedPolicies = Set(
         SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.reader, SamPolicy(Set(), Set(), Set()), WorkbenchEmail("reader-group")),
         SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.writer, SamPolicy(Set(), Set(), Set()), WorkbenchEmail("writer-group")),
         SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.owner, SamPolicy(Set(), Set(), Set()), WorkbenchEmail("owner-group"))
       )
-  
+
       // the first project owner should be included in the calculated ACL, as a reader. The algorithm grabs all _.policy.memberEmails
       val projectOwnerPolicy = Set(
         SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner, SamPolicy(Set(WorkbenchEmail("projowner-1"), WorkbenchEmail("projowner-2")), Set(), Set()), WorkbenchEmail("projowner-group-3"))
       )
-  
+
       val existingPolicies = ignoredPolicies ++ propagatedPolicies ++ projectOwnerPolicy
-  
+
       val expected = Map(
         Acl.Role.OWNER -> Seq((clientEmailUnderTest, Acl.Entity.Type.USER)),
         Acl.Role.WRITER -> Seq((deltaLayerStreamerEmailUnderTest, Acl.Entity.Type.USER)),
@@ -122,16 +122,16 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           (WorkbenchEmail("projowner-2"), Acl.Entity.Type.GROUP)
         )
       )
-  
+
       val actual = deltaLayer invokePrivate methodUnderTest(existingPolicies)
-  
+
       // actual and expected contain lists/vectors as values, which will return unequal if ordered differently.
       // for the sake of comparison, transform to unordered.
       val expectedMap = expected.map { kv => kv._1 -> kv._2.toSet }
       val actualMap = actual.map { kv => kv._1 -> kv._2.toSet }
       assertResult (expectedMap) { actualMap }
     }
-  
+
     "should catch/ignore 409s from BigQuery in createDatasetIfNotExist" in {
       // mock GoogleBigQueryService that throws error on createDataset
       val throwingBQService = mock[GoogleBigQueryService[IO]]
@@ -146,11 +146,11 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
         case (didCreate, datasetId) =>
           didCreate shouldBe false
           datasetId shouldBe DatasetId.of(
-            constantData.workspace.googleProject.value,
+            constantData.workspace.googleProjectId.value,
             s"deltalayer_forworkspace_${constantData.workspace.workspaceId.replace("-","_")}")
       }
     }
-  
+
     "should bubble up 409s from BigQuery in createDataset" in {
       // mock GoogleBigQueryService that throws error on createDataset
       val throwingBQService = mock[GoogleBigQueryService[IO]]
@@ -170,28 +170,28 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
         caught.getCode shouldBe 409
       }
     }
-  
+
     List("createDatasetIfNotExist", "createDataset") foreach { method =>
       s"$method method" - {
-      
+
         s"should create the companion dataset if it doesn't exist in $method" in {
           // for unit tests, we don't actually check to see if a call goes out to the cloud to create the dataset.
           // we just test that we properly call the low-level DeltaLayer.bqCreate method, which contains the call to the cloud
-    
+
           // create the Delta Layer instance and spy on it
           val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory))
           // find the createDataset/createDatasetIfNotExist method we want to test, then invoke it
           val methodUnderTest = deltaLayerSpy.getClass.getMethod(method, constantData.workspace.getClass, userInfo.getClass)
           methodUnderTest.invoke(deltaLayerSpy, constantData.workspace, userInfo)
-    
+
           // wait on futures until we see the bqCreate method being invoked
           eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
             verify(deltaLayerSpy, times(1)).bqCreate(any(), any(), any(), any())
           }
           succeed
         }
-    
+
         s"should add appropriate labels to the companion dataset in $method" in {
           // create the Delta Layer instance and spy on it
           val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
@@ -210,12 +210,12 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           val expected = Map("workspace_id" -> constantData.workspace.workspaceId)
           assertResult(expected) { actual }
         }
-    
+
         s"should specify some ACLs for the companion dataset in $method" in {
           // create unique "clientEmail" and "deltaLayerStreamerEmail" values for this test
           val clientEmailUnderTest = WorkbenchEmail("Fluffy")
           val deltaLayerStreamerEmailUnderTest = WorkbenchEmail("Patches")
-    
+
           // create the Delta Layer instance and spy on it
           val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory,
@@ -232,7 +232,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           }
           // assert the ACLs actually in use matches what we want
           val actual = aclBindingsCaptor.getValue
-    
+
           // expected ACLs add the clientEmail as owner, deltaLayerStreamerEmail as writer, and the pre-existing workspace owner/writer/reader as reader
           val expected = Map(
             Acl.Role.OWNER -> Seq((clientEmailUnderTest, Acl.Entity.Type.USER)),
@@ -244,7 +244,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
               (WorkbenchEmail("reader@example.com"), Acl.Entity.Type.GROUP)
             )
           )
-    
+
           // test the ordered seqs/lists/vectors individually
           actual.keys should contain theSameElementsAs expected.keys
           actual.keys foreach { key =>
@@ -252,7 +252,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           }
           succeed
         }
-    
+
         s"should use the specified workspace's project for the companion dataset in $method" in {
           // create the Delta Layer instance and spy on it
           val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
@@ -268,7 +268,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           }
           // assert the google project actually in use matches what we want
           val actual = googleProjectIdCaptor.getValue
-          val expected = constantData.workspace.googleProject
+          val expected = constantData.workspace.googleProjectId
           assertResult(expected) { actual }
         }
 
@@ -315,7 +315,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
             caught.getCode shouldBe 444
           }
         }
-    
+
         s"should bubble up synchronous Sam exceptions in $method" in {
           // create a mock Sam dao that will throw an error
           val throwingSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
@@ -325,13 +325,13 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           val deltaLayer = testDeltaLayer(bqFactory, samDAO = throwingSamDAO)
           // find the createDataset/createDatasetIfNotExist method we want to test, then invoke it
           val methodUnderTest = deltaLayer.getClass.getMethod(method, constantData.workspace.getClass, userInfo.getClass)
-    
+
           // wait on futures until we see the bqCreate method being invoked
           eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
             val caught = intercept[InvocationTargetException] {
               methodUnderTest.invoke(deltaLayer, constantData.workspace, userInfo)
             }
-    
+
             Option(caught.getCause) should not be empty
             caught.getCause shouldBe a [RuntimeException]
             caught.getCause.getMessage shouldBe s"Sam synchronous errors should bubble up in $method"

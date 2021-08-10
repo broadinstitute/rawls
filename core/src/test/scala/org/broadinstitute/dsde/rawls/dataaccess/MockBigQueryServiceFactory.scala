@@ -109,10 +109,6 @@ class MockBigQueryServiceFactory(credentialPath: String, blocker: Blocker, query
   override def getServiceFromJson(json: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
   }
-
-  override def getServiceFromJson(json: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
-    Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
-  }
 }
 
 class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) extends GoogleBigQueryService[IO] {
@@ -173,5 +169,5 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
     // Note that this Some(null) is intentional. We just need the method
     // to succeed, and no code actually looks at the contents of this option.
   }
-  
+
 }
