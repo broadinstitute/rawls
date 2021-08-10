@@ -33,9 +33,23 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.scalatest.concurrent.Eventually
+import org.scalatest.BeforeAndAfterAll
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.testkit.ScalatestRouteTest
+import cats.effect.IO
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig}
+import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
+import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers._
+import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, spy, times, verify}
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Eventually
@@ -49,6 +63,8 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.mapAsScalaMapConverter
 import scala.language.postfixOps
 import scala.util.Try
+
+import scala.concurrent.ExecutionContext.global
 
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -131,6 +147,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
     )_
 
+    val deltaLayerSpy = spy(new DeltaLayer(MockBigQueryServiceFactory.ioFactory(), new MockDeltaLayerWriter, samDAO,
+      WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global)))
+
     val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
       gcsDAO
@@ -167,7 +187,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      dataRepoDAO,
+      deltaLayerSpy,
       methodConfigResolver,
       gcsDAO,
       samDAO,
@@ -786,6 +806,30 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
     }
 
+  }
+
+  it should "delete the Delta Layer companion dataset when deleting a workspace" in withTestDataServices { services =>
+    // see also the tests in DeltaLayerSpec, which provide greater and lower-level coverage
+
+    // check that the workspace to be deleted exists; it shouldn't matter which workspace we use for this test
+    assertWorkspaceResult(Option(testData.workspaceWithMultiGroupAD)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName10))
+    }
+    // delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName10), Duration.Inf)
+    // check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName10))
+    }
+    // check that deleting the workspace triggered a call to DeltaLayer.deleteDataset
+    val deleteWsCaptor: ArgumentCaptor[Workspace] = ArgumentCaptor.forClass(classOf[Workspace])
+    verify(services.deltaLayerSpy, times(1)).deleteDataset(deleteWsCaptor.capture())
+    // check that the workspace sent to the deleteDataset call is correct
+    // note that we cannot compare against workspaceWithMultiGroupAD directly, as its last-updated value has changed
+    // during fixture creation, so we just compare its id and name
+    val deleteArg = deleteWsCaptor.getValue
+    deleteArg.workspaceId shouldBe testData.workspaceWithMultiGroupAD.workspaceId
+    deleteArg.toWorkspaceName shouldBe testData.workspaceWithMultiGroupAD.toWorkspaceName
   }
 
   it should "return the correct tags from autocomplete" in withTestDataServices { services =>

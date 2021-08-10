@@ -15,12 +15,13 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
@@ -67,7 +68,7 @@ import scala.util.{Failure, Success, Try}
 object WorkspaceService {
   def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO,
                   executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, workspaceManagerDAO: WorkspaceManagerDAO,
-                  dataRepoDAO: DataRepoDAO, methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
+                  deltaLayer: DeltaLayer, methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
                   notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
@@ -79,7 +80,7 @@ object WorkspaceService {
                  (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
     new WorkspaceService(userInfo, dataSource, entityManager, methodRepoDAO, cromiamDAO,
-      executionServiceCluster, execServiceBatchSize, workspaceManagerDAO,
+      executionServiceCluster, execServiceBatchSize, workspaceManagerDAO, deltaLayer,
       methodConfigResolver, gcsDAO, samDAO,
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
@@ -123,10 +124,43 @@ object WorkspaceService {
 }
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String, servicePerimeterService: ServicePerimeterService, googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
-  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport with Retry {
+class WorkspaceService(protected val userInfo: UserInfo,
+                       val dataSource: SlickDataSource,
+                       val entityManager: EntityManager,
+                       val methodRepoDAO: MethodRepoDAO,
+                       cromiamDAO: ExecutionServiceDAO,
+                       executionServiceCluster: ExecutionServiceCluster,
+                       execServiceBatchSize: Int,
+                       val workspaceManagerDAO: WorkspaceManagerDAO,
+                       val deltaLayer: DeltaLayer,
+                       val methodConfigResolver: MethodConfigResolver,
+                       protected val gcsDAO: GoogleServicesDAO,
+                       val samDAO: SamDAO, notificationDAO: NotificationDAO,
+                       userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
+                       maxActiveWorkflowsPerUser: Int,
+                       override val workbenchMetricBaseName: String,
+                       submissionCostService: SubmissionCostService,
+                       config: WorkspaceServiceConfig,
+                       requesterPaysSetupService: RequesterPaysSetupService)
+                      (implicit protected val executionContext: ExecutionContext) extends RoleSupport
+  with LibraryPermissionsSupport
+  with FutureSupport
+  with MethodWiths
+  with UserWiths
+  with LazyLogging
+  with RawlsInstrumented
+  with JsonFilterUtils
+  with WorkspaceSupport
+  with EntitySupport
+  with AttributeSupport
+  with StringValidationUtils
+  with Retry {
 
   import dataSource.dataAccess.driver.api._
+
+  implicit val errorReportSource = ErrorReportSource("rawls")
+
+  private val UserCommentMaxLength: Int = 1000
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
@@ -390,6 +424,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           Success(())
         }
       }
+      // Delete the Delta Layer companion dataset, if it exists
+      _ <- deltaLayer.deleteDataset(workspaceContext)
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo)
     } yield {
       aborts.onComplete {
@@ -1358,6 +1394,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
 
+      _ = submissionRequest.userComment.map(validateMaxStringLength(_, "userComment", UserCommentMaxLength))
+
       gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
 
       validationResult <- entityProvider.expressionValidator.validateExpressionsForSubmission(methodConfig, gatherInputsResult)
@@ -1449,7 +1487,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         externalEntityInfo = for {
           entityType <- header.entityType
           dataStoreId <- header.entityStoreId
-        } yield ExternalEntityInfo(dataStoreId, entityType)
+        } yield ExternalEntityInfo(dataStoreId, entityType),
+        userComment = submissionRequest.userComment
       )
 
       // implicitly passed to SubmissionComponent.create
@@ -1499,6 +1538,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               }
               val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
               RequestComplete((StatusCodes.OK, costedSubmission))
+          }
+        }
+      }
+    }
+  }
+
+  def updateSubmissionUserComment(workspaceName: WorkspaceName, submissionId: String, newComment: UserCommentUpdateOperation): Future[PerRequestMessage] = {
+    validateMaxStringLength(newComment.userComment, "userComment", UserCommentMaxLength)
+
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
+          dataAccess.submissionQuery.updateSubmissionUserComment(submissionId, newComment.userComment) map { rowsUpdated =>
+            if (rowsUpdated == 1) RequestComplete(StatusCodes.NoContent)
+            else RequestComplete(ErrorReport(StatusCodes.NotFound, s"Unable to update userComment for submission. Submission ${submissionId} could not be found."))
           }
         }
       }

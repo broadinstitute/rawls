@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -26,6 +27,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import spray.json.{JsObject, enrichAny}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -1752,8 +1754,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   private def createSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
-                                         submissionEntity: Entity, submissionExpression: Option[String],
-                                         services: TestApiService, exectedStatus: StatusCode): Unit = {
+                               submissionEntity: Entity, submissionExpression: Option[String],
+                               services: TestApiService, expectedStatus: StatusCode, userComment: Option[String] = None): Option[String] = {
 
     Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -1773,8 +1775,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
-
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = methodConf.namespace,
       methodConfigurationName = methodConf.name,
@@ -1783,14 +1783,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       expression = submissionExpression,
       useCallCache = false,
       deleteIntermediateOutputFiles = false,
-      workflowFailureMode = None
+      workflowFailureMode = None,
+      userComment = userComment
     )
     Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
       sealRoute(services.submissionRoutes) ~>
       check {
-        assertResult(exectedStatus, responseAs[String]) {
+        assertResult(expectedStatus, responseAs[String]) {
           status
         }
+        if (expectedStatus == StatusCodes.Created) {
+          val response = responseAs[SubmissionReport]
+          Option(response.submissionId)
+        }
+        else None
       }
   }
 
@@ -1808,5 +1814,46 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "fail when user with only read access to workspace tries to edit comments" in {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      // mock service for user that has owner access to workspace
+      withApiServicesSecure(dataSource) { servicesForOwner =>
+        // mock service for user that has only read access to the same workspace
+        withApiServicesSecure(dataSource, testData.userReader.userEmail.value) { servicesForReader =>
+          val wsName = testData.wsName
+          val userComment = Option("Comment for submission by workspace owner")
+          val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+
+          // submission created by user with owner access
+          val submissionId = createSubmission(wsName, agoraMethodConf, testData.sample1, None, servicesForOwner, StatusCodes.Created, userComment).get
+
+          // user with read access to workspace should be able to get submission details and read the user comment
+          Get(s"${wsName.path}/submissions/$submissionId") ~>
+            sealRoute(servicesForReader.submissionRoutes) ~>
+            check {
+              assertResult(StatusCodes.OK) {
+                status
+              }
+              val response = responseAs[Submission]
+              response.userComment shouldBe Option("Comment for submission by workspace owner")
+            }
+
+          // user with read access should not be able to update the submission comment
+          Patch(
+            s"${wsName.path}/submissions/$submissionId",
+            JsObject(
+              List("userComment" -> "user comment updated".toJson): _*
+            )
+          ) ~>
+            sealRoute(servicesForReader.submissionRoutes) ~>
+            check {
+              val response = responseAs[String]
+              status should be(StatusCodes.Forbidden)
+              response should include ("insufficient permissions to perform operation on myNamespace/myWorkspace")
+            }
+        }
+      }
+    }
+  }
 }
 

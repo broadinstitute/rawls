@@ -121,6 +121,76 @@ paths:
             - profile
             - https://www.googleapis.com/auth/cloud-billing
       x-codegen-request-body-name: createProjectRequest
+  /api/billing/v2/{projectId}/billingAccount:
+    put:
+      tags:
+        - billing_v2
+      summary: update billing account on billing project
+      description: update billing account on billing project
+      operationId: updateBillingProjectBillingAccount
+      parameters:
+        - name: projectId
+          in: path
+          description: Id of the billing project
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: update billing account request
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/UpdateRawlsBillingAccountRequest'
+        required: true
+      responses:
+        200:
+          description: Billing account successfully updated
+        400:
+          description: Billing account not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Billing Project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Internal Server Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - billing_v2
+      summary: deletes the billing account on billing project
+      description: deletes the billing account on billing project
+      operationId: deleteBillingProjectBillingAccount
+      parameters:
+        - name: projectId
+          in: path
+          description: Id of the billing project
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Billing account successfully removed
+        404:
+          description: Billing project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Internal Server Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/billing/{projectId}/members:
     get:
       tags:
@@ -269,7 +339,7 @@ paths:
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/CreateRawlsBillingProjectFullRequest'
+              $ref: '#/components/schemas/CreateRawlsV2BillingProjectFullRequest'
         required: true
       responses:
         201:
@@ -460,6 +530,121 @@ paths:
                   $ref: '#/components/schemas/RawlsBillingProjectMember'
         403:
           description: You must be a project owner to view the members of a project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+  /api/billing/v2/{projectId}/spendReportConfiguration:
+    get:
+      tags:
+        - billing_v2
+      summary: get the spend report configuration for the billing project
+      description: get the spend report configuration for the billing project
+      operationId: getSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successfully retrieved spend report configuration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/SpendReportConfiguration'
+        204:
+          description: The specified billing project exists but does not have spend reporting configured
+        403:
+          description: You must be a billing project owner to view the spend report configuration of the billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: The specified billing project could not be found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    put:
+      tags:
+        - billing_v2
+      summary: set the spend configuration for the billing project
+      description: set the spend configuration for the billing project
+      operationId: setSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: billing project spend configuration information
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/SpendReportConfiguration'
+      responses:
+        204:
+          description: Successfully updated spend configuration
+        400:
+          description: Either the billing project does not have an active billing account, the specified dataset does not exist, or the specified table does not exist
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be a billing project owner to alter the spend configuration of the billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: The specified billing project could not be found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - billing_v2
+      summary: clear the spend configuration for the billing project
+      description: clear the spend configuration for the billing project
+      operationId: clearSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Successfully cleared spend configuration
+        403:
+          description: You must be a billing project owner to alter the spend configuration of the billing project
           content:
             'application/json':
               schema:
@@ -1272,6 +1457,53 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/Submission'
+        404:
+          description: Workspace or submission not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    patch:
+      tags:
+        - submissions
+      summary: Update user comment for a submission
+      description: Update user comment for a submission
+      operationId: updateSubmissionUserComment
+      parameters:
+        - name: workspaceNamespace
+          in: path
+          description: Workspace Namespace
+          required: true
+          schema:
+            type: string
+        - name: workspaceName
+          in: path
+          description: Workspace Name
+          required: true
+          schema:
+            type: string
+        - name: submissionId
+          in: path
+          description: Submission Id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: User comment to be updated
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/UserCommentUpdateOperation'
+        required: true
+      responses:
+        200:
+          description: Successful Request
         404:
           description: Workspace or submission not found
           content:
@@ -4234,7 +4466,7 @@ paths:
       tags:
         - snapshots_v2
       summary: List snapshots
-      description: Enumerate references to snapshots in the Terra Data Repo
+      description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
       operationId: enumerateDataRepoSnapshot_v2
       parameters:
         - name: offset
@@ -4252,13 +4484,19 @@ paths:
           schema:
             type: integer
           example: 10
+        - name: referencedSnapshotId
+          in: query
+          description: Optional; UUID of the Data Repo snapshot being referenced
+          required: false
+          schema:
+            type: string
       responses:
         200:
           description: OK
           content:
             '*/*':
               schema:
-                $ref: '#/components/schemas/DataRepoSnapshotResourceList'
+                $ref: '#/components/schemas/SnapshotListResponse'
         404:
           description: Workspace not found or user lacks permissions
           content:
@@ -4381,6 +4619,38 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/name/{referenceName}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+      - $ref: '#/components/parameters/referenceNamePathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: Get a snapshot by name
+      description: Get a reference to a snapshot in the Terra Data Repo by its name
+      operationId: getDataRepoSnapshotByName_v2
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
+
 
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
@@ -4595,30 +4865,15 @@ components:
           $ref: '#/components/schemas/ResourceMetadata'
         attributes:
           $ref: '#/components/schemas/DataRepoSnapshotAttributes'
-    ResourceAttributesUnion:
+    SnapshotListResponse:
       type: object
-      required: [ gcpDataRepoSnapshot ]
+      required: [ gcpDataRepoSnapshots ]
       properties:
-        gcpDataRepoSnapshot:
-          $ref: '#/components/schemas/DataRepoSnapshotAttributes'
-    ResourceDescription:
-      type: object
-      required: [ metadata, resourceAttributes ]
-      properties:
-        metadata:
-          $ref: '#/components/schemas/ResourceMetadata'
-        resourceAttributes:
-          $ref: '#/components/schemas/ResourceAttributesUnion'
-      description: resource description
-    DataRepoSnapshotResourceList:
-      type: object
-      required: [ resources ]
-      properties:
-        resources:
+        gcpDataRepoSnapshots:
           type: array
-          description: A list of snapshot Data Resource definitions from Workspace Manager
+          description: A list of DataRepoSnapshotResources from Workspace Manager
           items:
-            $ref: '#/components/schemas/ResourceDescription'
+            $ref: '#/components/schemas/DataRepoSnapshotResource'
       description: List of snapshot resources
     ErrorReport:
       required:
@@ -4779,6 +5034,9 @@ components:
             - ContinueWhilePossible
         externalEntityInfo:
           $ref: '#/components/schemas/ExternalEntityInfo'
+        userComment:
+          type: string
+          description: Comment for the submission
       description: ""
     ExternalEntityInfo:
       type: object
@@ -4827,6 +5085,9 @@ components:
             - ContinueWhilePossible
         externalEntityInfo:
           $ref: '#/components/schemas/ExternalEntityInfo'
+        userComment:
+          type: string
+          description: Comment for the submission
       description: An abbreviated Submission, without workflow information, good for
         listings
     ActiveSubmission:
@@ -4945,6 +5206,9 @@ components:
           enum:
             - NoNewCalls
             - ContinueWhilePossible
+        userComment:
+          type: string
+          description: Comment for the submission (max length 1000 characters)
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
@@ -5092,6 +5356,15 @@ components:
           items:
             $ref: '#/components/schemas/SubmissionValidationEntityInputs'
       description: information on a submission
+    UserCommentUpdateOperation:
+      required:
+        - userComment
+      type: object
+      properties:
+        userComment:
+          type: string
+          description: The updated value for user comment (max length 1000 characters)
+      description: Update user comment for submission
     WorkflowCost:
       type: object
       properties:
@@ -6190,6 +6463,38 @@ components:
             Caller must have the add_project action for this service perimeter in
             Sam.
       description: ""
+    CreateRawlsV2BillingProjectFullRequest:
+      required:
+        - billingAccount
+        - projectName
+      type: object
+      properties:
+        projectName:
+          type: string
+          description: the name of the project to create
+        billingAccount:
+          type: string
+          description: the id of the billing account to use, must start with 'billingAccounts/'
+        servicePerimeter:
+          type: string
+          description: The fully qualified name of the GCP service perimeter to put
+            this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
+            Caller must have the add_project action for this service perimeter in
+            Sam.
+      description: ""
+    SpendReportConfiguration:
+      required:
+        - datasetGoogleProject
+        - datasetName
+      type: object
+      properties:
+        datasetGoogleProject:
+          type: string
+          description: the name of the Google Project where the BigQuery dataset resides
+        datasetName:
+          type: string
+          description: the name of the BigQuery dataset containing project spend data
+      description: ""
     SpendReportConfiguration:
       required:
         - datasetGoogleProject
@@ -6437,6 +6742,13 @@ components:
       name: snapshotId
       in: path
       description: The snapshot's referenceId
+      required: true
+      schema:
+        type: string
+    referenceNamePathParam:
+      name: referenceName
+      in: path
+      description: The snapshot reference's name
       required: true
       schema:
         type: string

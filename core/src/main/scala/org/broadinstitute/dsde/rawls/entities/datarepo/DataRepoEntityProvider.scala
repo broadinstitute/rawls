@@ -420,13 +420,13 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     val inserts = DeltaLayerTranslator.translateEntityUpdates(entityUpdates)
 
     // determine destination BQ dataset, based on snapshot reference.
-    val bqDataset = DeltaLayer.generateDatasetName(dataReference.getMetadata.getResourceId)
+    val bqDataset = DeltaLayer.generateDatasetNameForWorkspace(requestArguments.workspace)
 
     // create DeltaInsert object
     val insertId = UUID.randomUUID()
     val source = InsertSource(dataReference.getMetadata.getResourceId, requestArguments.userInfo.userSubjectId)
     val destination = InsertDestination(requestArguments.workspace.workspaceIdAsUUID, bqDataset,
-      requestArguments.workspace.googleProjectId, requestArguments.billingProject)
+      requestArguments.workspace.googleProject, requestArguments.billingProject)
     val deltaInsert = DeltaInsert(insertId, Instant.now(), source, destination, inserts)
 
     // consider making this async, so we respond to the user quicker. For now, leave as synchronous

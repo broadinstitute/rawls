@@ -439,6 +439,26 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       agoraMethod
     )
 
+    val agoraMethodConfigMaxWorkspaceAttributes = MethodConfiguration(
+      "ns",
+      "testConfigMaxWorkspaceAttributes",
+      Some("Sample"),
+      None,
+      Map("i1" -> AttributeString("input")),
+      Map("o1" -> AttributeString("workspace.long_attributes")),
+      agoraMethod
+    )
+
+    val agoraMethodConfigMaxEntityAttributes = MethodConfiguration(
+      "ns",
+      "testConfigMaxEntityAttributes",
+      Some("Sample"),
+      None,
+      Map("i1" -> AttributeString("input")),
+      Map("o1" -> AttributeString("this.long_attributes")),
+      agoraMethod
+    )
+
     val goodAndBadMethod = AgoraMethod("dsde", "good_and_bad", 1)
 
     val goodAndBadMethodConfig = MethodConfiguration(

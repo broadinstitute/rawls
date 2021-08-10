@@ -66,13 +66,13 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             put {
               entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
                 complete{
-                  userServiceConstructor(userInfo).updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest)
+                  userServiceConstructor(userInfo).updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest).map(_ => StatusCodes.OK)
                 }
               }
             } ~
               delete {
                 complete {
-                  userServiceConstructor(userInfo).deleteBillingAccount(RawlsBillingProjectName(projectId))
+                  userServiceConstructor(userInfo).deleteBillingAccount(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.OK)
                 }
               }
           }
@@ -105,7 +105,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
           complete { userServiceConstructor(userInfo).listBillingProjectsV2() }
         } ~
         post {
-          entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
+          entity(as[CreateRawlsV2BillingProjectFullRequest]) { createProjectRequest =>
             complete {
               userServiceConstructor(userInfo).createBillingProjectV2(createProjectRequest)
             }

@@ -167,7 +167,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -269,7 +271,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
 
             logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
@@ -381,7 +385,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
 
             logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
@@ -705,7 +711,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -863,6 +871,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               expression = "this",
               useCallCache = false,
               deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
 
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -947,6 +957,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
                   expression = "this",
                   useCallCache = false,
                   deleteIntermediateOutputFiles = false,
+                  useReferenceDisks = false,
+                  memoryRetryMultiplier = 1.0
                 )
               )
 
@@ -981,6 +993,13 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
   private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, Set[String])] = {
+    import org.typelevel.log4cats.Logger
+    import org.typelevel.log4cats.slf4j.Slf4jLogger
+    import org.apache.commons.io.IOUtils
+    import cats.effect.IO
+
+    implicit val logger: org.typelevel.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+
     GoogleStorageService.resource(
       RawlsConfig.pathToQAJson,
       Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global)

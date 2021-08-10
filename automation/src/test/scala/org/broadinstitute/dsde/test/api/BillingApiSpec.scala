@@ -106,7 +106,9 @@ class BillingApiSpec extends AnyFreeSpec with BillingFixtures with MethodFixture
           participantId,
           "this",
           useCallCache = false,
-          deleteIntermediateOutputFiles = false)
+          deleteIntermediateOutputFiles = false,
+          useReferenceDisks = false,
+          memoryRetryMultiplier = 1.0)
 
         // wait until submission complete
         Submission.waitUntilSubmissionComplete(billingProjectName, workspaceName, submissionId)

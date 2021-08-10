@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.test.api
 
-import java.util.UUID
-
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.Uri.{Path, Query}
 import akka.http.scaladsl.model.{StatusCodes, Uri}
@@ -11,23 +9,39 @@ import bio.terra.datarepo.model.{EnumerateSnapshotModel, SnapshotModel}
 import bio.terra.workspace.model._
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
-import com.typesafe.scalalogging.LazyLogging
+import com.google.api.services.compute.ComputeScopes
+import com.google.auth.oauth2.{AccessToken, GoogleCredentials, ServiceAccountCredentials}
+import java.nio.charset.Charset
+import java.util.UUID
+import org.apache.commons.io.IOUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import spray.json._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.userLoginScopes
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
-import org.broadinstitute.dsde.workbench.service.Rawls
+import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
-
+import org.scalatest.time.{Minutes, Seconds, Span}
+import com.typesafe.scalalogging.LazyLogging
+import cats.effect.{Blocker, ContextShift, IO, Timer}
 import scala.collection.JavaConverters._
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
+import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 
 class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterAll
@@ -77,11 +91,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
           // if we can successfully list snapshot references, it means WSM created its copy of the workspace
           val firstListResponse = listSnapshotReferences(projectName, workspaceName)
-          val firstResources = Rawls.parseResponseAs[ResourceList](firstListResponse).getResources.asScala
+          val firstResources = Rawls.parseResponseAs[SnapshotListResponse](firstListResponse).gcpDataRepoSnapshots
           firstResources.size shouldBe 1
           firstResources.head.getMetadata.getName shouldBe "firstSnapshot"
           firstResources.head.getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
-          firstResources.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe dataRepoSnapshotId
+          firstResources.head.getAttributes.getSnapshot shouldBe dataRepoSnapshotId
 
           // add a second snapshot reference to the workspace. Under the covers, this recognizes the workspace
           // already exists in WSM, so it just adds the ref
@@ -90,14 +104,14 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // validate the second snapshot was added correctly: list snapshots in Rawls, should return 2, which we just added
           val secondListResponse = listSnapshotReferences(projectName, workspaceName)
           // sort by reference name for easy predictability inside this test: "firstSnapshot" is before "secondSnapshot"
-          val secondResources = Rawls.parseResponseAs[ResourceList](secondListResponse)
-            .getResources.asScala.sortBy(_.getMetadata.getName)
+          val secondResources = Rawls.parseResponseAs[SnapshotListResponse](secondListResponse)
+            .gcpDataRepoSnapshots.sortBy(_.getMetadata.getName)
           secondResources.size shouldBe 2
           secondResources.head.getMetadata.getName shouldBe "firstSnapshot"
-          secondResources.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe dataRepoSnapshotId
+          secondResources.head.getAttributes.getSnapshot shouldBe dataRepoSnapshotId
           secondResources.head.getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
           secondResources(1).getMetadata.getName shouldBe "secondSnapshot"
-          secondResources(1).getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe anotherDataRepoSnapshotId
+          secondResources(1).getAttributes.getSnapshot shouldBe anotherDataRepoSnapshotId
           secondResources(1).getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
         }
       }
@@ -156,6 +170,78 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
     }
 
+    "should add a BigQuery dataset for each snapshot reference added" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+
+      val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
+
+      withCleanBillingProject(owner) { projectName =>
+        withWorkspace(projectName, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
+
+          val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
+          val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
+
+          val snapshotName = "snapshotReferenceAddBQDataset"
+          // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
+          createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)
+
+          // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
+          val listResponse = listSnapshotReferences(projectName, workspaceName)
+          val resources = Rawls.parseResponseAs[SnapshotListResponse](listResponse).gcpDataRepoSnapshots
+          resources should have size 1
+
+          // check that the bq dataset has been created
+          val workspaceId = resources.head.getMetadata.getWorkspaceId
+          val dataset = getDataset(generateReferenceName(workspaceId), projectName, ownerAuthToken)
+          dataset should not be empty
+        }
+      }
+    }
+
+    "should delete BigQuery dataset when a workspace is deleted" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+
+      val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
+
+      withCleanBillingProject(owner) { projectName =>
+        withCleanUp {
+          // get the snapshot
+          val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
+          val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
+
+          // create workspace
+          val workspaceName = s"${UUID.randomUUID().toString}-delete-bq-dataset"
+          Rawls.workspaces.create(projectName, workspaceName)
+
+          val snapshotName = "deleteWorkspaceDeleteBQDataset"
+          // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
+          createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)(owner.makeAuthToken())
+
+          // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
+          val listResponse = listSnapshotReferences(projectName, workspaceName)
+          val resources = Rawls.parseResponseAs[SnapshotListResponse](listResponse).gcpDataRepoSnapshots
+          resources should have size 1
+
+          // check that the bq dataset has been created
+          val workspaceId = resources.head.getMetadata.getWorkspaceId
+          val datasetName = generateReferenceName(workspaceId)
+          val datasetAfterCreation = getDataset(datasetName, projectName, ownerAuthToken)
+          datasetAfterCreation should not be empty
+
+          // delete workspace
+          Rawls.workspaces.delete(projectName, workspaceName)(owner.makeAuthToken())
+
+          // check that the bq dataset has been deleted
+          eventually {
+            val datasetAfterDeletion = getDataset(datasetName, projectName, ownerAuthToken)
+            datasetAfterDeletion should be(None)
+          }
+        }
+      }
+    }
+
     "should be able to run analysis on a snapshot" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
@@ -175,11 +261,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // if we can successfully list snapshot references, it means WSM created its copy of the workspace
           val listResponse = listSnapshotReferences(projectName, workspaceName)
 
-          val resources = Rawls.parseResponseAs[ResourceList](listResponse).getResources.asScala
+          val resources = Rawls.parseResponseAs[SnapshotListResponse](listResponse).gcpDataRepoSnapshots
           resources.size shouldBe 1
           resources.head.getMetadata.getName shouldBe snapshotName
           resources.head.getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
-          resources.head.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot shouldBe dataRepoSnapshotId
+          resources.head.getAttributes.getSnapshot shouldBe dataRepoSnapshotId
 
           // create method config in a workspace
           val createMethodConfigUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/methodconfigs"))
@@ -248,7 +334,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
             }
           }
 
-          }
+        }
 
       }
     }
@@ -269,6 +355,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     Rawls.postRequest(
       uri = targetRawlsUrl.toString(),
       content = payload)
+  }
+
+  private def deleteSnapshotReference(projectName: String, workspaceName: String, resourceId: String)(implicit authToken: AuthToken) = {
+    val targetRawlsUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$projectName/$workspaceName/snapshots/v2/$resourceId"))
+    Rawls.deleteRequest(uri = targetRawlsUrl.toString())
   }
 
   private def getEntityTypeMetadata(projectName: String, workspaceName: String, snapRefName: String)(implicit authToken: AuthToken): Map[String, EntityTypeMetadata] = {
@@ -326,6 +417,23 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
     }
   }
 
+  private def getDataset(datasetName: String, projectId: String, authToken: AuthToken)(implicit executionContext: ExecutionContext) = {
+    import org.typelevel.log4cats.Logger
+    import org.typelevel.log4cats.slf4j.Slf4jLogger
+
+    implicit lazy val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(executionContext)
+    implicit lazy val timer: Timer[IO] = cats.effect.IO.timer(executionContext)
+    implicit val logger: org.typelevel.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+
+    val bqService = GoogleBigQueryService.resource[IO](
+      GoogleCredentials.create(new AccessToken(authToken.value, null)),
+      Blocker.liftExecutionContext(executionContext),
+      GoogleProject(projectId)
+    )
+
+    bqService.use(_.getDataset(datasetName)).unsafeRunSync()
+  }
+
 
   // a bastardized version of the HttpDataRepoDAO in the main rawls codebase
   class TestDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) {
@@ -342,5 +450,10 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       new RepositoryApi(getApiClient(accessToken.value))
     }
   }
+
+  def generateReferenceName(workspaceId: UUID) = {
+    "deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_')
+  }
+
 
 }

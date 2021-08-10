@@ -43,6 +43,20 @@ import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, Moc
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.scalatest.concurrent.Eventually
 import spray.json._
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.http.scaladsl.server.Directives._
+import akka.stream.ActorMaterializer
+import cats.effect.IO
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
+import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
@@ -172,13 +186,16 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
     )_
 
+    val deltaLayer = new DeltaLayer(bigQueryServiceFactory, new MockDeltaLayerWriter, samDAO,
+      WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global))
+
     override val snapshotServiceConstructor = SnapshotService.constructor(
       slickDataSource,
       samDAO,
       workspaceManagerDAO,
-      bigQueryServiceFactory,
+      deltaLayer,
       mockServer.mockServerBaseUrl,
-      "fakeCredentialPath",
       WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
       WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com")
     )
@@ -224,7 +241,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      dataRepoDAO,
+      deltaLayer,
       methodConfigResolver,
       gcsDAO,
       samDAO,

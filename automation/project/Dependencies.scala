@@ -9,7 +9,7 @@ object Dependencies {
 
   val serviceTestV = "0.18-ecf1e1da-SNAP"
   val workbenchGoogleV = "0.21-3f3c0e4"
-  val workbenchGoogle2V = "0.18-4631ebf"
+  val workbenchGoogle2V = "0.21-e17afdf"
   val workbenchModelV  = "0.14-65bba14"
   val workbenchMetricsV  = "0.5-64a7b29"
 
@@ -20,10 +20,11 @@ object Dependencies {
     ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-util_" + scalaV),
     ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-metrics_" + scalaV)
   )
+  val rawlsModelExclusion = ExclusionRule(organization = "org.broadinstitute.dsde", name = "rawls-model_" + scalaV)
 
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(workbenchExclusions:_*)
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
-  val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions:_*)
+  val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
   val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.5-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
