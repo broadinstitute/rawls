@@ -258,9 +258,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
    * */
   def unregisterBillingProjectWithUserInfo(projectName: RawlsBillingProjectName, ownerUserInfo: UserInfo): Future[PerRequestMessage] = {
     for {
-      _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
       _ <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.delete(projectName)
+      }
+      _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting billing project (while deleting billing project in Sam) for billing project `${projectName.value}`", t)
+          throw t
+        }
       }
     } yield {
       RequestComplete(StatusCodes.NoContent)
