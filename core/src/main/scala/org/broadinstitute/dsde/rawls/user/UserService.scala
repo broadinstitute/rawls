@@ -476,7 +476,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo).recoverWith {
             case regrets: Throwable =>
               if (policy == SamBillingProjectPolicyNames.canComputeUser) {
-                logger.info(s"error adding user to canComputeUser policy for $projectName because it is a v2 project. regrets: ${regrets.getMessage}")
+                logger.info(s"error adding user to canComputeUser policy for $projectName likely because it is a v2 billing project which does not have a canComputeUser policy. regrets: ${regrets.getMessage}")
                 Future.successful(())
               } else {
                 Future.failed(regrets)
