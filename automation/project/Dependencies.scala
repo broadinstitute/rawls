@@ -54,7 +54,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % "test",
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % "test",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-b87cf35e8-SNAP"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-d3c0583e7-SNAP"
       exclude("com.typesafe.scala-logging", "scala-logging_2.11")
       exclude("com.typesafe.akka", "akka-stream_2.11")
       exclude("bio.terra", "workspace-manager-client"),
