@@ -380,26 +380,51 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
     for {
 
-      workflowsToAbort <- deletionFuture
+      workflowsToAbort <- deletionFuture recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while running `deletionFuture`) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
 
       // Abort running workflows
-      aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) }
+      aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) } recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while aborting workflows) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
 
       // Delete resource in sam outside of DB transaction
-      _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
+      _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
+        case t:Throwable => {
+          logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
       // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
-      _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recoverWith {
+      _ <- Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recoverWith {
         //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
         case e: ApiException => {
           if(e.getCode != StatusCodes.NotFound.intValue) {
-            logger.warn(s"Unexpected failure deleting workspace in Workspace Manager. Received ${e.getCode}: [${e.getResponseBody}]")
+            logger.warn(s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceName}. Received ${e.getCode}: [${e.getResponseBody}]")
           }
-          Success(())
+          Future.successful()
         }
       }
       // Delete the Delta Layer companion dataset, if it exists
-      _ <- deltaLayer.deleteDataset(workspaceContext)
-      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo)
+      _ <- deltaLayer.deleteDataset(workspaceContext) recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while deleting Delta Layer) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
+      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
     } yield {
       aborts.onComplete {
         case Failure(t) => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
