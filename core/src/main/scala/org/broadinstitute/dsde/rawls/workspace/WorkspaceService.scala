@@ -372,13 +372,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
       // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
       _ <- Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recoverWith {
-        //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle 404 exceptions here
-        case e: ApiException if e.getCode == StatusCodes.NotFound.intValue => {
-          Future.successful()
-        }
-        case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceName}`", t)
-          throw t
+        //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
+        case e: ApiException => {
+          if(e.getCode != StatusCodes.NotFound.intValue) {
+            logger.warn(s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceName}. Received ${e.getCode}: [${e.getResponseBody}]")
+            Future.successful()
+          }
+          else throw e
         }
       }
       // Delete the Delta Layer companion dataset, if it exists
