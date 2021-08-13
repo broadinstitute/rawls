@@ -604,11 +604,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               case None => Future(Option(permCtx.bucketName))
             }
 
-            val bucketLocationFuture: Future[Option[String]] = if(destWorkspaceRequest.bucketLocation.isEmpty) (for {
-              sourceWorkspaceContext <- getWorkspaceContext(permCtx.toWorkspaceName)
-              bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName, Option(GoogleProjectId(destWorkspaceRequest.namespace)))
-            } yield bucketLocation) else withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {Future(destWorkspaceRequest.bucketLocation)}
-
             sourceBucketName flatMap { sourceBucketNameOption =>
               for {
                 workspaceTuple <- dataSource.inTransactionWithAttrTempTable( Set(AttributeTempTableType.Workspace))({ dataAccess =>
@@ -2170,7 +2165,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 }
               }.flatten.toMap)
 
-              bucketLocation <- determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, workspaceRequest.sourceBucketName)
+              bucketLocation <- determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, workspaceRequest.sourceBucketName, googleProjectId)
               _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentSpan)(span => DBIO.from(
                   gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceRequest.bucketLocation)))
               _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))
@@ -2181,8 +2176,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     })
   }
 
-  private def determineWorkspaceBucketLocation(bucketLocation: Option[String], sourceBucketName: Option[String]): Future[Option[String]] = {
-    ???
+  // A new workspace request may specify the region where the bucket should be created. In the case of cloning a workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region as the source workspace's bucket. Rawls does not store bucket regions, so in order to get this information we need to query Google and this query costs money, so we need to make sure that the target Google Project is the one that gets charged.
+  private def determineWorkspaceBucketLocation(maybeBucketLocation: Option[String], maybeSourceBucketName: Option[String], googleProjectId: googleProjectId): Future[Option[String]] = {
+    maybeBucketLocation match {
+      case Some(bucketLocation) => Future(Option(bucketLocation))
+      case None =>
+        maybeSourceBucketName match {
+          case Some(sourceBucketName) => gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
+          case None => Future(None)
+        }
+    }
   }
 
   private def withSubmission[T](workspaceContext: Workspace, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[T]): ReadWriteAction[T] = {
