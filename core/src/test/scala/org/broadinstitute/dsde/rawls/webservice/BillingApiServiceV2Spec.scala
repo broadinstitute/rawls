@@ -497,7 +497,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, Option(services.gcsDAO.accessibleBillingAccountName), project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
       }
   }
 
@@ -526,7 +525,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, None, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
       }
   }
 }
