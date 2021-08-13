@@ -50,7 +50,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       val createDatasetIO = for {
         samPolicies <- IO.fromFuture(IO(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)))
         aclBindings = calculateDatasetAcl(samPolicies)
-        bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
+        bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceContext.googleProjectId.value))
         _ <- bqService.use(_.createDataset(datasetName, datasetLabels, aclBindings))
       } yield { }
 
@@ -62,15 +62,15 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       }.flatMap { _ =>
 
         val createBQReferenceFuture = for {
-          petToken <- samDAO.getPetServiceAccountToken(GoogleProjectId(workspaceName.namespace), SamDAO.defaultScopes + SamDAO.bigQueryReadOnlyScope, userInfo)
-          bigQueryRef = workspaceManagerDAO.createBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, new ReferenceResourceCommonFields().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GcpBigQueryDatasetAttributes().projectId(workspaceContext.namespace).datasetId(datasetName), OAuth2BearerToken(petToken))
+          petToken <- samDAO.getPetServiceAccountToken(workspaceContext.googleProjectId, SamDAO.defaultScopes + SamDAO.bigQueryReadOnlyScope, userInfo)
+          bigQueryRef = workspaceManagerDAO.createBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, new ReferenceResourceCommonFields().name(datasetName).cloningInstructions(CloningInstructionsEnum.NOTHING), new GcpBigQueryDatasetAttributes().projectId(workspaceContext.googleProjectId.value).datasetId(datasetName), OAuth2BearerToken(petToken))
         } yield { bigQueryRef }
 
         createBQReferenceFuture.recover {
           case t: Throwable =>
             //fire and forget these undos, we've made our best effort to fix things at this point
             for {
-              _ <- deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture()
+              _ <- deleteBigQueryDataset(workspaceContext.googleProjectId, datasetName).unsafeToFuture()
               _ <- IO.pure(workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, referenceId, userInfo.accessToken)).unsafeToFuture()
             } yield {}
             throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId}. Error: ${t.getMessage}"))
@@ -122,7 +122,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       workspaceManagerDAO.deleteDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
 
       val datasetName = DeltaLayer.generateDatasetName(snapshotRef.getMetadata.getResourceId)
-      deleteBigQueryDataset(workspaceName, datasetName).unsafeToFuture().map { _ =>
+      deleteBigQueryDataset(workspaceContext.googleProjectId, datasetName).unsafeToFuture().map { _ =>
         val datasetRef = workspaceManagerDAO.getBigQueryDatasetReferenceByName(workspaceContext.workspaceIdAsUUID, datasetName, userInfo.accessToken)
         workspaceManagerDAO.deleteBigQueryDatasetReference(workspaceContext.workspaceIdAsUUID, datasetRef.getMetadata.getResourceId, userInfo.accessToken)
       }.recover {
@@ -145,8 +145,8 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     }
   }
 
-  private def deleteBigQueryDataset(workspaceName: WorkspaceName, datasetName: String) = {
-    val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceName.namespace))
+  private def deleteBigQueryDataset(workspaceGoogleProjectId: GoogleProjectId, datasetName: String) = {
+    val bqService = bqServiceFactory.getServiceFromCredentialPath(pathToCredentialJson, GoogleProject(workspaceGoogleProjectId.value))
     bqService.use(_.deleteDataset(datasetName))
   }
 
