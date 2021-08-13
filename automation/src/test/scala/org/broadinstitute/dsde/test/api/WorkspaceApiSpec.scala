@@ -8,11 +8,11 @@ import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoog
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.fixture._
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
-import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
+import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -25,7 +25,6 @@ import spray.json._
 import DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
-
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -78,6 +77,29 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
       val labels = googleProjectDao.getLabels(createdWorkspaceGoogleProject.value).futureValue
       labels should contain allElementsOf bufferLabels
       labels should contain allElementsOf rawlsLabels
+
+      Rawls.workspaces.delete(billingProjectName, workspaceName)
+      Rawls.billingV2.deleteBillingProject(billingProjectName)
+    }
+
+    "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
+      val owner: Credentials = UserPool.chooseProjectOwner
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
+      val billingProjectName = s"workspaceapi-labels-${makeRandomId()}" // lowercase and hyphens due to google's label and display name requirements
+      Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
+      val workspaceName = prependUUID("rbs-project-labels-test")
+
+      implicit val ec: ExecutionContext = ExecutionContext.global
+      val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
+      val jsonCreds = try source.mkString finally source.close()
+      val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
+
+      Rawls.workspaces.create(billingProjectName, workspaceName)
+      val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+      createdWorkspaceResponse.workspace.name should be(workspaceName)
+      val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
+
+      val iamPermissions = googleIamDAO.testIamPermission(GoogleProject(createdWorkspaceGoogleProject.value), Set(IamPermission("iam.roles.list"))).futureValue
 
       Rawls.workspaces.delete(billingProjectName, workspaceName)
       Rawls.billingV2.deleteBillingProject(billingProjectName)
