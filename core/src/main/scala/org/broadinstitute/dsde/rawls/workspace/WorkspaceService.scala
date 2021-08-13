@@ -954,7 +954,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case (SamWorkspacePolicyNames.canCompute, email)  => email
     }
     Future.traverse(newWriterEmails) { email =>
-      samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, SamBillingProjectPolicyNames.canComputeUser, email, userInfo)
+      samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, SamBillingProjectPolicyNames.canComputeUser, email, userInfo).recoverWith {
+        case regrets: Throwable =>
+          logger.info(s"error adding user to canComputeUser policy of Terra billing project while updating ${workspaceName.toString} likely because it is a v2 billing project which does not have a canComputeUser policy. regrets: ${regrets.getMessage}")
+          Future.successful(())
+      }
     }.map(_ => ())
   }
 
