@@ -599,12 +599,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
             // if bucket location does not exist in request, use the same location as source workspace. Otherwise use the one from request
             // if the source bucket is a regional bucket, retrieve the region as the destination bucket also needs to be created in the same region
+            val sourceBucketName: Future[Option[String]] = destWorkspaceRequest.bucketLocation match {
+              case Some(bucketLocation) => withWorkspaceBucketRegionCheck(Option(bucketLocation)) {Future(None)}
+              case None => Future(Option(permCtx.bucketName))
+            }
+
             val bucketLocationFuture: Future[Option[String]] = if(destWorkspaceRequest.bucketLocation.isEmpty) (for {
               sourceWorkspaceContext <- getWorkspaceContext(permCtx.toWorkspaceName)
               bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName, Option(GoogleProjectId(destWorkspaceRequest.namespace)))
             } yield bucketLocation) else withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {Future(destWorkspaceRequest.bucketLocation)}
 
-            bucketLocationFuture flatMap { bucketLocationOption =>
+            sourceBucketName flatMap { sourceBucketNameOption =>
               for {
                 workspaceTuple <- dataSource.inTransactionWithAttrTempTable( Set(AttributeTempTableType.Workspace))({ dataAccess =>
                   // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
@@ -614,7 +619,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                         // add to or replace current attributes, on an individual basis
                         val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
                         traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
-                          withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, bucketLocation = bucketLocationOption), destBillingProject, dataAccess, s1) { destWorkspaceContext =>
+                          withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, sourceBucketName = sourceBucketNameOption), destBillingProject, dataAccess, s1) { destWorkspaceContext =>
                             dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
                               dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                                 val inserts = methodConfigShorts.map { methodConfigShort =>
@@ -2165,6 +2170,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 }
               }.flatten.toMap)
 
+              bucketLocation <- determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, workspaceRequest.sourceBucketName)
               _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentSpan)(span => DBIO.from(
                   gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceRequest.bucketLocation)))
               _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))
@@ -2173,6 +2179,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       })
     })
+  }
+
+  private def determineWorkspaceBucketLocation(bucketLocation: Option[String], sourceBucketName: Option[String]): Future[Option[String]] = {
+    ???
   }
 
   private def withSubmission[T](workspaceContext: Workspace, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[T]): ReadWriteAction[T] = {
