@@ -134,7 +134,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
           for {
             workspace <- traceWithParent("withNewWorkspaceContext", s2) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
-              withNewWorkspaceContext(workspaceRequest, billingProject, dataAccess, s3) { workspaceContext =>
+              withNewWorkspaceContext(workspaceRequest, billingProject, sourceBucketName = None, dataAccess, s3) { workspaceContext =>
                 DBIO.successful(workspaceContext)
               }
             }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
@@ -597,16 +597,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
         withBillingProjectContext(destWorkspaceRequest.namespace) { destBillingProject =>
           getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
-            // if bucket location does not exist in request, use the same location as source workspace. Otherwise use the one from request
-            // if the source bucket is a regional bucket, retrieve the region as the destination bucket also needs to be created in the same region
-            val sourceBucketName: Future[Option[String]] = destWorkspaceRequest.bucketLocation match {
-              case Some(bucketLocation) => withWorkspaceBucketRegionCheck(Option(bucketLocation)) {Future(None)}
-              case None => Future(Option(permCtx.bucketName))
-            }
+            withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {
+              // if bucket location is specified, then we just use that for the destination workspace's bucket location.
+              // if bucket location is NOT specified then we want to use the same location as the source workspace.
+              // Since the destination workspace's Google project has not been claimed at this point, we cannot charge
+              // the Google request that checks the source workspace bucket's location to the destination workspace's
+              // Google project. To get around this, we pass in the source workspace bucket's name to
+              // withNewWorkspaceContext and get the source workspace bucket's location after we've claimed a Google
+              // project and before we create the destination workspace's bucket.
+              val sourceBucketNameOption: Option[String] = destWorkspaceRequest.bucketLocation match {
+                case Some(_) => None
+                case None => Option(permCtx.bucketName)
+              }
 
-            sourceBucketName flatMap { sourceBucketNameOption =>
               for {
-                workspaceTuple <- dataSource.inTransactionWithAttrTempTable( Set(AttributeTempTableType.Workspace))({ dataAccess =>
+                workspaceTuple <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
                   // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
                   withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
                     DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
@@ -614,7 +619,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                         // add to or replace current attributes, on an individual basis
                         val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
                         traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
-                          withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, sourceBucketName = sourceBucketNameOption), destBillingProject, dataAccess, s1) { destWorkspaceContext =>
+                          withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, sourceBucketNameOption, dataAccess, s1) { destWorkspaceContext =>
                             dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
                               dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                                 val inserts = methodConfigShorts.map { methodConfigShort =>
@@ -632,10 +637,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                     }
                   }
                 }, TransactionIsolation.ReadCommitted)
+                // read committed to avoid deadlocks on workspace attr scratch table
                 _ <- maybeUpdateGoogleProjectsInPerimeter(destBillingProject)
               } yield workspaceTuple
             }
-            // read committed to avoid deadlocks on workspace attr scratch table
           }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
             //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
             //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
@@ -2104,7 +2109,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.
-  private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, billingProject: RawlsBillingProject, dataAccess: DataAccess, parentSpan: Span)
+  private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, billingProject: RawlsBillingProject, sourceBucketName: Option[String], dataAccess: DataAccess, parentSpan: Span)
                                      (op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
     def getBucketName(workspaceId: String, secure: Boolean) = s"${config.workspaceBucketNamePrefix}-${if(secure) "secure-" else ""}${workspaceId}"
@@ -2165,9 +2170,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 }
               }.flatten.toMap)
 
-              bucketLocation <- determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, workspaceRequest.sourceBucketName, googleProjectId)
+              workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentSpan)(_ => DBIO.from(
+                determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, sourceBucketName, googleProjectId)))
               _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentSpan)(span => DBIO.from(
-                  gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, bucketLocation)))
+                  gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceBucketLocation)))
               _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))
               response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
             } yield (response)
@@ -2176,15 +2182,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     })
   }
 
-  // A new workspace request may specify the region where the bucket should be created. In the case of cloning a workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region as the source workspace's bucket. Rawls does not store bucket regions, so in order to get this information we need to query Google and this query costs money, so we need to make sure that the target Google Project is the one that gets charged.
-  private def determineWorkspaceBucketLocation(maybeBucketLocation: Option[String], maybeSourceBucketName: Option[String], googleProjectId: googleProjectId): Future[Option[String]] = {
-    maybeBucketLocation match {
-      case Some(bucketLocation) => Future(Option(bucketLocation))
-      case None =>
-        maybeSourceBucketName match {
-          case Some(sourceBucketName) => gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
-          case None => Future(None)
-        }
+  // A new workspace request may specify the region where the bucket should be created. In the case of cloning a
+  // workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region
+  // as the source workspace's bucket. Rawls does not store bucket regions, so in order to get this information we need
+  // to query Google and this query costs money, so we need to make sure that the target Google Project is the one that
+  // gets charged. If neither a bucket location nor a source bucket name are provided, Future[None] is returned which
+  // will result in the default bucket location being used
+  private def determineWorkspaceBucketLocation(maybeBucketLocation: Option[String], maybeSourceBucketName: Option[String], googleProjectId: GoogleProjectId): Future[Option[String]] = {
+    (maybeBucketLocation, maybeSourceBucketName) match {
+      case (bucketLocation@Some(_), _) => Future(bucketLocation)
+      case (None, Some(sourceBucketName)) => gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
+      case (None, None) => Future(None)
     }
   }
 

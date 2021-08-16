@@ -138,8 +138,7 @@ case class WorkspaceRequest(namespace: String,
                             authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
                             copyFilesWithPrefix: Option[String] = None,
                             noWorkspaceOwner: Option[Boolean] = None,
-                            bucketLocation: Option[String] = None,
-                            sourceBucketName: Option[String] = None) extends Attributable {
+                            bucketLocation: Option[String] = None) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
