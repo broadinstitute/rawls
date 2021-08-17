@@ -5744,7 +5744,7 @@ components:
           description: A UUID associated with the workspace
         googleProject:
           type: string
-          description: Identifies the google project used by the workspace for compute and storage
+          description: Google Project ID of the google project used by the workspace for compute and storage
         googleProjectNumber:
           type: string
           description: A different google project identifier for the same project identified by the googleProject; required by google for certain actions
