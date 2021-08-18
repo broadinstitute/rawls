@@ -64,7 +64,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
       Rawls.workspaces.create(billingProjectName, workspaceName)
       val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
       createdWorkspaceResponse.workspace.name should be(workspaceName)
-      val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
+      val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
 
       // verify display name (starts with namespace, ends with name, limited to 30 chars)
       val maybeDisplayName = googleProjectDao.getProjectName(createdWorkspaceGoogleProject.value).futureValue
@@ -120,7 +120,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         Rawls.workspaces.create(billingProjectName, workspaceName)
         val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
         createdWorkspaceResponse.workspace.name should be(workspaceName)
-        val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
+        val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
 
         // verify that the google project exists
         googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe true)

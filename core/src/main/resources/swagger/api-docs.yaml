@@ -5970,7 +5970,7 @@ components:
         - name
         - namespace
         - workspaceId
-        - googleProjectId
+        - googleProject
         - workspaceVersion
       type: object
       properties:
@@ -6015,12 +6015,12 @@ components:
         workspaceId:
           type: string
           description: A UUID associated with the workspace
-        googleProjectId:
+        googleProject:
           type: string
-          description: Identifies the google project used by the workspace for compute and storage
+          description: Google Project ID of the google project used by the workspace for compute and storage
         googleProjectNumber:
           type: string
-          description: A different google project identifier for the same project identified by the googleProjectId; required by google for certain actions
+          description: A different google project identifier for the same project identified by the googleProject; required by google for certain actions
         workspaceVersion:
           type: string
           description: internal use
