@@ -4,7 +4,7 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleProjectDAO}
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO, HttpGoogleProjectDAO}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.fixture._
@@ -92,14 +92,14 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
       implicit val ec: ExecutionContext = ExecutionContext.global
       val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
       val jsonCreds = try source.mkString finally source.close()
-      val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
+      val googleIamDaoAsSa = new HttpGoogleIamDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
 
       Rawls.workspaces.create(billingProjectName, workspaceName)
       val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
       createdWorkspaceResponse.workspace.name should be(workspaceName)
       val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
 
-      val iamPermissions = googleIamDAO.testIamPermission(GoogleProject(createdWorkspaceGoogleProject.value), Set(IamPermission("iam.roles.list"))).futureValue
+      val iamPermissions = googleIamDaoAsSa.listIamRoles(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
 
       Rawls.workspaces.delete(billingProjectName, workspaceName)
       Rawls.billingV2.deleteBillingProject(billingProjectName)

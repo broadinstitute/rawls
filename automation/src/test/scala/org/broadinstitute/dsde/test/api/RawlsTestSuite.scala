@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.test.api
 
 import cats.effect.IO
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 import scala.concurrent.ExecutionContext.global
 

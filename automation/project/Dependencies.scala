@@ -8,8 +8,8 @@ object Dependencies {
   val jacksonV      = "2.12.3"
 
   val serviceTestV = "0.18-ecf1e1da-SNAP"
-  val workbenchGoogleV = "0.21-3f3c0e4"
-  val workbenchGoogle2V = "0.18-4631ebf"
+  val workbenchGoogleV = "0.21-7cd86d0a-SNAP"
+  val workbenchGoogle2V = "0.21-7cd86d0a-SNAP"
   val workbenchModelV  = "0.14-65bba14"
   val workbenchMetricsV  = "0.5-64a7b29"
 
