@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
@@ -13,7 +14,7 @@ import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -115,7 +116,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(Map(ServicePerimeterName("theGreatBarrier") -> Seq(GoogleProjectNumber("555555"), GoogleProjectNumber("121212")),
       ServicePerimeterName("anotherGoodName") -> Seq(GoogleProjectNumber("777777"), GoogleProjectNumber("343434"))), 1 second, 5 seconds)
     val servicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
-    when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName])).thenReturn(Future.successful(()))
+    when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess])).thenReturn(DBIO.successful(()))
 
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
@@ -1449,7 +1450,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val servicePerimeterNameCaptor = captor[ServicePerimeterName]
     // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
     // the arguments passed to it so that we can verify that they were correct
-    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture)
+    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture, any[DataAccess])
     servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
 
     // verify that we set the folder for the perimeter
@@ -1629,7 +1630,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val servicePerimeterNameCaptor = captor[ServicePerimeterName]
     // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
     // the arguments passed to it so that we can verify that they were correct
-    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture)
+    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture, any[DataAccess])
     servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
 
     // verify that we set the folder for the perimeter
