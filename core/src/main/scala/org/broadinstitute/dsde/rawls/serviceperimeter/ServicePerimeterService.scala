@@ -77,7 +77,7 @@ class ServicePerimeterService(dataSource: SlickDataSource, gcsDAO: GoogleService
     } yield {
       result match {
         case Left(regrets) =>
-          new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "Failed to update perimeter", regrets.map(ErrorReport(_)).toList))
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "Failed to update perimeter", regrets.map(ErrorReport(_)).toList))
         case Right(_) => ()
       }
     }
