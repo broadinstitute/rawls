@@ -2146,12 +2146,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                 createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
-              // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
-              _ <- traceDBIOWithParent("createResourceFull (google project)", parentSpan)(_ => DBIO.from(
-                  samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, Set.empty, userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
 
               _ <- traceDBIOWithParent("updateServicePerimeter", parentSpan)(_ =>
                 maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess))
+
+              // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
+              _ <- traceDBIOWithParent("createResourceFull (google project)", parentSpan)(_ => DBIO.from(
+                  samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, Set.empty, userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
 
               //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
               //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
