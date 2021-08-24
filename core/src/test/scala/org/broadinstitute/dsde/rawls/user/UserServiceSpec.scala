@@ -71,14 +71,14 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       runAndWait(rawlsBillingProjectQuery.create(project))
 
       val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
-      when(mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)).thenReturn(Future.successful(()))
+      when(mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName, dataSource.dataAccess)).thenReturn(DBIO.successful(()))
 
       val userService = getUserService(dataSource, servicePerimeterService = mockServicePerimeterService)
 
       val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
       val expected = RequestComplete(StatusCodes.NoContent)
       actual shouldEqual expected
-      verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)
+      verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName, dataSource.dataAccess)
 
       val updatedProject = dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(project.projectName)
@@ -105,14 +105,14 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockGcsDAO.getGoogleProjectNumber(googleProject)).thenReturn(googleProjectNumber)
 
       val mockServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
-      when(mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)).thenReturn(Future.successful(()))
+      when(mockServicePerimeterService.overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName, dataSource.dataAccess)).thenReturn(DBIO.successful(()))
 
       val userService = getUserService(dataSource, gcsDAO = mockGcsDAO, servicePerimeterService = mockServicePerimeterService)
 
       val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
       val expected = RequestComplete(StatusCodes.NoContent)
       actual shouldEqual expected
-      verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName)
+      verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName, dataSource.dataAccess)
 
       val updatedProject = dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(project.projectName)

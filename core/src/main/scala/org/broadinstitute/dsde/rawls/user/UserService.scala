@@ -756,7 +756,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
         }
 
-        _ <- servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName)
+        _ <- dataSource.inTransaction { dataAccess =>
+          servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
+        }
       } yield RequestComplete(StatusCodes.NoContent)
     }
   }

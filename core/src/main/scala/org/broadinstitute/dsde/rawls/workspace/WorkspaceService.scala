@@ -179,11 +179,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
                 DBIO.successful(workspaceContext)
               }
             }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
-            // After creating the Workspace, THIS is where we want to add the project to the Service Perimeter.  We need
-            // to wait until the Workspace is persisted before adding to the Service Perimeter because the database IS the
-            // source of record for which Google Projects need to be in the Service Perimeter because the method to add
-            // projects to the Service Perimeter overwrites the entire list projects in the Perimeter
-            _ <- maybeUpdateGoogleProjectsInPerimeter(billingProject)
           } yield workspace
         })
       })
@@ -706,7 +701,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
                   }
                 }, TransactionIsolation.ReadCommitted)
                 // read committed to avoid deadlocks on workspace attr scratch table
-                _ <- maybeUpdateGoogleProjectsInPerimeter(destBillingProject)
               } yield workspaceTuple
             }
           }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
@@ -2060,10 +2054,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * @param span
     * @return Future[Unit]
     */
-  private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject, span: Span = null): Future[Unit] = {
+  private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject, dataAccess: DataAccess, span: Span = null): ReadAction[Unit] = {
     billingProject.servicePerimeter match {
-      case Some(servicePerimeterName) => servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName)
-      case None => Future.successful()
+      case Some(servicePerimeterName) => servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
+      case None => DBIO.successful()
     }
   }
 
@@ -2238,6 +2232,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
                 setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                 createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
+
+              _ <- traceDBIOWithParent("updateServicePerimeter", parentSpan)(_ =>
+                maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess))
+
               // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
               _ <- traceDBIOWithParent("createResourceFull (google project)", parentSpan)(_ => DBIO.from(
                   samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, Set.empty, userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
