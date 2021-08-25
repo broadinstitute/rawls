@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.test.api
 
 import java.util.UUID
+import java.util.regex.Pattern
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
@@ -23,6 +24,8 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json._
 import DefaultJsonProtocol._
+import com.google.cloud.Binding
+import com.google.common.collect.ImmutableList
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -84,22 +87,42 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
     "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
       val owner: Credentials = UserPool.chooseProjectOwner
-      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
-      val billingProjectName = s"workspaceapi-labels-${makeRandomId()}" // lowercase and hyphens due to google's label and display name requirements
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
+      val billingProjectName = s"workspaceapi-iamtest-${makeRandomId()}" // lowercase and hyphens due to google's label and display name requirements
       Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
-      val workspaceName = prependUUID("rbs-project-labels-test")
+      val workspaceName = prependUUID("rbs-project-iam-test")
 
       implicit val ec: ExecutionContext = ExecutionContext.global
-      val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
-      val jsonCreds = try source.mkString finally source.close()
-      val googleIamDaoAsSa = new HttpGoogleIamDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
+      val googleIamDaoWithCloudCredentials = new HttpGoogleIamDAO("rawls-integration-tests", GoogleCredentialModes.RawGoogleCredential(ownerAuthToken.buildCredential()), "workbenchMetricBaseName")
 
       Rawls.workspaces.create(billingProjectName, workspaceName)
       val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
       createdWorkspaceResponse.workspace.name should be(workspaceName)
       val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
 
-      val iamPermissions = googleIamDaoAsSa.listIamRoles(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
+      val iamPermissions = googleIamDaoWithCloudCredentials.listIamRoles(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
+      // This is brittle. We know this is brittle and accept that risk because these permissions should change very rarely.
+      iamPermissions.getBindings.size() shouldEqual 12
+      iamPermissions.getBindings().forEach(binding => {
+        binding.getRole() match {
+          // We just check size here because the policy group names are generated on workspace creation
+          case s if s.endsWith("terra_billing_project_owner") => binding.getMembers.size() shouldEqual 1
+          case s if s.endsWith("terra_workspace_can_compute") => binding.getMembers.size() shouldEqual 3
+          case s if s.endsWith("compute.serviceAgent") => binding.getMembers.size() shouldEqual 1
+          case s if s.endsWith("container.serviceAgent") => binding.getMembers.size() shouldEqual 1
+          case s if s.endsWith("containerregistry.ServiceAgent") => binding.getMembers.size() shouldEqual 1
+          case s if s.endsWith("dataflow.serviceAgent") => binding.getMembers.size() shouldEqual 1
+          case s if s.endsWith("dataproc.serviceAgent") => binding.getMembers.size() shouldEqual 1
+          case s if s.endsWith("editor") => binding.getMembers.size() shouldEqual 2
+          case s if s.endsWith("genomics.serviceAgent") => binding.getMembers.size() shouldEqual 1
+          case s if s.endsWith("lifesciences.serviceAgent") => binding.getMembers.size() shouldEqual 1
+          case s if s.endsWith("owner") => binding.getMembers.size() shouldEqual 1
+          case s if s.endsWith("pubsub.serviceAgent") => binding.getMembers.size() shouldEqual 1
+          case _ =>
+            logger.error("Extra permission on workspace google project found")
+            throw new Exception("Extra permission on workspace google project found")
+        }
+      })
 
       Rawls.workspaces.delete(billingProjectName, workspaceName)
       Rawls.billingV2.deleteBillingProject(billingProjectName)
