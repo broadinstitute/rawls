@@ -100,7 +100,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
       createdWorkspaceResponse.workspace.name should be(workspaceName)
       val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
 
-      val iamPermissions = googleIamDaoWithCloudCredentials.listIamRoles(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
+      val iamPermissions = googleIamDaoWithCloudCredentials.getProjectPolicy(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
       // This is brittle. We know this is brittle and accept that risk because these permissions should change very rarely.
       iamPermissions.getBindings.size() shouldEqual 12
       iamPermissions.getBindings().forEach(binding => {
