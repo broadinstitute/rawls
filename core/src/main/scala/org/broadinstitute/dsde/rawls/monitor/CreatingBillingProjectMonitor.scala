@@ -201,8 +201,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
       _ <- gcsDAO.cleanupDMProject(project.googleProjectId)
       googleProject <- gcsDAO.getGoogleProject(project.googleProjectId)
     } yield {
-      val status = CreationStatuses.Ready
-      project.copy(status = status, googleProjectNumber = Option(GoogleProjectNumber(googleProject.getProjectNumber.toString)))
+      project.copy(status = CreationStatuses.Ready, googleProjectNumber = Option(GoogleProjectNumber(googleProject.getProjectNumber.toString)))
     }
   }
 
