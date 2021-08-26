@@ -140,7 +140,7 @@ trait WorkspaceSupport {
       case Some(region) =>
         // if the user specifies a region for the workspace bucket, it must be in the proper format for a single region or the default bucket location (US multi region)
         val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
-        val defaultBucketRegion = "US"
+        val validUSPattern = "US"
         if (region.matches(singleRegionPattern) || region.equals(defaultBucketRegion)) op
         else {
           val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = s"Workspace bucket location must be a single " +
