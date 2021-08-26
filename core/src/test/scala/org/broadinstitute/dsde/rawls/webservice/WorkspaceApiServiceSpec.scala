@@ -1304,7 +1304,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 400 if the cloned bucket location requested is in an invalid format" in withTestDataApiServices { services =>
+  it should "return 201 if the cloned bucket location requested is the default bucket location" in withTestDataApiServices { services =>
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("US"))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -1313,7 +1313,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 400 if the cloned bucket location requested is the default bucket location" in withTestDataApiServices { services =>
+  it should "return 400 if the cloned bucket location requested is in an invalid format" in withTestDataApiServices { services =>
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("EU"))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
