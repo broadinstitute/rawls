@@ -98,7 +98,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
       Rawls.workspaces.create(billingProjectName, workspaceName)
       val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
       createdWorkspaceResponse.workspace.name should be(workspaceName)
-      val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProjectId
+      val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
 
       val iamPermissions = googleIamDaoWithCloudCredentials.getProjectPolicy(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
       // This is brittle. We know this is brittle and accept that risk because these permissions should change very rarely.
