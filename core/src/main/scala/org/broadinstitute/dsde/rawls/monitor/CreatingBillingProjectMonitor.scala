@@ -65,141 +65,26 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
 
   /**
     * When creating projects, we call a set of "operations" that handle all the steps we need to run in order to: create
-    * the project, enable APIs, add it to a VPC-SC Security Perimeter, etc., and get it into a valid state so that it can be
+    * the project, enable APIs, etc., and get it into a valid state so that it can be
     * used by Firecloud/Terra.  We use Deployment Manager to handle the bulk of the steps needed to create and set up
-    * projects.  If a project needs to be added to a VPC-SC perimeter, this task is handled as a follow-up operation
-    * that we can only run AFTER a project is created.
+    * projects.  As of Project Per Workspace (PPW), workspaces have their own google projects so any new v1 billing
+    * project will not get their google project added to the service perimeter.
     * @return
     */
   def checkCreatingProjects(): Future[CheckDone] = {
     for {
-      (projectsBeingCreated, createProjectOperations, projectsBeingAddedToPerimeter, addProjectToPerimeterOperations) <- datasource.inTransaction { dataAccess =>
+      (projectsBeingCreated, createProjectOperations) <- datasource.inTransaction { dataAccess =>
         for {
           projectsBeingCreated <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
-          projectsBeingAddedToPerimeter <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.AddingToPerimeter)
           createProjectOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingCreated.map(_.projectName), GoogleOperationNames.DeploymentManagerCreateProject)
-          addProjectToPerimeterOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingAddedToPerimeter.map(_.projectName), GoogleOperationNames.AddProjectToPerimeter)
         } yield {
-          (projectsBeingCreated, createProjectOperations, projectsBeingAddedToPerimeter, addProjectToPerimeterOperations)
+          (projectsBeingCreated, createProjectOperations)
         }
       }
       latestCreateProjectOperations <- updateOperationRecordsFromGoogle(createProjectOperations)
       _ <- updateProjectsFromOperations(projectsBeingCreated, latestCreateProjectOperations, onSuccessfulProjectCreate, onFailedProjectCreate)
-      latestAddProjectToPerimeterOperations <- updateOperationRecordsFromGoogle(addProjectToPerimeterOperations)
-      _ <- updateProjectsFromOperations(projectsBeingAddedToPerimeter, latestAddProjectToPerimeterOperations, onSuccessfulAddProjectToPerimeter, onFailedAddProjectToPerimeter)
-      _ <- addProjectsToPerimeter(projectsBeingAddedToPerimeter, latestAddProjectToPerimeterOperations)
     } yield {
-      CheckDone(projectsBeingCreated.size + projectsBeingAddedToPerimeter.size)
-    }
-  }
-
-  /**
-    * Takes a collection of project records that we know have a status indicating they need to be added to a
-    * perimeter - operations might already exist to add some of these projects to the perimeter.
-    * The operations parameter contains all preexisting operations.  We then
-    * compare the list of projects that need to be added to a perimeter to the list of operations already in progress
-    * to add projects to a perimeter.  For each perimeter that needs one or more projects to be added to it, we will
-    * kick off one operation to add all of those projects at the same time.
-    * @param projects: Collection of RawlsBillingProjects that need to be added to a perimeter
-    * @param operations: Collection of RawlsBillingProjectOperationRecord that are already running to add a project to
-    *                  the specified perimeter
-    * @return
-    */
-  private def addProjectsToPerimeter(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord]): Future[Unit] = {
-    val projectsWithoutOperations = projects.filterNot(project => operations.exists(_.projectName == project.projectName.value))
-    if (projectsWithoutOperations.nonEmpty) {
-      Future.traverse(projectsWithoutOperations.groupBy(_.servicePerimeter)) {
-        case (None, projectsMissingPerimeter) => datasource.inTransaction { dataAccess =>
-          val errorProjects = projectsMissingPerimeter.map { project =>
-            project.copy(status = CreationStatuses.Error, message = Some("Failed to add project to perimeter because no perimeter specified"))
-          }
-          dataAccess.rawlsBillingProjectQuery.updateBillingProjects(errorProjects)
-        }
-        case (Some(servicePerimeterName: ServicePerimeterName), newProjectsInPerimeter) =>
-          createAddProjectsToPerimeterOperation(servicePerimeterName, newProjectsInPerimeter)
-      }.map(_ => ())
-    } else {
-      Future.successful(())
-    }
-  }
-
-  /**
-    * Takes the name of a VPC-SC Service Perimeter that needs to be updated along with a collection of
-    * RawlsBillingProjects that need to be added to the perimeter.  Caution: the Google APIs for PATCHing a Service
-    * Perimeter will OVERWRITE the project list with the provided list.  Therefore, whenever we update the list of
-    * projects in a perimeter, we must specify the ENTIRE membership list.  We can get the intended membership list from
-    * the Rawls DB and from the Rawls config which can optionally list additional projects that should be included in
-    * a specific perimeter.
-    * @param servicePerimeterName
-    * @param newProjectsInPerimeter all of these projects must be in servicePerimeterName
-    * @throws IllegalArgumentException if there are any members of newProjectsInPerimeter not in servicePerimeterName
-    * @return
-    */
-  private def createAddProjectsToPerimeterOperation(servicePerimeterName: ServicePerimeterName, newProjectsInPerimeter: Seq[RawlsBillingProject]): Future[Unit] = {
-    if (newProjectsInPerimeter.exists(_.servicePerimeter != Some(servicePerimeterName))) {
-      Future.failed(new IllegalArgumentException(s"all members of newProjectsInPerimeter must be in servicePerimeter $servicePerimeterName"))
-    } else {
-      for {
-        // Query Rawls DB to get full list of projects intended to be inside the perimeter
-        allProjectsInPerimeter <- datasource.inTransaction { dataAccess =>
-          dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeterAndStatus(servicePerimeterName, CreationStatuses.Ready, CreationStatuses.AddingToPerimeter)
-        }
-        rawlsProjectsInPerimeter = allProjectsInPerimeter.flatMap { project =>
-          project.googleProjectNumber match {
-            case Some(googleProjectNumber) => Option(googleProjectNumber.value)
-            case None if !newProjectsInPerimeter.map(_.projectName).contains(project.projectName) =>
-              // this case for a preexisting project that should already be in the perimeter but somehow does not
-              // have a project id at this time. If this code is allowed to continue this project will be removed
-              // from the perimeter which could allow data exfiltration which is BAD. So throw an exception which
-              // will halt all perimeter operations for this perimeter and hope someone will notice and fix by
-              // looking up the project number in google and adding it back to the database
-              throw new RawlsException(s"project ${project.projectName} has a perimeter but does not have a project number in the database, please lookup the project in google console and add it to the database. Projects cannot be added to perimeter ${servicePerimeterName.value} until this is fixed")
-          }
-        }
-        // We overwrite ALL projects in the Perimeter any time a new project is added.  We need to make sure the "static"
-        // projects are not forgotten
-        allProjectNumbers = rawlsProjectsInPerimeter ++ loadStaticProjectsForPerimeter(servicePerimeterName)
-        // Initiate operation to overwrite the list of projects in the Perimeter on Google
-        operationTry <- gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, allProjectNumbers.toSet).toTry
-
-        _ <- persistUpdatesFromOperation(operationTry, servicePerimeterName, newProjectsInPerimeter)
-      } yield ()
-    }
-  }
-
-  /**
-    * The configs hold a list of static project numbers that should be added to a specific Service Perimeter for
-    * administrative purpose.  See https://broadworkbench.atlassian.net/browse/CA-463
-    * @param servicePerimeterName
-    * @return Sequence of Google Project Number strings
-    */
-  private def loadStaticProjectsForPerimeter(servicePerimeterName: ServicePerimeterName): Seq[String] = {
-    val staticProjectsConfig = ConfigFactory.load().getConfig("gcs.servicePerimeters.staticProjects")
-    if (staticProjectsConfig.hasPath(servicePerimeterName.value)) {
-      staticProjectsConfig.getStringList(servicePerimeterName.value).asScala
-    } else {
-      List.empty
-    }
-  }
-
-  private def persistUpdatesFromOperation(operationTry: Try[Operation], servicePerimeterName: ServicePerimeterName, newProjectsInPerimeter: Seq[RawlsBillingProject]): Future[Unit] = {
-    datasource.inTransaction { dataAccess =>
-      val (projectsWithProjectNumber, projectsWithoutGoogleProjectNumber) = newProjectsInPerimeter.partition(_.googleProjectNumber.isDefined)
-      for {
-        _ <- operationTry match {
-          case Success(operation) => dataAccess.rawlsBillingProjectQuery.insertOperations(projectsWithProjectNumber.map { project =>
-            RawlsBillingProjectOperationRecord(project.projectName.value, GoogleOperationNames.AddProjectToPerimeter, operation.getName, false, None, GoogleApiTypes.AccessContextManagerApi)
-          })
-          case util.Failure(regrets) =>
-            logger.warn(s"Error adding projects ${projectsWithProjectNumber.map(_.projectName.value).mkString} to service perimeter ${servicePerimeterName.value}", regrets)
-            dataAccess.rawlsBillingProjectQuery.updateBillingProjects(projectsWithProjectNumber.map { project =>
-              project.copy(status = CreationStatuses.Error, message = Some(s"Failure adding project to perimeter: ${regrets.getMessage}"))
-            })
-        }
-        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingProjects(projectsWithoutGoogleProjectNumber.map { project =>
-          project.copy(status = CreationStatuses.Error, message = Some("Project was in Adding to Perimeter state but google project number did not exist"))
-        })
-      } yield ()
+      CheckDone(projectsBeingCreated.size)
     }
   }
 
@@ -316,11 +201,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
       _ <- gcsDAO.cleanupDMProject(project.googleProjectId)
       googleProject <- gcsDAO.getGoogleProject(project.googleProjectId)
     } yield {
-      val status = project.servicePerimeter match {
-        case Some(_) => CreationStatuses.AddingToPerimeter
-        case None => CreationStatuses.Ready
-      }
-      project.copy(status = status, googleProjectNumber = Option(GoogleProjectNumber(googleProject.getProjectNumber.toString)))
+      project.copy(status = CreationStatuses.Ready, googleProjectNumber = Option(GoogleProjectNumber(googleProject.getProjectNumber.toString)))
     }
   }
 
@@ -331,12 +212,4 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     }
   }
 
-  private def onSuccessfulAddProjectToPerimeter(project: RawlsBillingProject): Future[RawlsBillingProject] = {
-    Future.successful(project.copy(status = CreationStatuses.Ready))
-  }
-
-  private def onFailedAddProjectToPerimeter(project: RawlsBillingProject, error: String): Future[RawlsBillingProject] = {
-    logger.debug(s"project $project failed to add to perimeter with error message: $error")
-    Future.successful(project.copy(status = CreationStatuses.Error, message = Option(s"Failed to add project to perimeter. Error message: $error")))
-  }
 }
