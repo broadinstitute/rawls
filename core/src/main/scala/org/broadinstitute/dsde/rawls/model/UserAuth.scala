@@ -126,7 +126,18 @@ case class CreateRawlsBillingProjectFullRequest(
   privateIpGoogleAccess: Option[Boolean],
   servicePerimeter: Option[ServicePerimeterName])
 
+// V2 billing projects will have enable flow logs on if in a service perimeter
+// Otherwise not. HighSecurityNetwork and PrivateIpGoogleAccess will be on for
+// all projects. We do not want flow logs on by default because they are expensive
+// and prone to false positives, but for users who are making use of a service
+// perimeter, we found that they needed the extra security.
+case class CreateRawlsV2BillingProjectFullRequest(
+  projectName: RawlsBillingProjectName,
+  billingAccount: RawlsBillingAccountName,
+  servicePerimeter: Option[ServicePerimeterName])
+
 case class BillingProjectSpendConfiguration(datasetGoogleProject: GoogleProject, datasetName: BigQueryDatasetName)
+
 case class UpdateRawlsBillingAccountRequest(billingAccount: RawlsBillingAccountName)
 
 case class SyncReportItem(operation: String, email: String, errorReport: Option[ErrorReport])
@@ -188,6 +199,8 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val SyncReportFormat = jsonFormat2(SyncReport)
 
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat6(CreateRawlsBillingProjectFullRequest)
+
+  implicit val CreateRawlsV2BillingProjectFullRequestFormat = jsonFormat3(CreateRawlsV2BillingProjectFullRequest)
 
   implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
 

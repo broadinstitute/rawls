@@ -1,13 +1,13 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
-
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
 import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, DataRepoSnapshotAttributes, ReferenceResourceCommonFields, ReferenceTypeEnum}
+import cats.effect.IO
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
 import com.typesafe.config.ConfigFactory
@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -46,6 +46,8 @@ import scala.language.postfixOps
 import scala.util.Try
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+
+import scala.concurrent.ExecutionContext.global
 
 /**
  * Created with IntelliJ IDEA.
@@ -332,6 +334,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
       )_
 
+      val deltaLayer = new DeltaLayer(bigQueryServiceFactory, new MockDeltaLayerWriter, samDAO,
+        WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+        WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global))
+
       val genomicsServiceConstructor = GenomicsService.constructor(
         slickDataSource,
         gcsDAO
@@ -367,7 +373,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         execServiceCluster,
         execServiceBatchSize,
         workspaceManagerDAO,
-        dataRepoDAO,
+        deltaLayer,
         methodConfigResolver,
         gcsDAO,
         samDAO,

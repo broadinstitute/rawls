@@ -341,6 +341,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
+
   List(8, 17, 32, 65, 128, 257) foreach { parallelism =>
     it should s"handle $parallelism simultaneous writes to their own entity attribute temp tables" in withEmptyTestDatabase {
 

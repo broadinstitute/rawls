@@ -282,9 +282,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
    * */
   def unregisterBillingProjectWithUserInfo(projectName: RawlsBillingProjectName, ownerUserInfo: UserInfo): Future[PerRequestMessage] = {
     for {
-      _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
       _ <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.delete(projectName)
+      }
+      _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting billing project (while deleting billing project in Sam) for billing project `${projectName.value}`", t)
+          throw t
+        }
       }
     } yield {
       RequestComplete(StatusCodes.NoContent)
@@ -534,26 +539,26 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
-      _ <- validateCreateProjectRequest(createProjectRequest)
+      _ <- validateV1CreateProjectRequest(createProjectRequest)
       _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter)
       billingAccount <- checkBillingAccountAccess(createProjectRequest.billingAccount)
       result <- internalStartBillingProjectCreation(createProjectRequest, billingAccount)
     } yield result
   }
 
-  def createBillingProjectV2(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
+  def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
-      _ <- validateCreateProjectRequest(createProjectRequest)
+      _ <- validateBillingProjectName(createProjectRequest.projectName.value)
       _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter)
       hasAccess <- gcsDAO.testBillingAccountAccess(createProjectRequest.billingAccount, userInfo)
       _ = if (!hasAccess) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
       }
-      result <- createBillingProjectInternal(createProjectRequest)
+      result <- createV2BillingProjectInternal(createProjectRequest)
     } yield result
   }
 
-  private def validateCreateProjectRequest(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
+  private def validateV1CreateProjectRequest(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
     for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
       _ <- if ((createProjectRequest.enableFlowLogs.getOrElse(false) || createProjectRequest.privateIpGoogleAccess.getOrElse(false)) && !createProjectRequest.highSecurityNetwork.getOrElse(false)) {
@@ -633,7 +638,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     )
   }
 
-  private def createBillingProjectInternal(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
+  private def createV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[PerRequestMessage] = {
     for {
       maybeProject <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(createProjectRequest.projectName)
@@ -751,7 +756,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
         }
 
-        _ <- servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName)
+        _ <- dataSource.inTransaction { dataAccess =>
+          servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
+        }
       } yield RequestComplete(StatusCodes.NoContent)
     }
   }

@@ -170,7 +170,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
     mockPositiveBillingProjectCreation(services, projectName)
 
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
+    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
@@ -189,7 +189,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None, None, None, None)) ~>
+    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None)) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
@@ -198,29 +198,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 400 when creating a project with enableFlowLogs but not highSecurityNetwork" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), enableFlowLogs = Some(true), None, None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.BadRequest) {
-          status
-        }
-      }
-  }
-
-  it should "return 400 when creating a project with privateIpGoogleAccess but not highSecurityNetwork" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), None, privateIpGoogleAccess = Some(true), None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.BadRequest) {
-          status
-        }
-      }
-  }
-
   it should "return 400 when creating a project with a name that is too short" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("short"), services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("short"), services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -229,8 +209,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with a name that is too long" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"), services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"), services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -239,8 +219,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with a name that contains invalid characters" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("!@#$%^&*()=+,. "), services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
-      sealRoute(services.billingRoutes) ~>
+    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("!@#$%^&*()=+,. "), services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
+      sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -269,58 +249,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       ArgumentMatchers.eq(projectName.value),
       ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
     )).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
-  }
-
-  it should "return 201 when creating a project with a highSecurityNetwork" in withEmptyDatabaseAndApiServices { services =>
-    val projectName = RawlsBillingProjectName("test_good")
-    mockPositiveBillingProjectCreation(services, projectName)
-
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), None, None, None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-  }
-
-  it should "return 201 when creating a project with a highSecurityNetwork and enableFlowLogs turned on" in withEmptyDatabaseAndApiServices { services =>
-    val projectName = RawlsBillingProjectName("test_good")
-    mockPositiveBillingProjectCreation(services, projectName)
-
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), enableFlowLogs = Some(true), None, None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-  }
-
-  it should "return 201 when creating a project with a highSecurityNetwork with privateIpGoogleAccess turned on" in withEmptyDatabaseAndApiServices { services =>
-    val projectName = RawlsBillingProjectName("test_good")
-    mockPositiveBillingProjectCreation(services, projectName)
-
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), None, privateIpGoogleAccess = Some(true), None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-  }
-
-  it should "return 201 when creating a project with a highSecurityNetwork with enableFlowLogs and privateIpGoogleAccess turned on" in withEmptyDatabaseAndApiServices { services =>
-    val projectName = RawlsBillingProjectName("test_good")
-    mockPositiveBillingProjectCreation(services, projectName)
-
-    Post("/billing/v2", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(true), enableFlowLogs = Some(true), privateIpGoogleAccess = Some(true), None)) ~>
-      sealRoute(services.billingRoutesV2) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
   }
 
   "GET /billing/v2/{projectName}/members" should "return 200 when listing billing project members as owner" in withEmptyDatabaseAndApiServices { services =>
@@ -569,7 +497,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, Option(services.gcsDAO.accessibleBillingAccountName), project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
       }
   }
 
@@ -598,7 +525,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, None, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
       }
   }
 }

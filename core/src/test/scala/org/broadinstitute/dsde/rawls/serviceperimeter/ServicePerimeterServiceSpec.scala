@@ -58,7 +58,9 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
       }
     }
 
-    Await.result(service.overwriteGoogleProjectsInPerimeter(servicePerimeterName), Duration.Inf)
+    Await.result(slickDataSource.inTransaction { dataAccess =>
+      service.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
+    }, Duration.Inf)
 
     // Check that we made the call to overwrite the Perimeter exactly once (default) and that the correct perimeter
     // name was specified with the correct list of projects which should include all pre-existing Workspaces within
@@ -113,7 +115,9 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
     }
 
     val failure = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.overwriteGoogleProjectsInPerimeter(servicePerimeterName), Duration.Inf)
+      Await.result(slickDataSource.inTransaction { dataAccess =>
+        service.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
+      }, Duration.Inf)
     }
     failure.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }

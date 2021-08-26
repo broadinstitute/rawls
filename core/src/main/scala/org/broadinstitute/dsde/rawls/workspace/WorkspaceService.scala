@@ -15,12 +15,13 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
@@ -67,7 +68,7 @@ import scala.util.{Failure, Success, Try}
 object WorkspaceService {
   def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO,
                   executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, workspaceManagerDAO: WorkspaceManagerDAO,
-                  dataRepoDAO: DataRepoDAO, methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
+                  deltaLayer: DeltaLayer, methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
                   notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
@@ -79,7 +80,7 @@ object WorkspaceService {
                  (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
     new WorkspaceService(userInfo, dataSource, entityManager, methodRepoDAO, cromiamDAO,
-      executionServiceCluster, execServiceBatchSize, workspaceManagerDAO,
+      executionServiceCluster, execServiceBatchSize, workspaceManagerDAO, deltaLayer,
       methodConfigResolver, gcsDAO, samDAO,
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
@@ -123,10 +124,50 @@ object WorkspaceService {
 }
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val entityManager: EntityManager, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val workspaceManagerDAO: WorkspaceManagerDAO, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String, servicePerimeterService: ServicePerimeterService, googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String)(implicit val system: ActorSystem, val materializer: Materializer, protected val executionContext: ExecutionContext)
-  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils with WorkspaceSupport with EntitySupport with AttributeSupport with Retry {
+class WorkspaceService(protected val userInfo: UserInfo,
+                       val dataSource: SlickDataSource,
+                       val entityManager: EntityManager,
+                       val methodRepoDAO: MethodRepoDAO,
+                       cromiamDAO: ExecutionServiceDAO,
+                       executionServiceCluster: ExecutionServiceCluster,
+                       execServiceBatchSize: Int,
+                       val workspaceManagerDAO: WorkspaceManagerDAO,
+                       val deltaLayer: DeltaLayer,
+                       val methodConfigResolver: MethodConfigResolver,
+                       protected val gcsDAO: GoogleServicesDAO,
+                       val samDAO: SamDAO, notificationDAO: NotificationDAO,
+                       userServiceConstructor: UserInfo => UserService,
+                       genomicsServiceConstructor: UserInfo => GenomicsService,
+                       maxActiveWorkflowsTotal: Int,
+                       maxActiveWorkflowsPerUser: Int,
+                       override val workbenchMetricBaseName: String,
+                       submissionCostService: SubmissionCostService,
+                       config: WorkspaceServiceConfig,
+                       requesterPaysSetupService: RequesterPaysSetupService,
+                       resourceBufferService: ResourceBufferService,
+                       resourceBufferSaEmail: String,
+                       servicePerimeterService: ServicePerimeterService,
+                       googleIamDao: GoogleIamDAO,
+                       terraBillingProjectOwnerRole: String,
+                       terraWorkspaceCanComputeRole: String)
+                      (implicit protected val executionContext: ExecutionContext) extends RoleSupport
+  with LibraryPermissionsSupport
+  with FutureSupport
+  with MethodWiths
+  with UserWiths
+  with LazyLogging
+  with RawlsInstrumented
+  with JsonFilterUtils
+  with WorkspaceSupport
+  with EntitySupport
+  with AttributeSupport
+  with StringValidationUtils {
 
   import dataSource.dataAccess.driver.api._
+
+  implicit val errorReportSource = ErrorReportSource("rawls")
+
+  private val UserCommentMaxLength: Int = 1000
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
@@ -134,15 +175,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
           for {
             workspace <- traceWithParent("withNewWorkspaceContext", s2) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
-              withNewWorkspaceContext(workspaceRequest, billingProject, dataAccess, s3) { workspaceContext =>
+              withNewWorkspaceContext(workspaceRequest, billingProject, sourceBucketName = None, dataAccess, s3) { workspaceContext =>
                 DBIO.successful(workspaceContext)
               }
             }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
-            // After creating the Workspace, THIS is where we want to add the project to the Service Perimeter.  We need
-            // to wait until the Workspace is persisted before adding to the Service Perimeter because the database IS the
-            // source of record for which Google Projects need to be in the Service Perimeter because the method to add
-            // projects to the Service Perimeter overwrites the entire list projects in the Perimeter
-            _ <- maybeUpdateGoogleProjectsInPerimeter(billingProject)
           } yield workspace
         })
       })
@@ -370,27 +406,54 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     for {
 
-      workflowsToAbort <- deletionFuture
+      workflowsToAbort <- deletionFuture recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while running `deletionFuture`) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
 
       // Abort running workflows
-      aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) }
+      aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) } recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while aborting workflows) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
 
       // Delete Google Project
       _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo)
 
       // Delete resource in sam outside of DB transaction
-      _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
+      _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
+        case t:Throwable => {
+          logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
       // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
-      _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recoverWith {
+      _ <- Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recoverWith {
         //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
         case e: ApiException => {
           if(e.getCode != StatusCodes.NotFound.intValue) {
-            logger.warn(s"Unexpected failure deleting workspace in Workspace Manager. Received ${e.getCode}: [${e.getResponseBody}]")
+            logger.warn(s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceName}. Received ${e.getCode}: [${e.getResponseBody}]")
           }
-          Success(())
+          Future.successful()
         }
       }
-      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo)
+      // Delete the Delta Layer companion dataset, if it exists
+      _ <- deltaLayer.deleteDataset(workspaceContext) recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while deleting Delta Layer) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
+      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
     } yield {
       aborts.onComplete {
         case Failure(t) => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
@@ -597,16 +660,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
         withBillingProjectContext(destWorkspaceRequest.namespace) { destBillingProject =>
           getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
-            // if bucket location does not exist in request, use the same location as source workspace. Otherwise use the one from request
-            // if the source bucket is a regional bucket, retrieve the region as the destination bucket also needs to be created in the same region
-            val bucketLocationFuture: Future[Option[String]] = if(destWorkspaceRequest.bucketLocation.isEmpty) (for {
-              sourceWorkspaceContext <- getWorkspaceContext(permCtx.toWorkspaceName)
-              bucketLocation <- gcsDAO.getRegionForRegionalBucket(sourceWorkspaceContext.bucketName, Option(GoogleProjectId(destWorkspaceRequest.namespace)))
-            } yield bucketLocation) else withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {Future(destWorkspaceRequest.bucketLocation)}
+            withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {
+              // if bucket location is specified, then we just use that for the destination workspace's bucket location.
+              // if bucket location is NOT specified then we want to use the same location as the source workspace.
+              // Since the destination workspace's Google project has not been claimed at this point, we cannot charge
+              // the Google request that checks the source workspace bucket's location to the destination workspace's
+              // Google project. To get around this, we pass in the source workspace bucket's name to
+              // withNewWorkspaceContext and get the source workspace bucket's location after we've claimed a Google
+              // project and before we create the destination workspace's bucket.
+              val sourceBucketNameOption: Option[String] = destWorkspaceRequest.bucketLocation match {
+                case Some(_) => None
+                case None => Option(permCtx.bucketName)
+              }
 
-            bucketLocationFuture flatMap { bucketLocationOption =>
               for {
-                workspaceTuple <- dataSource.inTransactionWithAttrTempTable( Set(AttributeTempTableType.Workspace))({ dataAccess =>
+                workspaceTuple <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
                   // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
                   withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
                     DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
@@ -614,7 +682,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                         // add to or replace current attributes, on an individual basis
                         val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
                         traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
-                          withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs, bucketLocation = bucketLocationOption), destBillingProject, dataAccess, s1) { destWorkspaceContext =>
+                          withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, sourceBucketNameOption, dataAccess, s1) { destWorkspaceContext =>
                             dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
                               dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                                 val inserts = methodConfigShorts.map { methodConfigShort =>
@@ -632,10 +700,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                     }
                   }
                 }, TransactionIsolation.ReadCommitted)
-                _ <- maybeUpdateGoogleProjectsInPerimeter(destBillingProject)
+                // read committed to avoid deadlocks on workspace attr scratch table
               } yield workspaceTuple
             }
-            // read committed to avoid deadlocks on workspace attr scratch table
           }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
             //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
             //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
@@ -1362,6 +1429,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       _ = validateSubmissionRootEntity(submissionRequest, methodConfig)
 
+      _ = submissionRequest.userComment.map(validateMaxStringLength(_, "userComment", UserCommentMaxLength))
+
       gatherInputsResult <- gatherMethodConfigInputs(methodConfig)
 
       validationResult <- entityProvider.expressionValidator.validateExpressionsForSubmission(methodConfig, gatherInputsResult)
@@ -1453,7 +1522,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         externalEntityInfo = for {
           entityType <- header.entityType
           dataStoreId <- header.entityStoreId
-        } yield ExternalEntityInfo(dataStoreId, entityType)
+        } yield ExternalEntityInfo(dataStoreId, entityType),
+        userComment = submissionRequest.userComment
       )
 
       // implicitly passed to SubmissionComponent.create
@@ -1503,6 +1573,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               }
               val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
               RequestComplete((StatusCodes.OK, costedSubmission))
+          }
+        }
+      }
+    }
+  }
+
+  def updateSubmissionUserComment(workspaceName: WorkspaceName, submissionId: String, newComment: UserCommentUpdateOperation): Future[PerRequestMessage] = {
+    validateMaxStringLength(newComment.userComment, "userComment", UserCommentMaxLength)
+
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
+          dataAccess.submissionQuery.updateSubmissionUserComment(submissionId, newComment.userComment) map { rowsUpdated =>
+            if (rowsUpdated == 1) RequestComplete(StatusCodes.NoContent)
+            else RequestComplete(ErrorReport(StatusCodes.NotFound, s"Unable to update userComment for submission. Submission ${submissionId} could not be found."))
           }
         }
       }
@@ -1969,10 +2054,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     * @param span
     * @return Future[Unit]
     */
-  private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject, span: Span = null): Future[Unit] = {
+  private def maybeUpdateGoogleProjectsInPerimeter(billingProject: RawlsBillingProject, dataAccess: DataAccess, span: Span = null): ReadAction[Unit] = {
     billingProject.servicePerimeter match {
-      case Some(servicePerimeterName) => servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName)
-      case None => Future.successful()
+      case Some(servicePerimeterName) => servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
+      case None => DBIO.successful()
     }
   }
 
@@ -2104,7 +2189,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.
-  private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, billingProject: RawlsBillingProject, dataAccess: DataAccess, parentSpan: Span)
+  private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, billingProject: RawlsBillingProject, sourceBucketName: Option[String], dataAccess: DataAccess, parentSpan: Span)
                                      (op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
     def getBucketName(workspaceId: String, secure: Boolean) = s"${config.workspaceBucketNamePrefix}-${if(secure) "secure-" else ""}${workspaceId}"
@@ -2147,6 +2232,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                 createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
+
+              _ <- traceDBIOWithParent("updateServicePerimeter", parentSpan)(_ =>
+                maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess))
+
               // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
               _ <- traceDBIOWithParent("createResourceFull (google project)", parentSpan)(_ => DBIO.from(
                   samDAO.createResourceFull(SamResourceTypeNames.googleProject, googleProjectId.value, Map.empty, Set.empty, userInfo, Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value)))))
@@ -2165,14 +2254,30 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 }
               }.flatten.toMap)
 
+              workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentSpan)(_ => DBIO.from(
+                determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, sourceBucketName, googleProjectId)))
               _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentSpan)(span => DBIO.from(
-                  gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceRequest.bucketLocation)))
+                  gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceBucketLocation)))
               _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))
               response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
             } yield (response)
         }
       })
     })
+  }
+
+  // A new workspace request may specify the region where the bucket should be created. In the case of cloning a
+  // workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region
+  // as the source workspace's bucket. Rawls does not store bucket regions, so in order to get this information we need
+  // to query Google and this query costs money, so we need to make sure that the target Google Project is the one that
+  // gets charged. If neither a bucket location nor a source bucket name are provided, Future[None] is returned which
+  // will result in the default bucket location being used
+  private def determineWorkspaceBucketLocation(maybeBucketLocation: Option[String], maybeSourceBucketName: Option[String], googleProjectId: GoogleProjectId): Future[Option[String]] = {
+    (maybeBucketLocation, maybeSourceBucketName) match {
+      case (bucketLocation@Some(_), _) => Future(bucketLocation)
+      case (None, Some(sourceBucketName)) => gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
+      case (None, None) => Future(None)
+    }
   }
 
   private def withSubmission[T](workspaceContext: Workspace, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[T]): ReadWriteAction[T] = {

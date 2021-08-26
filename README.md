@@ -90,7 +90,10 @@ VAULT_TOKEN=$(cat ~/.vault-token) ARTIFACTORY_USERNAME=dsdejenkins ARTIFACTORY_P
 
 You can view what is in the artifactory here: https://broadinstitute.jfrog.io/broadinstitute/webapp/#/home
 
-After publishing, update [model/CHANGELOG.md](model/CHANGELOG.md) properly.
+After publishing:
+* update [model/CHANGELOG.md](model/CHANGELOG.md) properly
+* update the rawls-model dependency in the automation subdirectory, and ensure that sbt project is healthy
+* update the rawls-model dependency in workbench-libs serviceTest, and ensure that sbt project is healthy
 
 
 ## Troubleshooting

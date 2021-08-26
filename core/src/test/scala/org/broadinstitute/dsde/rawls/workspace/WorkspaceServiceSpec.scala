@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
@@ -13,7 +14,7 @@ import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -33,9 +34,23 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.scalatest.concurrent.Eventually
+import org.scalatest.BeforeAndAfterAll
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.testkit.ScalatestRouteTest
+import cats.effect.IO
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig}
+import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
+import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers._
+import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, spy, times, verify}
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.Eventually
@@ -49,6 +64,8 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.mapAsScalaMapConverter
 import scala.language.postfixOps
 import scala.util.Try
+
+import scala.concurrent.ExecutionContext.global
 
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -115,7 +132,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(Map(ServicePerimeterName("theGreatBarrier") -> Seq(GoogleProjectNumber("555555"), GoogleProjectNumber("121212")),
       ServicePerimeterName("anotherGoodName") -> Seq(GoogleProjectNumber("777777"), GoogleProjectNumber("343434"))), 1 second, 5 seconds)
     val servicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
-    when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName])).thenReturn(Future.successful(()))
+    when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess])).thenReturn(DBIO.successful(()))
 
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
@@ -130,6 +147,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
     )_
+
+    val deltaLayerSpy = spy(new DeltaLayer(MockBigQueryServiceFactory.ioFactory(), new MockDeltaLayerWriter, samDAO,
+      WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global)))
 
     val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
@@ -167,7 +188,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      dataRepoDAO,
+      deltaLayerSpy,
       methodConfigResolver,
       gcsDAO,
       samDAO,
@@ -786,6 +807,30 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
     }
 
+  }
+
+  it should "delete the Delta Layer companion dataset when deleting a workspace" in withTestDataServices { services =>
+    // see also the tests in DeltaLayerSpec, which provide greater and lower-level coverage
+
+    // check that the workspace to be deleted exists; it shouldn't matter which workspace we use for this test
+    assertWorkspaceResult(Option(testData.workspaceWithMultiGroupAD)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName10))
+    }
+    // delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName10), Duration.Inf)
+    // check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName10))
+    }
+    // check that deleting the workspace triggered a call to DeltaLayer.deleteDataset
+    val deleteWsCaptor: ArgumentCaptor[Workspace] = ArgumentCaptor.forClass(classOf[Workspace])
+    verify(services.deltaLayerSpy, times(1)).deleteDataset(deleteWsCaptor.capture())
+    // check that the workspace sent to the deleteDataset call is correct
+    // note that we cannot compare against workspaceWithMultiGroupAD directly, as its last-updated value has changed
+    // during fixture creation, so we just compare its id and name
+    val deleteArg = deleteWsCaptor.getValue
+    deleteArg.workspaceId shouldBe testData.workspaceWithMultiGroupAD.workspaceId
+    deleteArg.toWorkspaceName shouldBe testData.workspaceWithMultiGroupAD.toWorkspaceName
   }
 
   it should "return the correct tags from autocomplete" in withTestDataServices { services =>
@@ -1449,7 +1494,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val servicePerimeterNameCaptor = captor[ServicePerimeterName]
     // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
     // the arguments passed to it so that we can verify that they were correct
-    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture)
+    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture, any[DataAccess])
     servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
 
     // verify that we set the folder for the perimeter
@@ -1629,7 +1674,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val servicePerimeterNameCaptor = captor[ServicePerimeterName]
     // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
     // the arguments passed to it so that we can verify that they were correct
-    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture)
+    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture, any[DataAccess])
     servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
 
     // verify that we set the folder for the perimeter
