@@ -316,7 +316,8 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-      val defaultBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultBackend"))
+      val defaultNetworkBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultNetworkBackend"))
+      val highSecurityNetworkBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.highSecurityNetworkBackend"))
 
       val wdlParsingConfig = WDLParserConfig(conf.getConfig("wdl-parsing"))
       def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
@@ -472,7 +473,8 @@ object Boot extends IOApp with LazyLogging {
           requesterPaysRole,
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
-          defaultBackend,
+          defaultNetworkBackend,
+          highSecurityNetworkBackend,
           methodConfigResolver
         )
       } else

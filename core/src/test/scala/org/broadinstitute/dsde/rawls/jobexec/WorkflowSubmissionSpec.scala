@@ -51,20 +51,21 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
     */
   class TestWorkflowSubmission(
-    val dataSource: SlickDataSource,
-    val batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
-    val processInterval: FiniteDuration = 250 milliseconds,
-    val pollInterval: FiniteDuration = 1 second,
-    val maxActiveWorkflowsTotal: Int = 100,
-    val maxActiveWorkflowsPerUser: Int = 100,
-    val defaultRuntimeOptions: Option[JsValue] = None,
-    val trackDetailedSubmissionMetrics: Boolean = true,
-    override val workbenchMetricBaseName: String = "test",
-    val requesterPaysRole: String = requesterPaysRole,
-    val useWorkflowCollectionField: Boolean = false,
-    val useWorkflowCollectionLabel: Boolean = false,
-    val defaultBackend: CromwellBackend = CromwellBackend("PAPIv2"),
-    val methodConfigResolver: MethodConfigResolver = methodConfigResolver) extends WorkflowSubmission {
+                                val dataSource: SlickDataSource,
+                                val batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
+                                val processInterval: FiniteDuration = 250 milliseconds,
+                                val pollInterval: FiniteDuration = 1 second,
+                                val maxActiveWorkflowsTotal: Int = 100,
+                                val maxActiveWorkflowsPerUser: Int = 100,
+                                val defaultRuntimeOptions: Option[JsValue] = None,
+                                val trackDetailedSubmissionMetrics: Boolean = true,
+                                override val workbenchMetricBaseName: String = "test",
+                                val requesterPaysRole: String = requesterPaysRole,
+                                val useWorkflowCollectionField: Boolean = false,
+                                val useWorkflowCollectionLabel: Boolean = false,
+                                val defaultNetworkBackend: CromwellBackend = CromwellBackend("PAPIv2"),
+                                val highSecurityNetworkBackend: CromwellBackend = CromwellBackend("PAPIv2-CloudNAT"),
+                                val methodConfigResolver: MethodConfigResolver = methodConfigResolver) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -564,7 +565,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockMarthaResolver,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
-        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"),
+        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"), CromwellBackend("PAPIv2-CloudNAT"),
         methodConfigResolver)
       )
 
@@ -605,7 +606,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockMarthaResolver,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"),
+        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"), CromwellBackend("PAPIv2-CloudNAT"),
         methodConfigResolver)
       )
 
