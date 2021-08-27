@@ -304,6 +304,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs)
 
     val (workspace) = makeWorkspaceWithUsers(billingProject, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (v1Workspace) = makeWorkspaceWithUsers(billingProject, wsName.name + "v1", UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, billingProject.billingAccount, None)
 
     val (regionalWorkspace) = makeWorkspaceWithUsers(billingProject, wsRegionalName.name, UUID.randomUUID().toString, "fc-regional-bucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
 
@@ -907,6 +908,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val allWorkspaces = Seq(
       workspace,
+      v1Workspace,
       controlledWorkspace,
       workspacePublished,
       workspaceNoAttrs,
