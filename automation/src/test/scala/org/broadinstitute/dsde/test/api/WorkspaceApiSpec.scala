@@ -126,7 +126,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             case s if s.endsWith("lifesciences.serviceAgent") => binding.getMembers.size() shouldEqual 1
             case s if s.endsWith("owner") =>
               binding.getMembers.size() shouldEqual 1
-              binding.getMembers.get(0) shouldEqual "serviceAccount:buffer-tools@terra-kernel-k8s.iam.gserviceaccount.com"
+              binding.getMembers.get(0) should endWith ("@terra-kernel-k8s.iam.gserviceaccount.com")
             case s if s.endsWith("pubsub.serviceAgent") => binding.getMembers.size() shouldEqual 1
             case _ =>
               logger.error("Extra permission on workspace google project found")
