@@ -97,7 +97,10 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         val workspaceName = prependUUID("rbs-project-iam-test")
 
         implicit val ec: ExecutionContext = ExecutionContext.global
-        val googleIamDaoWithCloudCredentials = new HttpGoogleIamDAO("rawls-integration-tests", GoogleCredentialModes.RawGoogleCredential(ownerAuthToken.buildCredential()), "workbenchMetricBaseName")
+
+        val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
+        val jsonCreds = try source.mkString finally source.close()
+        val googleIamDaoWithCloudCredentials = new HttpGoogleIamDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
 
         Rawls.workspaces.create(billingProjectName, workspaceName)
         register cleanUp Rawls.workspaces.delete(billingProjectName, workspaceName)
