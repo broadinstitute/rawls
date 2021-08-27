@@ -405,6 +405,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
         }
       }
     for {
+      // Delete Google Project
+      _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo)
 
       workflowsToAbort <- deletionFuture recoverWith {
         case t:Throwable => {
@@ -421,8 +423,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
         }
       }
 
-      // Delete Google Project
-      _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo)
 
       // Delete resource in sam outside of DB transaction
       _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
