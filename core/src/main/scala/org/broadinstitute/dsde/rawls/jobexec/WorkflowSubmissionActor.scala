@@ -45,10 +45,10 @@ object WorkflowSubmissionActor {
             requesterPaysRole: String,
             useWorkflowCollectionField: Boolean,
             useWorkflowCollectionLabel: Boolean,
-            defaultNetworkBackend: CromwellBackend,
-            highSecurityNetworkBackend: CromwellBackend,
+            defaultNetworkCromwellBackend: CromwellBackend,
+            highSecurityNetworkCromwellBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, defaultRuntimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultNetworkBackend, highSecurityNetworkBackend, methodConfigResolver))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, defaultRuntimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultNetworkCromwellBackend, highSecurityNetworkCromwellBackend, methodConfigResolver))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -80,8 +80,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val requesterPaysRole: String,
                               val useWorkflowCollectionField: Boolean,
                               val useWorkflowCollectionLabel: Boolean,
-                              val defaultNetworkBackend: CromwellBackend,
-                              val highSecurityNetworkBackend: CromwellBackend,
+                              val defaultNetworkCromwellBackend: CromwellBackend,
+                              val highSecurityNetworkCromwellBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
@@ -131,8 +131,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
   val useWorkflowCollectionLabel: Boolean
-  val defaultNetworkBackend: CromwellBackend
-  val highSecurityNetworkBackend: CromwellBackend
+  val defaultNetworkCromwellBackend: CromwellBackend
+  val highSecurityNetworkCromwellBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
 
   import dataSource.dataAccess.driver.api._
@@ -254,8 +254,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
   def determineDefaultCromwellBackend(workspaceVersion: WorkspaceVersion): CromwellBackend = {
     workspaceVersion match {
-      case WorkspaceVersions.V1 => defaultNetworkBackend
-      case WorkspaceVersions.V2 => highSecurityNetworkBackend
+      case WorkspaceVersions.V1 => defaultNetworkCromwellBackend
+      case WorkspaceVersions.V2 => highSecurityNetworkCromwellBackend
     }
   }
 

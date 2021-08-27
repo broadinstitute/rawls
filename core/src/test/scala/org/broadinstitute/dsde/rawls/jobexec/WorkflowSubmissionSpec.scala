@@ -63,8 +63,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
                                 val requesterPaysRole: String = requesterPaysRole,
                                 val useWorkflowCollectionField: Boolean = false,
                                 val useWorkflowCollectionLabel: Boolean = false,
-                                val defaultNetworkBackend: CromwellBackend = CromwellBackend("PAPIv2"),
-                                val highSecurityNetworkBackend: CromwellBackend = CromwellBackend("PAPIv2-CloudNAT"),
+                                val defaultNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2"),
+                                val highSecurityNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2-CloudNAT"),
                                 val methodConfigResolver: MethodConfigResolver = methodConfigResolver) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
@@ -257,7 +257,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             delete_intermediate_output_files = false,
             use_reference_disks = false,
             memory_retry_multiplier = 1.0,
-            backend = workflowSubmission.highSecurityNetworkBackend,
+            backend = workflowSubmission.highSecurityNetworkCromwellBackend,
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
@@ -297,7 +297,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             delete_intermediate_output_files = false,
             use_reference_disks = false,
             memory_retry_multiplier = 1.0,
-            backend = workflowSubmission.defaultNetworkBackend,
+            backend = workflowSubmission.defaultNetworkCromwellBackend,
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])

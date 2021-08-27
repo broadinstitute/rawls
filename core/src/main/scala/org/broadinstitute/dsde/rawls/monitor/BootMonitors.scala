@@ -48,8 +48,8 @@ object BootMonitors extends LazyLogging {
                    requesterPaysRole: String,
                    useWorkflowCollectionField: Boolean,
                    useWorkflowCollectionLabel: Boolean,
-                   defaultNetworkBackend: CromwellBackend,
-                   highSecurityNetworkBackend: CromwellBackend,
+                   defaultNetworkCromwellBackend: CromwellBackend,
+                   highSecurityNetworkCromwellBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver)(implicit cs: ContextShift[IO]): Unit = {
     //Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
@@ -78,7 +78,7 @@ object BootMonitors extends LazyLogging {
     )
 
     //Boot workflow submission actors
-    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, drsResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultNetworkBackend, highSecurityNetworkBackend, methodConfigResolver)
+    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, drsResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultNetworkCromwellBackend, highSecurityNetworkCromwellBackend, methodConfigResolver)
 
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
@@ -178,8 +178,8 @@ object BootMonitors extends LazyLogging {
                                             requesterPaysRole: String,
                                             useWorkflowCollectionField: Boolean,
                                             useWorkflowCollectionLabel: Boolean,
-                                            defaultNetworkBackend: CromwellBackend,
-                                            highSecurityNetworkBackend: CromwellBackend,
+                                            defaultNetworkCromwellBackend: CromwellBackend,
+                                            highSecurityNetworkCromwellBackend: CromwellBackend,
                                             methodConfigResolver: MethodConfigResolver) = {
     for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
       system.actorOf(WorkflowSubmissionActor.props(
@@ -201,8 +201,8 @@ object BootMonitors extends LazyLogging {
         requesterPaysRole,
         useWorkflowCollectionField,
         useWorkflowCollectionLabel,
-        defaultNetworkBackend,
-        highSecurityNetworkBackend,
+        defaultNetworkCromwellBackend,
+        highSecurityNetworkCromwellBackend,
         methodConfigResolver
       ))
     }
