@@ -51,20 +51,21 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
     */
   class TestWorkflowSubmission(
-    val dataSource: SlickDataSource,
-    val batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
-    val processInterval: FiniteDuration = 250 milliseconds,
-    val pollInterval: FiniteDuration = 1 second,
-    val maxActiveWorkflowsTotal: Int = 100,
-    val maxActiveWorkflowsPerUser: Int = 100,
-    val defaultRuntimeOptions: Option[JsValue] = None,
-    val trackDetailedSubmissionMetrics: Boolean = true,
-    override val workbenchMetricBaseName: String = "test",
-    val requesterPaysRole: String = requesterPaysRole,
-    val useWorkflowCollectionField: Boolean = false,
-    val useWorkflowCollectionLabel: Boolean = false,
-    val defaultBackend: CromwellBackend = CromwellBackend("PAPIv2"),
-    val methodConfigResolver: MethodConfigResolver = methodConfigResolver) extends WorkflowSubmission {
+                                val dataSource: SlickDataSource,
+                                val batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
+                                val processInterval: FiniteDuration = 250 milliseconds,
+                                val pollInterval: FiniteDuration = 1 second,
+                                val maxActiveWorkflowsTotal: Int = 100,
+                                val maxActiveWorkflowsPerUser: Int = 100,
+                                val defaultRuntimeOptions: Option[JsValue] = None,
+                                val trackDetailedSubmissionMetrics: Boolean = true,
+                                override val workbenchMetricBaseName: String = "test",
+                                val requesterPaysRole: String = requesterPaysRole,
+                                val useWorkflowCollectionField: Boolean = false,
+                                val useWorkflowCollectionLabel: Boolean = false,
+                                val defaultNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2"),
+                                val highSecurityNetworkCromwellBackend: CromwellBackend = CromwellBackend("PAPIv2-CloudNAT"),
+                                val methodConfigResolver: MethodConfigResolver = methodConfigResolver) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -224,7 +225,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     }
   }
 
-  it should "submit a workflow with the right parameters and options" in withDefaultTestDatabase {
+  it should "submit a workflow with the right parameters and options for a v2 workspace" in withDefaultTestDatabase {
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, defaultRuntimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-someother"))))) {
       override val executionServiceCluster = mockExecCluster
@@ -256,7 +257,47 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             delete_intermediate_output_files = false,
             use_reference_disks = false,
             memory_retry_multiplier = 1.0,
-            backend = CromwellBackend("PAPIv2"),
+            backend = workflowSubmission.highSecurityNetworkCromwellBackend,
+            google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")
+          ))) {
+        mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+      }
+    }
+  }
+
+  it should "submit a workflow with the right parameters and options for a v1 workspace" in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, defaultRuntimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-someother"))))) {
+      override val executionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(testData.v1Workspace) { ctx =>
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submission1, testData.v1Workspace)
+
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      assertResult(workflowRecs.map(_ => s"""{"${testData.inputResolutions.head.inputName}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
+        mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
+      }
+
+      val petJson = Await.result(workflowSubmission.samDAO.getPetServiceAccountKeyForUser(testData.v1Workspace.googleProjectId, testData.userOwner.userEmail), Duration.Inf)
+      assertResult(
+        Some(
+          ExecutionServiceWorkflowOptions(
+            jes_gcs_root = s"gs://${testData.v1Workspace.bucketName}/${testData.submission1.submissionId}",
+            google_project = testData.v1Workspace.googleProjectId.value,
+            account_name = testData.userOwner.userEmail.value,
+            google_compute_service_account = "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
+            user_service_account_json =
+            """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""",
+            final_workflow_log_dir =
+              s"gs://${testData.v1Workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
+            default_runtime_attributes = Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
+            read_from_cache = false,
+            delete_intermediate_output_files = false,
+            use_reference_disks = false,
+            memory_retry_multiplier = 1.0,
+            backend = workflowSubmission.defaultNetworkCromwellBackend,
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
@@ -564,7 +605,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockMarthaResolver,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
-        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"),
+        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"), CromwellBackend("PAPIv2-CloudNAT"),
         methodConfigResolver)
       )
 
@@ -605,7 +646,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockMarthaResolver,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"),
+        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"), CromwellBackend("PAPIv2-CloudNAT"),
         methodConfigResolver)
       )
 
