@@ -254,7 +254,7 @@ class AvroUpsertMonitorActor(
         // of the same import.
         case Some(status) if status == ImportStatuses.ReadyForUpsert => {
           publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
-          toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, workspace, attributes.userEmail)) map {
+          toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, workspace, attributes.userEmail, attributes.isUpsert)) map {
             case Success(importUpsertResults) =>
               val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
               val baseMsg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
@@ -291,7 +291,7 @@ class AvroUpsertMonitorActor(
   }
 
 
-  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspace: Workspace, userEmail: RawlsUserEmail): Future[ImportUpsertResults] = {
+  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspace: Workspace, userEmail: RawlsUserEmail, isUpsert: Boolean): Future[ImportUpsertResults] = {
     val startTime = System.currentTimeMillis()
     logger.info(s"beginning upsert process for $jobId ...")
 
@@ -334,7 +334,7 @@ class AvroUpsertMonitorActor(
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProject, userEmail)
-          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = true, None, None)
+          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = isUpsert, None, None)
         } yield {
           upsertResults
         }
@@ -427,7 +427,7 @@ class AvroUpsertMonitorActor(
     pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, scala.collection.immutable.Seq(ackId))
   }
 
-  case class AvroUpsertAttributes(workspace: WorkspaceName, userEmail: RawlsUserEmail, importId: UUID, upsertFile: String)
+  case class AvroUpsertAttributes(workspace: WorkspaceName, userEmail: RawlsUserEmail, importId: UUID, upsertFile: String, isUpsert: Boolean)
 
   private def parseMessage(message: PubSubMessage) = {
     val workspaceNamespace = "workspaceNamespace"
@@ -435,6 +435,7 @@ class AvroUpsertMonitorActor(
     val userEmail = "userEmail"
     val jobId = "jobId"
     val upsertFile = "upsertFile"
+    val isUpsert = "isUpsert"
 
     def attributeNotFoundException(attribute: String) =  throw new Exception(s"unable to parse message - attribute $attribute not found in ${message.attributes}")
 
@@ -443,7 +444,8 @@ class AvroUpsertMonitorActor(
         message.attributes.getOrElse(workspaceName, attributeNotFoundException(workspaceName))),
       RawlsUserEmail(message.attributes.getOrElse(userEmail, attributeNotFoundException(userEmail))),
       UUID.fromString(message.attributes.getOrElse(jobId, attributeNotFoundException(jobId))),
-      message.attributes.getOrElse(upsertFile, attributeNotFoundException(upsertFile))
+      message.attributes.getOrElse(upsertFile, attributeNotFoundException(upsertFile)),
+      java.lang.Boolean.parseBoolean(message.attributes.getOrElse(isUpsert, "true"))
     )
   }
 
