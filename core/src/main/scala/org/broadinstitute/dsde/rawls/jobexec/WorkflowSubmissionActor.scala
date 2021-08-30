@@ -246,13 +246,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       deleteIntermediateOutputFiles,
       useReferenceDisks,
       memoryRetryMultiplier,
-      billingProject.cromwellBackend.getOrElse(determineDefaultCromwellBackend(WorkspaceVersions.fromStringThrows(workspace.workspaceVersion))),
+      determineCromwellBackendFromWorkspaceVersion(WorkspaceVersions.fromStringThrows(workspace.workspaceVersion)),
       workflowFailureMode,
       google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
     )
   }
 
-  def determineDefaultCromwellBackend(workspaceVersion: WorkspaceVersion): CromwellBackend = {
+  def determineCromwellBackendFromWorkspaceVersion(workspaceVersion: WorkspaceVersion): CromwellBackend = {
     workspaceVersion match {
       case WorkspaceVersions.V1 => defaultNetworkCromwellBackend
       case WorkspaceVersions.V2 => highSecurityNetworkCromwellBackend
