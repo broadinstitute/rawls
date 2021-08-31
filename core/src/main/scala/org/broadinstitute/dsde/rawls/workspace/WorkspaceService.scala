@@ -365,12 +365,29 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  private def deleteWorkspaceTransaction(workspaceName: WorkspaceName, workspaceContext: Workspace) = {
+    dataSource.inTransaction { dataAccess =>
+      for {
+        // Delete components of the workspace
+        _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+
+        // Delete the workspace
+        _ <- dataAccess.workspaceQuery.delete(workspaceName)
+
+        // Schedule bucket for deletion
+        _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))
+      } yield ()
+    }
+  }
+
   private def deleteWorkspace(workspaceName: WorkspaceName, workspaceContext: Workspace): Future[PerRequestMessage] = {
     //Attempt to abort any running workflows so they don't write any more to the bucket.
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
-    val deletionFuture: Future[Seq[WorkflowRecord]] =
+    val abortWorkflowFuture: Future[Seq[WorkflowRecord]] =
       requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext).flatMap { _ =>
         dataSource.inTransaction { dataAccess =>
           for {
@@ -387,18 +404,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
                   }
               }
             }
-
-            // Delete components of the workspace
-            _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-            _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-            _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-
-            // Delete the workspace
-            _ <- dataAccess.workspaceQuery.delete(workspaceName)
-
-            // Schedule bucket for deletion
-            _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))
-
           } yield {
             workflowsToAbort
           }
@@ -406,7 +411,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
     for {
 
-      workflowsToAbort <- deletionFuture recoverWith {
+      workflowsToAbort <- abortWorkflowFuture recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while running `deletionFuture`) for workspace `${workspaceName}`", t)
           throw t
@@ -422,9 +427,22 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
 
       // Delete Google Project
-      _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo)
+      _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo) recoverWith {
+        case t:Throwable => {
+          logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
 
-      // Delete resource in sam outside of DB transaction
+      // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
+      _ <- deleteWorkspaceTransaction(workspaceName, workspaceContext) recoverWith {
+        case t:Throwable => {
+          logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Rawls DB) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
+
+      // Delete workflowCollection resource in sam outside of DB transaction
       _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
         case t:Throwable => {
           logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
