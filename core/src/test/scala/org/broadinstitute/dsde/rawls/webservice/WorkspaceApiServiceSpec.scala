@@ -874,7 +874,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       name = "newWorkspace",
       attributes = Map.empty,
       authorizationDomain = None,
-      bucketLocation = Option("US")
+      bucketLocation = Option("EU")
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
@@ -882,7 +882,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         val errorText = responseAs[ErrorReport].message
         assert(status == StatusCodes.BadRequest)
-        assert(errorText.contains("Workspace bucket location must be a single (not multi-) region of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
+        assert(errorText.contains("Workspace bucket location must be a single region of format: [A-Za-z]+-[A-Za-z]+[0-9]+ or the default bucket location ('US')."))
+      }
+  }
+
+  it should "return 201 if the bucket location requested is the default bucket location" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      attributes = Map.empty,
+      authorizationDomain = None,
+      bucketLocation = Option("US")
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assert(status == StatusCodes.Created)
       }
   }
 
@@ -1288,14 +1304,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 400 if the cloned bucket location requested is in an invalid format" in withTestDataApiServices { services =>
+  it should "return 201 if the cloned bucket location requested is the default bucket location" in withTestDataApiServices { services =>
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("US"))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assert(status == StatusCodes.Created)
+      }
+  }
+
+  it should "return 400 if the cloned bucket location requested is in an invalid format" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("EU"))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         val errorText = responseAs[ErrorReport].message
         assert(status == StatusCodes.BadRequest)
-        assert(errorText.contains("Workspace bucket location must be a single (not multi-) region of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
+        assert(errorText.contains("Workspace bucket location must be a single region of format: [A-Za-z]+-[A-Za-z]+[0-9]+ or the default bucket location ('US')."))
       }
   }
 

@@ -106,6 +106,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       false,
       false,
       CromwellBackend("PAPIv2"),
+      CromwellBackend("PAPIv2-CloudNAT"),
       methodConfigResolver
     ))
 

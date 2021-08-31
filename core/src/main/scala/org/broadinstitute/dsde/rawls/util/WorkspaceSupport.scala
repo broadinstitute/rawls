@@ -138,12 +138,13 @@ trait WorkspaceSupport {
   def withWorkspaceBucketRegionCheck[T](bucketRegion: Option[String])(op: => Future[T]): Future[T] = {
     bucketRegion match {
       case Some(region) =>
-        // if the user specifies a region for the workspace bucket, it must be in the proper format for a single region
+        // if the user specifies a region for the workspace bucket, it must be in the proper format for a single region or the default bucket location (US multi region)
         val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
-        if (region.matches(singleRegionPattern)) op
+        val validUSPattern = "US"
+        if (region.matches(singleRegionPattern) || region.equals(validUSPattern)) op
         else {
           val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = s"Workspace bucket location must be a single " +
-            s"(not multi-) region of format: $singleRegionPattern.")
+            s"region of format: $singleRegionPattern or the default bucket location ('US').")
           throw new RawlsExceptionWithErrorReport(errorReport = err)
         }
       case None => op
