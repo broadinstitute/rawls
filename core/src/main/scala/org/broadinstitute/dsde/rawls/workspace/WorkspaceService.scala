@@ -365,6 +365,30 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  private def gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName: WorkspaceName, workspaceContext: Workspace) = {
+    requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext).flatMap { _ =>
+      dataSource.inTransaction { dataAccess =>
+        for {
+          // Gather any active workflows with external ids
+          workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
+
+          //If a workflow is not done, automatically change its status to Aborted
+          _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs =>
+            recs.collect {
+              case wf if !WorkflowStatuses.withName(wf.status).isDone =>
+                dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
+                  if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
+                  else None
+                }
+            }
+          }
+        } yield {
+          workflowsToAbort
+        }
+      }
+    }
+  }
+
   private def deleteWorkspaceTransaction(workspaceName: WorkspaceName, workspaceContext: Workspace) = {
     dataSource.inTransaction { dataAccess =>
       for {
@@ -373,11 +397,11 @@ class WorkspaceService(protected val userInfo: UserInfo,
         _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
         _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
 
-        // Delete the workspace
-        _ <- dataAccess.workspaceQuery.delete(workspaceName)
-
         // Schedule bucket for deletion
         _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))
+
+        // Delete the workspace
+        _ <- dataAccess.workspaceQuery.delete(workspaceName)
       } yield ()
     }
   }
@@ -387,31 +411,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
-    val abortWorkflowFuture: Future[Seq[WorkflowRecord]] =
-      requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext).flatMap { _ =>
-        dataSource.inTransaction { dataAccess =>
-          for {
-            // Gather any active workflows with external ids
-            workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
-
-            //If a workflow is not done, automatically change its status to Aborted
-            _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs =>
-              recs.collect {
-                case wf if !WorkflowStatuses.withName(wf.status).isDone =>
-                  dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
-                    if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
-                    else None
-                  }
-              }
-            }
-          } yield {
-            workflowsToAbort
-          }
-        }
-      }
+    val gatherWorkflowsFuture: Future[Seq[WorkflowRecord]] = gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName, workspaceContext)
     for {
 
-      workflowsToAbort <- abortWorkflowFuture recoverWith {
+      workflowsToAbort <- gatherWorkflowsFuture recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while running `deletionFuture`) for workspace `${workspaceName}`", t)
           throw t
