@@ -421,7 +421,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       workflowsToAbort <- gatherWorkflowsFuture recoverWith {
         case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while running `deletionFuture`) for workspace `${workspaceName}`", t)
+          logger.warn(s"Unexpected failure deleting workspace (while gathering workflows that need to be aborted) for workspace `${workspaceName}`", t)
           throw t
         }
       }
