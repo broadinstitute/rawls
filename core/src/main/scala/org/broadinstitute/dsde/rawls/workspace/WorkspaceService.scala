@@ -366,25 +366,23 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   private def gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName: WorkspaceName, workspaceContext: Workspace) = {
-    requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext).flatMap { _ =>
-      dataSource.inTransaction { dataAccess =>
-        for {
-          // Gather any active workflows with external ids
-          workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
+    dataSource.inTransaction { dataAccess =>
+      for {
+        // Gather any active workflows with external ids
+        workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
 
-          //If a workflow is not done, automatically change its status to Aborted
-          _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs =>
-            recs.collect {
-              case wf if !WorkflowStatuses.withName(wf.status).isDone =>
-                dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
-                  if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
-                  else None
-                }
-            }
+        //If a workflow is not done, automatically change its status to Aborted
+        _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs =>
+          recs.collect {
+            case wf if !WorkflowStatuses.withName(wf.status).isDone =>
+              dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
+                if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
+                else None
+              }
           }
-        } yield {
-          workflowsToAbort
         }
+      } yield {
+        workflowsToAbort
       }
     }
   }
@@ -413,6 +411,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
     //ExecutionContext run the futures whenever
     val gatherWorkflowsFuture: Future[Seq[WorkflowRecord]] = gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName, workspaceContext)
     for {
+
+      _ <- requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
 
       workflowsToAbort <- gatherWorkflowsFuture recoverWith {
         case t:Throwable => {
