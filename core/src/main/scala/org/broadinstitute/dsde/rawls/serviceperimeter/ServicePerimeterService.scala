@@ -20,7 +20,7 @@ class ServicePerimeterService(dataSource: SlickDataSource, gcsDAO: GoogleService
   import dataSource.dataAccess.driver.api._
 
   /**
-    * In its own transaction, look up all of the Workspaces contained in Billing Projects that use the specified
+    * Look up all of the Workspaces contained in Billing Projects that use the specified
     * ServicePerimeterName
     *
     * @param servicePerimeterName
@@ -31,7 +31,7 @@ class ServicePerimeterService(dataSource: SlickDataSource, gcsDAO: GoogleService
   }
 
   /**
-    * In its own transaction, look up all of the Billing Projects that use the specified
+    * Look up all of the Billing Projects that use the specified
     * ServicePerimeterName
     *
     * @param servicePerimeterName
@@ -59,7 +59,7 @@ class ServicePerimeterService(dataSource: SlickDataSource, gcsDAO: GoogleService
     * same Service Perimeter, we will:
     * 1. Load all the Billing Projects that also use this servicePerimeterName
     * 2. Load all the Workspaces in all of those Billing Projects
-    * 3. Collect all of the GoogleProjectNumbers from those Workspaces
+    * 3. Collect all of the GoogleProjectNumbers from those Workspaces and Billing Projects
     * 4. Post that list to Google to overwrite the Service Perimeter's list of included Google Projects
     * 5. Poll until Google Operation to update the Service Perimeter gets to some terminal state
     * Throw exceptions if any of this goes awry
@@ -72,9 +72,9 @@ class ServicePerimeterService(dataSource: SlickDataSource, gcsDAO: GoogleService
     for {
       workspacesInPerimeter <- collectWorkspacesInPerimeter(servicePerimeterName, dataAccess)
       billingProjectsInPerimeter <- collectBillingProjectsInPerimeter(servicePerimeterName, dataAccess)
-      projectNumbers = workspacesInPerimeter.flatMap(_.googleProjectNumber) ++ billingProjectsInPerimeter.flatMap(_.googleProjectNumber) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
-      projectNumberStrings = projectNumbers.map(_.value).toSet
-      operation <- DBIO.from(gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, projectNumberStrings))
+      googleProjectNumbers = workspacesInPerimeter.flatMap(_.googleProjectNumber) ++ billingProjectsInPerimeter.flatMap(_.googleProjectNumber) ++ loadStaticProjectsForPerimeter(servicePerimeterName)
+      googleProjectNumberStrings = googleProjectNumbers.map(_.value).toSet
+      operation <- DBIO.from(gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, googleProjectNumberStrings))
       result <- DBIO.from(retryUntilSuccessOrTimeout(failureLogMessage = s"Google Operation to update Service Perimeter: ${servicePerimeterName} was not successful")(config.pollInterval, config.pollTimeout) { () =>
         gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operation.getName)).map {
           case OperationStatus(false, _) => Future.failed(new RawlsException(s"Google Operation to update Service Perimeter ${servicePerimeterName} is still in progress..."))
