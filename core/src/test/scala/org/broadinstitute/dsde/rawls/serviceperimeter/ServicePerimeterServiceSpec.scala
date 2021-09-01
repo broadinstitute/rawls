@@ -1,14 +1,12 @@
 package org.broadinstitute.dsde.rawls.serviceperimeter
 
-import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.google.api.services.accesscontextmanager.v1.model.Operation
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.ServicePerimeterServiceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectNumber, ServicePerimeterName, Workspace}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -20,6 +18,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
@@ -48,15 +47,25 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
       val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName)).getOrElse(fail(s"billing project ${bp.projectName} not found"))
       updatedBillingProject.servicePerimeter shouldBe Option(servicePerimeterName)
 
-      (1 to workspacesPerProject).map { n =>
+      val workspaces = (1 to workspacesPerProject).map { n =>
         val workspace = testData.workspace.copy(
           namespace = bp.projectName.value,
           name = s"${bp.projectName.value}Workspace${n}",
           workspaceId = UUID.randomUUID().toString,
           googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
-        runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(workspace))
+        val createWorkspaceDbQuery = slickDataSource.dataAccess.workspaceQuery.createOrUpdate(workspace)
+        runAndWait(createWorkspaceDbQuery)
       }
+      workspaces
     }
+
+    // Add in a v1 billing project (which contains a google project) and without any workspaces
+    val v1BillingProjectWithoutWorkspaces = testData.testProject3
+    val v1BillingProjectGoogleProjectNumber = GoogleProjectNumber(UUID.randomUUID().toString)
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(v1BillingProjectWithoutWorkspaces.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(v1BillingProjectGoogleProjectNumber)))))
+    val updatedV1BillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(v1BillingProjectWithoutWorkspaces.projectName)).getOrElse(fail(s"billing project ${v1BillingProjectWithoutWorkspaces.projectName} not found"))
+    updatedV1BillingProject.servicePerimeter shouldBe Option(servicePerimeterName)
+    updatedV1BillingProject.googleProjectNumber shouldBe Option(v1BillingProjectGoogleProjectNumber)
 
     Await.result(slickDataSource.inTransaction { dataAccess =>
       service.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
@@ -67,7 +76,7 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
     // Billing Projects using the same Service Perimeter, all static Google Project Numbers specified by the Config, and
     // the new Google Project Number that we just created
     val existingProjectNumbersInPerimeter = workspacesInPerimeter.map(_.googleProjectNumber.get.value).toSet
-    val expectedGoogleProjectNumbers: Set[String] = (existingProjectNumbersInPerimeter ++ staticProjectNumbersInPerimeter)
+    val expectedGoogleProjectNumbers: Set[String] = (existingProjectNumbersInPerimeter ++ staticProjectNumbersInPerimeter) + v1BillingProjectGoogleProjectNumber.value
     val projectNumbersCaptor = captor[Set[String]]
     val servicePerimeterNameCaptor = captor[ServicePerimeterName]
 
