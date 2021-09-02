@@ -405,13 +405,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   private def deleteWorkspace(workspaceName: WorkspaceName, workspaceContext: Workspace): Future[PerRequestMessage] = {
-    //Attempt to abort any running workflows so they don't write any more to the bucket.
-    //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
-    //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
-    //ExecutionContext run the futures whenever
-    val gatherWorkflowsFuture: Future[Seq[WorkflowRecord]] = gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName, workspaceContext)
     for {
-
       _ <- requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceName}`", t)
@@ -419,14 +413,17 @@ class WorkspaceService(protected val userInfo: UserInfo,
         }
       }
 
-      workflowsToAbort <- gatherWorkflowsFuture recoverWith {
+      workflowsToAbort <- gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName, workspaceContext) recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while gathering workflows that need to be aborted) for workspace `${workspaceName}`", t)
           throw t
         }
       }
 
-      // Abort running workflows
+      //Attempt to abort any running workflows so they don't write any more to the bucket.
+      //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
+      //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
+      //ExecutionContext run the futures whenever
       aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) } recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while aborting workflows) for workspace `${workspaceName}`", t)
