@@ -100,7 +100,7 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def listProjectsWithServicePerimeterAndStatus(servicePerimeter: ServicePerimeterName, statuses: CreationStatus*): ReadWriteAction[Seq[RawlsBillingProject]] = {
+    def listProjectsWithServicePerimeterAndStatus(servicePerimeter: ServicePerimeterName, statuses: CreationStatus*): ReadAction[Seq[RawlsBillingProject]] = {
       for {
         projectRecords <- getProjectsWithPerimeterAndStatusQuery(servicePerimeter, statuses).result
       } yield {
