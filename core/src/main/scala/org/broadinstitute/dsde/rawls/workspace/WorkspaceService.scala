@@ -373,8 +373,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
         //If a workflow is not done, automatically change its status to Aborted
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { workflowRecords =>
-          val notDoneWorkflowRecords = workflowRecords.filter(workflowRecord => !WorkflowStatuses.withName(workflowRecord.status).isDone)
-          notDoneWorkflowRecords.foreach { workflowRecord =>
+          workflowRecords.filter(workflowRecord => !WorkflowStatuses.withName(workflowRecord.status).isDone)
+          .foreach { workflowRecord =>
             dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Aborted) { status =>
               if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, workflowRecord.submissionId))(status))
               else None
