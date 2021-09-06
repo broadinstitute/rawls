@@ -365,55 +365,65 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  private def deleteWorkspace(workspaceName: WorkspaceName, workspaceContext: Workspace): Future[PerRequestMessage] = {
-    //Attempt to abort any running workflows so they don't write any more to the bucket.
-    //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
-    //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
-    //ExecutionContext run the futures whenever
-    val deletionFuture: Future[Seq[WorkflowRecord]] =
-      requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext).flatMap { _ =>
-        dataSource.inTransaction { dataAccess =>
-          for {
-            // Gather any active workflows with external ids
-            workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
+  private def gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName: WorkspaceName, workspaceContext: Workspace) = {
+    dataSource.inTransaction { dataAccess =>
+      for {
+        // Gather any active workflows with external ids
+        workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
 
-            //If a workflow is not done, automatically change its status to Aborted
-            _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs =>
-              recs.collect {
-                case wf if !WorkflowStatuses.withName(wf.status).isDone =>
-                  dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
-                    if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
-                    else None
-                  }
-              }
+        //If a workflow is not done, automatically change its status to Aborted
+        _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { workflowRecords =>
+          workflowRecords.filter(workflowRecord => !WorkflowStatuses.withName(workflowRecord.status).isDone)
+          .foreach { workflowRecord =>
+            dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Aborted) { status =>
+              if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, workflowRecord.submissionId))(status))
+              else None
             }
-
-            // Delete components of the workspace
-            _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-            _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-            _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-
-            // Delete the workspace
-            _ <- dataAccess.workspaceQuery.delete(workspaceName)
-
-            // Schedule bucket for deletion
-            _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))
-
-          } yield {
-            workflowsToAbort
           }
         }
+      } yield {
+        workflowsToAbort
       }
-    for {
+    }
+  }
 
-      workflowsToAbort <- deletionFuture recoverWith {
+  private def deleteWorkspaceTransaction(workspaceName: WorkspaceName, workspaceContext: Workspace) = {
+    dataSource.inTransaction { dataAccess =>
+      for {
+        // Delete components of the workspace
+        _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+
+        // Schedule bucket for deletion
+        _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))
+
+        // Delete the workspace
+        _ <- dataAccess.workspaceQuery.delete(workspaceName)
+      } yield ()
+    }
+  }
+
+  private def deleteWorkspace(workspaceName: WorkspaceName, workspaceContext: Workspace): Future[PerRequestMessage] = {
+    for {
+      _ <- requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith {
         case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while running `deletionFuture`) for workspace `${workspaceName}`", t)
+          logger.warn(s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceName}`", t)
           throw t
         }
       }
 
-      // Abort running workflows
+      workflowsToAbort <- gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName, workspaceContext) recoverWith {
+        case t:Throwable => {
+          logger.warn(s"Unexpected failure deleting workspace (while gathering workflows that need to be aborted) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
+
+      //Attempt to abort any running workflows so they don't write any more to the bucket.
+      //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
+      //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
+      //ExecutionContext run the futures whenever
       aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) } recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while aborting workflows) for workspace `${workspaceName}`", t)
@@ -422,9 +432,22 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
 
       // Delete Google Project
-      _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo)
+      _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo) recoverWith {
+        case t:Throwable => {
+          logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
 
-      // Delete resource in sam outside of DB transaction
+      // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
+      _ <- deleteWorkspaceTransaction(workspaceName, workspaceContext) recoverWith {
+        case t:Throwable => {
+          logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Rawls DB) for workspace `${workspaceName}`", t)
+          throw t
+        }
+      }
+
+      // Delete workflowCollection resource in sam outside of DB transaction
       _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
         case t:Throwable => {
           logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
