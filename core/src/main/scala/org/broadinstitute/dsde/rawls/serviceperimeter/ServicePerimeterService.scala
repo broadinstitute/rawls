@@ -78,7 +78,7 @@ class ServicePerimeterService(dataSource: SlickDataSource, gcsDAO: GoogleService
       result <- DBIO.from(retryUntilSuccessOrTimeout(failureLogMessage = s"Google Operation to update Service Perimeter: ${servicePerimeterName} was not successful")(config.pollInterval, config.pollTimeout) { () =>
         gcsDAO.pollOperation(OperationId(GoogleApiTypes.AccessContextManagerApi, operation.getName)).map {
           case OperationStatus(false, _) => Future.failed(new RawlsException(s"Google Operation to update Service Perimeter ${servicePerimeterName} is still in progress..."))
-          // TODO: If the operation to update the Service Perimeter failed, we need to consider the possibility that
+          // TODO: If the operation to update the Service Perimeter failed, we need to consider the possibility that // todo: do we have any logging/alerting to catch this scenario?
           // the list of Projects in the Perimeter may have been wiped or somehow modified in an undesirable way.  If
           // this happened, it would be possible for Projects intended to be in the Perimeter are NOT in that
           // Perimeter anymore, which is a problem.

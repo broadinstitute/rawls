@@ -26,7 +26,7 @@ trait ServicePerimeterApiService extends UserInfoDirectives {
     path("servicePerimeters" / Segment / "projects" / Segment) { (servicePerimeterName, projectId) =>
       put {
         complete {
-          userServiceConstructor(userInfo).addProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)), RawlsBillingProjectName(projectId))
+          userServiceConstructor(userInfo).addProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)), RawlsBillingProjectName(projectId)) // todo: the `URLDecoder.decode` on this line decodes url-encoded chars. is this ok or could it lead to security issues, such as stored/persistent XSS?
         }
       }
     }

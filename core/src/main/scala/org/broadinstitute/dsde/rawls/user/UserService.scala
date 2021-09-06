@@ -736,7 +736,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           case status => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"project ${billingProject.projectName.value} should be Ready but is $status")))
         }
 
-        // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
         _ <- moveGoogleProjectToServicePerimeterFolder(servicePerimeterName, billingProject.googleProjectId)
 
         googleProjectNumber <- billingProject.googleProjectNumber match {
@@ -753,7 +752,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
         _ <- dataSource.inTransaction { dataAccess =>
           dataAccess.workspaceQuery.updateGoogleProjectNumber(v1Workspaces.map(_.workspaceIdAsUUID), googleProjectNumber)
-          dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
+          dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName)))) // note: I removed googleProjectNumber from this line because it is already defined (in billingProject) (todo: remove this note)
         }
 
         _ <- dataSource.inTransaction { dataAccess =>
@@ -763,6 +762,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
   def moveGoogleProjectToServicePerimeterFolder(servicePerimeterName: ServicePerimeterName, googleProjectId: GoogleProjectId): Future[Unit] = {
     for {
       folderId <- lookupFolderIdFromServicePerimeterName(servicePerimeterName)

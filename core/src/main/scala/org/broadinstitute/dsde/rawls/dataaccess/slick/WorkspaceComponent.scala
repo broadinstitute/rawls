@@ -304,7 +304,7 @@ trait WorkspaceComponent {
     def getWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): ReadAction[Seq[Workspace]] = {
       val workspaces = for {
         billingProject <- rawlsBillingProjectQuery.getProjectsWithPerimeterAndStatusQuery(servicePerimeterName, CreationStatuses.all.toSeq)
-        workspace <- workspaceQuery if workspace.namespace === billingProject.projectName
+        workspace <- workspaceQuery if workspace.namespace === billingProject.projectName // todo: comparison of table columns looks weird ; how does this work?
       } yield workspace
 
       loadWorkspaces(workspaces)

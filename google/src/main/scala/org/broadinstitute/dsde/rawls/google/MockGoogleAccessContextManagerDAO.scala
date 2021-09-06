@@ -8,5 +8,5 @@ import scala.concurrent.Future
 class MockGoogleAccessContextManagerDAO extends AccessContextManagerDAO {
   override def pollOperation(operationId: String): Future[Operation] = Future.successful(new Operation().setDone(true).setName("mock-poll-operation"))
 
-  override def overwriteProjectsInServicePerimeter(servicePerimeterName: ServicePerimeterName, billingProjectNumbers: Set[String]): Future[Operation] = Future.successful(new Operation().setDone(true).setName("mock-overwrite-projects-operation"))
+  override def overwriteProjectsInServicePerimeter(servicePerimeterName: ServicePerimeterName, googleProjectNumbers: Set[String]): Future[Operation] = Future.successful(new Operation().setDone(true).setName("mock-overwrite-projects-operation"))
 }

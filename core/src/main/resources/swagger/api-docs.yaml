@@ -991,10 +991,10 @@ paths:
     put:
       tags:
         - servicePerimeters
-      summary: Add a project to a service perimeter
-      description: Add a project to a service perimeter, must have 'add_to_service_perimeter'
-        action on project and 'add_project' action on perimeter, included in owner
-        role for both
+      summary: Add a billing project (and all of its workspaces) to a service perimeter
+      description: Add a billing project (and all of its workspaces) to a service perimeter. Must have 'add_to_service_perimeter'
+        action on the billing project and 'add_project' action on the service perimeter, which are included in the owner
+        roles for each respective resource.
       operationId: addProjectToServicePerimeter
       parameters:
         - name: servicePerimeterName
@@ -1006,22 +1006,22 @@ paths:
             type: string
         - name: projectName
           in: path
-          description: Project name
+          description: Billing project name
           required: true
           schema:
             type: string
       responses:
         204:
-          description: Project has been added to the perimeter
+          description: Billing Project has been added to the perimeter
           content: {}
         400:
-          description: Project is already in perimeter or is not in 'Ready' state
+          description: Billing Project is already in perimeter or is not in 'Ready' state
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         403:
-          description: Project does not exist or you do not have access
+          description: Billing Project does not exist or you do not have access
           content:
             'application/json':
               schema:
@@ -6274,7 +6274,7 @@ components:
         servicePerimeter:
           type: string
           description: The fully qualified name of the GCP service perimeter to put
-            this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
+            this billing project into, in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
             Caller must have the add_project action for this service perimeter in
             Sam.
       description: ""
@@ -6293,7 +6293,7 @@ components:
         servicePerimeter:
           type: string
           description: The fully qualified name of the GCP service perimeter to put
-            this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
+            this billing project into, in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
             Caller must have the add_project action for this service perimeter in
             Sam.
       description: ""
@@ -6377,7 +6377,7 @@ components:
           description: the billing account to use in google projects
         servicePerimeter:
           type: string
-          description: the name of the service permeters for google project
+          description: the name of the service perimeter
         invalidBillingAccount:
           type: boolean
           description: whether or not the billing account is usable by Terra

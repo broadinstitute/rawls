@@ -2233,7 +2233,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                 createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
 
-              _ <- traceDBIOWithParent("updateServicePerimeter", parentSpan)(_ =>
+              _ <- traceDBIOWithParent("maybeUpdateGoogleProjectsInPerimeter", parentSpan)(_ =>
                 maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess))
 
               // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
