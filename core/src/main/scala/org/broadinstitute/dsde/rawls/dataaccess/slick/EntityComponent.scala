@@ -307,19 +307,23 @@ trait EntityComponent {
           sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize} ) p on p.id = e.id "
         )
 
-        for {
-          unfilteredCount <- findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
-          filteredCount <- if (entityQuery.filterTerms.isEmpty) {
-                            // if the query has no filter, then "filteredCount" and "unfilteredCount" will always be the same; no need to make another query
-                            DBIO.successful(Vector(unfilteredCount))
-                           } else {
-                            val filteredQuery =
-                              sql"""select count(1) from ENTITY e
+        def filteredCountQuery: ReadAction[Vector[Int]] = {
+          val filteredQuery =
+            sql"""select count(1) from ENTITY e
                                    where e.deleted = 0
                                    and e.entity_type = $entityType
                                    and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """
-                            concatSqlActions(filteredQuery, filterSql("and", "e")).as[Int]
-                           }
+          concatSqlActions(filteredQuery, filterSql("and", "e")).as[Int]
+        }
+
+        for {
+          unfilteredCount <- findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
+          filteredCount <- if (entityQuery.filterTerms.isEmpty) {
+                              // if the query has no filter, then "filteredCount" and "unfilteredCount" will always be the same; no need to make another query
+                              DBIO.successful(Vector(unfilteredCount))
+                            } else {
+                              filteredCountQuery
+                            }
           page <- concatSqlActions(sql"#$baseEntityAndAttributeSql", paginationJoin, order("p")).as[EntityAndAttributesResult]
         } yield (unfilteredCount, filteredCount.head, page)
       }

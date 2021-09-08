@@ -1151,4 +1151,47 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  // loadEntityPage returns (unfilteredCount, filteredCount, pageOfEntities)
+  it should "always return filteredCount == unfilteredCount if no filter terms" in withConstantTestDatabase {
+    withWorkspaceContext(constantData.workspace) { context =>
+      val defaultQuery = EntityQuery(1, 1, "name", SortDirections.Ascending, None)
+      val allTypes = runAndWait(entityQuery.getEntityTypeMetadata(context)).keySet
+
+      allTypes.size shouldBe 6
+
+      allTypes foreach { typeName =>
+        val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, defaultQuery))
+        withClue(s"for entity type $typeName") {
+          pageResult._1 shouldBe pageResult._2
+        }
+      }
+    }
+  }
+
+  // these fixtures are based off the ConstantTestData, which we do not expect to change
+  val filterFixtures = Map(
+    "Sample" -> Map(
+                  "LUSC" -> 2,
+                  "huh" -> 1),
+    "Pair" -> Map(
+                "pair1" -> 1)
+  )
+
+  filterFixtures foreach { typeFixtures =>
+    val typeName = typeFixtures._1
+    val typeTests = typeFixtures._2
+    typeTests foreach { test =>
+      val filterTerm = test._1
+      val expectedCount = test._2
+      it should s"return expected count ($expectedCount) for type [$typeName] and filter term [$filterTerm]" in withConstantTestDatabase {
+        withWorkspaceContext(constantData.workspace) { context =>
+          val filterQuery = EntityQuery(1, 1, "name", SortDirections.Ascending, Some(filterTerm))
+          val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, filterQuery))
+          pageResult._2 shouldBe expectedCount
+          pageResult._2 should be < pageResult._1 // filteredCount should be less than unfilteredCount
+        }
+      }
+    }
+  }
+
 }
