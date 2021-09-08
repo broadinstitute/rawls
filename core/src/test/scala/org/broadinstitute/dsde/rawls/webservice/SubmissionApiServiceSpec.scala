@@ -987,7 +987,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
-  private val userComment1000character = RandomStringUtils.random(1000)
+  private val userComment1000character = RandomStringUtils.randomGraph(1000)
   private val validUserCommentCases = Table(
     ("description", "userCommentInput", "userCommentResult"),
     ("allow submission with userComment unset", None, JsNull),
