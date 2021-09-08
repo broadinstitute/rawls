@@ -1151,30 +1151,59 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  // loadEntityPage returns (unfilteredCount, filteredCount, pageOfEntities)
-  it should "always return filteredCount == unfilteredCount if no filter terms" in withConstantTestDatabase {
-    withWorkspaceContext(constantData.workspace) { context =>
-      val defaultQuery = EntityQuery(1, 1, "name", SortDirections.Ascending, None)
-      val allTypes = runAndWait(entityQuery.getEntityTypeMetadata(context)).keySet
+  private def caseSensitivityFixtures(context: Workspace) = {
+    val entitiesToSave = Seq(
+      Entity("name-1", "mytype", Map(
+        AttributeName.withDefaultNS("case") -> AttributeString("value1"),
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name-2", "mytype", Map(
+        AttributeName.withDefaultNS("CASE") -> AttributeString("value2"),
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name-3", "mytype", Map(
+        AttributeName.withDefaultNS("case") -> AttributeString("value3"),
+        AttributeName.withDefaultNS("CASE") -> AttributeString("value4"))),
 
-      allTypes.size shouldBe 6
+      Entity("name-4", "anothertype", Map(AttributeName.withDefaultNS("case") -> AttributeString("value5"))),
+      Entity("name-5", "anothertype", Map(AttributeName.withDefaultNS("CASE") -> AttributeString("value6"))),
+    )
+    runAndWait(entityQuery.save(context, entitiesToSave))
 
-      allTypes foreach { typeName =>
-        val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, defaultQuery))
-        withClue(s"for entity type $typeName") {
-          pageResult._1 shouldBe pageResult._2
+    assume(runAndWait(entityQuery.listEntities(context)).size == 5, "filteredCount tests did not set up fixtures correctly")
+
+  }
+
+  // following set of filteredCount tests all use the same entity fixtures on top of an empty workspace
+  val emptyWorkspace = new EmptyWorkspace
+
+
+  List("mytype", "anothertype") foreach { typeName =>
+    List("name", "case", "CASE") foreach { sortKey =>
+      List(SortDirections.Ascending, SortDirections.Descending) foreach { sortDir =>
+        it should s"return filteredCount == unfilteredCount if no filter terms, type=[$typeName], sortKey=[$sortKey], sortDir=[$sortDir]" in withCustomTestDatabase(emptyWorkspace) { _ =>
+          withWorkspaceContext(emptyWorkspace.workspace) { context =>
+            caseSensitivityFixtures(context)
+
+            assume(runAndWait(entityQuery.listEntities(context)).size == 5, "filteredCount tests did not set up fixtures correctly, within first test")
+            val unfilteredQuery = EntityQuery(1, 1, sortKey, sortDir, None)
+            val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, unfilteredQuery))
+            pageResult._2 should be > 0
+            pageResult._2 shouldBe pageResult._1
+          }
         }
       }
     }
   }
 
-  // these fixtures are based off the ConstantTestData, which we do not expect to change
   val filterFixtures = Map(
-    "Sample" -> Map(
-                  "LUSC" -> 2,
-                  "huh" -> 1),
-    "Pair" -> Map(
-                "pair1" -> 1)
+    "mytype" -> Map(
+      "bar" -> 2,
+      "value1" -> 1,
+      "value" -> 3,
+      "nonexistent" -> 0),
+    "anothertype" -> Map(
+      "value5" -> 1,
+      "value" -> 2,
+      "alsononexistent" -> 0)
   )
 
   filterFixtures foreach { typeFixtures =>
@@ -1183,12 +1212,16 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     typeTests foreach { test =>
       val filterTerm = test._1
       val expectedCount = test._2
-      it should s"return expected count ($expectedCount) for type [$typeName] and filter term [$filterTerm]" in withConstantTestDatabase {
-        withWorkspaceContext(constantData.workspace) { context =>
-          val filterQuery = EntityQuery(1, 1, "name", SortDirections.Ascending, Some(filterTerm))
-          val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, filterQuery))
-          pageResult._2 shouldBe expectedCount
-          pageResult._2 should be < pageResult._1 // filteredCount should be less than unfilteredCount
+      List("name", "case", "CASE") foreach { sortKey =>
+        List(SortDirections.Ascending, SortDirections.Descending) foreach { sortDir =>
+          it should s"return expected count ($expectedCount) for type=[$typeName], sortKey=[$sortKey], sortDir=[$sortDir], term [$filterTerm]" in withCustomTestDatabase(emptyWorkspace) { _ =>
+            withWorkspaceContext(emptyWorkspace.workspace) { context =>
+              caseSensitivityFixtures(context)
+              val filterQuery = EntityQuery(1, 1, sortKey, sortDir, Some(filterTerm))
+              val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, filterQuery))
+              pageResult._2 shouldBe expectedCount
+            }
+          }
         }
       }
     }
