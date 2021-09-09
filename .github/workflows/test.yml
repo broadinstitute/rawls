@@ -13,6 +13,9 @@ jobs:
 
     steps:
 
+      - name: Shutdown Ubuntu MySQL (SUDO)
+        run: sudo service mysql stop # Shutdown the Default MySQL, "sudo" is necessary, please not remove it
+
       # run this step first to give it time to start up
       - name: Set up MySQL
         uses: mirromutth/mysql-action@v1.1
