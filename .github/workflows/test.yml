@@ -13,6 +13,18 @@ jobs:
 
     steps:
 
+      # run this step first to give it time to start up
+      - name: Set up MySQL
+        uses: mirromutth/mysql-action@v1.1
+        with:
+          character set server: 'utf8'
+          collation server: 'utf8_general_ci'
+          mysql version: '5.6'
+          mysql database: 'testdb'
+          mysql root password: 'rawls-test'
+          mysql user: 'rawls-test'
+          mysql password: 'rawls-test'
+
       - uses: actions/checkout@v2
 
       # coursier cache action caches both coursier and sbt caches
@@ -36,16 +48,11 @@ jobs:
           ./minnie-kenny.sh --force
           git secrets --scan-history
 
-      - name: Set up MySQL
-        uses: mirromutth/mysql-action@v1.1
-        with:
-          character set server: 'utf8'
-          collation server: 'utf8_general_ci'
-          mysql version: '5.6'
-          mysql database: 'testdb'
-          mysql root password: 'rawls-test'
-          mysql user: 'rawls-test'
-          mysql password: 'rawls-test'
+      - name: Wait for MySQL
+        run: |
+          while ! mysqladmin ping --host=127.0.0.1 --password=rawls-test --silent; do
+            sleep 1
+          done
 
       - name: Run tests
         id: tests
