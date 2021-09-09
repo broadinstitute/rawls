@@ -987,7 +987,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
-  private val userComment1000character = RandomStringUtils.random(1000)
+  private val userComment1000character = RandomStringUtils.randomGraph(1000)
   private val validUserCommentCases = Table(
     ("description", "userCommentInput", "userCommentResult"),
     ("allow submission with userComment unset", None, JsNull),
@@ -1033,7 +1033,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
       ensureMethodConfigs(services, workspaceName, methodConfigurationName)
 
-      val invalidUserComment = RandomStringUtils.random(1010)
+      val invalidUserComment = RandomStringUtils.randomGraph(1010)
 
       Post(
         s"${workspaceName.path}/submissions",
