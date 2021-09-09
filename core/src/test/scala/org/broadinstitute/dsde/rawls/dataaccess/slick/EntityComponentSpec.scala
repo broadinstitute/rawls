@@ -25,6 +25,29 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
+  val emptyWorkspace = new EmptyWorkspace
+
+  private def caseSensitivityFixtures(context: Workspace) = {
+    val entitiesToSave = Seq(
+      Entity("name-1", "mytype", Map(
+        AttributeName.withDefaultNS("case") -> AttributeString("value1"),
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name-2", "mytype", Map(
+        AttributeName.withDefaultNS("CASE") -> AttributeString("value2"),
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name-3", "mytype", Map(
+        AttributeName.withDefaultNS("case") -> AttributeString("value3"),
+        AttributeName.withDefaultNS("CASE") -> AttributeString("value4"))),
+
+      Entity("name-4", "anothertype", Map(AttributeName.withDefaultNS("case") -> AttributeString("value5"))),
+      Entity("name-5", "anothertype", Map(AttributeName.withDefaultNS("CASE") -> AttributeString("value6"))),
+    )
+    runAndWait(entityQuery.save(context, entitiesToSave))
+
+    assume(runAndWait(entityQuery.listEntities(context)).size == 5, "filteredCount tests did not set up fixtures correctly")
+
+  }
+
   "EntityComponent" should "crud entities" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
@@ -397,10 +420,54 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+
+  it should "list all entity types with their case-sensitive attribute names, type=[$typeName]" in withCustomTestDatabase(emptyWorkspace) { _ =>
+    withWorkspaceContext(emptyWorkspace.workspace) { context =>
+      caseSensitivityFixtures(context)
+
+      // see caseSensitivityFixtures
+      val expectedTypesAndAttrNames: Map[String, List[AttributeName]] = Map(
+        "mytype" -> List("case", "CASE", "foo").map(AttributeName.withDefaultNS),
+        "anothertype" -> List("case", "CASE").map(AttributeName.withDefaultNS)
+      )
+
+      val actualTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID))
+      actualTypesAndAttrNames.keySet should contain theSameElementsAs expectedTypesAndAttrNames.keySet
+      actualTypesAndAttrNames.keySet foreach { typeName =>
+        withClue(s"for type [$typeName]") {
+          actualTypesAndAttrNames(typeName) should contain theSameElementsAs (expectedTypesAndAttrNames(typeName))
+        }
+      }
+    }
+  }
+
+  it should "list all entity type metadata with case-sensitive attribute names" in withCustomTestDatabase(emptyWorkspace) { _ =>
+    withWorkspaceContext(emptyWorkspace.workspace) { context =>
+      caseSensitivityFixtures(context)
+
+      // see caseSensitivityFixtures
+      val expectedTypeMetadata: Map[String, EntityTypeMetadata] = Map(
+        "mytype" -> EntityTypeMetadata(3, "mytype_id", Seq("case", "CASE", "foo")),
+        "anothertype" -> EntityTypeMetadata(2, "anothertype_id", Seq("case", "CASE"))
+      )
+
+      val actualTypeMetadata = runAndWait(entityQuery.getEntityTypeMetadata(context))
+      actualTypeMetadata.keySet should contain theSameElementsAs expectedTypeMetadata.keySet
+      actualTypeMetadata.keySet foreach { typeName =>
+        withClue(s"for type [$typeName]") {
+          val actual = actualTypeMetadata(typeName)
+          val expected = expectedTypeMetadata(typeName)
+          actual.count shouldBe expected.count
+          actual.idName shouldBe expected.idName
+          actual.attributeNames should contain theSameElementsAs (expected.attributeNames)
+        }
+      }
+    }
+  }
+
   // GAWB-870
-  val testWorkspace = new EmptyWorkspace
-  it should "list all entity type metadata when all_attribute_values is null" in withCustomTestDatabase(testWorkspace) { dataSource =>
-    withWorkspaceContext(testWorkspace.workspace) { context =>
+  it should "list all entity type metadata when all_attribute_values is null" in withCustomTestDatabase(emptyWorkspace) { dataSource =>
+    withWorkspaceContext(emptyWorkspace.workspace) { context =>
 
       val id1 = 1
       val id2 = 2   // arbitrary
@@ -430,16 +497,15 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-
-  it should "trim giant all_attribute_values strings so they don't overflow" in withCustomTestDatabase(testWorkspace) { dataSource =>
+  it should "trim giant all_attribute_values strings so they don't overflow" in withCustomTestDatabase(emptyWorkspace) { dataSource =>
     //it'll be longer than this (and thus will need trimming) because it'll get the entity name too
     val veryLongString = "a" * EntityComponent.allAttributeValuesColumnSize
     val sample1 = Entity("sample1", "Sample",
       Map(AttributeName.withDefaultNS("veryLongString") -> AttributeString(veryLongString)))
-    withWorkspaceContext(testWorkspace.workspace) { context =>
+    withWorkspaceContext(emptyWorkspace.workspace) { context =>
       runAndWait(entityQuery.save(context, sample1))
 
-      val entityRec = runAndWait(uniqueResult(entityQueryWithInlineAttributes.findEntityByName(UUID.fromString(testWorkspace.workspace.workspaceId), "Sample", "sample1").result))
+      val entityRec = runAndWait(uniqueResult(entityQueryWithInlineAttributes.findEntityByName(UUID.fromString(emptyWorkspace.workspace.workspaceId), "Sample", "sample1").result))
       assertResult(EntityComponent.allAttributeValuesColumnSize) {
         entityRec.get.allAttributeValues.get.length
       }
@@ -1150,31 +1216,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       assert(updatedResult.get.attributes.isEmpty)
     }
   }
-
-  private def caseSensitivityFixtures(context: Workspace) = {
-    val entitiesToSave = Seq(
-      Entity("name-1", "mytype", Map(
-        AttributeName.withDefaultNS("case") -> AttributeString("value1"),
-        AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
-      Entity("name-2", "mytype", Map(
-        AttributeName.withDefaultNS("CASE") -> AttributeString("value2"),
-        AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
-      Entity("name-3", "mytype", Map(
-        AttributeName.withDefaultNS("case") -> AttributeString("value3"),
-        AttributeName.withDefaultNS("CASE") -> AttributeString("value4"))),
-
-      Entity("name-4", "anothertype", Map(AttributeName.withDefaultNS("case") -> AttributeString("value5"))),
-      Entity("name-5", "anothertype", Map(AttributeName.withDefaultNS("CASE") -> AttributeString("value6"))),
-    )
-    runAndWait(entityQuery.save(context, entitiesToSave))
-
-    assume(runAndWait(entityQuery.listEntities(context)).size == 5, "filteredCount tests did not set up fixtures correctly")
-
-  }
-
-  // following set of filteredCount tests all use the same entity fixtures on top of an empty workspace
-  val emptyWorkspace = new EmptyWorkspace
-
 
   List("mytype", "anothertype") foreach { typeName =>
     List("name", "case", "CASE") foreach { sortKey =>
