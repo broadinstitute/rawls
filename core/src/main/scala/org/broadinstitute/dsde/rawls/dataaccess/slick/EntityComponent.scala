@@ -360,6 +360,19 @@ trait EntityComponent {
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
+
+      // note that we only treat attribute names with case-sensitivity,
+      // the entity types and attribute namespaces still use the default case-insensitive
+      // matching/distinction
+      def activeCaseSensitiveAttrNamesAndEntityTypes(workspaceId: UUID): ReadAction[Seq[(String, String, String)]] = {
+        sql"""select distinct e.entity_type, ea.namespace, ea.name collate utf8_bin
+             from ENTITY e, ENTITY_ATTRIBUTE ea
+             where e.id = ea.owner_id
+             and e.workspace_id = $workspaceId
+             and e.deleted = 0
+             and ea.deleted = 0;
+           """.as[(String, String, String)]
+      }
     }
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
@@ -400,10 +413,6 @@ trait EntityComponent {
     def getActiveRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
       EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
     }
-
-    private def findActiveAttributesByEntityId(entityId: Rep[Long]): EntityAttributeQuery = for {
-      entityAttrRec <- entityAttributeQuery if entityAttrRec.ownerId === entityId && ! entityAttrRec.deleted
-    } yield entityAttrRec
 
     // queries which may include "deleted" hidden entities
 
@@ -472,16 +481,11 @@ trait EntityComponent {
     }
 
     def getAttrNamesAndEntityTypes(workspaceId: UUID): ReadAction[Map[String, Seq[AttributeName]]] = {
-      val typesAndAttrNames = for {
-        entityRec <- findActiveEntityByWorkspace(workspaceId)
-        attrib <- findActiveAttributesByEntityId(entityRec.id)
-      } yield {
-        (entityRec.entityType, (attrib.namespace, attrib.name))
-      }
+      val typesAndAttrNames = EntityAndAttributesRawSqlQuery.activeCaseSensitiveAttrNamesAndEntityTypes(workspaceId)
 
-      typesAndAttrNames.distinct.result map { result =>
-        CollectionUtils.groupByTuples (result.map {
-          case (entityType:String, (ns:String, n:String)) => (entityType, AttributeName(ns, n))
+      typesAndAttrNames.map { tuples =>
+        CollectionUtils.groupByTuples (tuples.map {
+          case (entityType:String, ns:String, n:String) => (entityType, AttributeName(ns, n))
         })
       }
     }
