@@ -2,28 +2,31 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.IO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, AttributeString, Entity, ImportStatuses, TypedAttributeListSerializer}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, AttributeString, DataReferenceName, Entity, GoogleProjectId, ImportStatuses, TypedAttributeListSerializer, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
 import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
+import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.BeforeAndAfterAll
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation}
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 
 import scala.concurrent.ExecutionContext.global
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -96,7 +99,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     1
   )
 
-  def setUp(services: TestApiService) = {
+  private def setUpPubSub(services: TestApiService) = {
     // create the two topics and the subscription. These are futures so we need to wait for them
     // to complete before allowing tests to run.
     Await.result(
@@ -112,6 +115,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       },
       Duration.apply(10, TimeUnit.SECONDS)
     )
+  }
+
+  def setUp(services: TestApiService) = {
+    setUpPubSub(services)
 
     val mockImportServiceDAO =  new MockImportServiceDAO()
 
@@ -129,6 +136,35 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     ))
 
     mockImportServiceDAO
+  }
+
+  def setUpMockEntityManager(services: TestApiService): (MockImportServiceDAO, EntityService) = {
+    setUpPubSub(services)
+
+    val mockImportServiceDAO = new MockImportServiceDAO()
+
+    val mockEntityService = mock[EntityService]
+
+    when(mockEntityService.batchUpdateEntitiesInternal(
+      any[WorkspaceName], any[Seq[EntityUpdateDefinition]], any[Boolean], any[Option[DataReferenceName]], any[Option[GoogleProjectId]]
+    )).thenReturn(Future(Seq.empty[Entity]))
+
+    val mockEntityServiceConstructor: UserInfo => EntityService = _ => mockEntityService
+
+    // Start the monitor
+    system.actorOf(AvroUpsertMonitorSupervisor.props(
+      mockEntityServiceConstructor,
+      services.gcsDAO,
+      services.samDAO,
+      googleStorage,
+      services.gpsDAO,
+      services.gpsDAO,
+      mockImportServiceDAO,
+      config,
+      slickDataSource
+    ))
+
+    (mockImportServiceDAO, mockEntityService)
   }
 
   behavior of "AvroUpsertMonitor"
@@ -407,6 +443,65 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
           msg.attributes("errorMessage").contains("Successfully updated 1000 entities; 1 updates failed. First 100 failures are: test-type this-entity-does-not-exist not found")
       })
     }
+  }
+
+  // test cases for upsert vs. update handling:
+  // a map of {value in pubsub message attribute}->{expected behavior}
+  case class UpsertExpectation(isUpsert: Boolean, message: String)
+  val upsertCases = Map(
+    None -> UpsertExpectation(isUpsert = true, "omitted"),
+    Some("true") -> UpsertExpectation(isUpsert = true, "true"),
+    Some("tRuE") -> UpsertExpectation(isUpsert = true, "true, case-insensitive"),
+    Some("false") -> UpsertExpectation(isUpsert = false, "false"),
+    Some("no thank you") -> UpsertExpectation(isUpsert = false, "some value other than case-insensitive true"),
+  )
+
+  upsertCases foreach {
+    case (inputAttribute, expectation) =>
+      val methodString = if(expectation.isUpsert) "upsert" else "update"
+      it should s"$methodString when isUpsert is ${expectation.message}" in withTestDataApiServices { services =>
+        val timeout = 120000 milliseconds
+        val interval = 500 milliseconds
+        val importId1 = UUID.randomUUID()
+
+        // add the imports and their statuses to the mock importserviceDAO
+        val (mockImportServiceDAO, mockEntityService) =  setUpMockEntityManager(services)
+        mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+        // create upsert json file
+        val contents = makeOpsJsonString(1)
+
+        // Store upsert json file
+        Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+        Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+        // message to publish on the request topic:
+        val additionalAttributes = inputAttribute match {
+          case Some(input) => Map("isUpsert" -> input)
+          case None => Map.empty[String, String]
+        }
+        val msg = testAttributes(importId1) ++ additionalAttributes
+
+        // Publish message on the request topic
+        services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, msg)))
+
+        // check if correct message was posted on request topic
+        eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+          assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString, 1))
+        }
+
+        // check if, eventually, EntityService.batchUpdateEntitiesInternal is called with upsert={expectation.isUpsert}
+        // from BucketDeletionMonitorSpec:
+        // `eventually` now requires an implicit `Retrying` instance. When the statement inside returns future, it'll
+        // try to use `Retrying[Future[T]]`, which gets weird when we're using mockito together with it.
+        // Hence adding ascribing [Unit] explicitly here so that `eventually` will use `Retrying[Unit]`
+        eventually[Unit](Timeout(timeout), Interval(interval)) {
+          verify(mockEntityService, times(1)).batchUpdateEntitiesInternal(
+            any[WorkspaceName], any[Seq[EntityUpdateDefinition]], ArgumentMatchers.eq(expectation.isUpsert), any[Option[DataReferenceName]], any[Option[GoogleProjectId]]
+          )
+        }
+      }
   }
 
 }

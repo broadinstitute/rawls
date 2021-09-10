@@ -167,6 +167,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   implicit val errorReportSource = ErrorReportSource("rawls")
 
+  // Note: this limit is also hard-coded in the terra-ui code to allow client-side validation.
+  // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =

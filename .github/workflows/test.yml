@@ -11,22 +11,6 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    services:
-      mysql:
-        image: mysql/mysql-server:5.6
-        env:
-          MYSQL_ROOT_PASSWORD: rawls-test
-          MYSQL_USER: rawls-test
-          MYSQL_PASSWORD: rawls-test
-          MYSQL_DATABASE: testdb
-        options: >-
-          --health-cmd="mysqladmin ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 3306:3306
-
     steps:
 
       - uses: actions/checkout@v2
@@ -34,6 +18,10 @@ jobs:
       # coursier cache action caches both coursier and sbt caches
       - name: coursier-cache-action
         uses: coursier/cache-action@v5
+
+      - name: Start MySQL
+        run: |
+          sh docker/run-mysql.sh start
 
       - name: Set up JDK 11
         uses: actions/setup-java@v1
@@ -59,7 +47,7 @@ jobs:
           -J-Xmx3g
           -Denv.type=test
           -Dmysql.host=localhost
-          -Dmysql.port=3306
+          -Dmysql.port=3310
           it:compile
 
       # A known github bug results in 'annotations generated in a Github action during a step executed in
@@ -79,3 +67,7 @@ jobs:
       - name: Codecov upload
         uses: codecov/codecov-action@v1
         if: ${{ always() }}
+
+      - name: Stop MySQL
+        run: |
+          sh docker/run-mysql.sh stop
