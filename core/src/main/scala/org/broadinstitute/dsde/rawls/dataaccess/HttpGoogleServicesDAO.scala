@@ -230,7 +230,7 @@ class HttpGoogleServicesDAO(
         // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
         // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
         _ <- googleStorageService.overrideIamPolicy(GcsBucketName(bucketName), roleToIdentities,
-          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardGoogleRetryPredicate, RetryPredicates.whenStatusCode(400))) // todo why 400 here? we check for 5xx and 409s elsewhere
+          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardGoogleRetryPredicate, RetryPredicates.whenStatusCode(400)))
       } yield ()
     }
 

@@ -106,7 +106,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
     }
   }
 
-  // TODO: Remove during cleanup once all workspaces have their own Google project
+  // TODO: CA-1235 Remove during cleanup once all workspaces have their own Google project
   it should "propagate error messages to all workspaces in a Google project" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, Option(defaultBillingAccountName), None, googleProjectNumber = Option(defaultGoogleProjectNumber))
