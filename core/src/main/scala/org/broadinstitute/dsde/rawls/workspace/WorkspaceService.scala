@@ -2112,6 +2112,20 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  private def failUnlessBillingProjectReady(billingProject: RawlsBillingProject) =
+    billingProject.status match {
+      case CreationStatuses.Ready => Future.unit
+      case _ => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProject.projectName} is not ready")))
+    }
+
+  private def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject, span: Span) =
+    updateAndGetBillingAccountAccess(billingProject, span).map { hasAccess =>
+      if (!hasAccess) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(
+        StatusCodes.Forbidden,
+        s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"
+      ))
+    }
+    
   /**
     * Checks that Rawls has the right permissions on the BillingProject's Billing Account, and then passes along the
     * BillingProject to op to be used by code in this context
@@ -2122,17 +2136,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * @tparam T
     * @return
     */
-  private def withBillingProjectContext[T](billingProjectName: String, parentSpan: Span = null)(op: (RawlsBillingProject) => Future[T]): Future[T] = {
+  private def withBillingProjectContext[T](billingProjectName: String, parentSpan: Span = null)
+                                          (op: (RawlsBillingProject) => Future[T]): Future[T] = {
     for {
       maybeBillingProject <- dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("loadBillingProject", parentSpan)(_ => dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(billingProjectName)))
-      }
-      billingProject = maybeBillingProject.getOrElse(throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProjectName} does not exist")))
-      _ <- updateAndGetBillingAccountAccess(billingProject, parentSpan).map { hasAccess =>
-        if (!hasAccess) {
-          throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"))
+        traceDBIOWithParent("loadBillingProject", parentSpan) { _ =>
+          dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(billingProjectName))
         }
       }
+
+      billingProject = maybeBillingProject.getOrElse(throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProjectName} does not exist")))
+      _ <- failUnlessBillingProjectReady(billingProject)
+      _ <- failUnlessBillingAccountHasAccess(billingProject, parentSpan)
       result <- op(billingProject)
     } yield result
   }

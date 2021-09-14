@@ -1282,20 +1282,19 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     )
   }
 
-  // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
-  it should "succeed regardless of the BillingProject.status" in withTestDataServices { services =>
-     CreationStatuses.all.foreach { projectStatus =>
+  it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
+    (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
       // Update the BillingProject with the CreationStatus under test
       runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(status = projectStatus))))
 
       // Create a Workspace in the BillingProject
-      val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_${projectStatus}")
-      val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
-      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_${projectStatus}")
+        val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+        Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      }
 
-      // Load the newly created Workspace for assertions
-      val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
-      maybeWorkspace.value.name shouldBe workspaceName.name
+      error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     }
   }
 
@@ -1523,6 +1522,22 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
 
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+  it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
+    (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
+      // Update the BillingProject with the CreationStatus under test
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(status = projectStatus))))
+
+      // Create a Workspace in the BillingProject
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_${projectStatus}")
+        val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+        Await.result(services.workspaceService.cloneWorkspace(workspaceName, workspaceRequest), Duration.Inf)
+      }
+
+      error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    }
   }
 
   it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices { services =>
