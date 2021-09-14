@@ -2,9 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.nio.charset.Charset
 import cats.effect.{Blocker, ContextShift, IO, Timer}
-import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.util.Charsets
-import com.google.auth.Credentials
 import com.google.auth.oauth2.ServiceAccountCredentials
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.apache.commons.io.IOUtils
@@ -42,5 +40,4 @@ class GoogleBigQueryServiceFactory(pathToCredentialJson: String, blocker: Blocke
     val creds = ServiceAccountCredentials.fromStream(new ByteArrayInputStream(json.getBytes(Charsets.UTF_8)))
     GoogleBigQueryService.resource[IO](creds, blocker, projectId)
   }
-
 }

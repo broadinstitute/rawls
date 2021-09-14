@@ -75,6 +75,15 @@ trait RawlsBillingProjectComponent {
       DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.filter(_.projectName === project.projectName.value).update(marshalBillingProject(project))).toSeq)
     }
 
+    def updateBillingAccountValidity(billingAccount: RawlsBillingAccountName, isInvalid: Boolean): WriteAction[Int] = {
+      findBillingProjectsByBillingAccount(billingAccount).map(_.invalidBillingAccount).update(isInvalid)
+    }
+
+    def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] = {
+      findBillingProjectByName(projectName).map(_.billingAccount).update(billingAccount.map(_.value))
+    }
+
+
     def listAll(): ReadWriteAction[Seq[RawlsBillingProject]] = {
       for {
         projectRecords <- this.result
@@ -91,12 +100,16 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def listProjectsWithServicePerimeterAndStatus(servicePerimeter: ServicePerimeterName, statuses: CreationStatus*): ReadWriteAction[Seq[RawlsBillingProject]] = {
+    def listProjectsWithServicePerimeterAndStatus(servicePerimeter: ServicePerimeterName, statuses: CreationStatus*): ReadAction[Seq[RawlsBillingProject]] = {
       for {
-        projectRecords <- filter(rec => rec.servicePerimeter === servicePerimeter.value && rec.creationStatus.inSetBind(statuses.map(_.toString))).result
+        projectRecords <- getProjectsWithPerimeterAndStatusQuery(servicePerimeter, statuses).result
       } yield {
         projectRecords.map(unmarshalBillingProject)
       }
+    }
+
+    def getProjectsWithPerimeterAndStatusQuery(servicePerimeter: ServicePerimeterName, statuses: Seq[CreationStatus]): RawlsBillingProjectQuery = {
+      filter(rec => rec.servicePerimeter === servicePerimeter.value && rec.creationStatus.inSetBind(statuses.map(_.toString)))
     }
 
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
@@ -158,6 +171,10 @@ trait RawlsBillingProjectComponent {
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {
       filter(_.projectName === name.value)
+    }
+
+    private def findBillingProjectsByBillingAccount(billingAccount: RawlsBillingAccountName): RawlsBillingProjectQuery = {
+      filter(_.billingAccount === billingAccount.value)
     }
   }
 }

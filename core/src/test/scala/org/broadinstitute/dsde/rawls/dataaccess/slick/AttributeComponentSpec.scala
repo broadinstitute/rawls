@@ -44,7 +44,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   "AttributeComponent" should "insert string attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeString("test")
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", Option("test"), None, None, None, None, None, None, false, None))
@@ -53,14 +53,14 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   "AttributeComponent" should "insert string attribute as json" in withEmptyTestDatabase {
     val testAttribute = AttributeValueRawJson("\"thisshouldbelegitright\"")
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("\"thisshouldbelegitright\""), None, None, None, false, None))
   }
 
   it should "insert library-namespace attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeString("test")
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName(AttributeName.libraryNamespace, "test"), testAttribute))
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.libraryNamespace, "test", Option("test"), None, None, None, None, None, None, false, None))
@@ -68,7 +68,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert number attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeNumber(3.14159)
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, Option(3.14159), None, None, None, None, None, false, None))
@@ -77,14 +77,14 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "insert json number attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeValueRawJson("95")
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("95"), None, None, None, false, None))
   }
 
   it should "insert boolean attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeBoolean(true)
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, Option(true), None, None, None, None, false, None))
@@ -93,14 +93,14 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "insert json boolean attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeValueRawJson("true")
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("true"), None, None, None, false, None))
   }
 
   it should "insert attribute value list" in withEmptyTestDatabase {
     val testAttribute = AttributeValueList(Seq(AttributeNumber(9), AttributeNumber(8), AttributeNumber(7), AttributeNumber(6)))
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
 
     assertExpectedRecords(
@@ -114,7 +114,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   "AttributeComponent" should "insert json number list attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeValueRawJson("[9,3]")
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("[9,3]"), None, None, None, false, None))
   }
@@ -122,14 +122,14 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "insert json mixed list attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeValueRawJson("[\"foo\",\"bar\",true,54]")
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("[\"foo\",\"bar\",true,54]"), None, None, None, false, None))
   }
 
   it should "insert empty value list" in withEmptyTestDatabase {
     val testAttribute = AttributeValueEmptyList
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, Some(-1.0), None, None, None, None, Option(0), false, None))
@@ -137,7 +137,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert empty ref list" in withEmptyTestDatabase {
     val testAttribute = AttributeEntityReferenceEmptyList
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, None, None, None, Option(0), false, None))
@@ -145,7 +145,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "save empty AttributeValueLists as AttributeValueEmptyList" in withEmptyTestDatabase {
     val testAttribute = AttributeValueList(Seq())
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, Some(-1.0), None, None, None, None, Option(0), false, None))
@@ -153,7 +153,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "save empty AttributeEntityReferenceLists as AttributeEntityReferenceEmptyList" in withEmptyTestDatabase {
     val testAttribute = AttributeEntityReferenceList(Seq())
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, None, None, None, Option(0), false, None))
@@ -161,14 +161,14 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert null attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeNull
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, None, None, None, None, false, None))
   }
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp"))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None))
     val entityId = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name", "type", workspaceId, 0, deleted = false, None))
     val testAttribute = AttributeEntityReference("type", "name")
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
@@ -177,7 +177,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp"))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None))
     val entityId1 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name1", "type", workspaceId, 0, deleted = false, None))
     val entityId2 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name2", "type", workspaceId, 0, deleted = false, None))
     val entityId3 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name3", "type", workspaceId, 0, deleted = false, None))
@@ -195,7 +195,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "throw exception inserting ref to nonexistent entity" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp"))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None))
     val testAttribute = AttributeEntityReference("type", "name")
     intercept[RawlsException] {
       runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
@@ -219,14 +219,14 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "insert json object attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeValueRawJson("{\"field1\":5,\"field2\":false,\"field3\":\"hiiii\",\"field4\":{\"subfield1\":[4,true,\"ohno\"],\"subfield2\":false}}")
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("{\"field1\":5,\"field2\":false,\"field3\":\"hiiii\",\"field4\":{\"subfield1\":[4,true,\"ohno\"],\"subfield2\":false}}"), None, None, None, false, None))
 
   }
 
   it should "delete attribute records" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     val inserts = Seq(
       (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test1", None, Some(1), None, None, None, None, None, false, None),
       (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test2", None, Some(2), None, None, None, None, None, false, None),
@@ -381,9 +381,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       withClue(s"should have prepped $parallelism entities to save"){entitiesToSave.size shouldBe (parallelism)}
 
       // save the workspaces
-      val savedWorkspaceOdd = runAndWait(workspaceQuery.save(workspaceOdd))
+      val savedWorkspaceOdd = runAndWait(workspaceQuery.createOrUpdate(workspaceOdd))
       withClue("workspace (odd) should have saved") {savedWorkspaceOdd.workspaceId shouldBe (workspaceIdOdd.toString)}
-      val savedWorkspaceEven = runAndWait(workspaceQuery.save(workspaceEven))
+      val savedWorkspaceEven = runAndWait(workspaceQuery.createOrUpdate(workspaceEven))
       withClue("workspace (even) should have saved") {savedWorkspaceEven.workspaceId shouldBe (workspaceIdEven.toString)}
 
       // in parallel, save entities to the workspace
@@ -454,7 +454,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       rec.copy(id = runAndWait((workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += rec))
     }
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
 
     val existing = Seq(
       insertAndUpdateID(WorkspaceAttributeRecord(dummyId1, workspaceId, AttributeName.defaultNamespace, "test1", Option("test"), None, None, None, None, None, None, deleted = false, None)),
@@ -477,7 +477,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       rec.copy(id = runAndWait((workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += rec))
     }
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
 
     val existing = Seq(
       insertAndUpdateID(WorkspaceAttributeRecord(dummyId1, workspaceId, AttributeName.defaultNamespace, "test1", Option("test"), None, None, None, None, None, None, deleted = false, None)),
@@ -500,7 +500,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "findUniqueStringsByNameQuery shouldn't return any duplicates, limit results by namespace" in withEmptyTestDatabase{
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("testString"), AttributeString("cant")))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("cancer")))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("cantaloupe")))
@@ -508,7 +508,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     val workspace2ID = UUID.randomUUID()
     val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", workspace2ID.toString, "fake-bucket", Some("workflow-collection"), DateTime.now, DateTime.now, "testuser", Map.empty, false)
-    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("cancer")))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("buffalo")))
 
@@ -532,7 +532,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
         val expectedAfterInsertion = testData.workspace.attributes ++ inserts
 
-        runAndWait(workspaceQuery.save(
+        runAndWait(workspaceQuery.createOrUpdate(
           testData.workspace.copy(attributes = expectedAfterInsertion)
         ))
 
@@ -545,7 +545,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
         val expectedAfterUpdate = testData.workspace.attributes ++ updates
 
-        runAndWait(workspaceQuery.save(
+        runAndWait(workspaceQuery.createOrUpdate(
           testData.workspace.copy(attributes = expectedAfterUpdate)
         ))
 
@@ -640,7 +640,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   private case class AttributeTestFunction(description: String, run: (Attribute, Attribute) => Unit)
 
   private val attributeTestFunctions = List(
-    AttributeTestFunction("workspaceQuery.save()", runWorkspaceSaveNewTest),
+    AttributeTestFunction("workspaceQuery.createOrUpdate()", runWorkspaceSaveNewTest),
     AttributeTestFunction("entityQuery.save()", runEntitySaveNewTest),
     AttributeTestFunction("entityQuery.saveEntityPatch()", runEntityPatchNewTest),
   )
@@ -722,7 +722,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "skip inserts and deletes when rewriting entity attributes if only updating" in withEmptyTestDatabase {
     // save workspace
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     // save entity to use as parent
     runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
     // get id of saved entity
@@ -762,7 +762,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "skip updates and deletes when rewriting entity attributes if only inserting" in withEmptyTestDatabase {
     // save workspace
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     // save entity to use as parent
     runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
     // get id of saved entity
@@ -802,7 +802,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "skip inserts and updates when rewriting entity attributes if only deleting" in withEmptyTestDatabase {
     // save workspace
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     // save entity to use as parent
     runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
     // get id of saved entity
@@ -838,7 +838,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "combine inserts, updates, and deletes when rewriting entity attributes" in withEmptyTestDatabase {
     // save workspace
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     // save entity to use as parent
     runAndWait(entityQuery.save(workspace, Entity("baseEntity", "myType", Map())))
     // get id of saved entity

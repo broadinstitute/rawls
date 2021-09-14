@@ -298,7 +298,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
 
       val as = createEntities("a", aAttributes, wsc)
 
-      runAndWait(workspaceQuery.save(wsc.copy(attributes = wsc.attributes + (AttributeName.withDefaultNS("as") -> AttributeEntityReferenceList(as)))))
+      runAndWait(workspaceQuery.createOrUpdate(wsc.copy(attributes = wsc.attributes + (AttributeName.withDefaultNS("as") -> AttributeEntityReferenceList(as)))))
     }
   }
 
@@ -453,7 +453,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
 
       assertResult(Map("sample1" -> TrySuccess(Seq(testData.sample1.attributes.get(AttributeName.withDefaultNS("type")).get)))) {
         val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> testData.sample1.toReference)
-        runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
+        runAndWait(workspaceQuery.createOrUpdate(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref.type"))
       }
@@ -485,7 +485,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
 
       intercept[RawlsException] {
         val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> testData.sample1.toReference)
-        runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
+        runAndWait(workspaceQuery.createOrUpdate(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref."))
       }
@@ -558,7 +558,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
         AttributeName("library", "series") -> AttributeValueList(series)
       )
 
-      runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = testData.workspace.attributes ++ libraryAttributes)))
+      runAndWait(workspaceQuery.createOrUpdate(testData.workspace.copy(attributes = testData.workspace.attributes ++ libraryAttributes)))
 
       assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("L. Ron Hubbard"))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:author"))
@@ -680,7 +680,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
 
       assertResult(Set("sample1")) {
         val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> testData.sample1.toReference)
-        runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
+        runAndWait(workspaceQuery.createOrUpdate(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.sample1ref")).map(_.name).toSet
       }
@@ -688,7 +688,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       assertResult(Set("sample2")) {
         val reflist = AttributeEntityReferenceList(Seq(testData.sample2.toReference))
         val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("samplerefs") -> reflist)
-        runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
+        runAndWait(workspaceQuery.createOrUpdate(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.samplerefs")).map(_.name).toSet
       }
@@ -700,7 +700,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
 
       assertResult(Set("sample1")) {
         val attributesPlusReference = testData.workspace.attributes + (AttributeName("library", "s1ref") -> testData.sample1.toReference)
-        runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
+        runAndWait(workspaceQuery.createOrUpdate(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.library:s1ref")).map(_.name).toSet
       }
@@ -708,7 +708,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       assertResult(Set("sample2")) {
         val reflist = AttributeEntityReferenceList(Seq(testData.sample2.toReference))
         val attributesPlusReference = testData.workspace.attributes + (AttributeName("library", "srefs") -> reflist)
-        runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
+        runAndWait(workspaceQuery.createOrUpdate(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.library:srefs")).map(_.name).toSet
       }

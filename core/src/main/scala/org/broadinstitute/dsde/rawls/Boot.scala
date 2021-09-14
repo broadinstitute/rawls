@@ -17,9 +17,10 @@ import com.typesafe.scalalogging.LazyLogging
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.config.{WDLParserConfig, _}
+import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
+import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
@@ -32,15 +33,17 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
@@ -133,7 +136,7 @@ object Boot extends IOApp with LazyLogging {
       workbenchMetricBaseName = metricsPrefix
     )
 
-    initAppDependencies[IO](conf).use { appDependencies =>
+    initAppDependencies[IO](conf, appName, metricsPrefix).use { appDependencies =>
       val gcsDAO = new HttpGoogleServicesDAO(
         false,
         clientSecrets,
@@ -164,7 +167,8 @@ object Boot extends IOApp with LazyLogging {
         cleanupDeploymentAfterCreating = dmConfig.cleanupDeploymentAfterCreating,
         terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
         terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
-        accessContextManagerDAO = accessContextManagerDAO
+        accessContextManagerDAO = accessContextManagerDAO,
+        resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
       )
 
 
@@ -266,6 +270,9 @@ object Boot extends IOApp with LazyLogging {
       val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
       val marthaResolver = new MarthaResolver(marthaUrl)
 
+      val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
+      val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
+
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
           slickDataSource,
@@ -276,7 +283,9 @@ object Boot extends IOApp with LazyLogging {
           gcsConfig.getString("bigQueryJson"),
           requesterPaysRole,
           dmConfig,
-          projectTemplate
+          projectTemplate,
+          servicePerimeterService,
+          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId"))
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
@@ -307,7 +316,8 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-      val defaultBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultBackend"))
+      val defaultNetworkCromwellBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultNetworkBackend"))
+      val highSecurityNetworkCromwellBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.highSecurityNetworkBackend"))
 
       val wdlParsingConfig = WDLParserConfig(conf.getConfig("wdl-parsing"))
       def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
@@ -346,10 +356,7 @@ object Boot extends IOApp with LazyLogging {
       val statusServiceConstructor: () => StatusService = () =>
         StatusService.constructor(healthMonitor)
 
-      val workspaceServiceConfig = WorkspaceServiceConfig(
-        conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
-        gcsConfig.getString("groupsPrefix")
-      )
+      val workspaceServiceConfig = WorkspaceServiceConfig.apply(conf)
 
       val bondConfig = conf.getConfig("bond")
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
@@ -368,6 +375,11 @@ object Boot extends IOApp with LazyLogging {
         appDependencies.bigQueryServiceFactory, deltaLayerWriter,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
         conf.getBoolean("entityStatisticsCache.enabled"))
+
+      val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
+      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
+      val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+      val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
@@ -389,7 +401,13 @@ object Boot extends IOApp with LazyLogging {
         submissionCostService,
         workspaceServiceConfig,
         requesterPaysSetupService,
-        entityManager
+        entityManager,
+        resourceBufferService,
+        resourceBufferSaEmail,
+        servicePerimeterService,
+        googleIamDao = appDependencies.httpGoogleIamDAO,
+        terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
+        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole")
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
@@ -455,7 +473,8 @@ object Boot extends IOApp with LazyLogging {
           requesterPaysRole,
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
-          defaultBackend,
+          defaultNetworkCromwellBackend,
+          highSecurityNetworkCromwellBackend,
           methodConfigResolver
         )
       } else
@@ -502,10 +521,12 @@ object Boot extends IOApp with LazyLogging {
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
-  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config)(implicit executionContext: ExecutionContext): cats.effect.Resource[F, AppDependencies[F]] = {
+  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
+    val jsonFileSource = scala.io.Source.fromFile(pathToCredentialJson)
+    val jsonCreds = try jsonFileSource.mkString finally jsonFileSource.close()
     val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
     val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
@@ -519,7 +540,8 @@ object Boot extends IOApp with LazyLogging {
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
       bqServiceFactory = new GoogleBigQueryServiceFactory(pathToCredentialJson, blocker)(executionContext)
-    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory)
+      httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(system, executionContext)
+    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO)
   }
 }
 
@@ -528,4 +550,5 @@ final case class AppDependencies[F[_]](
   googleStorageService: GoogleStorageService[F],
   googleServiceHttp: GoogleServiceHttp[F],
   topicAdmin: GoogleTopicAdmin[F],
-  bigQueryServiceFactory: GoogleBigQueryServiceFactory)
+  bigQueryServiceFactory: GoogleBigQueryServiceFactory,
+  httpGoogleIamDAO: HttpGoogleIamDAO)

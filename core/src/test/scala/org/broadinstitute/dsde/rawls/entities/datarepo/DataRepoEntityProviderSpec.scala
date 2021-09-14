@@ -53,7 +53,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   it should "use the workspace's project if no explicit project was provided" in {
     val randStr = java.util.UUID.randomUUID().toString
     val gProject = GoogleProjectId(randStr)
-    val testWorkspace = workspace.copy(googleProject = gProject)
+    val testWorkspace = workspace.copy(googleProjectId = gProject)
     // arguments specify None for billingProject, but pass our random string inside the workspace
     val args = EntityRequestArguments(
       workspace = testWorkspace,
@@ -150,7 +150,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
-      assertResult("Error attempting to use project namespace. The project does not exist or you do not have permission to use it: sam error") { ex.getMessage }
+      assertResult(s"Error attempting to use project ${provider.googleProject}. The project does not exist or you do not have permission to use it: sam error") { ex.getMessage }
     }
   }
 

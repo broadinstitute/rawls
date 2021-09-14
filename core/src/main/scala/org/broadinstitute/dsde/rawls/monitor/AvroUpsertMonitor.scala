@@ -246,7 +246,7 @@ class AvroUpsertMonitorActor(
             throw new RawlsException(s"Workspace ${attributes.workspace} not found while importing entities")
         }
       }
-      petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProject, attributes.userEmail)
+      petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, attributes.userEmail)
       importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
       _ <- importStatus match {
         // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
@@ -333,7 +333,7 @@ class AvroUpsertMonitorActor(
       def performUpsertBatch(idx: Long, upsertBatch: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         for {
-          petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProject, userEmail)
+          petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
           upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = isUpsert, None, None)
         } yield {
           upsertResults

@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -44,9 +45,10 @@ object WorkflowSubmissionActor {
             requesterPaysRole: String,
             useWorkflowCollectionField: Boolean,
             useWorkflowCollectionLabel: Boolean,
-            defaultBackend: CromwellBackend,
+            defaultNetworkCromwellBackend: CromwellBackend,
+            highSecurityNetworkCromwellBackend: CromwellBackend,
             methodConfigResolver: MethodConfigResolver): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, defaultRuntimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, defaultRuntimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultNetworkCromwellBackend, highSecurityNetworkCromwellBackend, methodConfigResolver))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -78,7 +80,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val requesterPaysRole: String,
                               val useWorkflowCollectionField: Boolean,
                               val useWorkflowCollectionLabel: Boolean,
-                              val defaultBackend: CromwellBackend,
+                              val defaultNetworkCromwellBackend: CromwellBackend,
+                              val highSecurityNetworkCromwellBackend: CromwellBackend,
                               val methodConfigResolver: MethodConfigResolver) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
@@ -128,7 +131,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
   val useWorkflowCollectionLabel: Boolean
-  val defaultBackend: CromwellBackend
+  val defaultNetworkCromwellBackend: CromwellBackend
+  val highSecurityNetworkCromwellBackend: CromwellBackend
   val methodConfigResolver: MethodConfigResolver
 
   import dataSource.dataAccess.driver.api._
@@ -232,7 +236,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
-      workspace.googleProject,
+      workspace.googleProjectId,
       userEmail.value,
       petSAEmail,
       petSAJson,
@@ -242,10 +246,17 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       deleteIntermediateOutputFiles,
       useReferenceDisks,
       memoryRetryMultiplier,
-      billingProject.cromwellBackend.getOrElse(defaultBackend),
+      determineCromwellBackendFromWorkspaceVersion(WorkspaceVersions.fromStringThrows(workspace.workspaceVersion)),
       workflowFailureMode,
       google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
     )
+  }
+
+  def determineCromwellBackendFromWorkspaceVersion(workspaceVersion: WorkspaceVersion): CromwellBackend = {
+    workspaceVersion match {
+      case WorkspaceVersions.V1 => defaultNetworkCromwellBackend
+      case WorkspaceVersions.V2 => highSecurityNetworkCromwellBackend
+    }
   }
 
   def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[WDL] = {
@@ -345,10 +356,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val workflowBatchFuture = for {
       //yank things from the db. note this future has already started running and we're just waiting on it here
       (wfRecs, workflowBatch, billingProject, methodConfig) <- dbThingsFuture
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(GoogleProjectId(workspaceRec.googleProject), RawlsUserEmail(submissionRec.submitterEmail))
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(GoogleProjectId(workspaceRec.googleProjectId), RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
       wdl <- getWdl(methodConfig, petUserInfo)
-      updatedRuntimeOptions <- getRuntimeOptions(workspaceRec.googleProject, workspaceRec.bucketName)
+      updatedRuntimeOptions <- getRuntimeOptions(workspaceRec.googleProjectId, workspaceRec.bucketName)
     } yield {
 
       val wfOpts = buildWorkflowOpts(

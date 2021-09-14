@@ -1,14 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.util
-
-import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
-import com.google.api.services.bigquery.model.{GetQueryResultsResponse, QueryParameter, QueryParameterType, QueryParameterValue, TableRow}
+import com.google.api.services.bigquery.model._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.model.GoogleProjectId
+import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 
+import java.util
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -21,7 +21,8 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
 
   val stringParamType = new QueryParameterType().setType("STRING")
 
-  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], workspaceNamespace: String, submissionDate: DateTime, terminalStatusDate: Option[DateTime], tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
+
+  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], googleProjectId: GoogleProjectId, submissionDate: DateTime, terminalStatusDate: Option[DateTime], tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
     val tableName = tableNameOpt.getOrElse(defaultTableName)
 
     if( workflowIds.isEmpty ) {
@@ -30,10 +31,10 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
       for {
         //try looking up the workflows via the submission ID.
         //this makes for a smaller query string (though no faster).
-        submissionCosts <- executeSubmissionCostsQuery(submissionId, workspaceNamespace, submissionDate, terminalStatusDate, tableName)
+        submissionCosts <- executeSubmissionCostsQuery(submissionId, googleProjectId, submissionDate, terminalStatusDate, tableName)
         //if that doesn't return anything, fall back to
         fallbackCosts <- if (submissionCosts.size() == 0)
-          executeWorkflowCostsQuery(workflowIds, workspaceNamespace, submissionDate, terminalStatusDate, tableName)
+          executeWorkflowCostsQuery(workflowIds, googleProjectId, submissionDate, terminalStatusDate, tableName)
         else
           Future.successful(submissionCosts)
       } yield {
@@ -44,13 +45,13 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
 
 
   def getWorkflowCost(workflowId: String,
-                      workspaceNamespace: String,
+                      googleProjectId: GoogleProjectId,
                       submissionDate: DateTime,
                       terminalStatusDate: Option[DateTime],
                       tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
     val tableName = tableNameOpt.getOrElse(defaultTableName)
 
-    executeWorkflowCostsQuery(Seq(workflowId), workspaceNamespace, submissionDate, terminalStatusDate, tableName) map extractCostResults
+    executeWorkflowCostsQuery(Seq(workflowId), googleProjectId, submissionDate, terminalStatusDate, tableName) map extractCostResults
   }
 
   /*
@@ -80,7 +81,7 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
   }
 
   private def executeSubmissionCostsQuery(submissionId: String,
-                                          workspaceNamespace: String,
+                                          googleProjectId: GoogleProjectId,
                                           submissionDate: DateTime,
                                           terminalStatusDate: Option[DateTime],
                                           tableName: String): Future[util.List[TableRow]] = {
@@ -91,7 +92,7 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
     val namespaceParam =
       new QueryParameter()
         .setParameterType(stringParamType)
-        .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
+        .setParameterValue(new QueryParameterValue().setValue(googleProjectId.value))
 
     val queryParameters: List[QueryParameter] = List(namespaceParam)
 
@@ -107,7 +108,7 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
    * Queries BigQuery for compute costs associated with the workflowIds.
    */
   private def executeWorkflowCostsQuery(workflowIds: Seq[String],
-                                        workspaceNamespace: String,
+                                        googleProjectId: GoogleProjectId,
                                         submissionDate: DateTime,
                                         terminalStatusDate: Option[DateTime],
                                         tableName: String): Future[util.List[TableRow]] = {
@@ -121,7 +122,7 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
         val namespaceParam =
           new QueryParameter()
             .setParameterType(stringParamType)
-            .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
+            .setParameterValue(new QueryParameterValue().setValue(googleProjectId.value))
         val subqueryParams = workflowIds.toList map { workflowId =>
           new QueryParameter()
             .setParameterType(stringParamType)

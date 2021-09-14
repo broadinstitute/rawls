@@ -1,30 +1,47 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.concurrent.TimeUnit
+
 import akka.actor.PoisonPill
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import akka.http.scaladsl.server._
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.stream.ActorMaterializer
 import akka.testkit.TestKitBase
+import cats.effect.IO
+import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, SwaggerConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
+import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
-import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
-import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
+import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
+import org.broadinstitute.dsde.rawls.mock._
+import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsBillingAccountName, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
-import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.scalatest.concurrent.Eventually
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import akka.http.scaladsl.server._
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import spray.json._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
@@ -152,6 +169,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val drsResolver = new MarthaResolver(mockServer.mockServerBaseUrl)
 
+    val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
+    val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
+
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -161,7 +181,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       testConf.getString("gcs.pathToCredentialJson"),
       "requesterPaysRole",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
-      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
+      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
+      servicePerimeterService,
+      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
     )_
 
     val deltaLayer = new DeltaLayer(bigQueryServiceFactory, new MockDeltaLayerWriter, samDAO,
@@ -207,6 +229,11 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, new MockDeltaLayerWriter(), DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
 
+    val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
+    val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
+    val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+    val resourceBufferSaEmail = resourceBufferConfig.saEmail
+
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
@@ -227,7 +254,13 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager
+      entityManager,
+      resourceBufferService,
+      resourceBufferSaEmail,
+      servicePerimeterService,
+      googleIamDao = new MockGoogleIamDAO,
+      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
     )_
 
     override val entityServiceConstructor = EntityService.constructor(

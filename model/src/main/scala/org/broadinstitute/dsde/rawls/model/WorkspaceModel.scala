@@ -146,6 +146,9 @@ case class WorkspaceRequest(namespace: String,
 
 case class GoogleProjectId(value: String) extends ValueObject
 
+// All Workspaces are backed by a Google Project identified by googleProjectId.  The googleProjectNumber is a different
+// identifier that we only really need when adding the Workspace to a Service Perimeter.  For efficiency, we added the
+// GoogleProjectNumber field here.
 case class Workspace(
                       namespace: String,
                       name: String,
@@ -158,7 +161,10 @@ case class Workspace(
                       attributes: AttributeMap,
                       isLocked: Boolean,
                       workspaceVersion: WorkspaceVersion,
-                      googleProject: GoogleProjectId
+                      googleProjectId: GoogleProjectId,
+                      googleProjectNumber: Option[GoogleProjectNumber],
+                      currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
+                      billingAccountErrorMessage: Option[String]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -166,21 +172,26 @@ case class Workspace(
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
+/** convenience constructor (for unit tests only!)
+  * defaults workspace version to v2 and google project id and google project number to random strings
+  * TODO: to be refactored/removed in https://broadworkbench.atlassian.net/browse/CA-1128
+   */
 object Workspace {
-  /** convenience constructor that defaults workspace version to v1 and google project to namespace */
   def apply(namespace: String,
-           name: String,
-           workspaceId: String,
-           bucketName: String,
-           workflowCollectionName: Option[String],
-           createdDate: DateTime,
-           lastModified: DateTime,
-           createdBy: String,
-           attributes: AttributeMap,
-           isLocked: Boolean = false): Workspace = {
-    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace))
+            name: String,
+            workspaceId: String,
+            bucketName: String,
+            workflowCollectionName: Option[String],
+            createdDate: DateTime,
+            lastModified: DateTime,
+            createdBy: String,
+            attributes: AttributeMap,
+            isLocked: Boolean = false): Workspace = {
+    val randomString = java.util.UUID.randomUUID().toString
+    val googleProjectId = GoogleProjectId(randomString)
+    val googleProjectNumber = GoogleProjectNumber(randomString)
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None)
   }
-
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -566,8 +577,11 @@ case class WorkspaceDetails(namespace: String,
                             isLocked: Boolean = false,
                             authorizationDomain: Option[Set[ManagedGroupRef]],
                             workspaceVersion: WorkspaceVersion,
-                            googleProject: GoogleProjectId) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject)
+                            googleProject: GoogleProjectId, // The response field is called "googleProject" rather than "googleProjectId" for backwards compatibility
+                            googleProjectNumber: Option[GoogleProjectNumber],
+                            billingAccount: Option[RawlsBillingAccountName],
+                            billingAccountErrorMessage: Option[String] = None) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage)
 }
 
 
@@ -637,7 +651,10 @@ object WorkspaceDetails {
       workspace.isLocked,
       optAuthorizationDomain,
       workspace.workspaceVersion,
-      workspace.googleProject
+      workspace.googleProjectId,
+      workspace.googleProjectNumber,
+      workspace.currentBillingAccountOnGoogleProject,
+      workspace.billingAccountErrorMessage
     )
   }
 }
@@ -737,6 +754,7 @@ case class WorkspaceTag(tag: String, count: Int)
 class WorkspaceJsonSupport extends JsonSupport {
   import DataReferenceModelJsonSupport.DataReferenceNameFormat
   import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
+  import UserModelJsonSupport.RawlsBillingAccountNameFormat
   import spray.json.DefaultJsonProtocol._
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
@@ -845,6 +863,8 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val GoogleProjectIdFormat = ValueObjectFormat(GoogleProjectId)
 
+  implicit val GoogleProjectNumberFormat = ValueObjectFormat(GoogleProjectNumber)
+
   implicit val MethodConfigurationFormat = jsonFormat11(MethodConfiguration)
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
@@ -859,7 +879,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat13(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat16(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

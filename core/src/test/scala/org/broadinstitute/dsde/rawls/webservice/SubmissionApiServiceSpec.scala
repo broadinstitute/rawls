@@ -106,6 +106,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       false,
       false,
       CromwellBackend("PAPIv2"),
+      CromwellBackend("PAPIv2-CloudNAT"),
       methodConfigResolver
     ))
 
@@ -719,7 +720,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         entityQuery.save(workspace, lotsOfSamples :+ sampleSet)
       )
     }

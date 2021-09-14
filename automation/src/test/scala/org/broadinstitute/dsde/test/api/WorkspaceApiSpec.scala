@@ -1,17 +1,19 @@
 package org.broadinstitute.dsde.test.api
 
 import java.util.UUID
+import java.util.regex.Pattern
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.auth.AuthToken
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO, HttpGoogleProjectDAO}
+import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
+import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.fixture._
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
-import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
+import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -20,10 +22,12 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
-
 import spray.json._
 import DefaultJsonProtocol._
+import com.google.cloud.Binding
+import com.google.common.collect.ImmutableList
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -46,6 +50,92 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
   "Rawls" - {
+
+    "should set labels on the underlying Google Project when creating a new Workspace" in {
+      val owner: Credentials = UserPool.chooseProjectOwner
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
+      val billingProjectName = s"workspaceapi-labels-${makeRandomId()}" // lowercase and hyphens due to google's label and display name requirements
+      Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
+      val workspaceName = prependUUID("rbs-project-labels-test")
+
+      implicit val ec: ExecutionContext = ExecutionContext.global
+      val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
+      val jsonCreds = try source.mkString finally source.close()
+      val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
+
+      Rawls.workspaces.create(billingProjectName, workspaceName)
+      val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+      createdWorkspaceResponse.workspace.name should be(workspaceName)
+      val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
+
+      // verify display name (starts with namespace, ends with name, limited to 30 chars)
+      val maybeDisplayName = googleProjectDao.getProjectName(createdWorkspaceGoogleProject.value).futureValue
+      maybeDisplayName.getOrElse("") should startWith(createdWorkspaceResponse.workspace.namespace)
+
+      // verify labels exist and that we didn't accidentally forget the buffer labels
+      val bufferLabels = Map("vpc-network-name" -> "network", "vpc-subnetwork-name" -> "subnetwork")
+      val rawlsLabels = Map("workspacenamespace" -> createdWorkspaceResponse.workspace.namespace,
+        "workspaceid" -> createdWorkspaceResponse.workspace.workspaceId,
+        "workspacename" -> createdWorkspaceResponse.workspace.name)
+      val labels = googleProjectDao.getLabels(createdWorkspaceGoogleProject.value).futureValue
+      labels should contain allElementsOf bufferLabels
+      labels should contain allElementsOf rawlsLabels
+
+      Rawls.workspaces.delete(billingProjectName, workspaceName)
+      Rawls.billingV2.deleteBillingProject(billingProjectName)
+    }
+
+    "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
+      val owner: Credentials = UserPool.chooseProjectOwner
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
+      withCleanUp {
+        val billingProjectName = s"workspaceapi-iamtest-${makeRandomId()}"
+        Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
+
+        register cleanUp Rawls.billingV2.deleteBillingProject(billingProjectName)
+
+        val workspaceName = prependUUID("rbs-project-iam-test")
+
+        implicit val ec: ExecutionContext = ExecutionContext.global
+
+        val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
+        val jsonCreds = try source.mkString finally source.close()
+        val googleIamDaoWithCloudCredentials = new HttpGoogleIamDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
+
+        Rawls.workspaces.create(billingProjectName, workspaceName)
+        register cleanUp Rawls.workspaces.delete(billingProjectName, workspaceName)
+        val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+        createdWorkspaceResponse.workspace.name should be(workspaceName)
+        val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
+
+        val iamPermissions = googleIamDaoWithCloudCredentials.getProjectPolicy(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
+        // This is brittle. We know this is brittle and accept that risk because these permissions should change very rarely.
+        iamPermissions.getBindings.size() shouldEqual 12
+        iamPermissions.getBindings().forEach(binding => {
+          binding.getRole() match {
+            // We just check size here because the policy group names are generated on workspace creation
+            case s if s.endsWith("terra_billing_project_owner") => binding.getMembers.size() shouldEqual 1
+            case s if s.endsWith("terra_workspace_can_compute") => binding.getMembers.size() shouldEqual 3
+            case s if s.endsWith("compute.serviceAgent") => binding.getMembers.size() shouldEqual 1
+            case s if s.endsWith("container.serviceAgent") => binding.getMembers.size() shouldEqual 1
+            case s if s.endsWith("containerregistry.ServiceAgent") => binding.getMembers.size() shouldEqual 1
+            case s if s.endsWith("dataflow.serviceAgent") => binding.getMembers.size() shouldEqual 1
+            case s if s.endsWith("dataproc.serviceAgent") => binding.getMembers.size() shouldEqual 1
+            case s if s.endsWith("editor") => binding.getMembers.size() shouldEqual 2
+            case s if s.endsWith("genomics.serviceAgent") => binding.getMembers.size() shouldEqual 1
+            case s if s.endsWith("lifesciences.serviceAgent") => binding.getMembers.size() shouldEqual 1
+            case s if s.endsWith("owner") =>
+              binding.getMembers.size() shouldEqual 1
+              binding.getMembers.get(0) should endWith ("@terra-kernel-k8s.iam.gserviceaccount.com")
+            case s if s.endsWith("pubsub.serviceAgent") => binding.getMembers.size() shouldEqual 1
+            case _ =>
+              logger.error("Extra permission on workspace google project found")
+              throw new Exception("Extra permission on workspace google project found")
+          }
+        })
+      }
+    }
+
     "should allow project owners" - {
       "to create, clone, and delete workspaces" in {
         implicit val token: AuthToken = ownerAuthToken
@@ -68,6 +158,36 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         }
       }
 
+      "to delete the google project (from Resource Buffer) in a v2 workspaces (in a v2 billing project) when deleting the workspace" in {
+        val owner: Credentials = UserPool.chooseProjectOwner
+        implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
+        val billingProjectName = s"WorkspaceApi_v2Delete_${makeRandomId()}"
+        Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
+        val workspaceName = prependUUID("rbs-delete-workspace")
+
+        implicit val ec: ExecutionContext = ExecutionContext.global
+        val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
+        val jsonCreds = try source.mkString finally source.close()
+        val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
+
+        Rawls.workspaces.create(billingProjectName, workspaceName)
+        val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+        createdWorkspaceResponse.workspace.name should be(workspaceName)
+        val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
+
+        // verify that the google project exists
+        googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe true)
+
+        // delete the workspace
+        Rawls.workspaces.delete(billingProjectName, workspaceName)
+        assertNoAccessToWorkspace(billingProjectName, workspaceName)
+
+        // verify that the google project was deleted
+        googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe false)
+
+        Rawls.billingV2.deleteBillingProject(billingProjectName)
+      }
+
       "to get an error message when they try to create a workspace with a bucket region that is invalid" in {
         implicit val token: AuthToken = ownerAuthToken
         val invalidRegion = "invalid-region1"
@@ -78,7 +198,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
         exception.fields("statusCode").convertTo[Int] should equal(400)
         exception.fields("message").convertTo[String] should startWith("Workspace creation failed. Error trying to create bucket ")
-        exception.fields("message").convertTo[String] should endWith(s" in Google project `${p.projectName}` in region `${invalidRegion}`.")
+        exception.fields("message").convertTo[String] should endWith regex(s" in Google project (.+) in region `${invalidRegion}`.".r)
       }
 
       "to add readers with can-share access" in {

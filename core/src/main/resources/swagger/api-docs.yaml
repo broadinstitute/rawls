@@ -121,76 +121,6 @@ paths:
             - profile
             - https://www.googleapis.com/auth/cloud-billing
       x-codegen-request-body-name: createProjectRequest
-  /api/billing/v2/{projectId}/billingAccount:
-    put:
-      tags:
-        - billing_v2
-      summary: update billing account on billing project
-      description: update billing account on billing project
-      operationId: updateBillingProjectBillingAccount
-      parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
-      requestBody:
-        description: update billing account request
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/UpdateRawlsBillingAccountRequest'
-        required: true
-      responses:
-        200:
-          description: Billing account successfully updated
-        400:
-          description: Billing account not found
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        404:
-          description: Billing Project Not Found
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-    delete:
-      tags:
-        - billing_v2
-      summary: deletes the billing account on billing project
-      description: deletes the billing account on billing project
-      operationId: deleteBillingProjectBillingAccount
-      parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
-      responses:
-        200:
-          description: Billing account successfully removed
-        404:
-          description: Billing project Not Found
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
   /api/billing/{projectId}/members:
     get:
       tags:
@@ -415,6 +345,84 @@ paths:
       responses:
         204:
           description: OK
+        404:
+          description: Project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Internal Server Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+  /api/billing/v2/{projectId}/billingAccount:
+    put:
+      tags:
+        - billing_v2
+      summary: update billing account on billing project
+      description: update billing account on billing project
+      operationId: updateBillingProjectBillingAccount
+      parameters:
+        - name: projectId
+          in: path
+          description: Id of the billing project
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: update billing account request
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/UpdateRawlsBillingAccountRequest'
+        required: true
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RawlsBillingProjectResponse'
+        400:
+          description: Billing account not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Internal Server Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - billing_v2
+      summary: deletes the billing account on billing project
+      description: deletes the billing account on billing project
+      operationId: deleteBillingProjectBillingAccount
+      parameters:
+        - name: projectId
+          in: path
+          description: Id of the billing project
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RawlsBillingProjectResponse'
         404:
           description: Project Not Found
           content:
@@ -1003,8 +1011,8 @@ paths:
           schema:
             type: string
       responses:
-        202:
-          description: Successful request, check the project's status for completion
+        204:
+          description: Project has been added to the perimeter
           content: {}
         400:
           description: Project is already in perimeter or is not in 'Ready' state
@@ -5824,10 +5832,19 @@ components:
           description: A UUID associated with the workspace
         googleProject:
           type: string
-          description: the google project used by the workspace for compute and storage
+          description: Google Project ID of the google project used by the workspace for compute and storage
+        googleProjectNumber:
+          type: string
+          description: A different google project identifier for the same project identified by the googleProject; required by google for certain actions
         workspaceVersion:
           type: string
           description: internal use
+        billingAccount:
+          type: string
+          description: The current billing account being charged for activity within this workspace. For desired billing account, look to the billing account specified on this workspace's billing project
+        billingAccountErrorMessage:
+          type: string
+          description: Error message received during most recent attempt to update the current billing account on workspace's Google project. Empty if update was successful.
       description: ""
     WorkspaceSubmissionStats:
       required:
@@ -6369,10 +6386,23 @@ components:
           items:
             type: string
           description: the roles the caller has on the project
+        workspacesWithCorrectBillingAccount:
+          type: array
+          items:
+            type: string
+          description: A list of workspace names with the correct billing account contained within this billing project
         workspacesWithIncorrectBillingAccount:
           type: array
           items:
             $ref: '#/components/schemas/WorkspaceBillingAccount'
+    UpdateRawlsBillingAccountRequest:
+      required:
+        - billingAccount
+      type: object
+      properties:
+        billingAccount:
+          type: string
+          description: The name of the billing account to use
     WorkspaceBillingAccount:
       required:
         - workspaceName
@@ -6384,14 +6414,6 @@ components:
         currentBillingAccountOnGoogleProject:
           type: string
           description: the billing project associated with the workspace
-    UpdateRawlsBillingAccountRequest:
-      required:
-        - billingAccount
-      type: object
-      properties:
-        billingAccount:
-          type: string
-          description: The name of the billing account to use
     RawlsBillingProjectTransfer:
       required:
         - bucket

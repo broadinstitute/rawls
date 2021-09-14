@@ -85,6 +85,46 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       }
     } ~
+    path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
+      get {
+        complete {
+          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
+        }
+      } ~
+      patch {
+        entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
+          complete {
+            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
+          }
+        }
+      } ~
+      delete {
+        complete {
+          snapshotServiceConstructor(userInfo).deleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(_ => StatusCodes.NoContent)
+        }
+      }
+    } ~
+    // ---- SNAPSHOT V1 ----
+    path("workspaces" / Segment / Segment / "snapshots") { (workspaceNamespace, workspaceName) =>
+      post {
+        entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
+          complete {
+            snapshotServiceConstructor(userInfo).createSnapshot(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot)
+              .map(dataRepoSnapshotResourceToDataReferenceDescription)
+              .map(StatusCodes.Created -> _)
+          }
+        }
+      } ~
+      get {
+        parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
+          complete {
+            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit)
+              .map(snapshotListResponseToDataReferenceList)
+              .map(StatusCodes.OK -> _)
+          }
+        }
+      }
+    } ~
     path("workspaces" / Segment / Segment / "snapshots" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
       get {
         complete {

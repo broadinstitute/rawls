@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import cats.effect.{ContextShift, IO}
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace, WorkspaceVersions}
 import cats.implicits._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -25,7 +25,7 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
   def grantRequesterPaysToLinkedSAs(userInfo: UserInfo, workspace: Workspace): Future[List[BondServiceAccountEmail]] = {
     for {
       emails <- getBondProviderServiceAccountEmails(userInfo)
-      _ <- googleServicesDAO.addPolicyBindings(workspace.googleProject, Map(requesterPaysRole -> emails.toSet.map{mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
+      _ <- googleServicesDAO.addPolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.toSet.map{ mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
       _ <- dataSource.inTransaction { dataAccess => dataAccess.workspaceRequesterPaysQuery.insertAllForUser(workspace.toWorkspaceName, userInfo.userEmail, emails.toSet) }
     } yield {
       emails
@@ -55,15 +55,16 @@ class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesD
       keepBindings <- dataSource.inTransaction { dataAccess =>
         for {
           _ <- dataAccess.workspaceRequesterPaysQuery.deleteAllForUser(workspace.toWorkspaceName, userEmail)
-          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(workspace.namespace, userEmail)
+          // TODO (CA-1236): Remove after PPW migration is complete, we won't need to track on workspace namespace anymore, since google project will be per workspace
+          keepBindings <- dataAccess.workspaceRequesterPaysQuery.userExistsInWorkspaceNamespaceAssociatedGoogleProject(workspace.namespace, userEmail)
         } yield keepBindings
       }
-
-      // only remove google bindings if there are no workspaces left in the namespace (i.e. project)
+      // TODO (CA-1236): Clean up the if statement once PPW migration is complete. There will be no more V1 workspaces so this will be dead code
+      // only remove google bindings if there are no workspaces left in the namespace (i.e. project) or the workspace is V2
       _ <- if (keepBindings) {
         Future.successful(())
       } else {
-        googleServicesDAO.removePolicyBindings(workspace.googleProject, Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email)))
+        googleServicesDAO.removePolicyBindings(workspace.googleProjectId, Map(requesterPaysRole -> emails.map("serviceAccount:" + _.client_email)))
       }
     } yield ()
   }

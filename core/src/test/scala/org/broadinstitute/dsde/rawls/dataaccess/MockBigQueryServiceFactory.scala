@@ -169,5 +169,5 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
     // Note that this Some(null) is intentional. We just need the method
     // to succeed, and no code actually looks at the contents of this option.
   }
-  
+
 }

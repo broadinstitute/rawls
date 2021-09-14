@@ -115,6 +115,7 @@ object Dependencies {
   val workspaceManager = excludeJakartaActivationApi("bio.terra" % "workspace-manager-client" % "0.254.5-SNAPSHOT")
   val dataRepo = excludeJakartaActivationApi("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
   val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
+  val resourceBufferService = excludeJakartaActivationApi("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.0-M2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.0-M2"
@@ -236,6 +237,7 @@ object Dependencies {
     workspaceManager,
     dataRepo,
     dataRepoJersey,
-    antlrParser
+    antlrParser,
+    resourceBufferService
   )
 }
