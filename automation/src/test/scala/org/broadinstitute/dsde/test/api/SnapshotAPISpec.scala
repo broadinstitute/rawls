@@ -16,6 +16,7 @@ import java.util.UUID
 import org.apache.commons.io.IOUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.userLoginScopes
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
@@ -179,6 +180,10 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       withCleanBillingProject(owner) { projectName =>
         withWorkspace(projectName, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
 
+          // we need the actual Google project for this workspace, not just its namespace
+          val googleProject = Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(ownerAuthToken)
+            .parseJson.convertTo[WorkspaceResponse].workspace.googleProject
+
           val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
           val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
 
@@ -193,7 +198,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           // check that the bq dataset has been created
           val workspaceId = resources.head.getMetadata.getWorkspaceId
-          val dataset = getDataset(generateReferenceName(workspaceId), projectName, ownerAuthToken)
+          val dataset = getDataset(generateReferenceName(workspaceId), googleProject.value, ownerAuthToken)
           dataset should not be empty
         }
       }
