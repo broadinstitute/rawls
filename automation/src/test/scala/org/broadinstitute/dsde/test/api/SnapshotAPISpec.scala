@@ -220,6 +220,10 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           val workspaceName = s"${UUID.randomUUID().toString}-delete-bq-dataset"
           Rawls.workspaces.create(projectName, workspaceName)
 
+          // we need the actual Google project for this workspace, not just its namespace
+          val googleProject = Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(ownerAuthToken)
+            .parseJson.convertTo[WorkspaceResponse].workspace.googleProject
+
           val snapshotName = "deleteWorkspaceDeleteBQDataset"
           // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
           createSnapshotReference(projectName, workspaceName, dataRepoSnapshotId, snapshotName)(owner.makeAuthToken())
@@ -232,7 +236,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           // check that the bq dataset has been created
           val workspaceId = resources.head.getMetadata.getWorkspaceId
           val datasetName = generateReferenceName(workspaceId)
-          val datasetAfterCreation = getDataset(datasetName, projectName, ownerAuthToken)
+          val datasetAfterCreation = getDataset(datasetName, googleProject.value, ownerAuthToken)
           datasetAfterCreation should not be empty
 
           // delete workspace
@@ -240,7 +244,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
           // check that the bq dataset has been deleted
           eventually {
-            val datasetAfterDeletion = getDataset(datasetName, projectName, ownerAuthToken)
+            val datasetAfterDeletion = getDataset(datasetName, googleProject.value, ownerAuthToken)
             datasetAfterDeletion should be(None)
           }
         }
