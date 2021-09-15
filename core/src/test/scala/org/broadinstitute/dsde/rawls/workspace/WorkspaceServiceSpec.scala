@@ -1282,6 +1282,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     )
   }
 
+  // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
   it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
     (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
       // Update the BillingProject with the CreationStatus under test
@@ -1524,6 +1525,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
+  // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
   it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
     (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
       // Update the BillingProject with the CreationStatus under test
