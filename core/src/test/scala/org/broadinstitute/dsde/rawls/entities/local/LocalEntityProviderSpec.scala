@@ -238,6 +238,45 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       }
     }
 
+    "consider cache out of date if cache record exists but is old" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+      val wsLastModifiedTimestamp = Timestamp.from(Instant.ofEpochMilli(localEntityProviderTestData.workspace.lastModified.getMillis-10000))
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      // update cache timestamp
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, wsLastModifiedTimestamp))
+
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be out of date") {
+        assert(!isCurrent)
+      }
+    }
+
+    "consider cache to be current if cache record exists and is equal to workspace last-modified" in withLocalEntityProviderTestDatabase { da =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      val existingWorkspace = runAndWait(workspaceQuery.findById(wsid.toString))
+      existingWorkspace should not be empty
+      val wsLastModifiedTimestamp = new Timestamp(existingWorkspace.get.lastModified.getMillis)
+
+      // update cache timestamp
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, wsLastModifiedTimestamp))
+
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be current") {
+        assert(isCurrent)
+      }
+    }
+
     "insert cache record when updating if non-existent" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
