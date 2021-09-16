@@ -6,6 +6,7 @@ import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.trace
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor._
@@ -106,7 +107,8 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
           //We will set the cacheLastUpdated timestamp to the lowest possible value in MySQL.
           // This is a "magic" value that allows the monitor to skip this problematic workspace
           // so it does not get caught in a loop. These workspaces will require manual intervention.
-          dataAccess.entityCacheQuery.updateCacheLastUpdated(workspaceId, MIN_CACHE_TIME)
+          val errMsg = s"${t.getMessage} ${ExceptionUtils.getStackTrace(t)}"
+          dataAccess.entityCacheQuery.updateCacheLastUpdated(workspaceId, MIN_CACHE_TIME, Some(errMsg))
         }
     }
   }
