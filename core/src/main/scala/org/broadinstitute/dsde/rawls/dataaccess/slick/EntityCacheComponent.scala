@@ -34,7 +34,7 @@ trait EntityCacheComponent {
       // C. lastModified is before @param cooldownBound, meaning the workspace isn't likely actively being updated
       // D. Ordered by lastModified from oldest to newest. Meaning, return the workspace that was modified the longest ago
 
-      val baseQuery = sql"""SELECT * FROM (
+      val baseQuery = sql"""SELECT id, last_modified, entity_cache_last_updated FROM (
               |  SELECT w.id, w.last_modified, c.entity_cache_last_updated
               |    FROM WORKSPACE w LEFT OUTER JOIN WORKSPACE_ENTITY_CACHE c
               |    on w.id = c.workspace_id
