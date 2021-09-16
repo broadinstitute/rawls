@@ -35,15 +35,15 @@ trait EntityCacheComponent {
       // D. Ordered by lastModified from oldest to newest. Meaning, return the workspace that was modified the longest ago
 
       val baseQuery = sql"""SELECT * FROM (
-      |    SELECT w.id, w.last_modified, c.entity_cache_last_updated
-      |      FROM WORKSPACE w LEFT OUTER JOIN WORKSPACE_ENTITY_CACHE c
-      |      on w.id = c.workspace_id
-      |      where w.last_modified < $maxModifiedTime
-      |    ) workspacesAndCacheTimes
-      |    WHERE entity_cache_last_updated IS NULL or ($minCacheTime < entity_cache_last_updated AND entity_cache_last_updated < last_modified)
-        |  ORDER BY last_modified asc
-        |  LIMIT 1;
-        |""".stripMargin.as[(UUID, Timestamp, Option[Timestamp])]
+              |  SELECT w.id, w.last_modified, c.entity_cache_last_updated
+              |    FROM WORKSPACE w LEFT OUTER JOIN WORKSPACE_ENTITY_CACHE c
+              |    on w.id = c.workspace_id
+              |    where w.last_modified < $maxModifiedTime) workspacesAndCacheTimes
+              |  WHERE entity_cache_last_updated IS NULL
+              |    or ($minCacheTime < entity_cache_last_updated AND entity_cache_last_updated < last_modified)
+              |  ORDER BY last_modified asc
+              |  LIMIT 1;
+              |""".stripMargin.as[(UUID, Timestamp, Option[Timestamp])]
 
       uniqueResult[(UUID, Timestamp, Option[Timestamp])](baseQuery)
     }
