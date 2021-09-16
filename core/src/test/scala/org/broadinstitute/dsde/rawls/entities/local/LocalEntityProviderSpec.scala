@@ -14,6 +14,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 
 class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDriverComponent with MethodConfigTestSupport {
@@ -151,7 +152,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
@@ -170,7 +171,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
@@ -189,7 +190,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false)))
 
@@ -208,7 +209,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, false)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true)))
 
@@ -220,6 +221,81 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       attrNamesCache should not be Map.empty
 
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
+    }
+
+    "consider cache out of date if no cache record" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be out of date") {
+        assert(!isCurrent)
+      }
+    }
+
+    "insert cache record when updating if non-existent" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+      val expectedTimestamp = Timestamp.from(Instant.now())
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      // update cache timestamp
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, expectedTimestamp))
+
+      withClue("cache record should exist after updating") {
+        assert(runAndWait(workspaceFilter.exists.result))
+      }
+
+      val actualTimestamp = runAndWait(uniqueResult(workspaceFilter.map(_.entityCacheLastUpdated).result))
+
+      withClue("actual timestamp should match expected timestamp after updating") {
+        actualTimestamp should contain(expectedTimestamp)
+      }
+    }
+
+    "update cache record when updating if existent"  in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+      val expectedTimestamp = Timestamp.from(Instant.now())
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      // update cache timestamp - should cause insert
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, expectedTimestamp))
+
+      withClue("cache record should exist after updating") {
+        assert(runAndWait(workspaceFilter.exists.result))
+      }
+
+      val actualTimestamp = runAndWait(uniqueResult(workspaceFilter.map(_.entityCacheLastUpdated).result))
+
+      withClue("actual timestamp should match expected timestamp after updating") {
+        actualTimestamp should contain(expectedTimestamp)
+      }
+
+      val secondTimestamp = Timestamp.from(Instant.now())
+      // update cache timestamp - should cause update
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, secondTimestamp))
+      val actualUpdatedTimestamp = runAndWait(uniqueResult(workspaceFilter.map(_.entityCacheLastUpdated).result))
+
+      withClue("second update timestamp should be different than first update timestamp") {
+        actualTimestamp should not be empty
+        actualUpdatedTimestamp should not be empty
+        actualUpdatedTimestamp.get.getNanos should be > (actualTimestamp.get.getNanos)
+      }
+
+      withClue("actual timestamp should match expected timestamp after second update") {
+        actualUpdatedTimestamp should contain(secondTimestamp)
+      }
     }
 
   }

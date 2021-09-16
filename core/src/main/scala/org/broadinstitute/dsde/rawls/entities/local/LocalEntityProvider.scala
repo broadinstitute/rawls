@@ -41,7 +41,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       rootSpan.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspace.toWorkspaceName.toString))
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("isEntityCacheCurrent", rootSpan) { outerSpan =>
-          dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
+          dataAccess.entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
             //If the cache is current, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
             if(isEntityCacheCurrent && useCache && cacheEnabled) {
               traceDBIOWithParent("retrieve-cached-results", outerSpan) { _ =>
