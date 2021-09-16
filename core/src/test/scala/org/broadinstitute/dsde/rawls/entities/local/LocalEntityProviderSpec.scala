@@ -263,14 +263,16 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
     "update cache record when updating if existent"  in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
-      val expectedTimestamp = Timestamp.from(Instant.now())
+
+      val firstTimestamp = Timestamp.valueOf("2000-01-01 12:34:56")
+      val secondTimestamp = Timestamp.valueOf("2020-09-09 01:23:45")
 
       withClue("cache record should not exist before updating") {
         assert(!runAndWait(workspaceFilter.exists.result))
       }
 
       // update cache timestamp - should cause insert
-      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, expectedTimestamp))
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, firstTimestamp))
 
       withClue("cache record should exist after updating") {
         assert(runAndWait(workspaceFilter.exists.result))
@@ -279,19 +281,12 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val actualTimestamp = runAndWait(uniqueResult(workspaceFilter.map(_.entityCacheLastUpdated).result))
 
       withClue("actual timestamp should match expected timestamp after updating") {
-        actualTimestamp should contain(expectedTimestamp)
+        actualTimestamp should contain(firstTimestamp)
       }
 
-      val secondTimestamp = Timestamp.from(Instant.now())
       // update cache timestamp - should cause update
       runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, secondTimestamp))
       val actualUpdatedTimestamp = runAndWait(uniqueResult(workspaceFilter.map(_.entityCacheLastUpdated).result))
-
-      withClue("second update timestamp should be different than first update timestamp") {
-        actualTimestamp should not be empty
-        actualUpdatedTimestamp should not be empty
-        actualUpdatedTimestamp.get.getNanos should be > (actualTimestamp.get.getNanos)
-      }
 
       withClue("actual timestamp should match expected timestamp after second update") {
         actualUpdatedTimestamp should contain(secondTimestamp)
