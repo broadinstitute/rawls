@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParen
 import slick.dbio.DBIO
 
 import java.sql.Timestamp
-import java.time.Instant
 import java.util.{Calendar, UUID}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -57,7 +56,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
   val standardPollInterval: FiniteDuration
   val workspaceCooldown: FiniteDuration
 
-  def sweep() = {
+  def sweep(): Future[EntityStatisticsCacheMessage] = {
     trace("EntityStatisticsCacheMonitor.sweep") { rootSpan =>
       dataSource.inTransaction { dataAccess =>
         // calculate now - workspaceCooldown as the upper bound for workspace last_modified
@@ -68,7 +67,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
             rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId.toString))
             traceDBIOWithParent("updateStatisticsCache", rootSpan) { _ =>
               DBIO.from(updateStatisticsCache(workspaceId, lastModified).map { _ =>
-                val outDated = cacheLastUpdated.getOrElse(Timestamp.from(Instant.now())).getTime - lastModified.getTime
+                val outDated = lastModified.getTime - cacheLastUpdated.getOrElse(MIN_CACHE_TIME).getTime
                 logger.info(s"Updated entity cache for workspace $workspaceId. Cache was ${outDated}ms out of date.")
                 Sweep
               })

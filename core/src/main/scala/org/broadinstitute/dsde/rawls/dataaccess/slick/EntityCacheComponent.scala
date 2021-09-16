@@ -39,7 +39,7 @@ trait EntityCacheComponent {
       |      FROM WORKSPACE w LEFT OUTER JOIN WORKSPACE_ENTITY_CACHE c
       |      on w.id = c.workspace_id
       |      where w.last_modified < $maxModifiedTime
-      |    ) outerJoin
+      |    ) workspacesAndCacheTimes
       |    WHERE entity_cache_last_updated IS NULL or ($minCacheTime < entity_cache_last_updated AND entity_cache_last_updated < last_modified)
         |  ORDER BY last_modified asc
         |  LIMIT 1;
@@ -50,9 +50,7 @@ trait EntityCacheComponent {
 
     // insert if not exist
     def updateCacheLastUpdated(workspaceId: UUID, timestamp: Timestamp, errorMessage: Option[String] = None): ReadWriteAction[Int] = {
-      val dbResult = entityCacheQuery.insertOrUpdate(EntityCacheRecord(workspaceId, timestamp, errorMessage))
-      logger.info(s"******* updated cache record for $workspaceId to $timestamp")
-      dbResult
+      entityCacheQuery.insertOrUpdate(EntityCacheRecord(workspaceId, timestamp, errorMessage))
     }
 
     def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
