@@ -26,7 +26,6 @@ case class WorkspaceRecord(
                             workflowCollection: Option[String],
                             createdDate: Timestamp,
                             lastModified: Timestamp,
-                            entityCacheLastUpdated: Timestamp,
                             createdBy: String,
                             isLocked: Boolean,
                             recordVersion: Long,
@@ -58,7 +57,6 @@ trait WorkspaceComponent {
     def workflowCollection = column[Option[String]]("workflow_collection", O.Length(255))
     def createdDate = column[Timestamp]("created_date", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def lastModified = column[Timestamp]("last_modified", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
-    def entityCacheLastUpdated = column[Timestamp]("entity_cache_last_updated", O.SqlType("TIMESTAMP(6)"))
     def createdBy = column[String]("created_by", O.Length(254))
     def isLocked = column[Boolean]("is_locked")
     def recordVersion = column[Long]("record_version")
@@ -70,7 +68,7 @@ trait WorkspaceComponent {
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, entityCacheLastUpdated, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnGoogleProject, billingAccountErrorMessage) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnGoogleProject, billingAccountErrorMessage) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   /** raw/optimized SQL queries for working with workspace attributes
@@ -466,7 +464,7 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.currentBillingAccountOnGoogleProject.map(_.value), workspace.billingAccountErrorMessage)
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.currentBillingAccountOnGoogleProject.map(_.value), workspace.billingAccountErrorMessage)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord): Workspace = {

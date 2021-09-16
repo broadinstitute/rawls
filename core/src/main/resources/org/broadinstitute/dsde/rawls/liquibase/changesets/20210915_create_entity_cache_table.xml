@@ -9,7 +9,7 @@
                              referencedTableName="WORKSPACE" referencedColumnNames="id"
                              foreignKeyName="FK_WEC_WORKSPACE" deleteCascade="true"/>
             </column>
-            <column name="entity_cache_last_updated" type="TIMESTAMP(6)" defaultValueDate="1970-01-01 00:00:02">
+            <column name="entity_cache_last_updated" type="TIMESTAMP(6)" defaultValueDate="1970-01-01 00:00:01">
                 <constraints nullable="false"/>
             </column>
             <column name="error_message" type="TEXT">
@@ -29,6 +29,8 @@
         </rollback>
     </changeSet>
 
-    <!-- TODO: drop entity_cache_last_updated from WORKSPACE -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="drop_WORKSPACE_entity_cache_last_updated">
+        <dropColumn tableName="WORKSPACE" columnName="entity_cache_last_updated"/>
+    </changeSet>
 
 </databaseChangeLog>
