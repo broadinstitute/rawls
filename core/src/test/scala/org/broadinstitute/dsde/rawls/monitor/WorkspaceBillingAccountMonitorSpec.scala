@@ -54,12 +54,17 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, Option(defaultBillingAccountName), None, googleProjectNumber = Option(defaultGoogleProjectNumber))
       val v1Workspace = Workspace(billingProject.projectName.value, "v1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, GoogleProjectId(billingProject.projectName.value), billingProject.googleProjectNumber, billingProject.billingAccount, None)
       val v2Workspace = Workspace(billingProject.projectName.value, "v2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("differentId"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None)
+      val workspaceWithoutBillingAccount = v2Workspace.copy(
+        name = UUID.randomUUID().toString,
+        currentBillingAccountOnGoogleProject = None
+      )
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(v1Workspace))
       runAndWait(workspaceQuery.createOrUpdate(v2Workspace))
+      runAndWait(workspaceQuery.createOrUpdate(workspaceWithoutBillingAccount))
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
 
       val actor = createWorkspaceBillingAccountMonitor(dataSource)
