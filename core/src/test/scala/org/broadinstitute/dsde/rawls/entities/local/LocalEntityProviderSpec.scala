@@ -302,13 +302,13 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       // save a cache entry that includes a failure
       runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, EntityStatisticsCacheMonitor.MIN_CACHE_TIME, Some(expectedErrorMsg)))
 
-      val actualMessage = runAndWait(uniqueResult(workspaceFilter.map(_.errorMessage)))
+      val actualMessage = runAndWait(uniqueResult[Option[String]](workspaceFilter.map(_.errorMessage))).flatten
       actualMessage should contain(expectedErrorMsg)
 
       // save a cache entry that is successful
       runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, Timestamp.from(Instant.now())))
 
-      val secondMessage = runAndWait(uniqueResult(workspaceFilter.map(_.errorMessage)))
+      val secondMessage = runAndWait(uniqueResult[Option[String]](workspaceFilter.map(_.errorMessage))).flatten
       secondMessage shouldBe empty
     }
 
