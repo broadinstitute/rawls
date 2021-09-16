@@ -1,13 +1,11 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor._
-import akka.pattern._
-import cats.effect.{ContextShift, IO}
+import akka.pattern.pipe
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.trace
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.apache.commons.lang3.exception.ExceptionUtils
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor._
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
@@ -15,8 +13,8 @@ import slick.dbio.DBIO
 
 import java.sql.Timestamp
 import java.util.{Calendar, UUID}
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 
 object EntityStatisticsCacheMonitor {
@@ -34,7 +32,7 @@ object EntityStatisticsCacheMonitor {
 }
 
 class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val timeoutPerWorkspace: Duration, val standardPollInterval: FiniteDuration, val workspaceCooldown: FiniteDuration)(implicit val executionContext: ExecutionContext) extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
-  import context._
+  import context.setReceiveTimeout
 
   setReceiveTimeout(timeoutPerWorkspace)
 
