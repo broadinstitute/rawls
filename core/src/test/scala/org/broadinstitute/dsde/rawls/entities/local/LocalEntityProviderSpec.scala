@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor
 
 import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext
@@ -260,7 +261,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       }
     }
 
-    "update cache record when updating if existent"  in withLocalEntityProviderTestDatabase { _ =>
+    "update cache record when updating if existent" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
 
@@ -291,6 +292,24 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       withClue("actual timestamp should match expected timestamp after second update") {
         actualUpdatedTimestamp should contain(secondTimestamp)
       }
+    }
+
+    "nullify error message if cache update succeeds after previous failure" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+      val expectedErrorMsg = "intentional error message"
+
+      // save a cache entry that includes a failure
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, EntityStatisticsCacheMonitor.MIN_CACHE_TIME, Some(expectedErrorMsg)))
+
+      val actualMessage = runAndWait(workspaceFilter.map(_.errorMessage).result)
+      actualMessage should contain(expectedErrorMsg)
+
+      // save a cache entry that is successful
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, Timestamp.from(Instant.now())))
+
+      val secondMessage = runAndWait(workspaceFilter.map(_.errorMessage).result)
+      secondMessage shouldBe empty
     }
 
   }
