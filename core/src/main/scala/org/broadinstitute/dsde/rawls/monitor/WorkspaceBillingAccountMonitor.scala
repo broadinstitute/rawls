@@ -35,6 +35,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       workspacesToUpdate <- dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.listWorkspaceGoogleProjectsToUpdateWithNewBillingAccount()
       }
+      _ = logger.info(s"Attempting to update workspaces: ${workspacesToUpdate.toList}")
       _ <- workspacesToUpdate.toList.traverse {
         case (googleProjectId, newBillingAccount) => IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount)))
       }.unsafeToFuture()
@@ -60,6 +61,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
           }
       }
       dbResult <- dataSource.inTransaction( { dataAccess =>
+        logger.info(s"Updating billing account on ${googleProjectId} to ${newBillingAccount.get}")
         dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
       })
     } yield dbResult

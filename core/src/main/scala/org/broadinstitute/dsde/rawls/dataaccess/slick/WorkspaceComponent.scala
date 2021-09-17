@@ -315,8 +315,8 @@ trait WorkspaceComponent {
         billingProject <- rawlsBillingProjectQuery if !billingProject.invalidBillingAccount
         workspace <- workspaceQuery if workspace.namespace === billingProject.projectName &&
           workspace.billingAccountErrorMessage.isEmpty &&
-          !(workspace.currentBillingAccountOnGoogleProject === billingProject.billingAccount ||
-            (workspace.currentBillingAccountOnGoogleProject.isEmpty && billingProject.billingAccount.isEmpty))
+          (workspace.currentBillingAccountOnGoogleProject =!= billingProject.billingAccount ||
+            workspace.currentBillingAccountOnGoogleProject.isEmpty =!= billingProject.billingAccount.isEmpty)
       } yield (workspace.googleProjectId, billingProject.billingAccount)
       query.result.map(results => results.map {
         case (googleProjectId, newBillingAccount) =>
