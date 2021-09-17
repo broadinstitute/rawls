@@ -181,6 +181,20 @@ trait AttributeComponent {
   }
 
   def determineShard(workspaceId: UUID): ShardId = {
+    /* David An: if we wanted to roll out sharding incrementally, workspace-by-workspace,
+        we could modify this function. It would need to inspect, or look up, some flag on the workspace
+        that indicates whether or not the workspace is sharded.
+
+        Sharded workspaces would use a shard identifier such as "a_07", while unsharded workspaces
+        would use a shard identifier of "unsharded". This would translate into referencing tables named
+        ENTITY_ATTRIBUTE_a_07 or ENTITY_ATTRIBUTE_unsharded, respectively.
+
+        In such a case, we'd also need to update the liquibase changeset, which currently renames ENTITY_ATTRIBUTE to
+        ENTITY_ATTRIBUTE_archive; we'd want to rename it to ENTITY_ATTRIBUTE_unsharded. We'd also need to update
+        liquibase to not copy all attribute rows into the shards; we'd only want to copy rows for any workspaces
+        that should use sharding.
+     */
+
     // see the liquibase changeset "20210615_sharded_entity_tables.xml" for expected shard identifier values
     val idString = workspaceId.toString.take(2).toCharArray
     val part1 = idString(0) // first part of shardid just copies the first char of workspaceid
