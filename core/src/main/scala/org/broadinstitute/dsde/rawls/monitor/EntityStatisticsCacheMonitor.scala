@@ -83,6 +83,9 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
 
   def updateStatisticsCache(workspaceId: UUID, timestamp: Timestamp): Future[Unit] = {
     val updateFuture = dataSource.inTransaction { dataAccess =>
+      // TODO: beware contention on the approach of delete-all and batch-insert all below
+      // if we see contention we could move to encoding the entire metadata object as json
+      // and storing in a single column on WORKSPACE_ENTITY_CACHE
       for {
         //update entity statistics
         entityTypesWithCounts <- dataAccess.entityQuery.getEntityTypesWithCounts(workspaceId)
