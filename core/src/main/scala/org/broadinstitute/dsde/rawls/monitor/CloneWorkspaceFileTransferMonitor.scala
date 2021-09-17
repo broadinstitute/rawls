@@ -62,6 +62,7 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, va
       }
       _ <- dataSource.inTransaction { dataAccess =>
         dataAccess.cloneWorkspaceFileTransferQuery.delete(pendingCloneWorkspaceFileTransfer.destWorkspaceId)
+        dataAccess.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(pendingCloneWorkspaceFileTransfer.destWorkspaceId, true)
       }
     } yield copiedObjects
   }

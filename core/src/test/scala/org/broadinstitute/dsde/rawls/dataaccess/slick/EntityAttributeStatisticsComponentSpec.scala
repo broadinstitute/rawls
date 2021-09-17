@@ -28,7 +28,8 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
       GoogleProjectId("test_google_project"),
       None,
       None,
-      None
+      None,
+      true
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
@@ -69,7 +70,8 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
       GoogleProjectId("test_google_project"),
       None,
       None,
-      None
+      None,
+      true
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))

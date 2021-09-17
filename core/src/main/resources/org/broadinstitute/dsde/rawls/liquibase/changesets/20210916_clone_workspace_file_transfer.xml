@@ -19,4 +19,10 @@
         <addForeignKeyConstraint baseColumnNames="DEST_WORKSPACE_ID" baseTableName="CLONE_WORKSPACE_FILE_TRANSFER" constraintName="FK_CWBT_DEST_WORKSPACE" deferrable="false" initiallyDeferred="false" onDelete="CASCADE" onUpdate="NO ACTION" referencedColumnNames="id" referencedTableName="WORKSPACE"/>
         <addForeignKeyConstraint baseColumnNames="SOURCE_WORKSPACE_ID" baseTableName="CLONE_WORKSPACE_FILE_TRANSFER" constraintName="FK_CWBT_SOURCE_WORKSPACE" deferrable="false" initiallyDeferred="false" onDelete="CASCADE" onUpdate="NO ACTION" referencedColumnNames="id" referencedTableName="WORKSPACE"/>
     </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="add_completed_clone_file_transfer_to_workspace">
+        <addColumn tableName="WORKSPACE">
+            <column name="COMPLETED_CLONE_WORKSPACE_FILE_TRANSFER" type="BIT(1)" defaultValue="1"/>
+        </addColumn>
+    </changeSet>
 </databaseChangeLog>
