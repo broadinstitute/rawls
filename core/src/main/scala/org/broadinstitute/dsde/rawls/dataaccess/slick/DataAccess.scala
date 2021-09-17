@@ -4,6 +4,7 @@ import javax.naming.NameNotFoundException
 import javax.naming.directory.DirContext
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
 import slick.jdbc.JdbcProfile
+import slick.jdbc.meta.MTable
 
 import java.lang.Integer.toHexString
 import scala.util.Try
@@ -38,8 +39,8 @@ trait DataAccess
     // important to keep the right order for referential integrity !
     // if table X has a Foreign Key to table Y, delete table X first
 
-    // TODO: davidan could we instead SET FOREIGN_KEY_CHECKS = 0; truncate tables ...; SET FOREIGN_KEY_CHECKS = 1; ?
-    // do we have access to INFORMATION_SCHEMA.TABLES, and if so can we avoid listing all tables here? Can we use MTables?
+    // davidan: instead of specific ordering, could we instead SET FOREIGN_KEY_CHECKS = 0; truncate tables ...; SET FOREIGN_KEY_CHECKS = 1; ?
+    // instead of hardcoding the shards, could we use INFORMATION_SCHEMA.TABLES or MTable.getTables?
     val shardDeletes = (0 to 15).map(toHexString) flatMap { firstPart =>
       List("07", "8f") map { secondPart =>
         val shardSuffix = firstPart + "_" + secondPart
