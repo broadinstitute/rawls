@@ -180,20 +180,17 @@ trait AttributeComponent {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
-  // TODO: davidan reorganize these, add tests
   def determineShard(workspaceId: UUID): ShardId = {
     // see the liquibase changeset "20210615_sharded_entity_tables.xml" for expected shard identifier values
-    val idString = workspaceId.toString
-    val part1 = idString.take(1); // first part of shardid just copies the first char of workspaceid
-    val secondChar = idString.take(2).tail.head // second character of workspaceId
+    val idString = workspaceId.toString.take(2).toCharArray
+    val part1 = idString(0) // first part of shardid just copies the first char of workspaceid
+    val secondChar = idString(1) // second character of workspaceId
     val part2 = if ('0' <= secondChar && secondChar <= '7') "07" else "8f"
-    val shardId = part1 + "_" + part2
-
+    val shardId = s"${part1}_$part2"
     shardId
   }
   class EntityAttributeShardQuery(shard: ShardId) extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(shard)(_), EntityAttributeRecord)
   def entityAttributeShardQuery(workspaceId: UUID): EntityAttributeShardQuery = {
-    // TODO: davidan is it ok to create a new EntityAttributeShardQuery each time? Should we pre-create one for each shard and reuse it?
     new EntityAttributeShardQuery(determineShard(workspaceId))
   }
   def entityAttributeShardQuery(workspace: Workspace): EntityAttributeShardQuery = {

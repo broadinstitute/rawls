@@ -873,7 +873,6 @@ trait EntityComponent {
           val attributes = for {
             (entityId, entity) <- entityIdAndEntity
             (attributeName, attr) <- entity.attributes
-            // TODO: davidan confirm that marshalAttribute is table-agnostic, so it doesn't matter what we pass to entityAttributeShardQuery
             rec <- entityAttributeShardQuery(destWorkspaceContext).marshalAttribute(entityId, attributeName, attr, idsByRef)
           } yield rec
 
@@ -1010,7 +1009,6 @@ trait EntityComponent {
         case EntityAndAttributesRawSqlQuery.EntityAndAttributesResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
       }
 
-      // TODO: davidan confirm that unmarshalAttributes is table-agnostic, so it doesn't matter what we pass to entityAttributeShardQuery
       val attributesByEntityId = entityAttributeShardQuery(UUID.randomUUID()).unmarshalAttributes(entitiesWithAttributes)
 
       allEntityRecords.map { entityRec =>
