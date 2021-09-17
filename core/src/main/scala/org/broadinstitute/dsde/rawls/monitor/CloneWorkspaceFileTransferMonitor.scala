@@ -48,7 +48,7 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, va
     for {
       objectsToCopy <- gcsDAO.listObjectsWithPrefix(pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName, pendingCloneWorkspaceFileTransfer.copyFilesWithPrefix, Option(pendingCloneWorkspaceFileTransfer.destWorkspaceGoogleProjectId)).recoverWith {
         case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) => {
-          logger.warn(s"403 received when listing objects in ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} before copying to ${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}: ${e.errorReport.message}")
+          logger.warn(s"403 received when listing objects in ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} before copying to ${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}: $e")
           Future.failed(e)
         }
       }
@@ -60,7 +60,7 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, va
           }
         }
       }
-      _ = logger.info(s"successfully copied files with prefix ${pendingCloneWorkspaceFileTransfer.copyFilesWithPrefix} from ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} to [${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}]")
+      _ = logger.info(s"successfully copied files with prefix ${pendingCloneWorkspaceFileTransfer.copyFilesWithPrefix} from ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} to ${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}")
       _ <- markTransferAsComplete(pendingCloneWorkspaceFileTransfer)
     } yield copiedObjects
   }
