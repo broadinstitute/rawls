@@ -108,7 +108,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   def dbId(ent: Entity): Long = runAndWait(entityQuery.getEntityRecords(testData.workspace.workspaceIdAsUUID, Set(ent.toReference))).head.id
-  def dbName(id: Long): String = runAndWait(entityQuery.getEntities(Seq(id))).head._2.name
+  def dbName(id: Long): String = runAndWait(entityQuery.getEntities(testData.workspace.workspaceIdAsUUID, Seq(id))).head._2.name
 
   def entityOfSize(size: Long) = {
     val json = s"""[{"name":"${"0" * (size - 56).toInt}","entityType":"participant","operations":[]}]""" //template already includes 56 bytes, subtract that from repeated string

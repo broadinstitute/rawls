@@ -219,9 +219,6 @@ trait EntityComponent {
       }
 
       // the where clause for this query is filled in specific to the use case
-      // TODO: davidan update all the raw sql to reflect shards
-      val baseEntityAndAttributeAllShardsViewSql: String = baseEntityAndAttributeSql("ALL_SHARDS")
-
       def baseEntityAndAttributeSql(workspace: Workspace): String = baseEntityAndAttributeSql(workspace.workspaceIdAsUUID)
 
       def baseEntityAndAttributeSql(workspaceId: UUID): String = baseEntityAndAttributeSql(determineShard(workspaceId))
@@ -343,11 +340,11 @@ trait EntityComponent {
         sql"""#${baseEntityAndAttributeSql(workspaceContext)} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
 
-      def actionForIds(entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def actionForIds(workspaceId: UUID, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
         if( entityIds.isEmpty ) {
           DBIO.successful(Seq.empty[EntityAndAttributesResult])
         } else {
-          val baseSelect = sql"""#$baseEntityAndAttributeAllShardsViewSql where e.id in ("""
+          val baseSelect = sql"""#${baseEntityAndAttributeSql(workspaceId)} where e.id in ("""
           val entityIdSql = reduceSqlActionsWithDelim(entityIds.map { id => sql"$id" }.toSeq)
           concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
         }
@@ -436,8 +433,8 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map unmarshalEntities map(_.headOption)
     }
 
-    def getEntities(entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
-      EntityAndAttributesRawSqlQuery.actionForIds(entityIds.toSet) map unmarshalEntitiesWithIds
+    def getEntities(workspaceId: UUID, entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
+      EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, entityIds.toSet) map unmarshalEntitiesWithIds
     }
 
     def getEntityRecords(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
@@ -637,7 +634,7 @@ trait EntityComponent {
 
           for {
             _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, deletes)
-            updatedEntities <- entityQuery.getEntities(Seq(entityRecord.id))
+            updatedEntities <- entityQuery.getEntities(workspaceContext.workspaceIdAsUUID, Seq(entityRecord.id))
             _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(entityRecs, updatedEntities.map(elem => elem._2))
           } yield {}
         }
