@@ -91,5 +91,5 @@
     <include file="changesets/20210609_change_workspace_attr_temp_owner_id.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20210510_add_billing_project_export_columns.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20210915_create_entity_cache_table.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20210916_clone_workspace_file_transfer" relativeToChangelogFile="true"/>
+    <include file="changesets/20210916_clone_workspace_file_transfer.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
