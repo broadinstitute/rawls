@@ -796,7 +796,7 @@ trait EntityComponent {
 
       startingEntityRecsAction.result.flatMap { startingEntityRecs =>
         val refsToId = startingEntityRecs.map(rec => EntityPath(Seq(rec.toReference)) -> rec.id).toMap
-        recursiveGetEntityReferences(Down, startingEntityRecs.map(_.id).toSet, refsToId)
+        recursiveGetEntityReferences(workspaceContext, Down, startingEntityRecs.map(_.id).toSet, refsToId)
       }
     }
 
@@ -811,7 +811,7 @@ trait EntityComponent {
     def getAllReferringEntities(context: Workspace, entities: Set[AttributeEntityReference]): ReadAction[Set[AttributeEntityReference]] = {
       getEntityRecords(context.workspaceIdAsUUID, entities) flatMap { entityRecs =>
         val refsToId = entityRecs.map(rec => EntityPath(Seq(rec.toReference)) -> rec.id).toMap
-        recursiveGetEntityReferences(Up, entityRecs.map(_.id).toSet, refsToId)
+        recursiveGetEntityReferences(context, Up, entityRecs.map(_.id).toSet, refsToId)
       } flatMap { refs =>
         val entityAction = EntityAndAttributesRawSqlQuery.activeActionForRefs(context, refs.flatMap(_.path).toSet) map unmarshalEntities
         entityAction map { _.toSet map { e: Entity => e.toReference } }
@@ -831,16 +831,15 @@ trait EntityComponent {
       *                       that if there is a cycle some of entityIds may be in the result anyway
       * @return the ids of all the entities referred to by entityIds
       */
-    private def recursiveGetEntityReferences(direction: RecursionDirection, entityIds: Set[Long], accumulatedPathsWithLastId: Map[EntityPath, Long]): ReadAction[Seq[EntityPath]] = {
-      // TODO: davidan can we avoid using the all-shards view here?
+    private def recursiveGetEntityReferences(workspace: Workspace, direction: RecursionDirection, entityIds: Set[Long], accumulatedPathsWithLastId: Map[EntityPath, Long]): ReadAction[Seq[EntityPath]] = {
       def oneLevelDown(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
-        val query = entityAttributeAllShardsViewQuery filter (_.ownerId inSetBind idBatch) join
+        val query = entityAttributeShardQuery(workspace) filter (_.ownerId inSetBind idBatch) join
           this on { (attr, ent) => attr.valueEntityRef === ent.id && ! attr.deleted } map { case (attr, entity) => (attr.ownerId, entity)}
         query.result.map(_.toSet)
       }
 
       def oneLevelUp(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
-        val query = entityAttributeAllShardsViewQuery filter (_.valueEntityRef inSetBind idBatch) join
+        val query = entityAttributeShardQuery(workspace) filter (_.valueEntityRef inSetBind idBatch) join
           this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map { case (attr, entity) => (attr.valueEntityRef.get, entity)}
         query.result.map(_.toSet)
       }
@@ -863,7 +862,7 @@ trait EntityComponent {
         if (untraversedIds.isEmpty) {
           DBIO.successful(accumulatedPathsWithLastId.keys.toSeq)
         } else {
-          recursiveGetEntityReferences(direction, untraversedIds, accumulatedPathsWithLastId ++ currentPaths)
+          recursiveGetEntityReferences(workspace, direction, untraversedIds, accumulatedPathsWithLastId ++ currentPaths)
         }
       }
     }

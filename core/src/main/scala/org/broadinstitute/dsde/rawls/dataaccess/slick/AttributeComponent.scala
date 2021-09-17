@@ -202,7 +202,6 @@ trait AttributeComponent {
   def entityAttributeShardQuery(entityRec: EntityRecord): EntityAttributeShardQuery = {
     entityAttributeShardQuery(entityRec.workspaceId)
   }
-  lazy val entityAttributeAllShardsViewQuery = new EntityAttributeShardQuery("ALL_SHARDS")
 
 
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
