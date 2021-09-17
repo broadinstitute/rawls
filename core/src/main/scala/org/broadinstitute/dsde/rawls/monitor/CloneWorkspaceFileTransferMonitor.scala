@@ -60,11 +60,18 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, va
           }
         }
       }
-      _ <- dataSource.inTransaction { dataAccess =>
-        dataAccess.cloneWorkspaceFileTransferQuery.delete(pendingCloneWorkspaceFileTransfer.destWorkspaceId)
-        dataAccess.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(pendingCloneWorkspaceFileTransfer.destWorkspaceId, true)
-      }
+      _ = logger.info(s"successfully copied files with prefix ${pendingCloneWorkspaceFileTransfer.copyFilesWithPrefix} from ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} to [${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}]")
+      _ <- markTransferAsComplete(pendingCloneWorkspaceFileTransfer)
     } yield copiedObjects
+  }
+
+  private def markTransferAsComplete(pendingCloneWorkspaceFileTransfer: PendingCloneWorkspaceFileTransfer): Future[Unit] = {
+    dataSource.inTransaction { dataAccess =>
+      for {
+        _ <- dataAccess.cloneWorkspaceFileTransferQuery.delete(pendingCloneWorkspaceFileTransfer.destWorkspaceId)
+        _ <- dataAccess.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(pendingCloneWorkspaceFileTransfer.destWorkspaceId, true)
+      } yield ()
+    }
   }
 }
 
