@@ -659,6 +659,8 @@ object WorkspaceDetails {
   }
 }
 
+case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID, sourceWorkspaceBucketName: String, destWorkspaceBucketName: String, copyFilesWithPrefix: String, destWorkspaceGoogleProjectId: GoogleProjectId)
+
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
 
 case class WorkspacePermissionsPair(workspaceId: String,

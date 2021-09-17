@@ -733,7 +733,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
             //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
             //we also don't want to block returning a response on this call because it's already a slow endpoint
             destWorkspaceRequest.copyFilesWithPrefix.foreach { prefix =>
-              copyBucketFiles(sourceWorkspaceContext, destWorkspaceContext, prefix)
+              dataSource.inTransaction { dataAccess =>
+                dataAccess.cloneWorkspaceFileTransferQuery.save(destWorkspaceContext.workspaceIdAsUUID, sourceWorkspaceContext.workspaceIdAsUUID, prefix)
+              }
             }
 
             destWorkspaceContext
@@ -2125,7 +2127,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"
       ))
     }
-    
+
   /**
     * Checks that Rawls has the right permissions on the BillingProject's Billing Account, and then passes along the
     * BillingProject to op to be used by code in this context

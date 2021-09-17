@@ -21,14 +21,15 @@ trait DataAccess
   with EntityTypeStatisticsComponent
   with EntityAttributeStatisticsComponent
   with EntityCacheComponent
-  with LocalEntityExpressionQueries {
+  with LocalEntityExpressionQueries
+  with CloneWorkspaceFileTransferComponent {
 
 
   this: DriverComponent =>
 
   val driver: JdbcProfile
   val batchSize: Int
-  
+
   import driver.api._
 
   def truncateAll: WriteAction[Int] = {
@@ -50,6 +51,7 @@ trait DataAccess
       TableQuery[EntityTypeStatisticsTable].delete andThen        // FK to workspace
       TableQuery[EntityAttributeStatisticsTable].delete andThen   // FK to workspace
       TableQuery[EntityCacheTable].delete andThen                 // FK to workspace
+      TableQuery[CloneWorkspaceFileTransferTable].delete andThen   // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
