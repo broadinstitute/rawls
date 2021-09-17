@@ -1,16 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="create_sharded_entity_tables">
+    <!-- create db functions and stored procedures that will help with the db migration -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_shard_functions_and_procedures">
         <sql stripComments="true" endDelimiter="/">
-
-            -- populate a "shards" table to hold our expected shard ids; we use this later for looping
-            CREATE TABLE shards(shardid char(4), PRIMARY KEY (shardid)); /
-            INSERT INTO shards(shardid) VALUES('0_07'), ('0_8f'), ('1_07'), ('1_8f'), ('2_07'), ('2_8f'), ('3_07'), ('3_8f'),
-                ('4_07'), ('4_8f'), ('5_07'), ('5_8f'), ('6_07'), ('6_8f'), ('7_07'), ('7_8f'),
-                ('8_07'), ('8_8f'), ('9_07'), ('9_8f'), ('a_07'), ('a_8f'), ('b_07'), ('b_8f'),
-                ('c_07'), ('c_8f'), ('d_07'), ('d_8f'), ('e_07'), ('e_8f'), ('f_07'), ('f_8f'); /
-
             -- function to produce a shard identifier from a workspace uuid string
             -- important: the values produced by this function must match exactly the values produced by Rawls scala code
             -- and the values inserted into 'shards' above
@@ -93,76 +86,184 @@
                 CALL createEntityAttributeShard(shardIdentifier);
                 CALL copyRowsToAttributeShard(shardIdentifier);
             END /
-
-            -- procedure to loop over all defined shards, create and populate each
-            DROP PROCEDURE IF EXISTS createAndPopulateAllShards //
-            CREATE PROCEDURE createAndPopulateAllShards()
-            BEGIN
-                DECLARE done INT DEFAULT FALSE;
-                DECLARE shardSuffix char(4);
-                DECLARE cursorElement CURSOR FOR SELECT shardid FROM shards;
-                DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-
-                OPEN cursorElement;
-
-                createLoop: LOOP
-                    FETCH NEXT FROM cursorElement INTO shardSuffix;
-                    IF done THEN
-                        LEAVE createLoop;
-                    END IF;
-                    call createAndPopulateShard(shardSuffix);
-                END LOOP createLoop;
-
-                CLOSE cursorElement;
-            END /
-
-            call createAndPopulateAllShards(); /
-
-            -- drop ea (renaming for now to ease with debugging)
-            RENAME TABLE ENTITY_ATTRIBUTE to ENTITY_ATTRIBUTE_archived; /
-
-            -- TODO: should we drop table 'shards'? Would that table be useful in the future?
-
         </sql>
         <rollback>
-            DROP PROCEDURE IF EXISTS createAndPopulateAllShards;
             DROP PROCEDURE IF EXISTS copyRowsToAttributeShard;
             DROP PROCEDURE IF EXISTS createEntityAttributeShard;
             DROP FUNCTION IF EXISTS shardIdentifier;
-            DROP TABLE IF EXISTS shards;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_0_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_0_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_1_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_1_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_2_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_2_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_3_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_3_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_4_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_4_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_5_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_5_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_6_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_6_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_7_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_7_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_8_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_8_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_9_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_9_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e_8f;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f_07;
-            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f_8f;
+        </rollback>
+    </changeSet>
 
+    <!-- START create and populate each shard in its own changeset. If we hit an error with an
+            individual shard, we can restart the liquibase migration at that point,
+            and don't have to rollback any progress up to that changeset. -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_0_07">
+        <sql>call createAndPopulateShard('0_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_0_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_0_8f">
+        <sql>call createAndPopulateShard('0_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_0_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_1_07">
+        <sql>call createAndPopulateShard('1_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_1_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_1_8f">
+        <sql>call createAndPopulateShard('1_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_1_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_2_07">
+        <sql>call createAndPopulateShard('2_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_2_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_2_8f">
+        <sql>call createAndPopulateShard('2_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_2_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_3_07">
+        <sql>call createAndPopulateShard('3_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_3_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_3_8f">
+        <sql>call createAndPopulateShard('3_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_3_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_4_07">
+        <sql>call createAndPopulateShard('4_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_4_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_4_8f">
+        <sql>call createAndPopulateShard('4_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_4_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_5_07">
+        <sql>call createAndPopulateShard('5_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_5_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_5_8f">
+        <sql>call createAndPopulateShard('5_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_5_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_6_07">
+        <sql>call createAndPopulateShard('6_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_6_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_6_8f">
+        <sql>call createAndPopulateShard('6_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_6_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_7_07">
+        <sql>call createAndPopulateShard('7_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_7_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_7_8f">
+        <sql>call createAndPopulateShard('7_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_7_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_8_07">
+        <sql>call createAndPopulateShard('8_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_8_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_8_8f">
+        <sql>call createAndPopulateShard('8_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_8_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_9_07">
+        <sql>call createAndPopulateShard('9_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_9_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_9_8f">
+        <sql>call createAndPopulateShard('9_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_9_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_a_07">
+        <sql>call createAndPopulateShard('a_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_a_8f">
+        <sql>call createAndPopulateShard('a_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_b_07">
+        <sql>call createAndPopulateShard('b_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_b_8f">
+        <sql>call createAndPopulateShard('b_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_c_07">
+        <sql>call createAndPopulateShard('c_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_c_8f">
+        <sql>call createAndPopulateShard('c_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_d_07">
+        <sql>call createAndPopulateShard('d_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_d_8f">
+        <sql>call createAndPopulateShard('d_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_e_07">
+        <sql>call createAndPopulateShard('e_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_e_8f">
+        <sql>call createAndPopulateShard('e_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e_8f;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_f_07">
+        <sql>call createAndPopulateShard('f_07');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f_07;</rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_and_populate_shard_f_8f">
+        <sql>call createAndPopulateShard('f_8f');</sql>
+        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f_8f;</rollback>
+    </changeSet>
+    <!-- END create and populate each shard in its own changeset. If we hit an error with an
+            individual shard, we can restart the liquibase migration at that point,
+            and don't have to rollback any progress up to that changeset. -->
+
+    <!-- finally, move the old ENTITY_ATTRIBUTE table out of the way -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="archive_entity_attribute_table">
+        <sql>RENAME TABLE ENTITY_ATTRIBUTE to ENTITY_ATTRIBUTE_archived;</sql>
+        <rollback>
             RENAME TABLE ENTITY_ATTRIBUTE_archived to ENTITY_ATTRIBUTE;
         </rollback>
     </changeSet>

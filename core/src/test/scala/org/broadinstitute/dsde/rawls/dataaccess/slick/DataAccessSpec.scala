@@ -27,7 +27,6 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
     case "GROUP" => None
     case "USER" => None
     case "MANAGED_GROUP" => None
-    case "shards" => None // populated by Liquibase, not written to by Rawls
     case "ENTITY_ATTRIBUTE_archived" => None // never read by Rawls, will be deleted
     case "DATABASECHANGELOG" => None        // managed by Liquibase
     case "DATABASECHANGELOGLOCK" => None    // managed by Liquibase
