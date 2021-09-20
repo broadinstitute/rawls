@@ -41,10 +41,11 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       rootSpan.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspace.toWorkspaceName.toString))
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("isEntityCacheCurrent", rootSpan) { outerSpan =>
-          dataAccess.workspaceQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
+          dataAccess.entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
             //If the cache is current, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
             if(isEntityCacheCurrent && useCache && cacheEnabled) {
               traceDBIOWithParent("retrieve-cached-results", outerSpan) { _ =>
+                logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
                 val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
                 val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
 
@@ -53,6 +54,17 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
             }
             //Else return the full query results
             else {
+              val missReason = if (!cacheEnabled)
+                "cache disabled at system level"
+              else if (!useCache)
+                "user request specified cache bypass"
+              else if (!isEntityCacheCurrent)
+                "cache is out of date"
+              else
+                "unknown reason - this should be unreachable"
+
+              logger.info(s"entity statistics cache: miss ($missReason) [${workspaceContext.workspaceIdAsUUID}]")
+
               traceDBIOWithParent("retrieve-uncached-results", outerSpan) { _ =>
                 dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
               }

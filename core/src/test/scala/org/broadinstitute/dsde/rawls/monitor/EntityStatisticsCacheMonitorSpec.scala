@@ -108,7 +108,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
     val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
     //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-    runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
+    runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
 
     //Load the current cache entries
     val originalCache = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
@@ -143,14 +143,14 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
     val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
     //Update the entityCacheLastUpdated field to be older than lastModified, so we can test our scenario of having a stale cache
-    runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
+    runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
 
     //Load the current entityMetadata (which should not use the cache)
     val originalResult = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
 
     //Make sure that the timestamps do not match
     val lastModifiedOriginal = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.lastModified
-    val entityCacheLastUpdatedOriginal = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated
+    val entityCacheLastUpdatedOriginal = runAndWait(entityCacheQuery.filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated
 
     assert(lastModifiedOriginal.after(entityCacheLastUpdatedOriginal))
 
@@ -168,7 +168,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
 
     //Make sure that the timestamps now match
     val lastModified = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.lastModified
-    val entityCacheLastUpdated = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated
+    val entityCacheLastUpdated = runAndWait(entityCacheQuery.filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated
 
     lastModified shouldBe entityCacheLastUpdated
   }
