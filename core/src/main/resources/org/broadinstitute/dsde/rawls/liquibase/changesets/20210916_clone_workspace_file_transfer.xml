@@ -3,21 +3,19 @@
 
     <changeSet logicalFilePath="dummy" author="mtalbott" id="create_CLONE_WORKSPACE_FILE_TRANSFER">
         <createTable tableName="CLONE_WORKSPACE_FILE_TRANSFER">
-            <column name="DEST_WORKSPACE_ID" type="BINARY(16)">
+            <column autoIncrement="true" name="id" type="BIGINT">
                 <constraints primaryKey="true"/>
             </column>
+            <column name="DEST_WORKSPACE_ID" type="BINARY(16)">
+                <constraints nullable="false" unique="true" referencedTableName="WORKSPACE" referencedColumnNames="id" foreignKeyName="FK_CWFT_DEST_WORKSPACE" deleteCascade="true"/>
+            </column>
             <column name="SOURCE_WORKSPACE_ID" type="BINARY(16)">
-                <constraints nullable="false"/>
+                <constraints nullable="false" referencedTableName="WORKSPACE" referencedColumnNames="id" foreignKeyName="FK_CWFT_SOURCE_WORKSPACE" deleteCascade="true"/>
             </column>
             <column name="COPY_FILES_WITH_PREFIX" type="VARCHAR(254)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
-    </changeSet>
-
-    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_CLONE_WORKSPACE_FILE_TRANSFER_FK">
-        <addForeignKeyConstraint baseColumnNames="DEST_WORKSPACE_ID" baseTableName="CLONE_WORKSPACE_FILE_TRANSFER" constraintName="FK_CWBT_DEST_WORKSPACE" deferrable="false" initiallyDeferred="false" onDelete="CASCADE" onUpdate="NO ACTION" referencedColumnNames="id" referencedTableName="WORKSPACE"/>
-        <addForeignKeyConstraint baseColumnNames="SOURCE_WORKSPACE_ID" baseTableName="CLONE_WORKSPACE_FILE_TRANSFER" constraintName="FK_CWBT_SOURCE_WORKSPACE" deferrable="false" initiallyDeferred="false" onDelete="CASCADE" onUpdate="NO ACTION" referencedColumnNames="id" referencedTableName="WORKSPACE"/>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mtalbott" id="add_completed_clone_file_transfer_to_workspace">

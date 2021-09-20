@@ -5,7 +5,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PendingCloneWorkspaceFileTransfer}
 
 
-case class CloneWorkspaceFileTransferRecord(sourceWorkspaceId: UUID, destWorkspaceId: UUID, copyFilesWithPrefix: String)
+case class CloneWorkspaceFileTransferRecord(id: Long, destWorkspaceId: UUID, sourceWorkspaceId: UUID, copyFilesWithPrefix: String)
 
 trait CloneWorkspaceFileTransferComponent {
   this: DriverComponent
@@ -14,18 +14,21 @@ trait CloneWorkspaceFileTransferComponent {
   import driver.api._
 
   class CloneWorkspaceFileTransferTable(tag: Tag) extends Table[CloneWorkspaceFileTransferRecord](tag, "CLONE_WORKSPACE_FILE_TRANSFER") {
-    def destWorkspaceId = column[UUID]("DEST_WORKSPACE_ID", O.PrimaryKey)
+    def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
+    def destWorkspaceId = column[UUID]("DEST_WORKSPACE_ID")
     def sourceWorkspaceId = column[UUID]("SOURCE_WORKSPACE_ID")
     def copyFilesWithPrefix = column[String]("COPY_FILES_WITH_PREFIX", O.Length(254))
 
-    def * = (destWorkspaceId, sourceWorkspaceId, copyFilesWithPrefix) <> (CloneWorkspaceFileTransferRecord.tupled, CloneWorkspaceFileTransferRecord.unapply)
+    def * = (id, destWorkspaceId, sourceWorkspaceId, copyFilesWithPrefix) <> (CloneWorkspaceFileTransferRecord.tupled, CloneWorkspaceFileTransferRecord.unapply)
   }
 
   object cloneWorkspaceFileTransferQuery extends TableQuery(new CloneWorkspaceFileTransferTable(_)) {
     def save(destWorkspaceId: UUID, sourceWorkspaceId: UUID, copyFilesWithPrefix: String): ReadWriteAction[Int] = {
       findByDestWorkspaceId(destWorkspaceId).result.flatMap { results =>
         if (results.isEmpty) {
-          cloneWorkspaceFileTransferQuery += CloneWorkspaceFileTransferRecord(destWorkspaceId, sourceWorkspaceId, copyFilesWithPrefix)
+          cloneWorkspaceFileTransferQuery.map {
+            t => (t.destWorkspaceId, t.sourceWorkspaceId, t.copyFilesWithPrefix)
+          } += (destWorkspaceId, sourceWorkspaceId, copyFilesWithPrefix)
         } else {
           DBIO.successful(0)
         }
