@@ -165,7 +165,7 @@ case class Workspace(
                       googleProjectNumber: Option[GoogleProjectNumber],
                       currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
                       billingAccountErrorMessage: Option[String],
-                      completedCloneWorkspaceFileTransfer: Boolean
+                      completedCloneWorkspaceFileTransfer: Option[DateTime]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -191,7 +191,7 @@ object Workspace {
     val randomString = java.util.UUID.randomUUID().toString
     val googleProjectId = GoogleProjectId(randomString)
     val googleProjectNumber = GoogleProjectNumber(randomString)
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, true)
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate))
   }
 }
 
@@ -582,7 +582,7 @@ case class WorkspaceDetails(namespace: String,
                             googleProjectNumber: Option[GoogleProjectNumber],
                             billingAccount: Option[RawlsBillingAccountName],
                             billingAccountErrorMessage: Option[String] = None,
-                            completedCloneWorkspaceFileTransfer: Boolean = true) {
+                            completedCloneWorkspaceFileTransfer: Option[DateTime]) {
   def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer)
 }
 

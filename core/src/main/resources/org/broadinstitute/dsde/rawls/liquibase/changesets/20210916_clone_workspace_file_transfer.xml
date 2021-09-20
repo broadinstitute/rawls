@@ -22,7 +22,12 @@
 
     <changeSet logicalFilePath="dummy" author="mtalbott" id="add_completed_clone_file_transfer_to_workspace">
         <addColumn tableName="WORKSPACE">
-            <column name="COMPLETED_CLONE_WORKSPACE_FILE_TRANSFER" type="BIT(1)" defaultValue="1"/>
+            <column name="COMPLETED_CLONE_WORKSPACE_FILE_TRANSFER" type="TIMESTAMP(6)">
+                <constraints nullable="true"/>
+            </column>
         </addColumn>
+        <sql>
+            UPDATE WORKSPACE ws SET COMPLETED_CLONE_WORKSPACE_FILE_TRANSFER = CREATED_DATE;
+        </sql>
     </changeSet>
 </databaseChangeLog>

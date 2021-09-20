@@ -57,8 +57,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
       val destinationBucketName = "destinationBucket"
       val copyFilesWithPrefix = "prefix"
       val objectToCopy = new StorageObject().setName("copy-me")
-      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, true)
-      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, false)
+      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now))
+      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(sourceWorkspace))
@@ -76,7 +76,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
       eventually (timeout = timeout(Span(10, Seconds))) {
         runAndWait(workspaceQuery.findById(destWorkspace.workspaceIdAsUUID.toString))
           .getOrElse(fail(s"${destWorkspace.name} not found"))
-          .completedCloneWorkspaceFileTransfer shouldBe true
+          .completedCloneWorkspaceFileTransfer.isDefined shouldBe true
         runAndWait(cloneWorkspaceFileTransferQuery.listPendingTransfers()) shouldBe empty
       }
       verify(mockGcsDAO, times(1)).copyFile(sourceBucketName, objectToCopy.getName, destinationBucketName, objectToCopy.getName, Option(destWorkspace.googleProjectId))
@@ -91,8 +91,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
       val sourceBucketName = "sourceBucket"
       val destinationBucketName = "destinationBucket"
       val copyFilesWithPrefix = "prefix"
-      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, true)
-      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, false)
+      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now))
+      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(sourceWorkspace))
@@ -111,7 +111,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
         verify(mockGcsDAO, Mockito.atLeast(5)).listObjectsWithPrefix(sourceBucketName, copyFilesWithPrefix, Option(destWorkspace.googleProjectId))
         runAndWait(workspaceQuery.findById(destWorkspace.workspaceIdAsUUID.toString))
           .getOrElse(fail(s"${destWorkspace.name} not found"))
-          .completedCloneWorkspaceFileTransfer shouldBe false
+          .completedCloneWorkspaceFileTransfer.isDefined shouldBe false
         runAndWait(cloneWorkspaceFileTransferQuery.listPendingTransfers()).isEmpty shouldBe false
       }
 
@@ -126,8 +126,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
       val destinationBucketName = "destinationBucket"
       val copyFilesWithPrefix = "prefix"
       val objectToCopy = new StorageObject().setName("copy-me")
-      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, true)
-      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, false)
+      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now))
+      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(sourceWorkspace))
@@ -148,7 +148,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
         verify(mockGcsDAO, Mockito.atLeast(5)).copyFile(sourceBucketName, objectToCopy.getName, destinationBucketName, objectToCopy.getName, Option(destWorkspace.googleProjectId))
         runAndWait(workspaceQuery.findById(destWorkspace.workspaceIdAsUUID.toString))
           .getOrElse(fail(s"${destWorkspace.name} not found"))
-          .completedCloneWorkspaceFileTransfer shouldBe false
+          .completedCloneWorkspaceFileTransfer.isDefined shouldBe false
         runAndWait(cloneWorkspaceFileTransferQuery.listPendingTransfers()).isEmpty shouldBe false
       }
 

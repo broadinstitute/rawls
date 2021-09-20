@@ -168,11 +168,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
-<<<<<<< HEAD
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None))
-=======
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, true))
->>>>>>> 698110048 (add field to workspace to indicate whether cloned files have been transferred)
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, Option(defaultTimeStamp)))
     val entityId = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name", "type", workspaceId, 0, deleted = false, None))
     val testAttribute = AttributeEntityReference("type", "name")
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
@@ -181,11 +177,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
-<<<<<<< HEAD
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None))
-=======
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, true))
->>>>>>> 698110048 (add field to workspace to indicate whether cloned files have been transferred)
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, Option(defaultTimeStamp)))
     val entityId1 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name1", "type", workspaceId, 0, deleted = false, None))
     val entityId2 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name2", "type", workspaceId, 0, deleted = false, None))
     val entityId3 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name3", "type", workspaceId, 0, deleted = false, None))
@@ -203,11 +195,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "throw exception inserting ref to nonexistent entity" in withEmptyTestDatabase {
-<<<<<<< HEAD
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None))
-=======
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, true))
->>>>>>> 698110048 (add field to workspace to indicate whether cloned files have been transferred)
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, Option(defaultTimeStamp)))
     val testAttribute = AttributeEntityReference("type", "name")
     intercept[RawlsException] {
       runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))

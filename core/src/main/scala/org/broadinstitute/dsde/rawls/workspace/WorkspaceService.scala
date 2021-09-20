@@ -2208,6 +2208,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                          dataAccess: DataAccess,
                                          parentSpan: Span = null): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
+    val completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix match {
+      case Some(_) => None
+      case None => Option(currentDate)
+    }
 
     val workspace = Workspace(
       namespace = workspaceRequest.namespace,
@@ -2225,7 +2229,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       googleProjectNumber = googleProjectNumber,
       currentBillingAccountOnWorkspace,
       billingAccountErrorMessage = None,
-      completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix.isEmpty
+      completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)

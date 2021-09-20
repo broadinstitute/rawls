@@ -696,7 +696,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Option(GoogleProjectNumber("googleProjectNumber")),
       Option(RawlsBillingAccountName("fakeBillingAcct")),
       None,
-      true
+      Option(currentTime())
     )
 
     runAndWait(

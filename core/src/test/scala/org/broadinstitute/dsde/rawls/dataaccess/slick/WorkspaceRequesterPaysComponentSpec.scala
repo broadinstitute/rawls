@@ -25,7 +25,7 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       None,
       None,
       None,
-      true
+      Option(currentTime())
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
