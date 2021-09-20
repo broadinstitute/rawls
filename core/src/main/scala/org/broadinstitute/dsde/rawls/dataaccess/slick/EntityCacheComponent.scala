@@ -37,7 +37,8 @@ trait EntityCacheComponent {
                                 |FROM WORKSPACE w LEFT OUTER JOIN WORKSPACE_ENTITY_CACHE c
                                 |    on w.id = c.workspace_id
                                 |where (c.entity_cache_last_updated > $minCacheTime or c.entity_cache_last_updated is null)
-                                |and w.last_modified < $maxModifiedTime and c.entity_cache_last_updated < w.last_modified
+                                |  and w.last_modified < $maxModifiedTime
+                                |  and (c.entity_cache_last_updated < w.last_modified or c.entity_cache_last_updated is null)
                                 |order by w.last_modified asc limit 1""".stripMargin.as[(UUID, Timestamp, Option[Timestamp])]
 
       uniqueResult[(UUID, Timestamp, Option[Timestamp])](baseQuery)
