@@ -2125,7 +2125,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"
       ))
     }
-    
+
   /**
     * Checks that Rawls has the right permissions on the BillingProject's Billing Account, and then passes along the
     * BillingProject to op to be used by code in this context
@@ -2244,6 +2244,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
           case None =>
             val workspaceId = UUID.randomUUID.toString
+            logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
             val bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
             // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
             // Option, so we are being thorough
