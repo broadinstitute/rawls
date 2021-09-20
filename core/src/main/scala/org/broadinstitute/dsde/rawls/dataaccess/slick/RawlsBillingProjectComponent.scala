@@ -79,12 +79,8 @@ trait RawlsBillingProjectComponent {
       findBillingProjectsByBillingAccount(billingAccount).map(_.invalidBillingAccount).update(isInvalid)
     }
 
-    def updateBillingProjectBillingAccountValidity(projectName: RawlsBillingProjectName, isInvalid: Boolean): WriteAction[Int] = {
-      findBillingProjectByName(projectName).map(_.invalidBillingAccount).update(isInvalid)
-    }
-
     def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] = {
-      findBillingProjectByName(projectName).map(_.billingAccount).update(billingAccount.map(_.value))
+      findBillingProjectByName(projectName).map(billingProject => (billingProject.billingAccount, billingProject.invalidBillingAccount)).update(billingAccount.map(_.value), false)
     }
 
 
