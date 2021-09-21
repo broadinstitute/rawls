@@ -80,7 +80,7 @@ trait RawlsBillingProjectComponent {
     }
 
     def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] = {
-      findBillingProjectByName(projectName).map(_.billingAccount).update(billingAccount.map(_.value))
+      findBillingProjectByName(projectName).map(billingProject => (billingProject.billingAccount, billingProject.invalidBillingAccount)).update(billingAccount.map(_.value), false)
     }
 
 
