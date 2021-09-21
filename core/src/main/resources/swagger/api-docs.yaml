@@ -6372,6 +6372,15 @@ components:
         projectName:
           type: string
           description: the name of the project
+        status:
+          deprecated: true
+          type: string
+          enum:
+            - creating
+            - ready
+            - error
+            - addingtoperimeter
+          description: the status of allocating the billing project's resources.
         billingAccount:
           type: string
           description: the billing account to use in google projects

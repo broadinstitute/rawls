@@ -170,6 +170,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       (workspacesWithCorrectBillingAccount, workspacesWithIncorrectBillingAccount) <- loadAndPartitionWorkspacesByMatchingBillingProjectBillingAccount(billingProject)
     } yield RawlsBillingProjectResponse(
       billingProject.projectName,
+      billingProject.status,
       billingProject.billingAccount,
       billingProject.servicePerimeter,
       billingProject.invalidBillingAccount,

@@ -64,6 +64,7 @@ case class RawlsBillingProject(projectName: RawlsBillingProjectName,
 case class WorkspaceBillingAccount(workspaceName: WorkspaceName, currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName])
 
 case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName,
+                                       status: CreationStatuses.CreationStatus,
                                        billingAccount: Option[RawlsBillingAccountName],
                                        servicePerimeter: Option[ServicePerimeterName],
                                        invalidBillingAccount: Boolean,
@@ -218,7 +219,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBillingAccountFormat = jsonFormat2(WorkspaceBillingAccount)
 
-  implicit val RawlsBillingProjectResponseFormat = jsonFormat7(RawlsBillingProjectResponse)
+  implicit val RawlsBillingProjectResponseFormat = jsonFormat8(RawlsBillingProjectResponse)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

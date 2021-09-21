@@ -298,7 +298,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.status, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
       }
   }
 
@@ -314,7 +314,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.User), Set(), Set())
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.status, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.User), Set(), Set())
       }
   }
 
@@ -457,6 +457,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       samUserResources.find(_.resourceId == p.projectName.value).map { samResource =>
         RawlsBillingProjectResponse(
           p.projectName,
+          p.status,
           p.billingAccount,
           p.servicePerimeter,
           p.invalidBillingAccount,
