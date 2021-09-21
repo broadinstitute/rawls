@@ -6395,15 +6395,6 @@ components:
           items:
             type: string
           description: the roles the caller has on the project
-        workspacesWithCorrectBillingAccount:
-          type: array
-          items:
-            type: string
-          description: A list of workspace names with the correct billing account contained within this billing project
-        workspacesWithIncorrectBillingAccount:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceBillingAccount'
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount

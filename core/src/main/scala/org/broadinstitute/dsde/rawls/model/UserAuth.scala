@@ -68,9 +68,7 @@ case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName,
                                        billingAccount: Option[RawlsBillingAccountName],
                                        servicePerimeter: Option[ServicePerimeterName],
                                        invalidBillingAccount: Boolean,
-                                       roles: Set[ProjectRoles.ProjectRole],
-                                       workspacesWithCorrectBillingAccount: Set[WorkspaceName],
-                                       workspacesWithIncorrectBillingAccount: Set[WorkspaceBillingAccount])
+                                       roles: Set[ProjectRoles.ProjectRole])
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
@@ -219,7 +217,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBillingAccountFormat = jsonFormat2(WorkspaceBillingAccount)
 
-  implicit val RawlsBillingProjectResponseFormat = jsonFormat8(RawlsBillingProjectResponse)
+  implicit val RawlsBillingProjectResponseFormat = jsonFormat6(RawlsBillingProjectResponse)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
