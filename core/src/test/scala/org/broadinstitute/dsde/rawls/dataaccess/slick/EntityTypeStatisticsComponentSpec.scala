@@ -28,7 +28,8 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
       GoogleProjectId("test_google_project"),
       None,
       None,
-      None
+      None,
+      Option(currentTime())
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
@@ -68,7 +69,8 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
       GoogleProjectId("test_google_project"),
       None,
       None,
-      None
+      None,
+      Option(currentTime())
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))

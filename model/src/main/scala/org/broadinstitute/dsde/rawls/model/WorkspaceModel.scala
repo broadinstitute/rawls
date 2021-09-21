@@ -164,7 +164,8 @@ case class Workspace(
                       googleProjectId: GoogleProjectId,
                       googleProjectNumber: Option[GoogleProjectNumber],
                       currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
-                      billingAccountErrorMessage: Option[String]
+                      billingAccountErrorMessage: Option[String],
+                      completedCloneWorkspaceFileTransfer: Option[DateTime]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -190,7 +191,7 @@ object Workspace {
     val randomString = java.util.UUID.randomUUID().toString
     val googleProjectId = GoogleProjectId(randomString)
     val googleProjectNumber = GoogleProjectNumber(randomString)
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None)
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate))
   }
 }
 
@@ -580,8 +581,9 @@ case class WorkspaceDetails(namespace: String,
                             googleProject: GoogleProjectId, // The response field is called "googleProject" rather than "googleProjectId" for backwards compatibility
                             googleProjectNumber: Option[GoogleProjectNumber],
                             billingAccount: Option[RawlsBillingAccountName],
-                            billingAccountErrorMessage: Option[String] = None) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage)
+                            billingAccountErrorMessage: Option[String] = None,
+                            completedCloneWorkspaceFileTransfer: Option[DateTime]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer)
 }
 
 
@@ -654,10 +656,13 @@ object WorkspaceDetails {
       workspace.googleProjectId,
       workspace.googleProjectNumber,
       workspace.currentBillingAccountOnGoogleProject,
-      workspace.billingAccountErrorMessage
+      workspace.billingAccountErrorMessage,
+      workspace.completedCloneWorkspaceFileTransfer
     )
   }
 }
+
+case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID, sourceWorkspaceBucketName: String, destWorkspaceBucketName: String, copyFilesWithPrefix: String, destWorkspaceGoogleProjectId: GoogleProjectId)
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
 
@@ -879,7 +884,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat16(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat17(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

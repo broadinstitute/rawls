@@ -57,6 +57,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
+import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import scala.concurrent.duration._
@@ -64,7 +65,6 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.mapAsScalaMapConverter
 import scala.language.postfixOps
 import scala.util.Try
-
 import scala.concurrent.ExecutionContext.global
 
 
@@ -1508,6 +1508,23 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
 
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProjectId.value should not be empty
+    workspace.googleProjectNumber should not be empty
+  }
+
+  it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val copyFilesWithPrefix = "copy_me"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty, copyFilesWithPrefix = Option(copyFilesWithPrefix))
+
+    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    eventually (timeout = timeout(Span(10, Seconds))) {
+      runAndWait(slickDataSource.dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers()).map(_.destWorkspaceId).contains(workspace.workspaceIdAsUUID) shouldBe true
+    }
     workspace.name should be(newWorkspaceName)
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
     workspace.googleProjectId.value should not be empty
