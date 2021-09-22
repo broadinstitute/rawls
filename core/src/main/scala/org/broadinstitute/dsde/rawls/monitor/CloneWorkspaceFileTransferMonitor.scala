@@ -4,9 +4,9 @@ import akka.actor.{Actor, Props}
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
+import com.google.api.client.http.HttpResponseException
 import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CloneWorkspaceFileTransferMonitor.CheckAll
@@ -47,15 +47,15 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, va
   private def copyBucketFiles(pendingCloneWorkspaceFileTransfer: PendingCloneWorkspaceFileTransfer): Future[List[Option[StorageObject]]] = {
     for {
       objectsToCopy <- gcsDAO.listObjectsWithPrefix(pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName, pendingCloneWorkspaceFileTransfer.copyFilesWithPrefix, Option(pendingCloneWorkspaceFileTransfer.destWorkspaceGoogleProjectId)).recoverWith {
-        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) => {
+        case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue => {
           logger.warn(s"403 received when listing objects in ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} before copying to ${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}: $e")
           Future.failed(e)
         }
       }
       copiedObjects <- Future.traverse(objectsToCopy) { objectToCopy =>
         gcsDAO.copyFile(pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName, objectToCopy.getName, pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName, objectToCopy.getName, Option(pendingCloneWorkspaceFileTransfer.destWorkspaceGoogleProjectId)).recoverWith {
-          case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) => {
-            logger.warn(s"403 received when copying [${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName}/${objectToCopy}] to [${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}]: $e")
+          case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue => {
+            logger.warn(s"403 received when copying [${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName}/${objectToCopy.getName}] to [${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}]: $e")
             Future.failed(e)
           }
         }

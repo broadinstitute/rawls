@@ -500,12 +500,7 @@ class HttpGoogleServicesDAO(
     val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket, sourceObject, destinationBucket, destinationObject, new StorageObject())
     userProject.map( p => copier.setUserProject(p.value) )
 
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(copier)) }) {
-      case e: HttpResponseException => {
-        logger.warn(s"encountered error [${e.getStatusMessage}] with status code [${e.getStatusCode}] when copying [$sourceBucket/$sourceObject] to [$destinationBucket]")
-        None
-      }
-    }
+    retryWhen500orGoogleError(() => { Option(executeGoogleRequest(copier)) })
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: Option[GoogleProjectId]): Future[List[StorageObject]] = {
