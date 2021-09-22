@@ -67,6 +67,11 @@
             CREATE PROCEDURE copyRowsToAttributeShard(IN shardIdentifier CHAR(4))
             BEGIN
                 SET @tableSuffix := shardIdentifier;
+
+                SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;
+                SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
+                SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='TRADITIONAL,ALLOW_INVALID_DATES';
+
                 SET @sql_text:=CONCAT('INSERT INTO ENTITY_ATTRIBUTE_',@tableSuffix,'(id, name, value_string, value_number, value_boolean,'
                     ' value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)'
                     'SELECT ea.id, ea.name, ea.value_string, ea.value_number, ea.value_boolean,'
@@ -74,9 +79,15 @@
                     ' FROM ENTITY_ATTRIBUTE ea, ENTITY e, WORKSPACE w'
                     ' WHERE e.workspace_id = w.id'
                     ' AND ea.owner_id = e.id'
-                    ' AND shardIdentifier(hex(w.id)) = ''',@tableSuffix,''';');
+                    ' AND shardIdentifier(hex(w.id)) = ''',@tableSuffix,''''
+                    ' ORDER BY ea.id;');
                 PREPARE stmt from @sql_text;
                 EXECUTE stmt;
+
+                SET SQL_MODE=@OLD_SQL_MODE;
+                SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
+                SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
+
             END /
 
             -- convenience procedure to both create a shard and copy rows into it
