@@ -33,7 +33,7 @@ import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
 import com.typesafe.scalalogging.LazyLogging
-import cats.effect.{Blocker, ContextShift, IO, Timer}
+import cats.effect.IO
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -425,16 +425,13 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
   }
 
   private def getDataset(datasetName: String, projectId: String, authToken: AuthToken)(implicit executionContext: ExecutionContext) = {
-    import org.typelevel.log4cats.Logger
     import org.typelevel.log4cats.slf4j.Slf4jLogger
+    import cats.effect.unsafe.implicits.global
 
-    implicit lazy val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(executionContext)
-    implicit lazy val timer: Timer[IO] = cats.effect.IO.timer(executionContext)
     implicit val logger: org.typelevel.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
     val bqService = GoogleBigQueryService.resource[IO](
       GoogleCredentials.create(new AccessToken(authToken.value, null)),
-      Blocker.liftExecutionContext(executionContext),
       GoogleProject(projectId)
     )
 
