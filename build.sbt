@@ -59,5 +59,6 @@ mainClass in reStart := Some("org.broadinstitute.dsde.rawls.Boot")
 // process. This passes them through to the "re-start" command, which is probably what a developer
 // would normally expect.
 javaOptions in reStart ++= sys.env.getOrElse("JAVA_OPTS", "")
+  .concat(" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5050")
   .split(" ")
-  .toList :+ "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5050"
+  .toList
