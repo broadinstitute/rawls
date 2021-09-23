@@ -6329,6 +6329,7 @@ components:
             - Creating
             - Ready
             - Error
+            - AddingToPerimeter
         message:
           type: string
           description: informational message about the project
@@ -6348,6 +6349,7 @@ components:
             - Creating
             - Ready
             - Error
+            - AddingToPerimeter
       description: a billing project status
     RawlsBillingProjectMember:
       required:
@@ -6372,15 +6374,6 @@ components:
         projectName:
           type: string
           description: the name of the project
-        status:
-          deprecated: true
-          type: string
-          enum:
-            - creating
-            - ready
-            - error
-            - addingtoperimeter
-          description: the status of allocating the billing project's resources.
         billingAccount:
           type: string
           description: the billing account to use in google projects
@@ -6395,6 +6388,19 @@ components:
           items:
             type: string
           description: the roles the caller has on the project
+        status:
+          deprecated: true
+          type: string
+          enum:
+            - Creating
+            - Ready
+            - Error
+            - AddingToPerimeter
+          description: the status of allocating the billing project's resources.
+        message:
+          deprecated: true
+          type: string
+          description: informational message about the project
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount

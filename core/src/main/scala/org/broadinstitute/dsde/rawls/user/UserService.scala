@@ -168,11 +168,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   private def makeBillingProjectResponse(projectRoles: Set[ProjectRole], billingProject: RawlsBillingProject) =
     RawlsBillingProjectResponse(
       billingProject.projectName,
-      billingProject.status,
       billingProject.billingAccount,
       billingProject.servicePerimeter,
       billingProject.invalidBillingAccount,
-      projectRoles
+      projectRoles,
+      billingProject.status,
+      billingProject.message
     )
 
   def listBillingProjectsV2(): Future[PerRequestMessage] =
