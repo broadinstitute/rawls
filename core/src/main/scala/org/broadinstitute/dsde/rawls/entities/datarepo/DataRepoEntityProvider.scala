@@ -78,6 +78,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities not supported by this provider.")
 
+  override def deleteEntityColumn(workspaceNamespace: String, workspaceName: String, entityType: String, entityNamespace: String, entityColumn: String): Future[Vector[Int]] =
+    throw new UnsupportedEntityOperationException("delete entity column not supported by this provider.")
+
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     // extract table definition, with PK, from snapshot schema

@@ -341,6 +341,13 @@ trait AttributeComponent {
       }
     }
 
+    def deleteAttributeColumn(workspaceNamespace: String, workspaceName: String, entityType: String, entityNamespace: String, attributeName: String) = {
+     sql"""delete ea from ENTITY_ATTRIBUTE ea
+          |join ENTITY e on e.id = ea.owner_id
+          |join WORKSPACE w on w.id = e.workspace_id
+          |where w.namespace = #${workspaceNamespace} AND w.name = #${workspaceName} AND e.entity_type = #${entityType} AND ea.namespace = #${entityNamespace} AND ea.name = #${attributeName};""".as[Int]
+    }
+
     /**
      * Compares a collection of pre-existing attributes to a collection of attributes requested to save by a user,
      * finds the differences, saves the differences, and then returns the ids of the parent (entity|workspace) objects

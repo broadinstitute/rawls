@@ -104,6 +104,13 @@ trait EntityApiService extends UserInfoDirectives {
             }
           }
         } ~
+        path("workspaces" / Segment / Segment / "entities" / Segment / Segment / Segment ) { (workspaceNamespace, workspaceName, entityType, entityNamespace, entityColumnName) =>
+          delete {
+            complete {
+              entityServiceConstructor(userInfo).deleteEntityAttributeColumn(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityNamespace, entityColumnName, None, None)
+            }
+          }
+        } ~
         path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
           post {
             withSizeLimit(batchUpsertMaxBytes) {

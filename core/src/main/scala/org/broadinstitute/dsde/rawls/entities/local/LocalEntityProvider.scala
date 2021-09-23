@@ -104,6 +104,12 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
+  override def deleteEntityColumn(workspaceNamespace: String, workspaceName: String, entityType: String, entityNamespace: String, entityColumn: String): Future[Vector[Int]] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.entityQuery.deleteColumn(workspaceNamespace, workspaceName, entityType, entityNamespace, entityColumn)
+    }
+  }
+
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] = {
     dataSource.inTransaction { dataAccess =>
       withEntityRecsForExpressionEval(expressionEvaluationContext, workspace, dataAccess) { jobEntityRecs =>

@@ -760,6 +760,10 @@ trait EntityComponent {
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map(res => res.sum)
     }
 
+    def deleteColumn(workspaceNamespace: String, workspaceName: String, entityType: String, entityNamespace: String, entityColumnName: String) = {
+      entityAttributeQuery.deleteAttributeColumn(workspaceNamespace: String, workspaceName: String, entityType, entityNamespace, entityColumnName)
+    }
+
     // perform actual deletion (not hiding) of all entities in a workspace
 
     def deleteFromDb(workspaceId: UUID): WriteAction[Int] = {
@@ -884,7 +888,7 @@ trait EntityComponent {
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
     }
-    
+
     sealed trait RecursionDirection
     case object Up extends RecursionDirection
     case object Down extends RecursionDirection

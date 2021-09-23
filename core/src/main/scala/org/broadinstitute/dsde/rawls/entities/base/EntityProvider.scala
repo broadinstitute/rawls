@@ -21,6 +21,8 @@ trait EntityProvider {
 
   def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
 
+  def deleteEntityColumn(workspaceNamespace: String, workspaceName: String, entityType: String, entityNamespace: String, entityColumn: String): Future[Vector[Int]]
+
   /**
   The overall approach is:
         - Parse the input expression using ANTLR Extended JSON parser
