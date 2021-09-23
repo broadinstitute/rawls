@@ -3,12 +3,12 @@
 
     <!-- create db functions and stored procedures that will help with the db migration -->
     <changeSet logicalFilePath="dummy" author="davidan" id="create_shard_functions_and_procedures">
-        <sql stripComments="true" endDelimiter="/">
+        <sql stripComments="true" endDelimiter="~">
             -- function to produce a shard identifier from a workspace uuid string
             -- important: the values produced by this function must match exactly the values produced by Rawls scala code
-            DROP FUNCTION IF EXISTS shardIdentifier /
+            DROP FUNCTION IF EXISTS shardIdentifier ~
             CREATE FUNCTION shardIdentifier(workspaceId CHAR(32))
-            RETURNS CHAR(4) DETERMINISTIC
+            RETURNS CHAR(5) DETERMINISTIC
             BEGIN
                 -- this function produces 64 shards
                 DECLARE firstCharToInspect CHAR(1);
@@ -19,19 +19,17 @@
                 SET firstCharToInspect = SUBSTRING(workspaceId,1,1);
                 SET secondCharToInspect = SUBSTRING(workspaceId,2,1);
 
-                -- shard id is of the form {bottom of range}_{top of range}, where bottom and top are the first 2 chars of workspaceid
-
                 -- lowerBound: convert hex to decimal; divide by 4 and round down to find bottom of range; convert decimal to hex and finally lower-case
-                SET lowerBound = LOWER(CONV((FLOOR(CONV(secondCharToInspect, 16, 10) / 4)) * 4, 10, 16))
+                SET lowerBound = LOWER(CONV(FLOOR(CONV(secondCharToInspect, 16, 10) / 4) * 4, 10, 16));
                 -- upperBound: convert hex to decimal; add 3, convert decimal to hex and finally lower-case
-                SET upperBound = LOWER(CONV(CONV(lowerBound, 16, 10) + 3, 10, 16))
+                SET upperBound = LOWER(CONV(CONV(lowerBound, 16, 10) + 3, 10, 16));
 
                 RETURN CONCAT(firstCharToInspect, lowerBound, '_', firstCharToInspect, upperBound);
-            END /
+            END ~
 
             -- procedure to create a shard table
-            DROP PROCEDURE IF EXISTS createEntityAttributeShard /
-            CREATE PROCEDURE createEntityAttributeShard(IN shardIdentifier CHAR(4))
+            DROP PROCEDURE IF EXISTS createEntityAttributeShard ~
+            CREATE PROCEDURE createEntityAttributeShard(IN shardIdentifier CHAR(5))
             BEGIN
                 SET @tableSuffix := shardIdentifier;
                 SET @sql_text:=CONCAT('CREATE TABLE ENTITY_ATTRIBUTE_',@tableSuffix,' ('
@@ -56,12 +54,12 @@
                     ') ENGINE=InnoDB AUTO_INCREMENT=231805857 DEFAULT CHARSET=utf8;');
                 PREPARE stmt from @sql_text;
                 EXECUTE stmt;
-            END /
+            END ~
 
             -- procedure to copy rows from ENTITY_ATTRIBUTE to the appropriate shard table,
             -- based on the attributes' owning workspace
-            DROP PROCEDURE IF EXISTS copyRowsToAttributeShard /
-            CREATE PROCEDURE copyRowsToAttributeShard(IN shardIdentifier CHAR(4))
+            DROP PROCEDURE IF EXISTS copyRowsToAttributeShard ~
+            CREATE PROCEDURE copyRowsToAttributeShard(IN shardIdentifier CHAR(5))
             BEGIN
                 SET @tableSuffix := shardIdentifier;
 
@@ -85,15 +83,15 @@
                 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
                 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
 
-            END /
+            END ~
 
             -- convenience procedure to both create a shard and copy rows into it
-            DROP PROCEDURE IF EXISTS createAndPopulateShard /
-            CREATE PROCEDURE createAndPopulateShard(IN shardIdentifier CHAR(4))
+            DROP PROCEDURE IF EXISTS createAndPopulateShard ~
+            CREATE PROCEDURE createAndPopulateShard(IN shardIdentifier CHAR(5))
             BEGIN
                 CALL createEntityAttributeShard(shardIdentifier);
                 CALL copyRowsToAttributeShard(shardIdentifier);
-            END /
+            END ~
         </sql>
         <rollback>
             DROP PROCEDURE IF EXISTS copyRowsToAttributeShard;
