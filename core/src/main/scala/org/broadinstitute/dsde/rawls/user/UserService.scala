@@ -185,15 +185,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield RequestComplete(constructBillingProjectResponses(samUserResources, projectsInDB))
 
   private def constructBillingProjectResponses(samUserResources: Seq[SamUserResource], billingProjectsInRawlsDB: Seq[RawlsBillingProject]): List[RawlsBillingProjectResponse] = {
-    val projectsByName = billingProjectsInRawlsDB.map(p => p.projectName -> p).toMap
+    val projectsByName = billingProjectsInRawlsDB.map(p => p.projectName.value -> p).toMap
     samUserResources.toList
-      .traverse { samUserResource =>
+      .flatMap { samUserResource =>
         val projectRoles = samRolesToProjectRoles(samUserResource.direct.roles ++ samUserResource.inherited.roles)
-        projectsByName
-          .get(RawlsBillingProjectName(samUserResource.resourceId))
-          .map(makeBillingProjectResponse(projectRoles, _))
+        projectsByName.get(samUserResource.resourceId).map(makeBillingProjectResponse(projectRoles, _))
       }
-      .getOrElse(List.empty)
       .sortBy(_.projectName.value)
   }
 
