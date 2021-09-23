@@ -61,4 +61,4 @@ mainClass in reStart := Some("org.broadinstitute.dsde.rawls.Boot")
 javaOptions in reStart ++= sys.env.getOrElse("JAVA_OPTS", "")
   .concat(" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5050")
   .split(" ")
-  .toList
+  .toSeq
