@@ -34,19 +34,26 @@ trait DataAccess
 
   import driver.api._
 
+  // pre-calculate all shard identifiers, by generating all possible combinations of the first two chars of a UUID,
+  // then calling determineShard on those UUIDs. This allows determineShard to change without having to change the
+  // implementation here.
+  val allShards = ((0L to 15L) flatMap { firstLong =>
+    (0L to 15L) map { secondLong =>
+      val first = firstLong.toHexString
+      val second = secondLong.toHexString
+      determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000")).toString
+    }
+  }).toSet
+
   // only called from TestDriverComponent
   def truncateAll: WriteAction[Int] = {
     // important to keep the right order for referential integrity !
     // if table X has a Foreign Key to table Y, delete table X first
-
     // davidan: instead of specific ordering, could we instead SET FOREIGN_KEY_CHECKS = 0; truncate tables ...; SET FOREIGN_KEY_CHECKS = 1; ?
-    // instead of hardcoding the shards, could we use INFORMATION_SCHEMA.TABLES or MTable.getTables?
-    val shardDeletes = (0 to 15).map(toHexString) flatMap { firstPart =>
-      List("07", "8f") map { secondPart =>
-        val shardSuffix = firstPart + "_" + secondPart
-        new EntityAttributeShardQuery(shardSuffix).delete
-      }
-    }
+
+    val shardDeletes = allShards.map { shardSuffix =>
+      new EntityAttributeShardQuery(shardSuffix).delete
+    }.toSeq
 
     DBIO.sequence(shardDeletes) andThen // FK to entity
       TableQuery[WorkspaceAttributeTable].delete andThen          // FK to entity, workspace
