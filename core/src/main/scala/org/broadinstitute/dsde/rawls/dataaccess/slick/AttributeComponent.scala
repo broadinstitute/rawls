@@ -190,16 +190,19 @@ trait AttributeComponent {
         ENTITY_ATTRIBUTE_04_07 or ENTITY_ATTRIBUTE_archive, respectively.
      */
 
+    val shardSize = 4 // range of characters in a shard, e.g. 4 = "00-03"
+
     // see the liquibase changeset "20210923_sharded_entity_tables.xml" for expected shard identifier values
     val idString = workspaceId.toString.take(2).toCharArray
-    val firstChar = idString(0) // first part of shardid just copies the first char of workspaceid
-    val secondChar = idString(1) // second character of workspaceId
-    val lowerBound = Math.floor(Integer.parseInt(secondChar.toString, 16) / 4).toInt
-    val upperBound = lowerBound + 3
+    val firstChar = idString(0) // first char of workspaceid
+    val secondInt = Integer.parseInt(idString(1).toString, 16) // second character of workspaceId, as integer 0-15
 
-    val shardId = s"$firstChar${lowerBound.toHexString}_$firstChar${upperBound.toHexString}"
-    shardId
+    val lower = Math.floor(secondInt / shardSize) * shardSize
+    val upper = lower + shardSize - 1
+
+    s"$firstChar${lower.toLong.toHexString}_$firstChar${upper.toLong.toHexString}"
   }
+
   class EntityAttributeShardQuery(shard: ShardId) extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(shard)(_), EntityAttributeRecord)
   def entityAttributeShardQuery(workspaceId: UUID): EntityAttributeShardQuery = {
     new EntityAttributeShardQuery(determineShard(workspaceId))
