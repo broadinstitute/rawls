@@ -56,7 +56,7 @@
                 EXECUTE stmt;
             END ~
 
-            -- procedure to copy rows from ENTITY_ATTRIBUTE to the appropriate shard table,
+            -- procedure to copy rows from ENTITY_ATTRIBUTE_archived to the appropriate shard table,
             -- based on the attributes' owning workspace
             DROP PROCEDURE IF EXISTS copyRowsToAttributeShard ~
             CREATE PROCEDURE copyRowsToAttributeShard(IN shardIdentifier CHAR(5))
@@ -71,7 +71,7 @@
                     ' value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)'
                     'SELECT ea.id, ea.name, ea.value_string, ea.value_number, ea.value_boolean,'
                     ' ea.value_entity_ref, ea.list_index, ea.owner_id, ea.list_length, ea.namespace, ea.VALUE_JSON, ea.deleted, ea.deleted_date'
-                    ' FROM ENTITY_ATTRIBUTE ea, ENTITY e, WORKSPACE w'
+                    ' FROM ENTITY_ATTRIBUTE_archived ea, ENTITY e, WORKSPACE w'
                     ' WHERE e.workspace_id = w.id'
                     ' AND ea.owner_id = e.id'
                     ' AND shardIdentifier(hex(w.id)) = ''',@tableSuffix,''''
@@ -83,14 +83,6 @@
                 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
                 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
 
-            END ~
-
-            -- convenience procedure to both create a shard and copy rows into it
-            DROP PROCEDURE IF EXISTS createAndPopulateShard ~
-            CREATE PROCEDURE createAndPopulateShard(IN shardIdentifier CHAR(5))
-            BEGIN
-                CALL createEntityAttributeShard(shardIdentifier);
-                CALL copyRowsToAttributeShard(shardIdentifier);
             END ~
         </sql>
         <rollback>
