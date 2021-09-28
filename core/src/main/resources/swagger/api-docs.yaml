@@ -2070,6 +2070,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       x-codegen-request-body-name: entities
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityNamespace}/{entityColumnName}:
+    delete:
+      tags:
+        - entities
+      summary: delete column in entity table
+      description: Delete entity column
+      operationId: delete_entity_column
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - name: entityNamespace
+          in: path
+          description: entity column namespace
+          required: true
+          schema:
+            type: string
+        - name: entityColumnName
+          in: path
+          description: entity column name
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Successful Request
+          content: {}
+        400:
+          description: Attributes do not exist
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/workspaces/entities/copy:
     post:
       tags:

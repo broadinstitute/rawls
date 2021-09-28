@@ -104,10 +104,10 @@ trait EntityApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "entities" / Segment / Segment / Segment ) { (workspaceNamespace, workspaceName, entityType, entityNamespace, entityColumnName) =>
+        path("workspaces" / Segment / Segment / "entities" / Segment / Segment / Segment ) { (workspaceNamespace, workspaceName, entityType, entityAttributeNamespace, entityAttributeName) =>
           delete {
             complete {
-              entityServiceConstructor(userInfo).deleteEntityAttributeColumn(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityNamespace, entityColumnName, None, None)
+              entityServiceConstructor(userInfo).deleteEntityAttribute(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityAttributeNamespace, entityAttributeName, None, None)
             }
           }
         } ~

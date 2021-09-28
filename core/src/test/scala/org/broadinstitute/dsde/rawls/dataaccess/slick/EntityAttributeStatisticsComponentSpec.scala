@@ -94,4 +94,13 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
     }
   }
 
+//  // ToDo: finish this
+//  it should "checkAttributeNameExists should return false if there are no attributes of the given type" in withEmptyTestDatabase {
+//
+//  }
+//
+//  it should "checkAttributeNameExists should return true if there are attributes of the given type" in withEmptyTestDatabase {
+//
+//  }
+
 }

@@ -104,10 +104,22 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  override def deleteEntityColumn(workspaceNamespace: String, workspaceName: String, entityType: String, entityNamespace: String, entityColumn: String): Future[Vector[Int]] = {
+  override def deleteEntityAttribute(workspaceContext: Workspace, entityType: String, entityAttributeNamespace: String, entityAttributeName: String): Future[Vector[Int]] = {
+//    val sqlStr = s"""select exists(select 1 from WORKSPACE_ENTITY_ATTRIBUTE_STATISTICS weas
+//      where weas.WORKSPACE_ID = ${workspaceContext.workspaceIdAsUUID.toString} and weas.ENTITY_TYPE = $entityType and weas.ATTRIBUTE_NAMESPACE = $entityAttributeNamespace and weas.ATTRIBUTE_NAME = $entityAttributeName)"""
+//    logger.info("CHECK ATTRIBUTE NAME EXISTS SQL: " + sqlStr)
+
     dataSource.inTransaction { dataAccess =>
-      dataAccess.entityQuery.deleteColumn(workspaceNamespace, workspaceName, entityType, entityNamespace, entityColumn)
-    }
+      dataAccess.entityAttributeStatisticsQuery.checkAttributeNameExists(workspaceContext.workspaceIdAsUUID, entityType, entityAttributeNamespace, entityAttributeName) flatMap { attributeNameExists =>
+        logger.info(s"ATTRIBUTE NAME EXISTS: " + attributeNameExists)
+        if (attributeNameExists.toList.head)
+          dataAccess.entityQuery.deleteColumn(workspaceContext, entityType, entityAttributeNamespace, entityAttributeName)
+        else
+          throw new DataEntityException(message = s"Could not find column $entityAttributeName belonging to entity namespace $entityAttributeNamespace of entity type $entityType in workspace ${workspaceContext.namespace}/${workspaceContext.name}",
+                                        code = StatusCodes.BadRequest)
+      }
+         // dataAccess.entityQuery.deleteColumn(workspaceContext, entityType, entityAttributeNamespace, entityAttributeName)
+     }
   }
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] = {

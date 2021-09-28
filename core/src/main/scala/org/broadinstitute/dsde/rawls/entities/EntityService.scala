@@ -106,13 +106,13 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }.recover(bigQueryRecover)
     }
 
-  def deleteEntityAttributeColumn(workspaceName: WorkspaceName, entityType: String, entityNamespace: String, entityColumnName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
+  def deleteEntityAttribute(workspaceName: WorkspaceName, entityType: String, entityAttributeNamespace: String, entityAttributeName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
       val deleteFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        _ <- entityProvider.deleteEntityColumn(workspaceName.namespace, workspaceName.name, entityType, entityNamespace, entityColumnName)
+        _ <- entityProvider.deleteEntityAttribute(workspaceContext, entityType, entityAttributeNamespace, entityAttributeName)
       } yield {
         PerRequest.RequestComplete(StatusCodes.NoContent)
       }

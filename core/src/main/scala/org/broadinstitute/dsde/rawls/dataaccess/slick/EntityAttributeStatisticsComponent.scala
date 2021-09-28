@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model.AttributeName
+import org.broadinstitute.dsde.rawls.model.{Workspace, _}
+import slick.jdbc.{GetResult, JdbcProfile}
 
 case class EntityAttributeStatisticsRecord(workspaceId: UUID, entityType: String, attributeNamespace: String, attributeName: String)
 
@@ -43,6 +45,19 @@ trait EntityAttributeStatisticsComponent {
         (res.entityType, res.attributeNamespace, res.attributeName)
       }.result map { result =>
         result.groupBy(_._1).mapValues(_.map(x => AttributeName(x._2, x._3)))
+      }
+    }
+
+    def checkAttributeNameExists(workspaceId: UUID, entityType: String, attributeNamespace: String, attributeName: String) = {
+      EntityAttributeStatisticsRawSqlQuery.checkAttributeNameExists(workspaceId, entityType, attributeNamespace, attributeName)
+    }
+
+    private object EntityAttributeStatisticsRawSqlQuery extends RawSqlQuery {
+      val driver: JdbcProfile = EntityAttributeStatisticsComponent.this.driver
+
+      def checkAttributeNameExists(workspaceId: UUID, entityType: String, attributeNamespace: String, attributeName: String) = {
+        sql"""select exists(select 1 from WORKSPACE_ENTITY_ATTRIBUTE_STATISTICS weas
+              where weas.WORKSPACE_ID=$workspaceId and weas.ENTITY_TYPE=$entityType and weas.ATTRIBUTE_NAMESPACE=$attributeNamespace and weas.ATTRIBUTE_NAME=$attributeName)""".as[Boolean]
       }
     }
 
