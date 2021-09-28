@@ -39,7 +39,13 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, va
         dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers()
       }
       _ <- pendingTransfers.toList.traverse { pendingTransfer =>
-        IO.fromFuture(IO(copyBucketFiles(pendingTransfer)))
+        IO.fromFuture(IO(copyBucketFiles(pendingTransfer))).attempt.map {
+          case Left(e) => {
+            logger.warn(s"Failed to copy files from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName}", e)
+            List.empty
+          }
+          case Right(res) => res
+        }
       }.unsafeToFuture()
     } yield()
   }
