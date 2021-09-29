@@ -1634,7 +1634,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       AttributeName.withDefaultNS("hello") -> AttributeString("brazil"),
       AttributeName.withDefaultNS("hello") -> AttributeString("pluto"),
       AttributeName.withDefaultNS("hi") -> AttributeString("hades")
-      //      AttributeName.fromDelimitedName("hello") -> AttributeString("moon"),
     ))
 
     Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
@@ -1654,7 +1653,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(None) {
           runAndWait(entityQuery.get(testData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("hello"))
         }
-        assertResult(Some("hades")) {
+        assertResult(Some(AttributeString("hades"))) {
           runAndWait(entityQuery.get(testData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("hi"))
         }
       }
@@ -1662,7 +1661,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
 
   it should "return 400 when deleting entity attribute that does not exist" in withTestDataApiServices { services =>
-    val e = Entity("name1", "type1", Map(AttributeName.withDefaultNS("hello") -> AttributeString("world")))
+    val e = Entity("name2", "type1", Map(AttributeName.withDefaultNS("hello") -> AttributeString("world")))
 
     Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
       sealRoute(services.entityRoutes) ~>
@@ -1677,39 +1676,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.BadRequest) {
           status
-        }
-      }
-  }
-
-  // ToDo: change this
-  it should "return a 204 when deleting attributes of non-default namespace" in withTestDataApiServices { services =>
-    val e = Entity("name1", "type1", Map(
-      AttributeName.withDefaultNS("hello") -> AttributeString("world"),
-        AttributeName.withDefaultNS("hello") -> AttributeString("brazil"),
-      AttributeName.withDefaultNS("hello") -> AttributeString("pluto"),
-    AttributeName.withDefaultNS("hi") -> AttributeString("hades")
-    //      AttributeName.fromDelimitedName("hello") -> AttributeString("moon"),
-    ))
-
-    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
-    Delete(s"${testData.workspace.path}/entities/type1/default/hello", httpJson(EntityDeleteRequest(e))) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-        assertResult(None) {
-          runAndWait(entityQuery.get(testData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("hello"))
-        }
-        assertResult(Some("hades")) {
-          runAndWait(entityQuery.get(testData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("hi"))
         }
       }
   }

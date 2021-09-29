@@ -435,6 +435,13 @@ trait EntityComponent {
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
+
+      def checkAttributeNameExists(workspaceId: UUID, entityType: String, attributeNamespace: String, attributeName: String) = {
+        sql"""select exists(select 1 from ENTITY_ATTRIBUTE ea
+              join ENTITY e on e.id=ea.owner_id
+              join WORKSPACE w on w.id = e.workspace_id
+              where w.id=$workspaceId and e.entity_type=$entityType and ea.namespace=$attributeNamespace and ea.name=$attributeName)""".as[Boolean]
+      }
     }
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
@@ -560,6 +567,10 @@ trait EntityComponent {
           case (entityType:String, (ns:String, n:String)) => (entityType, AttributeName(ns, n))
         })
       }
+    }
+
+    def checkAttributeNameExists(workspaceId: UUID, entityType: String, attributeNamespace: String, attributeName: String) = {
+      EntityAndAttributesRawSqlQuery.checkAttributeNameExists(workspaceId, entityType, attributeNamespace, attributeName)
     }
 
     // get paginated entities for UI display, as a result of executing a query

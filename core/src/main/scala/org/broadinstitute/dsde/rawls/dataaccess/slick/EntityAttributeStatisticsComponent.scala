@@ -48,19 +48,6 @@ trait EntityAttributeStatisticsComponent {
       }
     }
 
-    def checkAttributeNameExists(workspaceId: UUID, entityType: String, attributeNamespace: String, attributeName: String) = {
-      EntityAttributeStatisticsRawSqlQuery.checkAttributeNameExists(workspaceId, entityType, attributeNamespace, attributeName)
-    }
-
-    private object EntityAttributeStatisticsRawSqlQuery extends RawSqlQuery {
-      val driver: JdbcProfile = EntityAttributeStatisticsComponent.this.driver
-
-      def checkAttributeNameExists(workspaceId: UUID, entityType: String, attributeNamespace: String, attributeName: String) = {
-        sql"""select exists(select 1 from WORKSPACE_ENTITY_ATTRIBUTE_STATISTICS weas
-              where weas.WORKSPACE_ID=$workspaceId and weas.ENTITY_TYPE=$entityType and weas.ATTRIBUTE_NAMESPACE=$attributeNamespace and weas.ATTRIBUTE_NAME=$attributeName)""".as[Boolean]
-      }
-    }
-
   }
 
 }
