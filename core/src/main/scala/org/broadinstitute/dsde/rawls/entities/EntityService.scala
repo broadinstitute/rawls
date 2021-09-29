@@ -1,15 +1,23 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import akka.actor.{ActorSystem, Cancellable}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
+import akka.stream.IOResult
+import akka.stream.scaladsl.{Flow, Keep, Sink, Source, StreamConverters}
+import akka.util.ByteString
+import com.fasterxml.jackson.core.{JsonEncoding, JsonFactory, JsonGenerator}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.slick.EntityAttributeRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerException
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.model.AttributeFormat.{ENTITY_NAME_KEY, ENTITY_TYPE_KEY}
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityCopyDefinition, EntityQuery, ErrorReport, SamResourceTypeNames, SamWorkspaceActions, UserInfo, WorkspaceName, _}
@@ -20,6 +28,7 @@ import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.json.DefaultJsonProtocol._
 
+import java.io.{ByteArrayOutputStream, OutputStream}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -157,12 +166,111 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       metadataFuture.recover(bigQueryRecover)
     }
 
-  def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
+  def listEntities(workspaceName: WorkspaceName, entityType: String) = {
+
+    import dataSource.dataAccess.entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult
+    import spray.json._
+    import spray.json.DefaultJsonProtocol._
+
+    implicit val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
+
+
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) map { workspaceContext =>
+      // TODO: set transaction isolation level
+      // TODO: play with fetchSize
+      val listAllAttrs = dataSource.dataAccess.entityQuery.streamActiveEntityAttributesOfType(workspaceContext, entityType)
+        .transactionally
+        .withStatementParameters(fetchSize = 1000)
+
+      // database source stream
+      val dbPublisher = dataSource.database.stream(listAllAttrs)
+      val dbSource = Source.fromPublisher(dbPublisher) // this REQUIRES an order by e.id, a.namespace, a.name, a.list_index
+
+      implicit val system = ActorSystem()
+
+
+      // Jackson streaming-json generator
+      val outputStream = new ByteArrayOutputStream()
+      val jsonGenerator: JsonGenerator = new JsonFactory().createGenerator(outputStream, JsonEncoding.UTF8)
+
+      def writeAttrPart(prev: EntityAndAttributesResult, curr: EntityAndAttributesResult): EntityAndAttributesResult = {
+
+        val prevListIndex = prev.attributeRecord.flatMap(_.listIndex)
+        val currListIndex = curr.attributeRecord.flatMap(_.listIndex)
+
+        // do we need to end an attribute value array?
+        (prevListIndex, currListIndex) match {
+          case (Some(_), None) => jsonGenerator.writeEndArray()
+          case (Some(p), Some(c)) if c <= p => jsonGenerator.writeEndArray()
+          case _ => // noop
+        }
+
+        // do we need to end the previous entity and start a new one?
+        if (curr.entityRecord.id != prev.entityRecord.id) {
+          // close previous entity's attributes
+          jsonGenerator.writeEndObject()
+          // close previous entity
+          jsonGenerator.writeEndObject()
+
+          // start new entity
+          jsonGenerator.writeStartObject()
+          // write entity name and type
+          jsonGenerator.writeStringField("name", curr.entityRecord.name)
+          jsonGenerator.writeStringField("entityType", curr.entityRecord.entityType)
+          // start attributes array
+          jsonGenerator.writeFieldName("attributes")
+          jsonGenerator.writeStartObject()
+        }
+
+        // write current attribute
+        curr.attributeRecord.foreach { attr =>
+          val fieldName = toDelimitedName(AttributeName(attr.namespace, attr.name))
+
+          // do we need to start an attribute value array?
+          (prevListIndex, currListIndex) match {
+            case (None, Some(_)) => jsonGenerator.writeStartArray()
+            case (Some(p), Some(c)) if c <= p => jsonGenerator.writeStartArray()
+            case _ => // noop
+          }
+          // output the attribute value
+          AttributeString
+          if (curr.refEntityRecord.isDefined) {
+            val ref = dataSource.dataAccess.entityAttributeQuery.unmarshalReference(curr.refEntityRecord.get)
+            jsonGenerator.writeFieldName(fieldName)
+            jsonGenerator.writeStartObject()
+            jsonGenerator.writeStringField(ENTITY_TYPE_KEY, ref.entityType)
+            jsonGenerator.writeStringField(ENTITY_NAME_KEY, ref.entityName)
+            jsonGenerator.writeEndObject()
+          } else {
+            val attrValue = dataSource.dataAccess.entityAttributeQuery.unmarshalValue(attr)
+            jsonGenerator.writeFieldName(fieldName)
+            attrValue match {
+              case AttributeNull => jsonGenerator.writeNull()
+              case AttributeBoolean(b) => jsonGenerator.writeBoolean(b)
+              case AttributeNumber(n) => jsonGenerator.writeNumber(n.toFloat)
+              case AttributeString(s) => jsonGenerator.writeString(s)
+              case AttributeValueRawJson(j) => jsonGenerator.writeRaw(j.prettyPrint)
+            }
+          }
+        }
+
+        curr
       }
+
+      // output sink, which goes unused
+      val sink = Sink.fold[EntityAndAttributesResult, EntityAndAttributesResult](null) ( (acc, element) => writeAttrPart(acc, element))
+
+      dbSource.toMat(sink)(Keep.right).run()
+
+      StreamConverters.fromOutputStream(() => outputStream)
     }
+
+//    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+//      dataSource.inTransaction { dataAccess =>
+//        dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
+//      }
+//    }
+  }
 
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>

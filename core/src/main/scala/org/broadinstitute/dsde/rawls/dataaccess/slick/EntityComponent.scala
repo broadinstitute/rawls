@@ -194,7 +194,7 @@ trait EntityComponent {
     }
 
     //noinspection ScalaDocMissingParameterDescription,SqlDialectInspection,RedundantBlock,DuplicatedCode
-    private object EntityAndAttributesRawSqlQuery extends RawSqlQuery {
+    object EntityAndAttributesRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
       // result structure from entity and attribute list raw sql
@@ -228,6 +228,15 @@ trait EntityComponent {
           left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
 
       // Active actions: only return entities and attributes with their deleted flag set to false
+
+      // : ReadAction[Seq[EntityAndAttributesResult]]
+      def activeStreamForType(workspaceContext: Workspace, entityType: String) = {
+        sql"""#$baseEntityAndAttributeSql
+              where e.deleted = false
+              and e.entity_type = ${entityType}
+              and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
+              order by e.id, a.namespace, a.name, a.list_index""".as[EntityAndAttributesResult]
+      }
 
       def activeActionForType(workspaceContext: Workspace, entityType: String): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
@@ -452,6 +461,10 @@ trait EntityComponent {
 
     def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] = {
       EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map unmarshalEntities
+    }
+
+    def streamActiveEntityAttributesOfType(workspaceContext: Workspace, entityType: String) = {
+      EntityAndAttributesRawSqlQuery.activeStreamForType(workspaceContext, entityType)
     }
 
     // get entity types, counts, and attribute names to populate UI tables.  Active entities and attributes only.
@@ -889,7 +902,7 @@ trait EntityComponent {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 
-    private def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[Entity] = {
+    def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[Entity] = {
       unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
     }
 

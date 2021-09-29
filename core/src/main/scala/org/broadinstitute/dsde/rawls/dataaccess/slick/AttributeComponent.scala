@@ -178,7 +178,7 @@ trait AttributeComponent {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
-  protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
+  object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
@@ -519,7 +519,7 @@ trait AttributeComponent {
       }
     }
 
-    private def unmarshalValue(attributeRec: RECORD): AttributeValue = {
+    def unmarshalValue(attributeRec: RECORD): AttributeValue = {
       if (attributeRec.valueBoolean.isDefined) {
         AttributeBoolean(attributeRec.valueBoolean.get)
       } else if (attributeRec.valueNumber.isDefined) {
@@ -534,7 +534,7 @@ trait AttributeComponent {
       }
     }
 
-    private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
+    def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
 
     private def getTableSuffix(tableName: String): String = {
       if (tableName == "ENTITY_ATTRIBUTE" || tableName == "WORKSPACE_ATTRIBUTE")
