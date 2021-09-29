@@ -3,8 +3,9 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.actor.{ActorSystem, Cancellable}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
-import akka.stream.IOResult
+import akka.stream.{Attributes, FlowShape, IOResult, Inlet, Outlet}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source, StreamConverters}
+import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
 import akka.util.ByteString
 import com.fasterxml.jackson.core.{JsonEncoding, JsonFactory, JsonGenerator}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -169,11 +170,10 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def listEntities(workspaceName: WorkspaceName, entityType: String) = {
 
     import dataSource.dataAccess.entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult
-    import spray.json._
-    import spray.json.DefaultJsonProtocol._
-
-    implicit val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
-
+//    import spray.json._
+//    import spray.json.DefaultJsonProtocol._
+//
+//    implicit val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) map { workspaceContext =>
       // TODO: set transaction isolation level
@@ -188,7 +188,95 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
       implicit val system = ActorSystem()
 
+      case class Magpie(accum: Seq[EntityAndAttributesResult], entity: Option[Entity])
 
+      def gatherOrOutput(prev: Magpie, curr: Magpie, forceMarshal: Boolean = false): Magpie = {
+        // logger.info(s"*** iterating: $prev :: $curr")
+        if (forceMarshal) {
+          val unmarshalled = dataSource.dataAccess.entityQuery.unmarshalEntities(curr.accum)
+          if (unmarshalled.size != 1) {
+            throw new Exception("how did we have more than one entity?")
+          }
+          val entity = unmarshalled.head
+          logger.info(s"*** LAST/FORCED ENTITY: ${entity.name} (${entity.attributes.size})")
+          Magpie(curr.accum, Some(entity))
+        } else if (prev.accum.isEmpty) {
+          // should only happen on the first element
+          logger.info(s"*** FIRST ELEMENT")
+          curr
+        } else if (prev.accum.head.entityRecord.id == curr.accum.head.entityRecord.id) {
+          // we are in the same entity, keep gathering attributes
+          val newAccum = prev.accum ++ curr.accum
+          logger.info(s"*** SAME ENTITY ${newAccum.size}")
+          Magpie(newAccum, None)
+        } else if (prev.accum.head.entityRecord.id != curr.accum.head.entityRecord.id) {
+          // we have started a new entity. Marshal and output what we've accumulated so far,
+          // and start a new accumulator for the new entity
+          val unmarshalled = dataSource.dataAccess.entityQuery.unmarshalEntities(prev.accum)
+          if (unmarshalled.size != 1) {
+            throw new Exception("how did we have more than one entity?")
+          }
+          val entity = unmarshalled.head
+          logger.info(s"*** NEW ENTITY: ${entity.name} (${entity.attributes.size})")
+          Magpie(curr.accum, Some(entity))
+        } else {
+          throw new Exception(s"we shouldn't be here: $prev :: $curr")
+        }
+      }
+
+      class Nest extends GraphStage[FlowShape[Magpie, Magpie]] {
+        val in = Inlet[Magpie]("DigestCalculator.in")
+        val out = Outlet[Magpie]("DigestCalculator.out")
+        override val shape = FlowShape(in, out)
+
+        override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
+          private var prev: Magpie = Magpie(Seq(), None)
+
+          setHandler(out, new OutHandler {
+            override def onPull(): Unit = pull(in)
+          })
+
+          setHandler(in, new InHandler {
+            override def onPush(): Unit = {
+              val next = gatherOrOutput(prev, grab(in))
+              prev = next
+              emit(out, next)
+            }
+            override def onUpstreamFinish(): Unit = {
+              emit(out, gatherOrOutput(Magpie(Seq(), None), prev, true))
+              completeStage()
+            }
+          })
+
+        }
+
+
+      }
+
+
+      val pipeline = dbSource
+        .map(x => Magpie(Seq(x), None))
+        .via(new Nest())
+        .map { x =>
+          logger.info(s"********** in this iteration, entity is: ${x.entity}")
+          x
+        }
+        .collect {
+          case x if x.entity.isDefined =>
+            logger.info(s"********** we have an entity in collect: ${x.entity.map(_.name)}")
+            x.entity.get
+        }.map { e =>
+          logger.info(s"********** we have an entity in map: ${e.name}")
+          e
+        }
+
+      val entitySource = Source.fromGraph(pipeline)
+
+      entitySource
+
+    }
+
+      /*
       // Jackson streaming-json generator
       val outputStream = new ByteArrayOutputStream()
       val jsonGenerator: JsonGenerator = new JsonFactory().createGenerator(outputStream, JsonEncoding.UTF8)
@@ -263,7 +351,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       dbSource.toMat(sink)(Keep.right).run()
 
       StreamConverters.fromOutputStream(() => outputStream)
-    }
+      */
+    // }
 
 //    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 //      dataSource.inTransaction { dataAccess =>
