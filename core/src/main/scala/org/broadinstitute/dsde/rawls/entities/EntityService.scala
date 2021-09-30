@@ -170,7 +170,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def listEntities(workspaceName: WorkspaceName, entityType: String) = {
 
-    import dataSource.dataAccess.entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult
+    import dataSource.dataAccess.entityQuery.EntityAndAttributesResult
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) map { workspaceContext =>
       // TODO: reassess transaction isolation level

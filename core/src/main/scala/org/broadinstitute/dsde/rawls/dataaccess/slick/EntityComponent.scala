@@ -155,6 +155,9 @@ trait EntityComponent {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
 
+    // result structure from entity and attribute list raw sql
+    case class EntityAndAttributesResult(entityRecord: EntityRecord, attributeRecord: Option[EntityAttributeRecord], refEntityRecord: Option[EntityRecord])
+
     // Raw queries - used when querying for multiple AttributeEntityReferences
 
     //noinspection SqlDialectInspection,DuplicatedCode
@@ -195,11 +198,8 @@ trait EntityComponent {
     }
 
     //noinspection ScalaDocMissingParameterDescription,SqlDialectInspection,RedundantBlock,DuplicatedCode
-    object EntityAndAttributesRawSqlQuery extends RawSqlQuery {
+    private object EntityAndAttributesRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
-
-      // result structure from entity and attribute list raw sql
-      case class EntityAndAttributesResult(entityRecord: EntityRecord, attributeRecord: Option[EntityAttributeRecord], refEntityRecord: Option[EntityRecord])
 
       // tells slick how to convert a result row from a raw sql query to an instance of EntityAndAttributesResult
       implicit val getEntityAndAttributesResult = GetResult { r =>
@@ -461,7 +461,7 @@ trait EntityComponent {
     }
 
     // almost the same as "listActiveEntitiesOfType" except 1) does not unmarshal entities; 2) returns a stream
-    def streamActiveEntityAttributesOfType(workspaceContext: Workspace, entityType: String): SqlStreamingAction[Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult, Read] = {
+    def streamActiveEntityAttributesOfType(workspaceContext: Workspace, entityType: String): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] = {
       EntityAndAttributesRawSqlQuery.activeStreamForType(workspaceContext, entityType)
     }
 
@@ -904,16 +904,16 @@ trait EntityComponent {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 
-    def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[Entity] = {
+    def unmarshalEntities(entityAttributeRecords: Seq[EntityAndAttributesResult]): Seq[Entity] = {
       unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
     }
 
-    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[(Long, Entity)] = {
+    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[EntityAndAttributesResult]): Seq[(Long, Entity)] = {
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
 
       // note that not all entities have attributes, thus the collect below
       val entitiesWithAttributes = entityAttributeRecords.collect {
-        case EntityAndAttributesRawSqlQuery.EntityAndAttributesResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
+        case EntityAndAttributesResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
       }
 
       val attributesByEntityId = entityAttributeQuery.unmarshalAttributes(entitiesWithAttributes)
