@@ -108,7 +108,6 @@ trait EntityComponent {
       Option(s"${entity.name} ${collectAttributeStrings(entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]), List(), maxLength)}".toLowerCase.take(maxLength))
     }
 
-    //TODO: Add tracing
     def batchInsertEntities(workspaceContext: Workspace, entities: TraversableOnce[Entity]): ReadWriteAction[Seq[EntityRecord]] = {
       def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecordWithInlineAttributes = {
         EntityRecordWithInlineAttributes(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity), deleted = false, deletedDate = None)
@@ -174,7 +173,6 @@ trait EntityComponent {
         }
       }
 
-      //TODO: Add tracing
       def batchHide(workspaceId: UUID, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
         // get unique suffix for renaming
         val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
@@ -185,7 +183,6 @@ trait EntityComponent {
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
 
-      //TODO: Add tracing
       def activeActionForRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
         if( entities.isEmpty ) {
           DBIO.successful(Seq.empty[AttributeEntityReference])
@@ -446,13 +443,8 @@ trait EntityComponent {
 
     // list all entities or those in a category
 
-    //Used by cloneWorkspace
     def listActiveEntities(workspaceContext: Workspace): ReadWriteAction[TraversableOnce[Entity]] = {
-      traceDBIO("EntityComponent.listActiveEntities") { rootSpan =>
-        rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-
-        EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map unmarshalEntities
-      }
+      EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map unmarshalEntities
     }
 
     // includes "deleted" hidden entities
@@ -461,14 +453,8 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map unmarshalEntities
     }
 
-    //Used by EntityService.listEntities
     def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadWriteAction[TraversableOnce[Entity]] = {
-      traceDBIO("EntityComponent.listActiveEntitiesOfType") { rootSpan =>
-        rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-        rootSpan.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
-
-        EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map unmarshalEntities
-      }
+      EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map unmarshalEntities
     }
 
     // get entity types, counts, and attribute names to populate UI tables.  Active entities and attributes only.
@@ -703,7 +689,7 @@ trait EntityComponent {
 
     // perform actual deletion (not hiding) of all entities in a workspace
 
-    def deleteFromDb(workspaceId: UUID): ReadWriteAction[Int] = {
+    def deleteFromDb(workspaceId: UUID): WriteAction[Int] = {
       EntityDependenciesDeletionQuery.deleteAction(workspaceId) andThen {
         filter(_.workspaceId === workspaceId).delete
       }
@@ -711,7 +697,6 @@ trait EntityComponent {
 
     def rename(workspaceContext: Workspace, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
       validateEntityName(newName)
-
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, oldName).map(_.name).update(newName)
     }
