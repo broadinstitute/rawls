@@ -70,6 +70,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
   def this() = this(ActorSystem("SubmissionSpec"))
   implicit val materializer = ActorMaterializer()
+  implicit val cs = IO.contextShift(global)
 
   val testDbName = "SubmissionSpec"
   val submissionSupervisorActorName = "test-subspec-submission-supervisor"

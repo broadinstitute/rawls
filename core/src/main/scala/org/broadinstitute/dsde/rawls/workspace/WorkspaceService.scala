@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
@@ -9,6 +8,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
+import cats.effect.{ContextShift, IO}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
@@ -77,7 +77,8 @@ object WorkspaceService {
                   servicePerimeterService: ServicePerimeterService,
                   googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String)
                  (userInfo: UserInfo)
-                 (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
+                 (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext,
+                  cs: ContextShift[IO]): WorkspaceService = {
 
     new WorkspaceService(userInfo, dataSource, entityManager, methodRepoDAO, cromiamDAO,
       executionServiceCluster, execServiceBatchSize, workspaceManagerDAO, deltaLayer,
@@ -150,7 +151,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        googleIamDao: GoogleIamDAO,
                        terraBillingProjectOwnerRole: String,
                        terraWorkspaceCanComputeRole: String)
-                      (implicit protected val executionContext: ExecutionContext) extends RoleSupport
+                      (implicit protected val executionContext: ExecutionContext, cs: ContextShift[IO]) extends RoleSupport
   with LibraryPermissionsSupport
   with FutureSupport
   with MethodWiths
@@ -2005,7 +2006,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ = logger.info(s"Creating labels for ${googleProjectId}.")
       googleProjectLabels = gcsDAO.labelSafeMap(Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId), "")
       googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
-      _ = logger.info(s"Setting up project in ${googleProjectId} cloud resource manager.")
+      _ = logger.info(s"Setting up project ${googleProjectId} in cloud resource manager.")
       googleProject <- traceWithParent("setUpProjectInCloudResourceManager", span)(_ => setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName))
       _ = logger.info(s"Remove RBS SA from owner policy ${googleProjectId}.")
       googleProjectNumber = gcsDAO.getGoogleProjectNumber(googleProject)
@@ -2180,20 +2181,22 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   private def syncPolicies(workspaceId: String, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], workspaceRequest: WorkspaceRequest, parentSpan: Span) = {
     traceWithParent("traversePolicies", parentSpan) (s1 =>
-      Future.traverse(policyEmailsByName.keys) { policyName =>
+      // This used to be Future.traverse but that runs all the futures eagerly and concurrently. This led to some perf
+      // issues, hitting the akka subscription timeout. We switched to use cats traverse to make these calls serially.
+      policyEmailsByName.keys.toList.traverse { policyName =>
         if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
           // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
           // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
           // the limit of 2000
-          Future.successful(())
+          IO.fromFuture(IO(Future.successful(())))
         } else if (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined || policyName == SamWorkspacePolicyNames.canCompute) {
           // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
           // granted bucket access (and thus need a google group)
-          traceWithParent(s"syncPolicy-${policyName}", s1)(_ => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName))
+          IO.fromFuture(IO(traceWithParent(s"syncPolicy-${policyName}", s1)(_ => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName))))
         } else {
-          Future.successful(())
+          IO.fromFuture(IO(Future.successful(())))
         }
-      }
+      }.unsafeToFuture()
     )
   }
 
