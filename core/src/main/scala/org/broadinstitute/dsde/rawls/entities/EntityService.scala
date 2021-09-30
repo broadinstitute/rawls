@@ -5,6 +5,8 @@ import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.scala.Tracing.traceWithParent
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerException
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
@@ -13,6 +15,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityCopyDefinition, EntityQuery, ErrorReport, SamResourceTypeNames, SamWorkspaceActions, UserInfo, WorkspaceName, _}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
@@ -86,14 +89,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
+  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
       val deleteFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        _ <- entityProvider.deleteEntities(entRefs)
+        _ <- entityProvider.deleteEntities(entRefs, parentSpan)
       } yield {
         PerRequest.RequestComplete(StatusCodes.NoContent)
       }
@@ -157,10 +160,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       metadataFuture.recover(bigQueryRecover)
     }
 
-  def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =
+  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
+        traceDBIOWithParent("listActiveEntitiesOfType", parentSpan) { _ =>
+          dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
+        }.map { r =>
+          RequestComplete(StatusCodes.OK, r.toSeq)
+        }
       }
     }
 
@@ -180,7 +187,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
   }
 
-  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean): Future[PerRequestMessage] =
+  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean, parentSpan: Span = null): Future[PerRequestMessage] =
 
     getWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { destWorkspaceContext =>
       getWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { sourceWorkspaceContext =>
@@ -191,7 +198,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
             result <- authDomainCheck(sourceAD.toSet, destAD.toSet) flatMap { _ =>
               val entityNames = entityCopyDef.entityNames
               val entityType = entityCopyDef.entityType
-              val copyResults = dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
+              val copyResults = traceDBIOWithParent("checkAndCopyEntities", parentSpan)( s1 => dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities, s1))
               copyResults.map { response =>
                 if (response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntities)) RequestComplete(StatusCodes.Created, response)
                 else RequestComplete(StatusCodes.Conflict, response)
@@ -202,15 +209,15 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def batchUpdateEntitiesInternal(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Traversable[Entity]] =
+  def batchUpdateEntitiesInternal(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[Traversable[Entity]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
       (for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         entities       <- if (upsert) {
-                            entityProvider.batchUpsertEntities(entityUpdates)
+                            entityProvider.batchUpsertEntities(entityUpdates, parentSpan)
                           } else {
-                            entityProvider.batchUpdateEntities(entityUpdates)
+                            entityProvider.batchUpdateEntities(entityUpdates, parentSpan)
                           }
       } yield {
         entities
@@ -220,12 +227,12 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
-    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject).map (_ =>
+  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[PerRequestMessage] =
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject, parentSpan).map (_ =>
       RequestComplete(StatusCodes.NoContent))
 
-  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
-    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject).map (_ =>
+  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[PerRequestMessage] =
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject, parentSpan).map (_ =>
       RequestComplete(StatusCodes.NoContent))
 
   private def bigQueryRecover: PartialFunction[Throwable, PerRequestMessage] = {

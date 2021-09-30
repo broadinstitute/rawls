@@ -9,6 +9,7 @@ import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, QueryParameterValue, TableResult}
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, DeltaLayerException, DeltaLayerTranslator, DeltaLayerWriter}
@@ -74,7 +75,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
   override def createEntity(entity: Entity): Future[Entity] =
     throw new UnsupportedEntityOperationException("create entity not supported by this provider.")
 
-  override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] =
+  override def deleteEntities(entityRefs: Seq[AttributeEntityReference], parentSpan: Span = null): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities not supported by this provider.")
 
 
@@ -412,10 +413,10 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
 
   override def expressionValidator: ExpressionValidator = new DataRepoEntityExpressionValidator(snapshotModel)
 
-  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
+  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]] =
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]] = {
     // translate to delta layer row objects. This method includes validation.
     val inserts = DeltaLayerTranslator.translateEntityUpdates(entityUpdates)
 

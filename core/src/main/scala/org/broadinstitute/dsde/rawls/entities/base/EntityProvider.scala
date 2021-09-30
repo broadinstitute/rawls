@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
@@ -18,7 +19,7 @@ trait EntityProvider {
 
   def createEntity(entity: Entity): Future[Entity]
 
-  def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
+  def deleteEntities(entityRefs: Seq[AttributeEntityReference], parentSpan: Span = null): Future[Int]
 
   /**
   The overall approach is:
@@ -50,7 +51,7 @@ trait EntityProvider {
 
   def queryEntities(entityType: String, query: EntityQuery): Future[EntityQueryResponse]
 
-  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]]
 
-  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]]
 }

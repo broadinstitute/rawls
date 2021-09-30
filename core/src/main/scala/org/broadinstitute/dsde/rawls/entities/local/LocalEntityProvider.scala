@@ -2,8 +2,8 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.scala.Tracing.trace
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.scala.Tracing.{trace, traceWithParent}
+import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 
@@ -85,15 +85,18 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   }
 
   // EntityApiServiceSpec has good test coverage for this api
-  override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = {
+  override def deleteEntities(entRefs: Seq[AttributeEntityReference], parentSpan: Span = null): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
-      withAllEntityRefs(workspaceContext, dataAccess, entRefs) { _ =>
-        dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
-          if (referringEntities != entRefs.toSet)
-            throw new DeleteEntitiesConflictException(referringEntities)
-          else {
-            dataAccess.entityQuery.hide(workspaceContext, entRefs)
+      traceDBIOWithParent("LocalEntityProvider.deleteEntities", parentSpan) { s1 =>
+        s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+        withAllEntityRefs(workspaceContext, dataAccess, entRefs, s1) { _ =>
+          traceDBIOWithParent("getAllReferringEntities", s1)(s2 => dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet)) flatMap { referringEntities =>
+            if (referringEntities != entRefs.toSet)
+              throw new DeleteEntitiesConflictException(referringEntities)
+            else {
+              traceDBIOWithParent("hide", s1)(_ => dataAccess.entityQuery.hide(workspaceContext, entRefs))
+            }
           }
         }
       }
@@ -173,52 +176,58 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Traversable[Entity]] = {
+  def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean, parentSpan: Span = null): Future[Traversable[Entity]] = {
     val namesToCheck = for {
       update <- entityUpdates
       operation <- update.operations
     } yield operation.name
 
-    withAttributeNamespaceCheck(namesToCheck) {
-      dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity)){ dataAccess =>
-        val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
-          val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
-          entityUpdates.map { entityUpdate =>
-            entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
-              case Some(e) =>
-                Try(applyOperationsToEntity(e, entityUpdate.operations))
-              case None =>
-                if (upsert) {
-                  Try(applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations))
-                } else {
-                  Failure(new RuntimeException("Entity does not exist"))
-                }
-            })
+    traceWithParent("LocalEntityProvider.batchUpdateEntitiesImpl", parentSpan) { s1 =>
+      s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+      s1.putAttribute("isUpsert", OpenCensusAttributeValue.booleanAttributeValue(upsert))
+      s1.putAttribute("entityUpdatesCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.length))
+
+      withAttributeNamespaceCheck(namesToCheck) {
+        dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
+          val updateTrialsAction = traceDBIOWithParent("getActiveEntities", s1)(_ => dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name)))) map { entities =>
+            val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
+            entityUpdates.map { entityUpdate =>
+              entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
+                case Some(e) =>
+                  Try(applyOperationsToEntity(e, entityUpdate.operations))
+                case None =>
+                  if (upsert) {
+                    Try(applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations))
+                  } else {
+                    Failure(new RuntimeException("Entity does not exist"))
+                  }
+              })
+            }
           }
+
+          val saveAction = updateTrialsAction flatMap { updateTrials =>
+            val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
+              ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
+            }
+            if (errorReports.nonEmpty) {
+              DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
+            } else {
+              val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
+
+              dataAccess.entityQuery.save(workspaceContext, t)
+            }
+          }
+
+          traceDBIOWithParent("saveAction", s1)(_ => saveAction)
         }
-
-        val saveAction = updateTrialsAction flatMap { updateTrials =>
-          val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
-            ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
-          }
-          if (errorReports.nonEmpty) {
-            DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
-          } else {
-            val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
-
-            dataAccess.entityQuery.save(workspaceContext, t)
-          }
-        }
-
-        saveAction
       }
     }
   }
 
-  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
-    batchUpdateEntitiesImpl(entityUpdates, upsert = false)
+  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]] =
+    batchUpdateEntitiesImpl(entityUpdates, upsert = false, parentSpan)
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
-    batchUpdateEntitiesImpl(entityUpdates, upsert = true)
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]] =
+    batchUpdateEntitiesImpl(entityUpdates, upsert = true, parentSpan)
 
 }
