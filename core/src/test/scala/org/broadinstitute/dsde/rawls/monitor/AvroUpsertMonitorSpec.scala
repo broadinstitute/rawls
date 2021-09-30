@@ -499,7 +499,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
         // Hence adding ascribing [Unit] explicitly here so that `eventually` will use `Retrying[Unit]`
         eventually[Unit](Timeout(timeout), Interval(interval)) {
           verify(mockEntityService, times(1)).batchUpdateEntitiesInternal(
-            any[WorkspaceName], any[Seq[EntityUpdateDefinition]], ArgumentMatchers.eq(expectation.isUpsert), any[Option[DataReferenceName]], any[Option[GoogleProjectId]]
+            any[WorkspaceName], any[Seq[EntityUpdateDefinition]], ArgumentMatchers.eq(expectation.isUpsert), any[Option[DataReferenceName]], any[Option[GoogleProjectId]], any[Span]
           )
         }
       }
