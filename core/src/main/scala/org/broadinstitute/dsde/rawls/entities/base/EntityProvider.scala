@@ -49,7 +49,7 @@ trait EntityProvider {
 
   def getEntity(entityType: String, entityName: String): Future[Entity]
 
-  def queryEntities(entityType: String, query: EntityQuery): Future[EntityQueryResponse]
+  def queryEntities(entityType: String, query: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse]
 
   def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]]
 

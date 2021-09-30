@@ -108,7 +108,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     resultIO.unsafeToFuture()
   }
 
-  override def queryEntities(entityType: String, incomingQuery: EntityQuery): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
     // throw immediate error if user supplied filterTerms
     if (incomingQuery.filterTerms.nonEmpty) {
       throw new UnsupportedEntityOperationException("term filtering not supported by this provider.")

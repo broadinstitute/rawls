@@ -275,7 +275,7 @@ trait EntityComponent {
         concatSqlActions(sql"""select e.id, e.name, e.all_attribute_values #$sortColumns from ENTITY e """, sortJoin, sql""" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId """)
       }
 
-      def activeActionForPagination(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery): ReadAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
+      def activeActionForPagination(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentSpan: Span = null): ReadWriteAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
         /*
         The query here starts with baseEntityAndAttributeSql which is the typical select
         to pull entities will all attributes and references. A join is added on a sub select from ENTITY
@@ -319,14 +319,14 @@ trait EntityComponent {
         }
 
         for {
-          unfilteredCount <- findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
+          unfilteredCount <- traceDBIOWithParent("findActiveEntityByType", parentSpan)(_ => findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result)
           filteredCount <- if (entityQuery.filterTerms.isEmpty) {
                               // if the query has no filter, then "filteredCount" and "unfilteredCount" will always be the same; no need to make another query
                               DBIO.successful(Vector(unfilteredCount))
                             } else {
-                              filteredCountQuery
+                              traceDBIOWithParent("filteredCountQuery", parentSpan)(_ => filteredCountQuery)
                             }
-          page <- concatSqlActions(sql"#$baseEntityAndAttributeSql", paginationJoin, order("p")).as[EntityAndAttributesResult]
+          page <- traceDBIOWithParent("pageQuery", parentSpan)(_ => concatSqlActions(sql"#$baseEntityAndAttributeSql", paginationJoin, order("p")).as[EntityAndAttributesResult])
         } yield (unfilteredCount, filteredCount.head, page)
       }
 
@@ -443,7 +443,7 @@ trait EntityComponent {
 
     // list all entities or those in a category
 
-    def listActiveEntities(workspaceContext: Workspace): ReadWriteAction[TraversableOnce[Entity]] = {
+    def listActiveEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] = {
       EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map unmarshalEntities
     }
 
@@ -453,7 +453,7 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map unmarshalEntities
     }
 
-    def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadWriteAction[TraversableOnce[Entity]] = {
+    def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] = {
       EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map unmarshalEntities
     }
 
@@ -491,8 +491,8 @@ trait EntityComponent {
 
     // get paginated entities for UI display, as a result of executing a query
 
-    def loadEntityPage(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery): ReadAction[(Int, Int, Iterable[Entity])] = {
-      EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext, entityType, entityQuery) map { case (unfilteredCount, filteredCount, pagination) =>
+    def loadEntityPage(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentSpan: Span = null): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
+      EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext, entityType, entityQuery, parentSpan) map { case (unfilteredCount, filteredCount, pagination) =>
         (unfilteredCount, filteredCount, unmarshalEntities(pagination))
       }
     }

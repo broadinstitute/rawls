@@ -159,9 +159,9 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  override def queryEntities(entityType: String, query: EntityQuery): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String, query: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query) map { case (unfilteredCount, filteredCount, entities) =>
+      traceDBIOWithParent("loadEntityPage", parentSpan)( s1 => dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query, s1)) map { case (unfilteredCount, filteredCount, entities) =>
         createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq)
       }
     }

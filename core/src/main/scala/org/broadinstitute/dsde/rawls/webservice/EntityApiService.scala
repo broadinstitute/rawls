@@ -35,19 +35,23 @@ trait EntityApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
         get {
           parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
-            val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
-            val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+            traceRequest { span =>
+              val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
+              val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
 
-            val errors = toIntTries.collect {
-              case (k, Failure(t)) => s"$k must be a positive integer"
-              case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
-            } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
+              val errors = toIntTries.collect {
+                case (k, Failure(t)) => s"$k must be a positive integer"
+                case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
+              } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
 
-            if (errors.isEmpty) {
-              val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
-              complete { entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject) }
-            } else {
-              complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
+              if (errors.isEmpty) {
+                val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
+                complete {
+                  entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject, span)
+                }
+              } else {
+                complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
+              }
             }
           }
         }
@@ -147,10 +151,10 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / "entities" / "copy") {
           post {
             parameters('linkExistingEntities.?) { (linkExistingEntities) =>
-              traceRequest { span =>
-                extractRequest { request =>
-                  val linkExistingEntitiesBool = Try(linkExistingEntities.getOrElse("false").toBoolean).getOrElse(false)
-                  entity(as[EntityCopyDefinition]) { copyDefinition =>
+              extractRequest { request =>
+                val linkExistingEntitiesBool = Try(linkExistingEntities.getOrElse("false").toBoolean).getOrElse(false)
+                entity(as[EntityCopyDefinition]) { copyDefinition =>
+                  traceRequest { span =>
                     complete {
                       entityServiceConstructor(userInfo).copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool, span)
                     }

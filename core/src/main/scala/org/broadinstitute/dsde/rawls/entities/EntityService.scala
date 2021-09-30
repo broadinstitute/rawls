@@ -171,14 +171,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] = {
+  def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[PerRequestMessage] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
       val queryFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        entities <- entityProvider.queryEntities(entityType, query)
+        entities <- entityProvider.queryEntities(entityType, query, parentSpan)
       } yield {
         PerRequest.RequestComplete(StatusCodes.OK, entities)
       }
