@@ -2179,7 +2179,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     )
   }
 
-  private def syncPolicies(workspaceId: String, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], workspaceRequest: WorkspaceRequest, parentSpan: Span) = {
+  private def syncPolicies(workspaceId: String, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], workspaceRequest: WorkspaceRequest, parentSpan: Span): Future[List[Any]] = {
     traceWithParent("traversePolicies", parentSpan) (s1 =>
       // This used to be Future.traverse but that runs all the futures eagerly and concurrently. This led to some perf
       // issues, hitting the akka subscription timeout. We switched to use cats traverse to make these calls serially.
