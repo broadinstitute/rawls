@@ -1,24 +1,18 @@
 package org.broadinstitute.dsde.rawls.entities
 
-import akka.actor.{ActorSystem, Cancellable}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
-import akka.stream.{Attributes, FlowShape, IOResult, Inlet, Outlet}
-import akka.stream.scaladsl.{Flow, Keep, Sink, Source, StreamConverters}
+import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
+import akka.stream.scaladsl.Source
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
-import akka.util.ByteString
-import com.fasterxml.jackson.core.{JsonEncoding, JsonFactory, JsonGenerator}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.EntityAttributeRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerException
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.AttributeFormat.{ENTITY_NAME_KEY, ENTITY_TYPE_KEY}
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityCopyDefinition, EntityQuery, ErrorReport, SamResourceTypeNames, SamWorkspaceActions, UserInfo, WorkspaceName, _}
@@ -30,7 +24,6 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import slick.jdbc.TransactionIsolation
 import spray.json.DefaultJsonProtocol._
 
-import java.io.{ByteArrayOutputStream, OutputStream}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -182,57 +175,82 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       // database source stream
       val dbSource = Source.fromPublisher(dataSource.database.stream(allAttrsStream)) // this REQUIRES an order by ENTITY.id
 
-      case class Magpie(accum: Seq[EntityAndAttributesResult], entity: Option[Entity])
+      // interim class used while iterating through the stream, allows us to accumulate attributes
+      // until ready to emit an entity
+      trait AttributeStreamElement
+      case class AttrAccum(accum: Seq[EntityAndAttributesResult], entity: Option[Entity]) extends AttributeStreamElement
+      case object EmptyElement extends AttributeStreamElement
 
-      def gatherOrOutput(prev: Magpie, curr: Magpie, forceMarshal: Boolean = false): Magpie = {
-        if (forceMarshal) {
-          val unmarshalled = dataSource.dataAccess.entityQuery.unmarshalEntities(curr.accum)
-          if (unmarshalled.size != 1) {
-            throw new Exception("how did we have more than one entity?")
-          }
-          val entity = unmarshalled.head
-          Magpie(curr.accum, Some(entity))
-        } else if (prev.accum.isEmpty) {
-          // should only happen on the first element
-          curr
-        } else if (prev.accum.head.entityRecord.id == curr.accum.head.entityRecord.id) {
-          // we are in the same entity, keep gathering attributes
-          val newAccum = prev.accum ++ curr.accum
-          Magpie(newAccum, None)
-        } else if (prev.accum.head.entityRecord.id != curr.accum.head.entityRecord.id) {
-          // we have started a new entity. Marshal and output what we've accumulated so far,
-          // and start a new accumulator for the new entity
-          val unmarshalled = dataSource.dataAccess.entityQuery.unmarshalEntities(prev.accum)
-          if (unmarshalled.size != 1) {
-            throw new Exception("how did we have more than one entity?")
-          }
-          val entity = unmarshalled.head
-          Magpie(curr.accum, Some(entity))
-        } else {
-          throw new Exception(s"we shouldn't be here: $prev :: $curr")
+      def gatherOrOutput(previous: AttributeStreamElement, current: AttributeStreamElement): AttrAccum = {
+        // utility function called when an entity is finished or when the stream is finished
+        def entityFinished(prevAttrs: Seq[EntityAndAttributesResult], nextAttrs: Seq[EntityAndAttributesResult]) = {
+          val unmarshalled = dataSource.dataAccess.entityQuery.unmarshalEntities(prevAttrs)
+          // safety check - did the attributes we gathered all marshal into a single entity?
+          if (unmarshalled.size != 1)
+            throw new DataEntityException(s"gatherOrOutput expected only one entity, found ${unmarshalled.size}")
+          AttrAccum(nextAttrs, Some(unmarshalled.head))
+        }
+
+        (previous, current) match {
+          // the first element
+          case (EmptyElement, curr: AttrAccum) =>
+            curr
+
+          // midstream, we notice that the current entity is the same as the previous entity.
+          // keep gathering attributes for this entity, and don't emit an entity yet.
+          case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id == curr.accum.head.entityRecord.id =>
+            val newAccum = prev.accum ++ curr.accum
+            AttrAccum(newAccum, None)
+
+          // midstream, we notice that the current entity is DIFFERENT from the previous entity.
+          // take all the attributes we have gathered for the previous entity,
+          // marshal them into an Entity object, emit that Entity, and start a new accumulator
+          // for the new/current entity
+          case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id != curr.accum.head.entityRecord.id =>
+            entityFinished(prev.accum, curr.accum)
+
+          // the stream has finished (curr == EmptyElement). marshal and output the final Entity.
+          case (prev: AttrAccum, EmptyElement) =>
+            entityFinished(prev.accum, Seq())
+
+          // relief valve, this should not happen
+          case _ =>
+            throw new Exception(s"gatherOrOutput encountered unexpected input, cannot continue. Prev: $previous :: Curr: $current")
         }
       }
 
-      class Nest extends GraphStage[FlowShape[Magpie, Magpie]] {
-        val in = Inlet[Magpie]("Nest.in")
-        val out = Outlet[Magpie]("Nest.out")
+      /* custom stream stage that allows us to compare the current stream element
+         to the previous stream element. In turn, this allows us to accumulate attributes
+         until we notice that the current element is from a different entity than the previous attribute;
+         when that happens, we marshal and emit an entity.
+       */
+      class EntityCollector extends GraphStage[FlowShape[AttrAccum, AttrAccum]] {
+        val in = Inlet[AttrAccum]("EntityCollector.in")
+        val out = Outlet[AttrAccum]("EntityCollector.out")
         override val shape = FlowShape(in, out)
 
         override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
-          private var prev: Magpie = Magpie(Seq(), None)
+          private var prev: AttributeStreamElement = EmptyElement // note: var!
 
+          // if our downstream pulls on us, propagate that pull to our upstream
           setHandler(out, new OutHandler {
             override def onPull(): Unit = pull(in)
           })
 
           setHandler(in, new InHandler {
+            // when a new element arrives ...
             override def onPush(): Unit = {
+              // send it to gatherOrOutput which has most of the logic
               val next = gatherOrOutput(prev, grab(in))
+              // save the current element to "prev" to prepare for the next iteration
               prev = next
+              // emit whatever gatherOrOutput returned
               emit(out, next)
             }
+            // when the upstream finishes ...
             override def onUpstreamFinish(): Unit = {
-              emit(out, gatherOrOutput(Magpie(Seq(), None), prev, true))
+              // ensure we marshal and emit the last entity
+              emit(out, gatherOrOutput(prev, EmptyElement))
               completeStage()
             }
           })
@@ -240,14 +258,13 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
 
       val pipeline = dbSource
-        .map(x => Magpie(Seq(x), None))
-        .via(new Nest())
-        .collect {
-          case x if x.entity.isDefined =>
-            x.entity.get
+        .map(x => AttrAccum(Seq(x), None)) // transform EntityAndAttributesResult to AttrAccum
+        .via(new EntityCollector())        // execute the business logic to accumulate attributes and emit entities
+        .collect {                         // "flatten" the stream to only emit entities
+          case x if x.entity.isDefined => x.entity.get
         }
 
-      Source.fromGraph(pipeline)
+      Source.fromGraph(pipeline) // return a Source, which akka-http natively knows how to stream to the caller
     }
   }
 
