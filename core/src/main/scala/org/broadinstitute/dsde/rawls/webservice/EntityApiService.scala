@@ -129,9 +129,7 @@ trait EntityApiService extends UserInfoDirectives {
           get {
             // if any other APIs adopt streaming, move this implicit val higher up in the EntityApiService trait
             implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json()
-            complete {
-              entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType)
-            }
+            complete { entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType) }
           }
         } ~
         path("workspaces" / "entities" / "copy") {
