@@ -2,13 +2,14 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
-
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
+import slick.dbio.Effect.Read
 import slick.jdbc.{GetResult, JdbcProfile}
+import slick.sql.SqlStreamingAction
 
 import scala.annotation.tailrec
 import scala.language.postfixOps
@@ -229,13 +230,13 @@ trait EntityComponent {
 
       // Active actions: only return entities and attributes with their deleted flag set to false
 
-      // : ReadAction[Seq[EntityAndAttributesResult]]
-      def activeStreamForType(workspaceContext: Workspace, entityType: String) = {
+      // almost the same as "activeActionForType" except 1) adds a sort by e.id; 2) returns a stream
+      def activeStreamForType(workspaceContext: Workspace, entityType: String): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] = {
         sql"""#$baseEntityAndAttributeSql
               where e.deleted = false
               and e.entity_type = ${entityType}
               and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
-              order by e.id, a.namespace, a.name, a.list_index""".as[EntityAndAttributesResult]
+              order by e.id""".as[EntityAndAttributesResult]
       }
 
       def activeActionForType(workspaceContext: Workspace, entityType: String): ReadAction[Seq[EntityAndAttributesResult]] = {
@@ -459,12 +460,13 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map unmarshalEntities
     }
 
-    def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] = {
-      EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map unmarshalEntities
+    // almost the same as "listActiveEntitiesOfType" except 1) does not unmarshal entities; 2) returns a stream
+    def streamActiveEntityAttributesOfType(workspaceContext: Workspace, entityType: String): SqlStreamingAction[Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult, Read] = {
+      EntityAndAttributesRawSqlQuery.activeStreamForType(workspaceContext, entityType)
     }
 
-    def streamActiveEntityAttributesOfType(workspaceContext: Workspace, entityType: String) = {
-      EntityAndAttributesRawSqlQuery.activeStreamForType(workspaceContext, entityType)
+    def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] = {
+      EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map unmarshalEntities
     }
 
     // get entity types, counts, and attribute names to populate UI tables.  Active entities and attributes only.

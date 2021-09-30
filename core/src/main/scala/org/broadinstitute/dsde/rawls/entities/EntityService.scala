@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import slick.jdbc.TransactionIsolation
 import spray.json.DefaultJsonProtocol._
 
 import java.io.{ByteArrayOutputStream, OutputStream}
@@ -170,44 +171,33 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def listEntities(workspaceName: WorkspaceName, entityType: String) = {
 
     import dataSource.dataAccess.entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult
-//    import spray.json._
-//    import spray.json.DefaultJsonProtocol._
-//
-//    implicit val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) map { workspaceContext =>
-      // TODO: set transaction isolation level
-      // TODO: play with fetchSize
-      val listAllAttrs = dataSource.dataAccess.entityQuery.streamActiveEntityAttributesOfType(workspaceContext, entityType)
-        .transactionally
+      // TODO: reassess transaction isolation level
+      // TODO: play with fetchSize, possibly move to config
+      val allAttrsStream = dataSource.dataAccess.entityQuery.streamActiveEntityAttributesOfType(workspaceContext, entityType)
+        .transactionally.withTransactionIsolation(TransactionIsolation.RepeatableRead)
         .withStatementParameters(fetchSize = 1000)
 
       // database source stream
-      val dbPublisher = dataSource.database.stream(listAllAttrs)
-      val dbSource = Source.fromPublisher(dbPublisher) // this REQUIRES an order by e.id, a.namespace, a.name, a.list_index
-
-      implicit val system = ActorSystem()
+      val dbSource = Source.fromPublisher(dataSource.database.stream(allAttrsStream)) // this REQUIRES an order by ENTITY.id
 
       case class Magpie(accum: Seq[EntityAndAttributesResult], entity: Option[Entity])
 
       def gatherOrOutput(prev: Magpie, curr: Magpie, forceMarshal: Boolean = false): Magpie = {
-        // logger.info(s"*** iterating: $prev :: $curr")
         if (forceMarshal) {
           val unmarshalled = dataSource.dataAccess.entityQuery.unmarshalEntities(curr.accum)
           if (unmarshalled.size != 1) {
             throw new Exception("how did we have more than one entity?")
           }
           val entity = unmarshalled.head
-          logger.info(s"*** LAST/FORCED ENTITY: ${entity.name} (${entity.attributes.size})")
           Magpie(curr.accum, Some(entity))
         } else if (prev.accum.isEmpty) {
           // should only happen on the first element
-          logger.info(s"*** FIRST ELEMENT")
           curr
         } else if (prev.accum.head.entityRecord.id == curr.accum.head.entityRecord.id) {
           // we are in the same entity, keep gathering attributes
           val newAccum = prev.accum ++ curr.accum
-          logger.info(s"*** SAME ENTITY ${newAccum.size}")
           Magpie(newAccum, None)
         } else if (prev.accum.head.entityRecord.id != curr.accum.head.entityRecord.id) {
           // we have started a new entity. Marshal and output what we've accumulated so far,
@@ -217,7 +207,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
             throw new Exception("how did we have more than one entity?")
           }
           val entity = unmarshalled.head
-          logger.info(s"*** NEW ENTITY: ${entity.name} (${entity.attributes.size})")
           Magpie(curr.accum, Some(entity))
         } else {
           throw new Exception(s"we shouldn't be here: $prev :: $curr")
@@ -225,8 +214,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
 
       class Nest extends GraphStage[FlowShape[Magpie, Magpie]] {
-        val in = Inlet[Magpie]("DigestCalculator.in")
-        val out = Outlet[Magpie]("DigestCalculator.out")
+        val in = Inlet[Magpie]("Nest.in")
+        val out = Outlet[Magpie]("Nest.out")
         override val shape = FlowShape(in, out)
 
         override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
@@ -247,118 +236,19 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
               completeStage()
             }
           })
-
         }
-
-
       }
-
 
       val pipeline = dbSource
         .map(x => Magpie(Seq(x), None))
         .via(new Nest())
-        .map { x =>
-          logger.info(s"********** in this iteration, entity is: ${x.entity}")
-          x
-        }
         .collect {
           case x if x.entity.isDefined =>
-            logger.info(s"********** we have an entity in collect: ${x.entity.map(_.name)}")
             x.entity.get
-        }.map { e =>
-          logger.info(s"********** we have an entity in map: ${e.name}")
-          e
         }
 
-      val entitySource = Source.fromGraph(pipeline)
-
-      entitySource
-
+      Source.fromGraph(pipeline)
     }
-
-      /*
-      // Jackson streaming-json generator
-      val outputStream = new ByteArrayOutputStream()
-      val jsonGenerator: JsonGenerator = new JsonFactory().createGenerator(outputStream, JsonEncoding.UTF8)
-
-      def writeAttrPart(prev: EntityAndAttributesResult, curr: EntityAndAttributesResult): EntityAndAttributesResult = {
-
-        val prevListIndex = prev.attributeRecord.flatMap(_.listIndex)
-        val currListIndex = curr.attributeRecord.flatMap(_.listIndex)
-
-        // do we need to end an attribute value array?
-        (prevListIndex, currListIndex) match {
-          case (Some(_), None) => jsonGenerator.writeEndArray()
-          case (Some(p), Some(c)) if c <= p => jsonGenerator.writeEndArray()
-          case _ => // noop
-        }
-
-        // do we need to end the previous entity and start a new one?
-        if (curr.entityRecord.id != prev.entityRecord.id) {
-          // close previous entity's attributes
-          jsonGenerator.writeEndObject()
-          // close previous entity
-          jsonGenerator.writeEndObject()
-
-          // start new entity
-          jsonGenerator.writeStartObject()
-          // write entity name and type
-          jsonGenerator.writeStringField("name", curr.entityRecord.name)
-          jsonGenerator.writeStringField("entityType", curr.entityRecord.entityType)
-          // start attributes array
-          jsonGenerator.writeFieldName("attributes")
-          jsonGenerator.writeStartObject()
-        }
-
-        // write current attribute
-        curr.attributeRecord.foreach { attr =>
-          val fieldName = toDelimitedName(AttributeName(attr.namespace, attr.name))
-
-          // do we need to start an attribute value array?
-          (prevListIndex, currListIndex) match {
-            case (None, Some(_)) => jsonGenerator.writeStartArray()
-            case (Some(p), Some(c)) if c <= p => jsonGenerator.writeStartArray()
-            case _ => // noop
-          }
-          // output the attribute value
-          AttributeString
-          if (curr.refEntityRecord.isDefined) {
-            val ref = dataSource.dataAccess.entityAttributeQuery.unmarshalReference(curr.refEntityRecord.get)
-            jsonGenerator.writeFieldName(fieldName)
-            jsonGenerator.writeStartObject()
-            jsonGenerator.writeStringField(ENTITY_TYPE_KEY, ref.entityType)
-            jsonGenerator.writeStringField(ENTITY_NAME_KEY, ref.entityName)
-            jsonGenerator.writeEndObject()
-          } else {
-            val attrValue = dataSource.dataAccess.entityAttributeQuery.unmarshalValue(attr)
-            jsonGenerator.writeFieldName(fieldName)
-            attrValue match {
-              case AttributeNull => jsonGenerator.writeNull()
-              case AttributeBoolean(b) => jsonGenerator.writeBoolean(b)
-              case AttributeNumber(n) => jsonGenerator.writeNumber(n.toFloat)
-              case AttributeString(s) => jsonGenerator.writeString(s)
-              case AttributeValueRawJson(j) => jsonGenerator.writeRaw(j.prettyPrint)
-            }
-          }
-        }
-
-        curr
-      }
-
-      // output sink, which goes unused
-      val sink = Sink.fold[EntityAndAttributesResult, EntityAndAttributesResult](null) ( (acc, element) => writeAttrPart(acc, element))
-
-      dbSource.toMat(sink)(Keep.right).run()
-
-      StreamConverters.fromOutputStream(() => outputStream)
-      */
-    // }
-
-//    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-//      dataSource.inTransaction { dataAccess =>
-//        dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
-//      }
-//    }
   }
 
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] = {
