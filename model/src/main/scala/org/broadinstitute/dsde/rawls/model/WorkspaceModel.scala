@@ -248,7 +248,10 @@ object SortDirections {
 
   def toSql(direction: SortDirection) = toString(direction)
 }
-case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
+case class EntityQuery(page: Int, pageSize: Int,
+                       sortField: String, sortDirection: SortDirections.SortDirection,
+                       filterTerms: Option[String],
+                       fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs())
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 
@@ -799,11 +802,13 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat7(WorkspaceRequest)
 
+  implicit val workspaceFieldSpecsFormat = jsonFormat1(WorkspaceFieldSpecs.apply)
+
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
   implicit val EntityTypeMetadataFormat = jsonFormat3(EntityTypeMetadata)
 
-  implicit val EntityQueryFormat = jsonFormat5(EntityQuery)
+  implicit val EntityQueryFormat = jsonFormat6(EntityQuery)
 
   implicit val EntityQueryResultMetadataFormat = jsonFormat3(EntityQueryResultMetadata)
 

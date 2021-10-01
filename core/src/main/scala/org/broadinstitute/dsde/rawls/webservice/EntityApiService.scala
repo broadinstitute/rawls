@@ -36,21 +36,26 @@ trait EntityApiService extends UserInfoDirectives {
         get {
           parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
             traceRequest { span =>
-              val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
-              val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+              parameterSeq { allParams =>
+                val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
+                val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
 
-              val errors = toIntTries.collect {
-                case (k, Failure(t)) => s"$k must be a positive integer"
-                case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
-              } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
+                val errors = toIntTries.collect {
+                  case (k, Failure(t)) => s"$k must be a positive integer"
+                  case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
+                } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
 
-              if (errors.isEmpty) {
-                val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
-                complete {
-                  entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject, span)
+                if (errors.isEmpty) {
+                  val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10),
+                    sortField.getOrElse("name"), sortDirectionTry.get,
+                    filterTerms,
+                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"))
+                  complete {
+                    entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject, span)
+                  }
+                } else {
+                  complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
                 }
-              } else {
-                complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
               }
             }
           }

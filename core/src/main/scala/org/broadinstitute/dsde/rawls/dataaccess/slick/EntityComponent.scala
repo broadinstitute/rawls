@@ -276,6 +276,9 @@ trait EntityComponent {
       }
 
       def activeActionForPagination(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentSpan: Span = null): ReadWriteAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
+        // TODO: when sorting by name (the default) AND no fields requested beyond name/entityType,
+        // don't bother with the extra join to ENTITY_ATTRIBUTE and its additional join to ENTITY
+        // TODO: when sorting by name, do we need the extra join to pagination?
         /*
         The query here starts with baseEntityAndAttributeSql which is the typical select
         to pull entities will all attributes and references. A join is added on a sub select from ENTITY
@@ -295,6 +298,18 @@ trait EntityComponent {
           }
         }
 
+        def attrSelectionSql(prefix: String) = {
+          val fieldsOption = entityQuery.fields.fields.map { fieldList =>
+            val attributeNameList: Set[AttributeName] = fieldList.map(AttributeName.fromDelimitedName)
+            val attrClauses = attributeNameList.map(attrName =>
+              sql"a.namespace = ${attrName.namespace} AND a.name = ${attrName.name}"
+            )
+            concatSqlActions(sql"#$prefix ", reduceSqlActionsWithDelim(attrClauses.toSeq, sql" or "))
+          }
+
+          fieldsOption.getOrElse(sql"")
+        }
+
         def order(alias: String) = entityQuery.sortField match {
           case "name" => sql" order by #$alias.name #${SortDirections.toSql(entityQuery.sortDirection)} "
           case _ => sql" order by #$alias.sort_list_length #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_string #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_number #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_boolean #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_ref #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.name #${SortDirections.toSql(entityQuery.sortDirection)} "
@@ -306,7 +321,8 @@ trait EntityComponent {
           sql") pagination ",
           filterSql("where", "pagination"),
           order("pagination"),
-          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize} ) p on p.id = e.id "
+          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize} ) p on p.id = e.id ",
+          attrSelectionSql("where")
         )
 
         def filteredCountQuery: ReadAction[Vector[Int]] = {
