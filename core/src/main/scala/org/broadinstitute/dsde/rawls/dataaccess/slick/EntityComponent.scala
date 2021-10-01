@@ -310,7 +310,7 @@ trait EntityComponent {
             val attrClauses = attributeNameList.map(attrName =>
               sql"(a.namespace = ${attrName.namespace} AND a.name = ${attrName.name})"
             )
-            concatSqlActions(sql"#$prefix ", reduceSqlActionsWithDelim(attrClauses.toSeq, sql" or "))
+            concatSqlActions(sql"#$prefix (", reduceSqlActionsWithDelim(attrClauses.toSeq, sql" or "), sql") ")
           }
 
           fieldsOption.getOrElse(sql"")
@@ -363,8 +363,8 @@ trait EntityComponent {
                    |          e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
                    |          from ENTITY e
                    |          left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id and a.deleted = e.deleted """.stripMargin,
-              attrSelectionSql(" and ( "),
-              sql""") left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
+              attrSelectionSql(" and "),
+              sql""" left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
               paginationJoin, order("p")).as[EntityAndAttributesResult]
           }
         }
