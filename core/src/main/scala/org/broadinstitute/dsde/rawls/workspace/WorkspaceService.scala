@@ -7,6 +7,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
+import cats.Applicative
 import cats.implicits._
 import cats.effect.{ContextShift, IO}
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -2180,24 +2181,36 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   private def syncPolicies(workspaceId: String, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], workspaceRequest: WorkspaceRequest, parentSpan: Span): Future[List[Any]] = {
-    traceWithParent("traversePolicies", parentSpan) (s1 =>
-      // This used to be Future.traverse but that runs all the futures eagerly and concurrently. This led to some perf
-      // issues, hitting the akka subscription timeout. We switched to use cats traverse to make these calls serially.
+    // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+    // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+    // the limit of 2000
+    def hasAuthorizationDomain(request: WorkspaceRequest): Boolean =
+      request.authorizationDomain match {
+        case Some(xs) => !xs.isEmpty
+        case None => false
+      }
+
+    def isProjectOwner(policy: SamResourcePolicyName): Boolean =
+      policy == SamWorkspacePolicyNames.projectOwner
+
+    // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
+    // granted bucket access (and thus need a google group)
+    def isCanCompute(policy: SamResourcePolicyName): Boolean =
+      policy == SamWorkspacePolicyNames.canCompute
+
+    traceWithParent("traversePolicies", parentSpan) { s1 =>
+      // This used to be Future.traverse but that runs all the futures eagerly and concurrently. This led to a perf
+      // issue with hitting the akka subscription timeout. We switched to use cats traverse to make these calls serially.
       policyEmailsByName.keys.toList.traverse { policyName =>
-        if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
-          // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-          // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-          // the limit of 2000
-          IO.fromFuture(IO(Future.successful(())))
-        } else if (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined || policyName == SamWorkspacePolicyNames.canCompute) {
-          // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
-          // granted bucket access (and thus need a google group)
-          IO.fromFuture(IO(traceWithParent(s"syncPolicy-${policyName}", s1)(_ => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName))))
-        } else {
-          IO.fromFuture(IO(Future.successful(())))
-        }
-      }.unsafeToFuture()
-    )
+        Applicative[Future].whenA(
+          !isProjectOwner(policyName) &&
+            !hasAuthorizationDomain(workspaceRequest) &&
+            (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined || isCanCompute(policyName))) (
+          traceWithParent(s"syncPolicy-${policyName}", s1)(_ =>
+            samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName))
+        )
+      }
+    }
   }
 
   private def createWorkspaceInDatabase(
