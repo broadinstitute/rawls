@@ -2588,10 +2588,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   val fieldSelectionApiPath = s"${fieldSelectionTestData.workspace.path}/entityQuery/${fieldSelectionTestData.entityType}"
 
-  def assertFieldSelection(actualResponse: EntityQueryResponse, expected: List[String]) = {
+  def assertFieldSelection(actualResponse: EntityQueryResponse, expectedFields: List[String], expectedPageSize: Int) = {
+    withClue("when checking results page size, ") {
+      actualResponse.results.size shouldBe expectedPageSize
+    }
     // calculate actual field list
     val actual = actualResponse.results.flatMap(e => e.attributes.keySet.map(a => AttributeName.toDelimitedName(a)))
-    actual.toSet should contain theSameElementsAs expected.toSet
+    actual.toSet should contain theSameElementsAs expectedFields.toSet
   }
 
   it should "return all attributes, name, and entityType if the fields parameter is omitted (all entities)" in withFieldSelectionTestDataApiServices { services =>
@@ -2602,7 +2605,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         status shouldBe StatusCodes.OK
         val resp = responseAs[EntityQueryResponse]
         val expected = fieldSelectionTestData.colorGroup1 ++ fieldSelectionTestData.colorGroup2 ++ fieldSelectionTestData.colorGroup3
-        assertFieldSelection(resp, expected)
+        assertFieldSelection(resp, expected, fieldSelectionTestData.entities.size)
       }
   }
 
@@ -2614,7 +2617,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         status shouldBe StatusCodes.OK
         val resp = responseAs[EntityQueryResponse]
         val expected = fieldSelectionTestData.colorGroup1
-        assertFieldSelection(resp, expected)
+        assertFieldSelection(resp, expected, 10)
       }
   }
 
@@ -2626,7 +2629,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         status shouldBe StatusCodes.OK
         val resp = responseAs[EntityQueryResponse]
         val expected = fieldSelectionTestData.colorGroup2
-        assertFieldSelection(resp, expected)
+        assertFieldSelection(resp, expected, 10)
       }
   }
 
@@ -2639,7 +2642,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         status shouldBe StatusCodes.OK
         val resp = responseAs[EntityQueryResponse]
         val expected = fieldSelectionTestData.colorGroup2 ++ fieldSelectionTestData.colorGroup3
-        assertFieldSelection(resp, expected)
+        assertFieldSelection(resp, expected, 15)
       }
   }
 
@@ -2650,7 +2653,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
-          assertFieldSelection(resp, fieldsUnderTest)
+          assertFieldSelection(resp, fieldsUnderTest, 25)
         }
     }
   }
@@ -2696,7 +2699,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         check {
           status shouldBe StatusCodes.OK
           val resp = responseAs[EntityQueryResponse]
-          assertFieldSelection(resp, fieldsUnderTest)
+          assertFieldSelection(resp, fieldsUnderTest, testCase.pageSize)
         }
     }
   }
@@ -2708,7 +2711,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       check {
         status shouldBe StatusCodes.OK
         val resp = responseAs[EntityQueryResponse]
-        assertFieldSelection(resp, List())
+        assertFieldSelection(resp, List(), 10)
       }
   }
 
@@ -2719,7 +2722,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       check {
         status shouldBe StatusCodes.OK
         val resp = responseAs[EntityQueryResponse]
-        assertFieldSelection(resp, List())
+        assertFieldSelection(resp, List(), 10)
       }
   }
 
@@ -2732,7 +2735,19 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         status shouldBe StatusCodes.OK
         val resp = responseAs[EntityQueryResponse]
         val expected = List("apricot")
-        assertFieldSelection(resp, expected)
+        assertFieldSelection(resp, expected, 10)
+      }
+  }
+
+  it should "return no attributes if field list is empty, i.e. 'fields='" in withFieldSelectionTestDataApiServices { services =>
+    // query for all entities
+    Get(s"$fieldSelectionApiPath?pageSize=${fieldSelectionTestData.entities.size}&fields=") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[EntityQueryResponse]
+        val expected = List()
+        assertFieldSelection(resp, expected, fieldSelectionTestData.entities.size)
       }
   }
 

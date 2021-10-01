@@ -229,6 +229,12 @@ trait EntityComponent {
           left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id and a.deleted = e.deleted
           left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
 
+      // NB: the "null" as the last column here is important! It allows this query to be translated into
+      // EntityAndAttributesResult objects; the null represents the lack of any attributes for this entity
+      val baseEntitySql =
+        s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date, null
+          from ENTITY e"""
+
       // Active actions: only return entities and attributes with their deleted flag set to false
 
       def activeActionForType(workspaceContext: Workspace, entityType: String): ReadAction[Seq[EntityAndAttributesResult]] = {
@@ -302,7 +308,7 @@ trait EntityComponent {
           val fieldsOption = entityQuery.fields.fields.map { fieldList =>
             val attributeNameList: Set[AttributeName] = fieldList.map(AttributeName.fromDelimitedName)
             val attrClauses = attributeNameList.map(attrName =>
-              sql"a.namespace = ${attrName.namespace} AND a.name = ${attrName.name}"
+              sql"(a.namespace = ${attrName.namespace} AND a.name = ${attrName.name})"
             )
             concatSqlActions(sql"#$prefix ", reduceSqlActionsWithDelim(attrClauses.toSeq, sql" or "))
           }
@@ -321,8 +327,7 @@ trait EntityComponent {
           sql") pagination ",
           filterSql("where", "pagination"),
           order("pagination"),
-          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize} ) p on p.id = e.id ",
-          attrSelectionSql("where")
+          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize} ) p on p.id = e.id "
         )
 
         def filteredCountQuery: ReadAction[Vector[Int]] = {
@@ -334,6 +339,36 @@ trait EntityComponent {
           concatSqlActions(filteredQuery, filterSql("and", "e")).as[Int]
         }
 
+        def pageQuery = {
+          /* when sorting by name (the default) AND no fields requested beyond name/entityType,
+              don't bother with the extra join to ENTITY_ATTRIBUTE and its additional join to ENTITY
+           */
+          val attrsRequested: Boolean = entityQuery.fields.fields.forall { fieldSel =>
+            (fieldSel diff Set("name", "entityType")).nonEmpty
+          }
+
+          if (entityQuery.sortField == "name" && !attrsRequested) {
+            // skip the join
+            // TODO: remove the copy/paste here and centralize
+            concatSqlActions(sql"#$baseEntitySql",
+              sql" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} ",
+              filterSql("and", "e"),
+              order("e"),
+              sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize}").as[EntityAndAttributesResult]
+          } else {
+            // fully paginated, sorted, filtered query
+            concatSqlActions(
+              sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
+                   |          a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
+                   |          e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
+                   |          from ENTITY e
+                   |          left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id and a.deleted = e.deleted """.stripMargin,
+              attrSelectionSql(" and ( "),
+              sql""") left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
+              paginationJoin, order("p")).as[EntityAndAttributesResult]
+          }
+        }
+
         for {
           unfilteredCount <- traceDBIOWithParent("findActiveEntityByType", parentSpan)(_ => findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result)
           filteredCount <- if (entityQuery.filterTerms.isEmpty) {
@@ -342,9 +377,10 @@ trait EntityComponent {
                             } else {
                               traceDBIOWithParent("filteredCountQuery", parentSpan)(_ => filteredCountQuery)
                             }
-          page <- traceDBIOWithParent("pageQuery", parentSpan)(_ => concatSqlActions(sql"#$baseEntityAndAttributeSql", paginationJoin, order("p")).as[EntityAndAttributesResult])
+          page <- traceDBIOWithParent("pageQuery", parentSpan)(_ => pageQuery)
         } yield (unfilteredCount, filteredCount.head, page)
       }
+      // END activeActionForPagination
 
       // actions which may include "deleted" hidden entities
 
