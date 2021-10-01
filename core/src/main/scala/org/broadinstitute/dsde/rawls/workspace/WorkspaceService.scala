@@ -2006,7 +2006,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ = logger.info(s"Creating labels for ${googleProjectId}.")
       googleProjectLabels = gcsDAO.labelSafeMap(Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId), "")
       googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
-      _ = logger.info(s"Setting up project ${googleProjectId} in cloud resource manager.")
+      _ = logger.info(s"Setting up google project ${googleProjectId} in cloud resource manager.")
       googleProject <- traceWithParent("setUpProjectInCloudResourceManager", span)(_ => setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName))
       _ = logger.info(s"Remove RBS SA from owner policy ${googleProjectId}.")
       googleProjectNumber = gcsDAO.getGoogleProjectNumber(googleProject)
