@@ -229,12 +229,6 @@ trait EntityComponent {
           left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id and a.deleted = e.deleted
           left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
 
-      // NB: the "null" as the last column here is important! It allows this query to be translated into
-      // EntityAndAttributesResult objects; the null represents the lack of any attributes for this entity
-      val baseEntitySql =
-        s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date, null
-          from ENTITY e"""
-
       // Active actions: only return entities and attributes with their deleted flag set to false
 
       def activeActionForType(workspaceContext: Workspace, entityType: String): ReadAction[Seq[EntityAndAttributesResult]] = {
@@ -264,6 +258,9 @@ trait EntityComponent {
         * @return
         */
       private def paginationSubquery(workspaceId: UUID, entityType: String, sortFieldName: String) = {
+        /* TODO: can we eliminate the SELECT ... e.all_attribute_values by being smarter about our where clauses?
+            while not returned to the end user, it still causes mysql extra work
+         */
 
         val (sortColumns, sortJoin) = sortFieldName match {
           case "name" => (
@@ -282,16 +279,24 @@ trait EntityComponent {
       }
 
       def activeActionForPagination(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentSpan: Span = null): ReadWriteAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
-        // TODO: when sorting by name (the default) AND no fields requested beyond name/entityType,
-        // don't bother with the extra join to ENTITY_ATTRIBUTE and its additional join to ENTITY
-        // TODO: when sorting by name, do we need the extra join to pagination?
         /*
-        The query here starts with baseEntityAndAttributeSql which is the typical select
-        to pull entities will all attributes and references. A join is added on a sub select from ENTITY
-        (and ENTITY_ATTRIBUTE if there is a sort field other than name) which constrains to only entities of the
-        right type, workspace, and matches the filters then sorts and slices out the appropriate page of entities.
+          Lots of conditionals in here, to achieve the optimal SQL query for any given request. Pseudocode:
+
+          When sorting by name, and requesting no attributes:
+            select from ENTITY e order by e.name, with optional filter on e.all_attribute_values, limit, offset.
+
+          All other requests:
+            select from ENTITY e
+              left outer join ENTITY_ATTRIBUTE to get entity values, restricting to just those requested by the user
+              left outer join ENTITY to populate any attribute references
+              join (subquery of select attribute-being-sorted-on from ENTITY
+                      left join ENTITY_ATTRIBUTE
+                      left join ENTITY
+                      optional filter on e.all_attribute_values
+                      sort by attribute, limit, offset) to get the proper pagination
          */
 
+        // generate the clause to filter based on user search terms
         def filterSql(prefix: String, alias: String) = {
           val filtersOption = entityQuery.filterTerms.map { _.split(" ").toSeq.map { term =>
             sql"concat(#$alias.name, ' ', #$alias.all_attribute_values) like ${'%' + term.toLowerCase + '%'}"
@@ -304,6 +309,7 @@ trait EntityComponent {
           }
         }
 
+        // generate the clauses to limit the attributes returned to the user
         def attrSelectionSql(prefix: String) = {
           val fieldsOption = entityQuery.fields.fields.map { fieldList =>
             val attributeNameList: Set[AttributeName] = fieldList.map(AttributeName.fromDelimitedName)
@@ -316,11 +322,13 @@ trait EntityComponent {
           fieldsOption.getOrElse(sql"")
         }
 
+        // sorting clauses
         def order(alias: String) = entityQuery.sortField match {
           case "name" => sql" order by #$alias.name #${SortDirections.toSql(entityQuery.sortDirection)} "
           case _ => sql" order by #$alias.sort_list_length #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_string #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_number #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_boolean #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_ref #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.name #${SortDirections.toSql(entityQuery.sortDirection)} "
         }
 
+        // additional joins-to-subquery to provide proper pagination
         val paginationJoin = concatSqlActions(
           sql""" join (select * from (""",
           paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
@@ -330,6 +338,7 @@ trait EntityComponent {
           sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize} ) p on p.id = e.id "
         )
 
+        // standalone query to calculate the count of results that match our filter
         def filteredCountQuery: ReadAction[Vector[Int]] = {
           val filteredQuery =
             sql"""select count(1) from ENTITY e
@@ -339,30 +348,38 @@ trait EntityComponent {
           concatSqlActions(filteredQuery, filterSql("and", "e")).as[Int]
         }
 
+        // the full query to generate the page of results, as requested by the user
         def pageQuery = {
-          /* when sorting by name (the default) AND no fields requested beyond name/entityType,
-              don't bother with the extra join to ENTITY_ATTRIBUTE and its additional join to ENTITY
-           */
-          val attrsRequested: Boolean = entityQuery.fields.fields.forall { fieldSel =>
+          // did the user request any attributes other than "name" and "entityType"?
+          val isRequestingAttrs: Boolean = entityQuery.fields.fields.forall { fieldSel =>
             (fieldSel diff Set("name", "entityType")).nonEmpty
           }
 
-          if (entityQuery.sortField == "name" && !attrsRequested) {
-            // skip the join
-            // TODO: remove the copy/paste here and centralize
-            concatSqlActions(sql"#$baseEntitySql",
-              sql" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} ",
+          // different cases for which query to execute:
+          if (entityQuery.sortField == "name" && !isRequestingAttrs) {
+            // simplest; the user is sorting by ENTITY.name and doesn't want any attributes; we only need to
+            // query the ENTITY table
+            // NB: the "null" as the last column in the select is important! It allows this query to be translated into
+            // EntityAndAttributesResult objects; the null represents the lack of any attributes for this entity
+            concatSqlActions(
+              sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date, null
+                             from ENTITY e
+                             where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """,
               filterSql("and", "e"),
               order("e"),
               sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize}").as[EntityAndAttributesResult]
           } else {
-            // fully paginated, sorted, filtered query
+            // user is sorting by an attribute value, so we need the largest number of joins
+            // this query is very similar to baseEntityAndAttributeSql
+            /* TODO: include "where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId"
+                in the top-level select, to reduce what MySQL needs to look at
+             */
             concatSqlActions(
               sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
-                   |          a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
-                   |          e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
-                   |          from ENTITY e
-                   |          left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id and a.deleted = e.deleted """.stripMargin,
+                             a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
+                             e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
+                             from ENTITY e
+                             left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id and a.deleted = e.deleted """,
               attrSelectionSql(" and "),
               sql""" left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
               paginationJoin, order("p")).as[EntityAndAttributesResult]
