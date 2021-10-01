@@ -2203,8 +2203,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       // issue with hitting the akka subscription timeout. We switched to use cats traverse to make these calls serially.
       policyEmailsByName.keys.toList.traverse { policyName =>
         Applicative[Future].whenA(
-          !isProjectOwner(policyName) &&
-            !hasAuthorizationDomain(workspaceRequest) &&
+          !(isProjectOwner(policyName) && !hasAuthorizationDomain(workspaceRequest)) &&
             (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined || isCanCompute(policyName))) (
           traceWithParent(s"syncPolicy-${policyName}", s1)(_ =>
             samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName))
