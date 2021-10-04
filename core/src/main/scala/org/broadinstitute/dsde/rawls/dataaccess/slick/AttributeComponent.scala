@@ -354,9 +354,10 @@ trait AttributeComponent {
         }.toSeq)
 
         val deleteQueryBase = sql"""delete ea from ENTITY_ATTRIBUTE ea
-               join ENTITY e on e.id = ea.owner_id
-               join WORKSPACE w on w.id = e.workspace_id
-           where w.id = ${workspaceId} AND e.entity_type = ${entityType} AND (ea.namespace, ea.name) IN """
+                                    join ENTITY e on e.id = ea.owner_id
+                                    where e.workspace_id = ${workspaceId}
+                                      and e.entity_type = ${entityType}
+                                      and (ea.namespace, ea.name) in """
 
         concatSqlActions(deleteQueryBase, sql"(", attributeNamesSql, sql")").as[Int]
       }

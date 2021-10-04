@@ -1935,7 +1935,7 @@ paths:
         - name: attributeNames
           in: query
           description: |
-             The attribute Names to delete. Required.
+             A comma-delimited list of attribute names to delete. Required.
           style: form
           explode: false
           schema:
