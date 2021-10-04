@@ -736,6 +736,7 @@ trait EntityComponent {
       traceDBIOWithParent("EntityComponent.checkAndCopyEntities", parentSpan) { s1 =>
         s1.putAttribute("destWorkspaceId", OpenCensusAttributeValue.stringAttributeValue(destWorkspaceContext.workspaceId))
         s1.putAttribute("sourceWorkspaceId", OpenCensusAttributeValue.stringAttributeValue(sourceWorkspaceContext.workspaceId))
+        s1.putAttribute("numEntities", OpenCensusAttributeValue.longAttributeValue(entityNames.length))
         traceDBIOWithParent("getHardConflicts", s1)(s2 => getHardConflicts(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs).flatMap {
           case Seq() =>
             val pathsAndConflicts = for {
