@@ -162,7 +162,15 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   override def queryEntities(entityType: String, query: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
     dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("loadEntityPage", parentSpan)( s1 => dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query, s1)) map { case (unfilteredCount, filteredCount, entities) =>
+      traceDBIOWithParent("loadEntityPage", parentSpan) { s1 =>
+        s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
+        s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
+        s1.putAttribute("filterTerms", OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse("")))
+        s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
+        s1.putAttribute("sortDirection", OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString))
+
+        dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query, s1)
+      } map { case (unfilteredCount, filteredCount, entities) =>
         createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq)
       }
     }
