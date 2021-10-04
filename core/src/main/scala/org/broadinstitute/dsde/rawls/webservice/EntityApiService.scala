@@ -110,7 +110,7 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / Segment ) { (workspaceNamespace, workspaceName, entityType) =>
           delete {
             parameterSeq { allParams =>
-              def thing() = {
+              def parseAttributeNames() = {
                 val paramName = "attributeNames"
                 val paramValues: Seq[String] = allParams.filter(_._1.equals(paramName)).map(_._2)
                 if (paramValues.size > 1) {
@@ -122,7 +122,7 @@ trait EntityApiService extends UserInfoDirectives {
                 }
               }
               complete {
-                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, thing())
+                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames())
               }
             }
           }
