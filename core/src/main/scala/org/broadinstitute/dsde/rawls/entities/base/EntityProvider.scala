@@ -19,7 +19,7 @@ trait EntityProvider {
 
   def createEntity(entity: Entity): Future[Entity]
 
-  def deleteEntities(entityRefs: Seq[AttributeEntityReference], parentSpan: Span = null): Future[Int]
+  def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
 
   /**
   The overall approach is:
@@ -51,7 +51,7 @@ trait EntityProvider {
 
   def queryEntities(entityType: String, query: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse]
 
-  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]]
+  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
 
-  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]]
+  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
 }

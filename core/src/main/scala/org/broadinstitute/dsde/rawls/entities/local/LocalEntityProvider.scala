@@ -85,19 +85,19 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   }
 
   // EntityApiServiceSpec has good test coverage for this api
-  override def deleteEntities(entRefs: Seq[AttributeEntityReference], parentSpan: Span = null): Future[Int] = {
+  override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
-      traceDBIOWithParent("LocalEntityProvider.deleteEntities", parentSpan) { s1 =>
-        s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-        withAllEntityRefs(workspaceContext, dataAccess, entRefs, s1) { _ =>
-          traceDBIOWithParent("getAllReferringEntities", s1)(s2 => dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet)) flatMap { referringEntities =>
+      traceDBIO("LocalEntityProvider.deleteEntities") { rootSpan =>
+        rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+        withAllEntityRefs(workspaceContext, dataAccess, entRefs, rootSpan) { _ =>
+          traceDBIOWithParent("entityQuery.getAllReferringEntities", rootSpan)(innerSpan => dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
             if (referringEntities != entRefs.toSet)
               throw new DeleteEntitiesConflictException(referringEntities)
             else {
-              traceDBIOWithParent("hide", s1)(_ => dataAccess.entityQuery.hide(workspaceContext, entRefs))
+              traceDBIOWithParent("entityQuery.hide", innerSpan)(_ => dataAccess.entityQuery.hide(workspaceContext, entRefs))
             }
-          }
+          })
         }
       }
     }
@@ -176,20 +176,20 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean, parentSpan: Span = null): Future[Traversable[Entity]] = {
+  def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Traversable[Entity]] = {
     val namesToCheck = for {
       update <- entityUpdates
       operation <- update.operations
     } yield operation.name
 
-    traceWithParent("LocalEntityProvider.batchUpdateEntitiesImpl", parentSpan) { s1 =>
-      s1.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-      s1.putAttribute("isUpsert", OpenCensusAttributeValue.booleanAttributeValue(upsert))
-      s1.putAttribute("entityUpdatesCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.length))
+    trace("LocalEntityProvider.batchUpdateEntitiesImpl") { rootSpan =>
+      rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+      rootSpan.putAttribute("isUpsert", OpenCensusAttributeValue.booleanAttributeValue(upsert))
+      rootSpan.putAttribute("entityUpdatesCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.length))
 
       withAttributeNamespaceCheck(namesToCheck) {
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
-          val updateTrialsAction = traceDBIOWithParent("getActiveEntities", s1)(_ => dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name)))) map { entities =>
+          val updateTrialsAction = traceDBIOWithParent("getActiveEntities", rootSpan)(_ => dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name)))) map { entities =>
             val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
             entityUpdates.map { entityUpdate =>
               entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
@@ -218,16 +218,16 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
             }
           }
 
-          traceDBIOWithParent("saveAction", s1)(_ => saveAction)
+          traceDBIOWithParent("saveAction", rootSpan)(_ => saveAction)
         }
       }
     }
   }
 
-  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]] =
-    batchUpdateEntitiesImpl(entityUpdates, upsert = false, parentSpan)
+  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
+    batchUpdateEntitiesImpl(entityUpdates, upsert = false)
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition], parentSpan: Span = null): Future[Traversable[Entity]] =
-    batchUpdateEntitiesImpl(entityUpdates, upsert = true, parentSpan)
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
+    batchUpdateEntitiesImpl(entityUpdates, upsert = true)
 
 }

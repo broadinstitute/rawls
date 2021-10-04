@@ -93,10 +93,8 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / "delete") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[AttributeEntityReference]]) { entities =>
-              traceRequest { span =>
-                complete {
-                  entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, None, None, span)
-                }
+              complete {
+                entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, None, None)
               }
             }
           }
@@ -105,10 +103,8 @@ trait EntityApiService extends UserInfoDirectives {
           post {
             withSizeLimit(batchUpsertMaxBytes) {
               entity(as[Array[EntityUpdateDefinition]]) { operations =>
-                traceRequest { span =>
-                  complete {
-                    entityServiceConstructor(userInfo).batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject, span)
-                  }
+                complete {
+                  entityServiceConstructor(userInfo).batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject)
                 }
               }
             }
@@ -117,10 +113,8 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[EntityUpdateDefinition]]) { operations =>
-              traceRequest { span =>
-                complete {
-                  entityServiceConstructor(userInfo).batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject, span)
-                }
+              complete {
+                entityServiceConstructor(userInfo).batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject)
               }
             }
           }
