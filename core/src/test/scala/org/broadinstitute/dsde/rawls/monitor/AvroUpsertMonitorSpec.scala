@@ -5,7 +5,6 @@ import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.IO
-import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityService
