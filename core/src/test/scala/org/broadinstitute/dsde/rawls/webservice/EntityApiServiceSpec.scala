@@ -1644,7 +1644,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Delete(s"${testData.workspace.path}/entities/type1/default/hello", httpJson(EntityDeleteRequest(e))) ~>
+    Delete(s"${testData.workspace.path}/entities/type1?attributeNames=hello", httpJson(EntityDeleteRequest(e))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1655,6 +1655,33 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(Some(AttributeString("hades"))) {
           runAndWait(entityQuery.get(testData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("hi"))
+        }
+      }
+  }
+
+  it should "return a 204 when deleting attributes with a specified namespace" in withTestDataApiServices { services =>
+    val e = Entity("name1", "type1", Map(
+      AttributeName.withDefaultNS("hello") -> AttributeString("world"),
+      AttributeName.withDefaultNS("hello") -> AttributeString("world"),
+
+    ))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Delete(s"${testData.workspace.path}/entities/type1?attributeNames=default:hello", httpJson(EntityDeleteRequest(e))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(testData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("hello"))
         }
       }
   }
@@ -1671,7 +1698,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Delete(s"${testData.workspace.path}/entities/type1/default/hi", httpJson(EntityDeleteRequest(e))) ~>
+    Delete(s"${testData.workspace.path}/entities/type1?attributeNames=hi", httpJson(EntityDeleteRequest(e))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
