@@ -88,7 +88,12 @@ object SamServicePerimeterActions {
   Resource policy names
  */
 
-case class SamResourcePolicyName(value: String) extends ValueObject
+case class SamResourcePolicyName(value: String) extends ValueObject {
+  def isProjectOwner: Boolean =
+    value == SamWorkspacePolicyNames.projectOwner.value
+  def isCanCompute: Boolean =
+    value == SamWorkspacePolicyNames.canCompute.value
+}
 
 object SamWorkspacePolicyNames {
   val projectOwner = SamResourcePolicyName("project-owner")

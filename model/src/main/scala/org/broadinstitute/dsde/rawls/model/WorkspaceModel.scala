@@ -142,6 +142,11 @@ case class WorkspaceRequest(namespace: String,
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
+  def hasAuthorizationDomain: Boolean =
+    authorizationDomain match {
+      case Some(xs) => xs.nonEmpty
+      case None => false
+    }
 }
 
 case class GoogleProjectId(value: String) extends ValueObject
