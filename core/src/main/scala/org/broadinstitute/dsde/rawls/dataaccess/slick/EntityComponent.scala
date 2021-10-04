@@ -562,7 +562,6 @@ trait EntityComponent {
       }
     }
 
-
     // get paginated entities for UI display, as a result of executing a query
 
     def loadEntityPage(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentSpan: Span = null): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
