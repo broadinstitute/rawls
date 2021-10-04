@@ -37,7 +37,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
   def evalFinalAttribute(workspaceContext: Workspace, entityType: String, entityName: String, expression: String) = {
     entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, entityName).result flatMap { entityRec =>
       ExpressionEvaluator.withNewExpressionEvaluator(this, Some(entityRec)) { evaluator =>
-        evaluator.evalFinalAttribute(workspaceContext, expression)
+        evaluator.evalFinalAttribute(workspaceContext, expression, None)
       }
     }
   }
@@ -138,7 +138,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
 
       val resultsByType = runAndWait(entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
         ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
-          evaluator.evalFinalAttribute(workspaceContext, "this.library:chapter")
+          evaluator.evalFinalAttribute(workspaceContext, "this.library:chapter", None)
         }
       })
 
@@ -216,7 +216,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       assertResult(allTheTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
           ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
-            evaluator.evalFinalAttribute(workspaceContext, "this.type")
+            evaluator.evalFinalAttribute(workspaceContext, "this.type", None)
           }
         })
       }
@@ -234,7 +234,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       assertResult(allTheTumorTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
           ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
-            evaluator.evalFinalAttribute(workspaceContext, "this.tumortype")
+            evaluator.evalFinalAttribute(workspaceContext, "this.tumortype", None)
           }
         })
       }

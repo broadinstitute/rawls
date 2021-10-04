@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord,
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.InputExpressionReassembler
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr._
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model.{AttributeValue, Workspace}
 
 import scala.concurrent.ExecutionContext
@@ -56,7 +57,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
         )
     )
     */
-  def evalFinalAttribute(workspaceContext: Workspace, expression: String)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[EntityName, Try[Iterable[AttributeValue]]]] = {
+  def evalFinalAttribute(workspaceContext: Workspace, expression: String, input: Option[MethodInput])(implicit executionContext: ExecutionContext): ReadWriteAction[Map[EntityName, Try[Iterable[AttributeValue]]]] = {
 
     // parse expression using ANTLR TerraExpression parser
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
@@ -71,7 +72,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
         */
 
         localFinalAttributeEvaluationVisitor.visit(parsedTree).map { result =>
-          InputExpressionReassembler.constructFinalInputValues(result, parsedTree, rootEntities.map(_.map(_.name)))
+          InputExpressionReassembler.constructFinalInputValues(result, parsedTree, rootEntities.map(_.map(_.name)), input)
         }
 
       case Failure(regrets) => slickEvaluator.dataAccess.driver.api.DBIO.failed(regrets)

@@ -67,4 +67,8 @@ trait ExpressionEvaluationSupport {
     }
     SubmissionValidationValue(attr, None, inputName)
   }
+
+  private def getObjectResult(wfInput: ToolInputParameter, seq: Iterable[AttributeValue]) = {
+
+  }
 }

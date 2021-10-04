@@ -1,12 +1,17 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
+import cromwell.client.model.ValueType.TypeNameEnum
+import cromwell.client.model.ValueTypeObjectFieldTypes
 import org.antlr.v4.runtime.tree.ParseTree
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.expressions.JsonExpressionEvaluator
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ReconstructExpressionVisitor
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson}
-import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsString, JsValue}
+import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.{Success, Try}
 
 object InputExpressionReassembler {
@@ -32,7 +37,8 @@ object InputExpressionReassembler {
     */
   def constructFinalInputValues(lookupExpressionAndResults: Seq[ExpressionAndResult],
                                 parsedInputExpression: ParseTree,
-                                rootEntityNames: Option[Seq[EntityName]]): Map[EntityName, Try[Iterable[AttributeValue]]] = {
+                                rootEntityNames: Option[Seq[EntityName]],
+                                input: Option[MethodInput]): Map[EntityName, Try[Iterable[AttributeValue]]] = {
     // unpack the evaluated AttributeValue to JsValue and transform it into sequence of tuples with entity name as key
     val seqOfEntityToLookupExprAndValue: Seq[(EntityName, (LookupExpression, Try[JsValue]))] = unpackAndTransformEvaluatedOutput(lookupExpressionAndResults)
 
@@ -43,7 +49,7 @@ object InputExpressionReassembler {
     val mapOfEntityToEvaluatedExprMap: Map[EntityName, Try[Map[LookupExpression, JsValue]]] = convertEvaluatedExprSeqToMap(mapOfEntityToSeqOfEvaluatedExpr)
 
     // replace the value for evaluated attribute references in the input expression for each entity name
-    val mapOfEntityToInputExpr: Map[EntityName, Try[JsValue]] = reconstructInputExprForEachEntity(mapOfEntityToEvaluatedExprMap, parsedInputExpression, rootEntityNames)
+    val mapOfEntityToInputExpr: Map[EntityName, Try[JsValue]] = reconstructInputExprForEachEntity(mapOfEntityToEvaluatedExprMap, parsedInputExpression, rootEntityNames, input)
 
     /*
       For each entity name and it's generated expression call JsonExpressionEvaluator to reconstruct the desired return type
@@ -92,6 +98,29 @@ object InputExpressionReassembler {
        */
   private def unpackAndTransformEvaluatedOutput(seqOfTuple: Seq[ExpressionAndResult])
   : Seq[(EntityName, (LookupExpression, Try[JsValue]))] = {
+
+//    inputOption match {
+//      case Some(input) => input.workflowInput.getValueType.getTypeName match {
+//        case TypeNameEnum.OBJECT => ???
+//        case _ => ???
+//      }
+//      case None => ???
+//    }
+//
+//    def isObjectFieldArray(lookupExpr: LookupExpression) = {
+//      inputOption.map { input =>
+//        val abc: mutable.Seq[ValueTypeObjectFieldTypes] = input.workflowInput.getValueType.getObjectFieldTypes.asScala
+//        abc.collect {
+//          case x if x.getFieldName == lookupExpr =>
+//            x.getFieldType.getTypeName == TypeNameEnum.ARRAY
+//        }
+//      }.get.head
+//    }
+//
+//    val isInputRawJson = inputOption.exists(input => input.workflowInput.getValueType.getTypeName == TypeNameEnum.OBJECT)
+//
+//    if(isInputRawJson && isObjectFieldArray(lookupExpr))
+
     seqOfTuple.flatMap {
       case (lookupExpr, slickEvaluatedAttrValueMap) =>
         // returns  Map[EntityName, (LookupExpression, Try[JsValue])]
@@ -169,17 +198,50 @@ object InputExpressionReassembler {
    */
   private def reconstructInputExprForEachEntity(mapOfEntityToEvaluatedExprMap: Map[EntityName, Try[Map[LookupExpression, JsValue]]],
                                                 parsedTree: ParseTree,
-                                                rootEntityNames: Option[Seq[EntityName]]): Map[EntityName, Try[JsValue]] = {
+                                                rootEntityNames: Option[Seq[EntityName]],
+                                                inputOption: Option[MethodInput]): Map[EntityName, Try[JsValue]] = {
     // when there are no root entities handle as a single root entity with empty string for name
     rootEntityNames.getOrElse(Seq("")).map { entityName =>
       // in the case of literal JSON there are no LookupExpressions
       val evaluatedLookupMapTry = mapOfEntityToEvaluatedExprMap.getOrElse(entityName, Success(Map.empty[LookupExpression, JsValue]))
-      val inputExprWithEvaluatedRef = evaluatedLookupMapTry.map { lookupMap =>
+      val inputExprWithEvaluatedRef: Try[JsValue] = evaluatedLookupMapTry.map { lookupMap =>
         val visitor = new ReconstructExpressionVisitor(lookupMap)
         visitor.visit(parsedTree)
       }
 
-      entityName -> inputExprWithEvaluatedRef
+      val updatedMap: Try[JsValue] = inputOption match {
+        case Some(input) => input.workflowInput.getValueType.getTypeName match {
+          case TypeNameEnum.OBJECT => inputExprWithEvaluatedRef.map { evaluatedMap =>
+            val updatedObject: Map[String, JsValue] = evaluatedMap.asJsObject.fields.map { case (key, value) =>
+              val objectFields: mutable.Seq[ValueTypeObjectFieldTypes] = input.workflowInput.getValueType.getObjectFieldTypes.asScala
+              val isFieldAnArray: Boolean = objectFields.collect {
+                case x if x.getFieldName == key =>
+                  x.getFieldType.getTypeName == TypeNameEnum.ARRAY
+              }.head
+
+              val updatedValue: JsValue = if(isFieldAnArray){
+                value match {
+                  case v: JsBoolean => JsArray(v)
+                  case v: JsNumber => JsArray(v)
+                  case v: JsString => JsArray(v)
+                  case _ => value
+                }
+              }
+              else
+                value
+
+              key -> updatedValue
+            }
+            JsObject(updatedObject)
+          }
+          case _ =>
+            inputExprWithEvaluatedRef
+        }
+        case None =>
+          inputExprWithEvaluatedRef
+      }
+
+      entityName -> updatedMap
     }.toMap
   }
 }

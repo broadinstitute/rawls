@@ -120,7 +120,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       dataSource.inTransaction { dataAccess =>
         withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
           ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
-            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity => tryValuesByEntity match {
+            evaluator.evalFinalAttribute(workspaceContext, expression, None).asTry map { tryValuesByEntity => tryValuesByEntity match {
               //parsing failure
               case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
               case Success(valuesByEntity) =>

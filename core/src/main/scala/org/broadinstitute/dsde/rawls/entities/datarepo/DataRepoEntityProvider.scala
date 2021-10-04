@@ -307,7 +307,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
 
       val expressionResultsByEntityName = InputExpressionReassembler.constructFinalInputValues(groupedResults.filter {
         case (expression, _) => lookupExpressions.contains(expression)
-      }, parsedTree, Option(rootEntities))
+      }, parsedTree, Option(rootEntities), Option(input))
 
       convertToSubmissionValidationValues(expressionResultsByEntityName, input)
     }
