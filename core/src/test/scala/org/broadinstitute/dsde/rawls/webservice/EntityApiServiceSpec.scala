@@ -2539,7 +2539,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO: *********** START implement entityQuery field-selection tests
+  // *********** START entityQuery field-selection tests
 
   // creates 30 entities, in groups of 10; each group has different attributes, with some overlap.
   class FieldSelectionTestData extends TestData {
@@ -2750,10 +2750,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertFieldSelection(resp, expected, fieldSelectionTestData.entities.size)
       }
   }
-
-
-  // TODO: *********** END implement entityQuery field-selection tests
-
+  // *********** END entityQuery field-selection tests
 
   "Entity type metadata API" should "pass true by default to useCache argument" in withMockedEntityService { services =>
     Get(s"${constantData.workspace.path}/entities") ~>

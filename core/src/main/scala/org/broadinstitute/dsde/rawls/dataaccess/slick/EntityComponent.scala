@@ -329,6 +329,7 @@ trait EntityComponent {
         }
 
         // additional joins-to-subquery to provide proper pagination
+        // TODO: we don't need the nested "select * from (select ... ))", this causes extra work for MySQL
         val paginationJoin = concatSqlActions(
           sql""" join (select * from (""",
           paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
@@ -372,7 +373,10 @@ trait EntityComponent {
             // user is sorting by an attribute value, so we need the largest number of joins
             // this query is very similar to baseEntityAndAttributeSql
             /* TODO: include "where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId"
-                in the top-level select, to reduce what MySQL needs to look at
+                in the top-level select, to reduce what MySQL needs to look at? Does this actually help?
+             */
+            /* TODO: it's inefficient to return all columns of e_ref; we only really need the id and the name. We turn it into an
+                EntityRecord, and then very quickly we read that EntityRecord's name and toss the rest of the info. Can we do better?
              */
             concatSqlActions(
               sql"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
