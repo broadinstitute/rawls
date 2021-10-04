@@ -771,9 +771,9 @@ trait EntityComponent {
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map(res => res.sum)
     }
 
-    def deleteColumn(workspaceContext: Workspace, entityType: String, entityNamespace: String, entityColumnName: String) = {
+    def deleteAttributes(workspaceContext: Workspace, entityType: String, attributesNames: Set[AttributeName]) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
-      entityAttributeQuery.deleteAttributeColumn(workspaceContext.namespace, workspaceContext.name, entityType, entityNamespace, entityColumnName)
+      entityAttributeQuery.deleteAttributes(workspaceContext.workspaceIdAsUUID, entityType, attributesNames)
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace

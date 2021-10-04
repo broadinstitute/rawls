@@ -106,21 +106,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }.recover(bigQueryRecover)
     }
 
-  def deleteEntityAttribute(workspaceName: WorkspaceName, entityType: String, entityAttributeNamespace: String, entityAttributeName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
+  def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName]): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
-
-      val deleteFuture = for {
-        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        _ <- entityProvider.deleteEntityAttribute(workspaceContext, entityType, entityAttributeNamespace, entityAttributeName)
-      } yield {
-        PerRequest.RequestComplete(StatusCodes.NoContent)
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.entityQuery.deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
+          case Vector(0) => throw new DataEntityException(message = s"Could not find any of the given attribute names.", code = StatusCodes.BadRequest)
+          case _ => DBIO.successful(())
+        } map (_ => RequestComplete(StatusCodes.NoContent))
       }
-
-      deleteFuture.recover {
-        case delEx: DeleteEntitiesConflictException => RequestComplete(StatusCodes.Conflict, delEx.referringEntities)
-      }.recover(bigQueryRecover)
-
     }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =

@@ -104,17 +104,6 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  override def deleteEntityAttribute(workspaceContext: Workspace, entityType: String, entityAttributeNamespace: String, entityAttributeName: String): Future[Vector[Int]] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.entityQuery.checkAttributeNameExists(workspaceContext.workspaceIdAsUUID, entityType, entityAttributeNamespace, entityAttributeName) flatMap { attributeNameExists =>
-        if (attributeNameExists.toList.head)
-          dataAccess.entityQuery.deleteColumn(workspaceContext, entityType, entityAttributeNamespace, entityAttributeName)
-        else
-          throw new DataEntityException(message = s"Could not find column $entityAttributeName belonging to entity namespace $entityAttributeNamespace of entity type $entityType in workspace ${workspaceContext.namespace}/${workspaceContext.name}",
-            code = StatusCodes.BadRequest)
-      }
-    }
-  }
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] = {
     dataSource.inTransaction { dataAccess =>
