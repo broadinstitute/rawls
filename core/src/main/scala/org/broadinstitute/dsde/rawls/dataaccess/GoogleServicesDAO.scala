@@ -20,7 +20,7 @@ import spray.json.JsObject
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
