@@ -1922,6 +1922,42 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - entities
+      summary: delete column in entity table
+      description: Delete entity column
+      operationId: delete_entity_column
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - name: attributeNames
+          in: query
+          description: |
+             A comma-delimited list of attribute names to delete. Required.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        204:
+          description: Successful Request
+          content: {}
+        400:
+          description: Attributes do not exist
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}:
     get:
       tags:

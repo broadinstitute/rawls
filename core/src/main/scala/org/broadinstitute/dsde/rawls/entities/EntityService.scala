@@ -106,6 +106,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }.recover(bigQueryRecover)
     }
 
+  def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName]): Future[PerRequestMessage] =
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.entityQuery.deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
+          case Vector(0) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names."))
+          case _ => DBIO.successful(())
+        } map (_ => RequestComplete(StatusCodes.NoContent))
+      }
+    }
+
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>

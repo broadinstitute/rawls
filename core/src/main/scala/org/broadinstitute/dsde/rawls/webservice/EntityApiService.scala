@@ -3,13 +3,16 @@ package org.broadinstitute.dsde.rawls.webservice
 import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model._
 import spray.json.DefaultJsonProtocol._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.AttributeName
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.StatusCodes.BadRequest
 import CustomDirectives._
 import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -143,6 +146,20 @@ trait EntityApiService extends UserInfoDirectives {
             traceRequest { span =>
               complete {
                 entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, span)
+              }
+            }
+          } ~
+          delete {
+            parameterSeq { allParams =>
+              def parseAttributeNames() = {
+                val paramName = "attributeNames"
+                WorkspaceFieldSpecs.fromQueryParams(allParams, paramName).fields match {
+                  case None => throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' must be included.")(ErrorReportSource("rawls")))
+                  case Some(atts) => atts.toSet.map{ (value: String) => AttributeName.fromDelimitedName(value.trim) }
+                }
+              }
+              complete {
+                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames())
               }
             }
           }

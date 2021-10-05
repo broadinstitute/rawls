@@ -1627,6 +1627,113 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  class DeleteAttributeNameTestData extends TestData {
+    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "fake-bucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
+
+    val entitiesWithDefaultNamespace =  Entity("name1", "type1", Map(
+      AttributeName.withDefaultNS("hello") -> AttributeString("world"),
+      AttributeName.withDefaultNS("hello") -> AttributeString("brazil"),
+      AttributeName.withDefaultNS("hello") -> AttributeString("pluto"),
+      AttributeName.withDefaultNS("hi") -> AttributeString("hades"),
+      AttributeName.withDefaultNS("salutations") -> AttributeString("hades"),
+    ))
+
+    val entitiesWithNonDefaultNamespace = Entity("name2", "type1", Map(
+      AttributeName.withDefaultNS("hello") -> AttributeString("world"),
+      AttributeName.fromDelimitedName("othernamespace:yo") -> AttributeString("world"),
+      AttributeName.fromDelimitedName("othernamespace:yo") -> AttributeString("atlantis"),
+    ))
+
+    val entities = List(entitiesWithDefaultNamespace, entitiesWithNonDefaultNamespace)
+
+    override def save(): ReadWriteAction[Unit] = {
+      import driver.api._
+
+      DBIO.seq(
+        workspaceQuery.createOrUpdate(workspace),
+        entityQuery.save(workspace, entities)
+      )
+    }
+  }
+
+  val deleteAttributeNameTestData = new DeleteAttributeNameTestData()
+
+  def withDeleteAttributeNameTestDataApiServices[T](testCode: TestApiService => T): T = {
+    withCustomTestDatabase(deleteAttributeNameTestData) { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
+  it should "return a 204 when deleting multiple attributes of default namespace" in withDeleteAttributeNameTestDataApiServices { services =>
+    Delete(s"${testData.workspace.path}/entities/type1?attributeNames=hello,hi") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("hello"))
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("hi"))
+        }
+        assertResult(Some(AttributeString("hades"))) {
+          runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("salutations"))
+        }
+      }
+  }
+
+  it should "return a 204 when deleting attributes with a specified default namespace" in withDeleteAttributeNameTestDataApiServices { services =>
+    Delete(s"${testData.workspace.path}/entities/type1?attributeNames=default:hello") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name1")).get.attributes.get(AttributeName.withDefaultNS("hello"))
+        }
+      }
+  }
+
+  it should "return a 204 when deleting attributes with a non-default namespace" in withDeleteAttributeNameTestDataApiServices { services =>
+    Delete(s"${testData.workspace.path}/entities/type1?attributeNames=othernamespace:yo") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(Some(AttributeString("world"))) {
+          runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name2")).get.attributes.get(AttributeName.withDefaultNS("hello"))
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(deleteAttributeNameTestData.workspace, "type1", "name2")).get.attributes.get(AttributeName.fromDelimitedName("othernamespace:yo"))
+        }
+      }
+  }
+
+  it should "return 400 when deleting entity attribute that does not exist" in withDeleteAttributeNameTestDataApiServices { services =>
+    Delete(s"${testData.workspace.path}/entities/type1?attributeNames=fakeattribute") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 when deleting entity attributes with no query params" in withDeleteAttributeNameTestDataApiServices { services =>
+    Delete(s"${testData.workspace.path}/entities/type1") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+
   // evaluate expressions
 
   it should "return 200 on successfully parsing an expression" in withTestDataApiServices { services =>
