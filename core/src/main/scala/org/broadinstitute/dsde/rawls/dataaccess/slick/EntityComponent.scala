@@ -258,10 +258,6 @@ trait EntityComponent {
         * @return
         */
       private def paginationSubquery(workspaceId: UUID, entityType: String, sortFieldName: String) = {
-        /* TODO: can we eliminate the SELECT ... e.all_attribute_values by being smarter about our where clauses?
-            while not returned to the end user, it still causes mysql extra work
-         */
-
         val (sortColumns, sortJoin) = sortFieldName match {
           case "name" => (
             // no additional sort columns
@@ -336,7 +332,6 @@ trait EntityComponent {
         }
 
         // additional joins-to-subquery to provide proper pagination
-        // TODO: we don't need the nested "select * from (select ... ))", this causes extra work for MySQL
         val paginationJoin = concatSqlActions(
           sql""" join (""",
           paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
