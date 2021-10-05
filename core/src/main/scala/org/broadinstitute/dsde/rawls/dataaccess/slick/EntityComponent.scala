@@ -889,7 +889,7 @@ trait EntityComponent {
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
     }
-
+    
     sealed trait RecursionDirection
     case object Up extends RecursionDirection
     case object Down extends RecursionDirection

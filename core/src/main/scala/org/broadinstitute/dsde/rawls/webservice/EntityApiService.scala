@@ -107,26 +107,6 @@ trait EntityApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "entities" / Segment ) { (workspaceNamespace, workspaceName, entityType) =>
-          delete {
-            parameterSeq { allParams =>
-              def parseAttributeNames() = {
-                val paramName = "attributeNames"
-                val paramValues: Seq[String] = allParams.filter(_._1.equals(paramName)).map(_._2)
-                if (paramValues.size > 1) {
-                  throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' may not be present multiple times.")(ErrorReportSource("rawls")))
-                } else if (paramValues.isEmpty) {
-                  throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' must be included.")(ErrorReportSource("rawls")))
-                } else {
-                  paramValues.head.split(',').toSet.map { (value: String) => AttributeName.fromDelimitedName(value.trim) }
-                }
-              }
-              complete {
-                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames())
-              }
-            }
-          }
-        } ~
         path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
           post {
             withSizeLimit(batchUpsertMaxBytes) {
@@ -166,6 +146,20 @@ trait EntityApiService extends UserInfoDirectives {
             traceRequest { span =>
               complete {
                 entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, span)
+              }
+            }
+          } ~
+          delete {
+            parameterSeq { allParams =>
+              def parseAttributeNames() = {
+                val paramName = "attributeNames"
+                WorkspaceFieldSpecs.fromQueryParams(allParams, paramName).fields match {
+                  case None => throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' must be included.")(ErrorReportSource("rawls")))
+                  case Some(atts) => atts.toSet.map{ (value: String) => AttributeName.fromDelimitedName(value.trim) }
+                }
+              }
+              complete {
+                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames())
               }
             }
           }
