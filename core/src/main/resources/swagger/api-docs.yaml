@@ -1625,6 +1625,16 @@ paths:
           description: Filter terms
           schema:
             type: string
+        - name: fields
+          in: query
+          description: |
+            When specified, include only these attributes in the response payload and exclude other attributes. Accepts a comma-delimited list of values. If omitted, will return the full response payload.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
         - $ref: '#/components/parameters/dataReferenceQueryParam'
         - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:

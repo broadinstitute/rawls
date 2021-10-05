@@ -2163,7 +2163,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   def calculateNumPages(count: Int, pageSize: Int) = Math.ceil(count.toDouble / pageSize).toInt
 
-  it should "return 400 bad request on entity query when page is not a number" in withPaginationTestDataApiServices { services =>
+  "entityQuery API" should "return 400 bad request on entity query when page is not a number" in withPaginationTestDataApiServices { services =>
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=asdf") ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -2539,7 +2539,220 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "pass true by default to useCache argument" in withMockedEntityService { services =>
+  // *********** START entityQuery field-selection tests
+
+  // creates 30 entities, in groups of 10; each group has different attributes, with some overlap.
+  class FieldSelectionTestData extends TestData {
+    val userOwner = RawlsUser(UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
+    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set())
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set())
+
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
+
+    val colorGroup1 = List("allgroups", "group1and2", "red", "yellow", "blue", "brown", "orange")
+    val colorGroup2 = List("allgroups", "group1and2", "group2and3", "green", "violet", "black", "carnation", "white")
+    val colorGroup3 = List("allgroups", "group2and3", "dandelion", "cerulean", "apricot", "scarlet", "gray")
+
+    val numEntities = 100
+    val entityType = "fieldselect"
+
+    val entities = List(colorGroup1, colorGroup2, colorGroup3).zipWithIndex.flatMap {
+      case (colorList, groupIdx) =>
+        (0 to 9) map { idx =>
+          val attributes = colorList.map(color => AttributeName.withDefaultNS(color) -> AttributeString(s"$color value")).toMap
+          // default sorting for entityQuery is by name, so ensure the names we generate here are in
+          // ascending order of insertion
+          Entity(s"$groupIdx-$idx", entityType, attributes)
+        }
+    }
+
+    override def save(): ReadWriteAction[Unit] = {
+      import driver.api._
+
+      DBIO.seq(
+        workspaceQuery.createOrUpdate(workspace),
+        entityQuery.save(workspace, entities)
+      )
+    }
+  }
+
+  val fieldSelectionTestData = new FieldSelectionTestData()
+
+  def withFieldSelectionTestDataApiServices[T](testCode: TestApiService => T): T = {
+    withCustomTestDatabase(fieldSelectionTestData) { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
+  val fieldSelectionApiPath = s"${fieldSelectionTestData.workspace.path}/entityQuery/${fieldSelectionTestData.entityType}"
+
+  def assertFieldSelection(actualResponse: EntityQueryResponse, expectedFields: List[String], expectedPageSize: Int) = {
+    withClue("when checking results page size, ") {
+      actualResponse.results.size shouldBe expectedPageSize
+    }
+    // calculate actual field list
+    val actual = actualResponse.results.flatMap(e => e.attributes.keySet.map(a => AttributeName.toDelimitedName(a)))
+    actual.toSet should contain theSameElementsAs expectedFields.toSet
+  }
+
+  it should "return all attributes, name, and entityType if the fields parameter is omitted (all entities)" in withFieldSelectionTestDataApiServices { services =>
+    // query for all entities
+    Get(s"$fieldSelectionApiPath?pageSize=${fieldSelectionTestData.entities.size}") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[EntityQueryResponse]
+        val expected = fieldSelectionTestData.colorGroup1 ++ fieldSelectionTestData.colorGroup2 ++ fieldSelectionTestData.colorGroup3
+        assertFieldSelection(resp, expected, fieldSelectionTestData.entities.size)
+      }
+  }
+
+  it should "return all attributes, name, and entityType if the fields parameter is omitted (first page)" in withFieldSelectionTestDataApiServices { services =>
+    // query for first page of results
+    Get(s"$fieldSelectionApiPath?pageSize=10") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[EntityQueryResponse]
+        val expected = fieldSelectionTestData.colorGroup1
+        assertFieldSelection(resp, expected, 10)
+      }
+  }
+
+  it should "return all attributes, name, and entityType if the fields parameter is omitted (second page)" in withFieldSelectionTestDataApiServices { services =>
+    // query for second page of results
+    Get(s"$fieldSelectionApiPath?pageSize=10&page=2") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[EntityQueryResponse]
+        val expected = fieldSelectionTestData.colorGroup2
+        assertFieldSelection(resp, expected, 10)
+      }
+  }
+
+  it should "return all attributes, name, and entityType if the fields parameter is omitted (second page extending into third page)" in withFieldSelectionTestDataApiServices { services =>
+    // query for the second page of results, with a page size that extends us into the third
+    // group of entities from fieldSelectionTestData
+    Get(s"$fieldSelectionApiPath?pageSize=15&page=2") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[EntityQueryResponse]
+        val expected = fieldSelectionTestData.colorGroup2 ++ fieldSelectionTestData.colorGroup3
+        assertFieldSelection(resp, expected, 15)
+      }
+  }
+
+  List(List("name"), List("entityType"), List("name", "entityType")) foreach { fieldsUnderTest =>
+    it should s"return [${fieldsUnderTest.mkString(", ")}] if requested in fields" ignore withFieldSelectionTestDataApiServices { services =>
+      Get(s"$fieldSelectionApiPath?pageSize=25&page=1&fields=${fieldsUnderTest.mkString(",")}") ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          status shouldBe StatusCodes.OK
+          val resp = responseAs[EntityQueryResponse]
+          assertFieldSelection(resp, fieldsUnderTest, 25)
+        }
+    }
+  }
+
+  /*
+    val colorGroup1 = List("allgroups", "group1and2", "red", "yellow", "blue", "brown", "orange")
+    val colorGroup2 = List("allgroups", "group1and2", "group2and3", "green", "violet", "black", "carnation", "white")
+    val colorGroup3 = List("allgroups", "group2and3", "dandelion", "cerulean", "apricot", "scarlet", "gray")
+   */
+  case class FieldsTestCase(pageSize: Int, page: Int, fieldsUnderTest: List[String])
+  // see FieldSelectionTestData for expected attribute names
+  val testCases = List(
+    // test cases for the first group
+    FieldsTestCase(10, 1, fieldSelectionTestData.colorGroup1),
+    FieldsTestCase(10, 1, List("allgroups", "group1and2", "red")),
+    FieldsTestCase(10, 1, List("red", "yellow")),
+    FieldsTestCase(10, 1, List("orange")),
+    // test cases for the second group
+    FieldsTestCase(10, 2, fieldSelectionTestData.colorGroup2),
+    FieldsTestCase(10, 2, List("allgroups", "group1and2", "group2and3", "green")),
+    FieldsTestCase(10, 2, List("black", "carnation")),
+    FieldsTestCase(10, 2, List("violet")),
+    // test cases for the third group
+    FieldsTestCase(10, 3, fieldSelectionTestData.colorGroup3),
+    FieldsTestCase(10, 3, List("allgroups", "group2and3", "dandelion")),
+    FieldsTestCase(10, 3, List("cerulean", "apricot")),
+    FieldsTestCase(10, 3, List("gray")),
+    // test cases for all three groups combined
+    FieldsTestCase(25, 1, fieldSelectionTestData.colorGroup1 ++ fieldSelectionTestData.colorGroup2 ++ fieldSelectionTestData.colorGroup3),
+    FieldsTestCase(25, 1, List("allgroups", "group1and2", "group2and3", "red", "green", "dandelion")),
+    FieldsTestCase(25, 1, List("yellow", "blue", "violet", "black", "cerulean", "apricot")),
+    FieldsTestCase(25, 1, List("yellow", "blue")),
+    FieldsTestCase(25, 1, List("violet", "black")),
+    FieldsTestCase(25, 1, List("cerulean", "apricot")),
+    FieldsTestCase(25, 1, List("orange", "scarlet")),
+  )
+
+  testCases foreach { testCase =>
+    val fieldsUnderTest = testCase.fieldsUnderTest
+    it should s"return only the requested fields (pageSize ${testCase.pageSize}, page ${testCase.page}, fields ${testCase.fieldsUnderTest})" in withFieldSelectionTestDataApiServices { services =>
+      Get(s"$fieldSelectionApiPath?pageSize=${testCase.pageSize}&page=${testCase.page}&fields=${fieldsUnderTest.mkString(",")}") ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          status shouldBe StatusCodes.OK
+          val resp = responseAs[EntityQueryResponse]
+          assertFieldSelection(resp, fieldsUnderTest, testCase.pageSize)
+        }
+    }
+  }
+
+  it should "return no attributes if requested field exists, but not in this page of results" in withFieldSelectionTestDataApiServices { services =>
+    // get the first page of results, but request a field from the second page
+    Get(s"$fieldSelectionApiPath?pageSize=10&page=1&fields=violet") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[EntityQueryResponse]
+        assertFieldSelection(resp, List(), 10)
+      }
+  }
+
+  it should "return no attributes if unrecognized field names in parameter" in withFieldSelectionTestDataApiServices { services =>
+    // request a totally nonexistent field
+    Get(s"$fieldSelectionApiPath?pageSize=10&page=1&fields=nonexistent") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[EntityQueryResponse]
+        assertFieldSelection(resp, List(), 10)
+      }
+  }
+
+  it should "return requested fields in conjunction with sort and filter" in withFieldSelectionTestDataApiServices { services =>
+    // request all 30 results, but use a filter term that should only return the third page.
+    // request fields from all pages, but expect only the third page's fields back.
+    Get(s"$fieldSelectionApiPath?pageSize=30&page=1&filterTerms=gray&sortField=red&sortDirection=desc&fields=yellow,green,apricot") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[EntityQueryResponse]
+        val expected = List("apricot")
+        assertFieldSelection(resp, expected, 10)
+      }
+  }
+
+  it should "return no attributes if field list is empty, i.e. 'fields='" in withFieldSelectionTestDataApiServices { services =>
+    // query for all entities
+    Get(s"$fieldSelectionApiPath?pageSize=${fieldSelectionTestData.entities.size}&fields=") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        status shouldBe StatusCodes.OK
+        val resp = responseAs[EntityQueryResponse]
+        val expected = List()
+        assertFieldSelection(resp, expected, fieldSelectionTestData.entities.size)
+      }
+  }
+  // *********** END entityQuery field-selection tests
+
+  "Entity type metadata API" should "pass true by default to useCache argument" in withMockedEntityService { services =>
     Get(s"${constantData.workspace.path}/entities") ~>
       sealRoute(services.entityRoutes) ~>
       check {
