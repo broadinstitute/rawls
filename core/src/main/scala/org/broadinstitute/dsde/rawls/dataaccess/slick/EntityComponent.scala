@@ -275,7 +275,7 @@ trait EntityComponent {
             sql"""left outer join ENTITY_ATTRIBUTE sort_a on sort_a.owner_id = e.id and sort_a.name = $sortFieldName and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """)
         }
 
-        concatSqlActions(sql"""select e.id, e.name, e.all_attribute_values #$sortColumns from ENTITY e """, sortJoin, sql""" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId """)
+        concatSqlActions(sql"""select e.id, e.name #$sortColumns from ENTITY e """, sortJoin, sql""" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId """)
       }
 
       def activeActionForPagination(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentSpan: Span = null): ReadWriteAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
@@ -323,19 +323,25 @@ trait EntityComponent {
         }
 
         // sorting clauses
-        def order(alias: String) = entityQuery.sortField match {
-          case "name" => sql" order by #$alias.name #${SortDirections.toSql(entityQuery.sortDirection)} "
-          case _ => sql" order by #$alias.sort_list_length #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_string #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_number #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_boolean #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.sort_field_ref #${SortDirections.toSql(entityQuery.sortDirection)}, #$alias.name #${SortDirections.toSql(entityQuery.sortDirection)} "
+        def order(alias: String) = {
+          val prefix = if (alias == "") {
+            ""
+          } else {
+            s"$alias."
+          }
+          entityQuery.sortField match {
+            case "name" => sql" order by #${prefix}name #${SortDirections.toSql(entityQuery.sortDirection)} "
+            case _ => sql" order by #${prefix}sort_list_length #${SortDirections.toSql(entityQuery.sortDirection)}, #${prefix}sort_field_string #${SortDirections.toSql(entityQuery.sortDirection)}, #${prefix}sort_field_number #${SortDirections.toSql(entityQuery.sortDirection)}, #${prefix}sort_field_boolean #${SortDirections.toSql(entityQuery.sortDirection)}, #${prefix}sort_field_ref #${SortDirections.toSql(entityQuery.sortDirection)}, #${prefix}name #${SortDirections.toSql(entityQuery.sortDirection)} "
+          }
         }
 
         // additional joins-to-subquery to provide proper pagination
         // TODO: we don't need the nested "select * from (select ... ))", this causes extra work for MySQL
         val paginationJoin = concatSqlActions(
-          sql""" join (select * from (""",
+          sql""" join (""",
           paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
-          sql") pagination ",
-          filterSql("where", "pagination"),
-          order("pagination"),
+          filterSql("and", "e"),
+          order(""),
           sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize} ) p on p.id = e.id "
         )
 
