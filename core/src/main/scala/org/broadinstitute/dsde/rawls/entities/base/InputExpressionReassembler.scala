@@ -98,29 +98,6 @@ object InputExpressionReassembler {
        */
   private def unpackAndTransformEvaluatedOutput(seqOfTuple: Seq[ExpressionAndResult])
   : Seq[(EntityName, (LookupExpression, Try[JsValue]))] = {
-
-//    inputOption match {
-//      case Some(input) => input.workflowInput.getValueType.getTypeName match {
-//        case TypeNameEnum.OBJECT => ???
-//        case _ => ???
-//      }
-//      case None => ???
-//    }
-//
-//    def isObjectFieldArray(lookupExpr: LookupExpression) = {
-//      inputOption.map { input =>
-//        val abc: mutable.Seq[ValueTypeObjectFieldTypes] = input.workflowInput.getValueType.getObjectFieldTypes.asScala
-//        abc.collect {
-//          case x if x.getFieldName == lookupExpr =>
-//            x.getFieldType.getTypeName == TypeNameEnum.ARRAY
-//        }
-//      }.get.head
-//    }
-//
-//    val isInputRawJson = inputOption.exists(input => input.workflowInput.getValueType.getTypeName == TypeNameEnum.OBJECT)
-//
-//    if(isInputRawJson && isObjectFieldArray(lookupExpr))
-
     seqOfTuple.flatMap {
       case (lookupExpr, slickEvaluatedAttrValueMap) =>
         // returns  Map[EntityName, (LookupExpression, Try[JsValue])]
@@ -200,6 +177,43 @@ object InputExpressionReassembler {
                                                 parsedTree: ParseTree,
                                                 rootEntityNames: Option[Seq[EntityName]],
                                                 inputOption: Option[MethodInput]): Map[EntityName, Try[JsValue]] = {
+
+    def updateInputExprValueMapForObjectInput(inputExprWithEvaluatedRef: Try[JsValue], input: MethodInput): Try[JsObject] = {
+      inputExprWithEvaluatedRef.map { evaluatedMap =>
+        val updatedObject: Map[String, JsValue] = evaluatedMap.asJsObject.fields.map { case (inputName, evaluatedValue) =>
+          val objectFields: mutable.Seq[ValueTypeObjectFieldTypes] = input.workflowInput.getValueType.getObjectFieldTypes.asScala
+          val isFieldAnArray: Boolean = objectFields.exists(x => x.getFieldName == inputName && x.getFieldType.getTypeName == TypeNameEnum.ARRAY)
+
+//          val updatedValue: JsValue = if(isFieldAnArray) {
+//            val arrayInput = input.workflowInput.getValueType.getObjectFieldTypes.asScala.filter {
+//              x => x.getFieldName == inputName
+//            }.map(x => x.getFieldType.getArrayType).head
+//
+//            arrayInput.getTypeName match {
+//              case TypeNameEnum.ARRAY => ???
+//              case _ => evaluatedValue match {
+//                case JsBoolean(_) | JsNumber(_) | JsString(_) => JsArray(evaluatedValue)
+//                case _ => evaluatedValue
+//              }
+//            }
+//          }
+//          else evaluatedValue
+
+          val updatedValue: JsValue = if(isFieldAnArray) {
+            evaluatedValue match {
+                case JsBoolean(_) | JsNumber(_) | JsString(_) => JsArray(evaluatedValue)
+                case JsNull => JsArray()
+                case _ => evaluatedValue
+              }
+            }
+          else evaluatedValue
+
+          inputName -> updatedValue
+        }
+        JsObject(updatedObject)
+      }
+    }
+
     // when there are no root entities handle as a single root entity with empty string for name
     rootEntityNames.getOrElse(Seq("")).map { entityName =>
       // in the case of literal JSON there are no LookupExpressions
@@ -211,34 +225,10 @@ object InputExpressionReassembler {
 
       val updatedMap: Try[JsValue] = inputOption match {
         case Some(input) => input.workflowInput.getValueType.getTypeName match {
-          case TypeNameEnum.OBJECT => inputExprWithEvaluatedRef.map { evaluatedMap =>
-            val updatedObject: Map[String, JsValue] = evaluatedMap.asJsObject.fields.map { case (key, value) =>
-              val objectFields: mutable.Seq[ValueTypeObjectFieldTypes] = input.workflowInput.getValueType.getObjectFieldTypes.asScala
-              val isFieldAnArray: Boolean = objectFields.collect {
-                case x if x.getFieldName == key =>
-                  x.getFieldType.getTypeName == TypeNameEnum.ARRAY
-              }.head
-
-              val updatedValue: JsValue = if(isFieldAnArray){
-                value match {
-                  case v: JsBoolean => JsArray(v)
-                  case v: JsNumber => JsArray(v)
-                  case v: JsString => JsArray(v)
-                  case _ => value
-                }
-              }
-              else
-                value
-
-              key -> updatedValue
-            }
-            JsObject(updatedObject)
-          }
-          case _ =>
-            inputExprWithEvaluatedRef
+          case TypeNameEnum.OBJECT => updateInputExprValueMapForObjectInput(inputExprWithEvaluatedRef, input)
+          case _ => inputExprWithEvaluatedRef
         }
-        case None =>
-          inputExprWithEvaluatedRef
+        case None => inputExprWithEvaluatedRef
       }
 
       entityName -> updatedMap
