@@ -700,7 +700,7 @@ trait EntityComponent {
 
     // perform actual deletion (not hiding) of all entities in a workspace
 
-    def deleteFromDb(workspaceId: UUID): WriteAction[Int] = {
+    def deleteFromDb(workspaceId: UUID): ReadWriteAction[Int] = {
       EntityDependenciesDeletionQuery.deleteAction(workspaceId) andThen {
         filter(_.workspaceId === workspaceId).delete
       }
@@ -917,7 +917,7 @@ trait EntityComponent {
         case EntityAndAttributesRawSqlQuery.EntityAndAttributesResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
       }
 
-      val attributesByEntityId = entityAttributeShardQuery(UUID.randomUUID()).unmarshalAttributes(entitiesWithAttributes)
+      val attributesByEntityId = entityAttributeShardQuery(UUID.randomUUID(), None).unmarshalAttributes(entitiesWithAttributes) //TODO FIX THIS
 
       allEntityRecords.map { entityRec =>
         entityRec.id -> unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))

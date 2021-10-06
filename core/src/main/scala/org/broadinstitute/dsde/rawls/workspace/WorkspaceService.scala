@@ -2229,7 +2229,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
       googleProjectNumber = googleProjectNumber,
       currentBillingAccountOnWorkspace,
       billingAccountErrorMessage = None,
-      completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer
+      completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
+      sharded = Some(true)
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)
