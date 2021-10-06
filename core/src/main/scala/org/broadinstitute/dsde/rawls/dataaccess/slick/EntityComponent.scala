@@ -434,11 +434,11 @@ trait EntityComponent {
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"
 
     def get(workspaceContext: Workspace, entityType: String, entityName: String): ReadAction[Option[Entity]] = {
-      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map unmarshalEntities map(_.headOption)
+      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map(query => unmarshalEntities(query, workspaceContext.sharded)) map(_.headOption)
     }
 
     def getEntities(workspaceId: UUID, sharded: Option[Boolean], entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
-      EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, sharded, entityIds.toSet) map unmarshalEntitiesWithIds
+      EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, sharded, entityIds.toSet) map(query => unmarshalEntitiesWithIds(query, sharded))
     }
 
     def getEntityRecords(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
@@ -450,22 +450,22 @@ trait EntityComponent {
     }
 
     def getActiveEntities(workspaceContext: Workspace, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
-      EntityAndAttributesRawSqlQuery.activeActionForRefs(workspaceContext, entityRefs.toSet) map unmarshalEntities
+      EntityAndAttributesRawSqlQuery.activeActionForRefs(workspaceContext, entityRefs.toSet) map(query => unmarshalEntities(query, workspaceContext.sharded))
     }
 
     // list all entities or those in a category
 
     def listActiveEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] = {
-      EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map unmarshalEntities
+      EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map(query => unmarshalEntities(query, workspaceContext.sharded))
     }
 
     // includes "deleted" hidden entities
     def listEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] = {
-      EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map unmarshalEntities
+      EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map(query => unmarshalEntities(query, workspaceContext.sharded))
     }
 
     def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] = {
-      EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map unmarshalEntities
+      EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map(query => unmarshalEntities(query, workspaceContext.sharded))
     }
 
     // get entity types, counts, and attribute names to populate UI tables.  Active entities and attributes only.
@@ -504,7 +504,7 @@ trait EntityComponent {
 
     def loadEntityPage(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery): ReadAction[(Int, Int, Iterable[Entity])] = {
       EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext, entityType, entityQuery) map { case (unfilteredCount, filteredCount, pagination) =>
-        (unfilteredCount, filteredCount, unmarshalEntities(pagination))
+        (unfilteredCount, filteredCount, unmarshalEntities(pagination, workspaceContext.sharded))
       }
     }
 
@@ -813,7 +813,7 @@ trait EntityComponent {
         val refsToId = entityRecs.map(rec => EntityPath(Seq(rec.toReference)) -> rec.id).toMap
         recursiveGetEntityReferences(context, Up, entityRecs.map(_.id).toSet, refsToId)
       } flatMap { refs =>
-        val entityAction = EntityAndAttributesRawSqlQuery.activeActionForRefs(context, refs.flatMap(_.path).toSet) map unmarshalEntities
+        val entityAction = EntityAndAttributesRawSqlQuery.activeActionForRefs(context, refs.flatMap(_.path).toSet) map(query => unmarshalEntities(query, context.sharded))
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
     }
@@ -905,11 +905,11 @@ trait EntityComponent {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 
-    private def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[Entity] = {
-      unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
+    private def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], sharded: Option[Boolean]): Seq[Entity] = {
+      unmarshalEntitiesWithIds(entityAttributeRecords, sharded).map { case (_, entity) => entity }
     }
 
-    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[(Long, Entity)] = {
+    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], sharded: Option[Boolean]): Seq[(Long, Entity)] = {
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
 
       // note that not all entities have attributes, thus the collect below
@@ -917,7 +917,7 @@ trait EntityComponent {
         case EntityAndAttributesRawSqlQuery.EntityAndAttributesResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
       }
 
-      val attributesByEntityId = entityAttributeShardQuery(UUID.randomUUID(), None).unmarshalAttributes(entitiesWithAttributes) //TODO FIX THIS
+      val attributesByEntityId = entityAttributeShardQuery(UUID.randomUUID(), sharded).unmarshalAttributes(entitiesWithAttributes)
 
       allEntityRecords.map { entityRec =>
         entityRec.id -> unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
