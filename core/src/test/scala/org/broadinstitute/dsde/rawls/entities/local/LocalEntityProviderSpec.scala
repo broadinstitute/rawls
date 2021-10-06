@@ -354,7 +354,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
     }
 
 
-    "return helpful error message when upserting case-divergent entity names (create method)" in withLocalEntityProviderTestDatabase { dataSource =>
+    "return helpful error message when upserting case-divergent entity names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
@@ -377,7 +377,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       }
     }
 
-    "return helpful error message when upserting case-divergent entity names (batchUpsert method)" in withLocalEntityProviderTestDatabase { dataSource =>
+    "return helpful error message when upserting case-divergent entity names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
@@ -400,7 +400,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       }
     }
 
-    "return helpful error message when upserting case-divergent type names (create method)" in withLocalEntityProviderTestDatabase { dataSource =>
+    "return helpful error message when upserting case-divergent type names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
@@ -423,7 +423,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       }
     }
 
-    "return helpful error message when upserting case-divergent type names (batchUpsert method)" in withLocalEntityProviderTestDatabase { dataSource =>
+    "return helpful error message when upserting case-divergent type names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
