@@ -92,7 +92,8 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
         _ <- dataAccess.entityTypeStatisticsQuery.deleteAllForWorkspace(workspaceId)
         _ <- dataAccess.entityTypeStatisticsQuery.batchInsert(workspaceId, entityTypesWithCounts)
         //update entity attribute statistics
-        entityTypesWithAttrNames <- dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceId)
+        sharded <- dataAccess.workspaceQuery.isWorkspaceSharded(workspaceId)
+        entityTypesWithAttrNames <- dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceId, sharded)
         _ <- dataAccess.entityAttributeStatisticsQuery.deleteAllForWorkspace(workspaceId)
         _ <- dataAccess.entityAttributeStatisticsQuery.batchInsert(workspaceId, entityTypesWithAttrNames)
         //update cache update date

@@ -340,11 +340,11 @@ trait EntityComponent {
         sql"""#${baseEntityAndAttributeSql(workspaceContext)} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
 
-      def actionForIds(workspaceId: UUID, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def actionForIds(workspaceId: UUID, sharded: Option[Boolean], entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
         if( entityIds.isEmpty ) {
           DBIO.successful(Seq.empty[EntityAndAttributesResult])
         } else {
-          val baseSelect = sql"""#${baseEntityAndAttributeSql(workspaceId, None)} where e.id in (""" //TODO: FIX THIS
+          val baseSelect = sql"""#${baseEntityAndAttributeSql(workspaceId, sharded)} where e.id in ("""
           val entityIdSql = reduceSqlActionsWithDelim(entityIds.map { id => sql"$id" }.toSeq)
           concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
         }
@@ -415,8 +415,8 @@ trait EntityComponent {
       EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
     }
 
-    private def findActiveAttributesByEntityId(workspaceId: UUID, entityId: Rep[Long]): EntityAttributeQuery = for {
-      entityAttrRec <- entityAttributeShardQuery(workspaceId, None) if entityAttrRec.ownerId === entityId && ! entityAttrRec.deleted //TODO: FIX THIS
+    private def findActiveAttributesByEntityId(workspaceId: UUID, sharded: Option[Boolean], entityId: Rep[Long]): EntityAttributeQuery = for {
+      entityAttrRec <- entityAttributeShardQuery(workspaceId, sharded) if entityAttrRec.ownerId === entityId && ! entityAttrRec.deleted
     } yield entityAttrRec
 
     // queries which may include "deleted" hidden entities
@@ -437,8 +437,8 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map unmarshalEntities map(_.headOption)
     }
 
-    def getEntities(workspaceId: UUID, entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
-      EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, entityIds.toSet) map unmarshalEntitiesWithIds
+    def getEntities(workspaceId: UUID, sharded: Option[Boolean], entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
+      EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, sharded, entityIds.toSet) map unmarshalEntitiesWithIds
     }
 
     def getEntityRecords(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
@@ -472,7 +472,7 @@ trait EntityComponent {
 
     def getEntityTypeMetadata(workspaceContext: Workspace): ReadAction[Map[String, EntityTypeMetadata]] = {
       val typesAndCountsQ = getEntityTypesWithCounts(workspaceContext.workspaceIdAsUUID)
-      val typesAndAttrsQ = getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID)
+      val typesAndAttrsQ = getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, workspaceContext.sharded)
 
       generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
     }
@@ -485,10 +485,10 @@ trait EntityComponent {
       }
     }
 
-    def getAttrNamesAndEntityTypes(workspaceId: UUID): ReadAction[Map[String, Seq[AttributeName]]] = {
+    def getAttrNamesAndEntityTypes(workspaceId: UUID, sharded: Option[Boolean]): ReadAction[Map[String, Seq[AttributeName]]] = {
       val typesAndAttrNames = for {
         entityRec <- findActiveEntityByWorkspace(workspaceId)
-        attrib <- findActiveAttributesByEntityId(workspaceId, entityRec.id)
+        attrib <- findActiveAttributesByEntityId(workspaceId, sharded, entityRec.id)
       } yield {
         (entityRec.entityType, (attrib.namespace, attrib.name))
       }
@@ -638,7 +638,7 @@ trait EntityComponent {
 
           for {
             _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, deletes)
-            updatedEntities <- entityQuery.getEntities(workspaceContext.workspaceIdAsUUID, Seq(entityRecord.id))
+            updatedEntities <- entityQuery.getEntities(workspaceContext.workspaceIdAsUUID, workspaceContext.sharded, Seq(entityRecord.id))
             _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(entityRecs, updatedEntities.map(elem => elem._2))
           } yield {}
         }

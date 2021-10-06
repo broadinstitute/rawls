@@ -428,7 +428,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     //yank out of Seq[(Long, Option[Entity])] and into Seq[(Long, Entity)]
     val entityIds = workflowsWithEntities.flatMap{ case (workflowRec, outputs) => workflowRec.workflowEntityId }
-    dataAccess.entityQuery.getEntities(workspaceId, entityIds).map(_.toMap)
+
+    dataAccess.workspaceQuery.isWorkspaceSharded(workspaceId).flatMap { sharded =>
+      dataAccess.entityQuery.getEntities(workspaceId, sharded, entityIds).map(_.toMap)
+    }
   }
 
   def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
