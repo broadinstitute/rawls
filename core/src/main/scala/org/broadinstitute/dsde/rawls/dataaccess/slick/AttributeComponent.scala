@@ -182,13 +182,13 @@ trait AttributeComponent {
 
   def determineShard(workspaceId: UUID, shardedOpt: Option[Boolean]): ShardId = {
     /* Sharded workspaces use a shard identifier such as "04_07", while unsharded workspaces
-        use a shard identifier of "archive". This translates into referencing tables named
+        use a shard identifier of "archived". This translates into referencing tables named
         ENTITY_ATTRIBUTE_04_07 or ENTITY_ATTRIBUTE_archive, respectively.
      */
 
     val sharded = shardedOpt.getOrElse(throw new RawlsException(s"Unexpected shard status for workspace $workspaceId. Shard value was null."))
 
-    if(!sharded) "archive"
+    if(!sharded) "archived"
     else {
       val shardSize = 4 // range of characters in a shard, e.g. 4 = "00-03"
 
