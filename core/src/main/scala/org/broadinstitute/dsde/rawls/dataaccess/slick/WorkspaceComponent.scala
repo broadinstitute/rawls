@@ -34,7 +34,8 @@ case class WorkspaceRecord(
                             googleProjectNumber: Option[String],
                             currentBillingAccountOnGoogleProject: Option[String],
                             billingAccountErrorMessage: Option[String],
-                            completedCloneWorkspaceFileTransfer: Option[Timestamp]) {
+                            completedCloneWorkspaceFileTransfer: Option[Timestamp],
+                            sharded: Boolean) {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
 }
 
@@ -67,10 +68,11 @@ trait WorkspaceComponent {
     def currentBillingAccountOnGoogleProject = column[Option[String]]("billing_account_on_google_project", O.Length(254))
     def billingAccountErrorMessage = column[Option[String]]("billing_account_error_message")
     def completedCloneWorkspaceFileTransfer = column[Option[Timestamp]]("completed_clone_workspace_file_transfer")
+    def sharded = column[Boolean]("sharded")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnGoogleProject, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnGoogleProject, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, sharded) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   /** raw/optimized SQL queries for working with workspace attributes
@@ -280,6 +282,10 @@ trait WorkspaceComponent {
       uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
     }
 
+    def isWorkspaceSharded(workspaceId: UUID): ReadAction[Option[Boolean]] = {
+      uniqueResult(workspaceQuery.filter(_.id === workspaceId).map(_.sharded).result)
+    }
+
     /**
       * Lists all workspaces with a particular attribute name/value pair.
       *
@@ -471,7 +477,7 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.currentBillingAccountOnGoogleProject.map(_.value), workspace.billingAccountErrorMessage, workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)))
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.currentBillingAccountOnGoogleProject.map(_.value), workspace.billingAccountErrorMessage, workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)), sharded = true)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord): Workspace = {
