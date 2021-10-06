@@ -394,8 +394,8 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
       ex match {
         case er:RawlsExceptionWithErrorReport =>
-          val expectedMessage = s"${upsert2.head.entityType} ${upsert2.head.name} already exists in ${workspaceContext.toWorkspaceName}"
-          er.errorReport.message shouldBe expectedMessage
+          val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities. Underlying error message:"
+          er.errorReport.message should startWith (expectedMessage)
         case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
       }
     }
@@ -440,8 +440,8 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
       ex match {
         case er:RawlsExceptionWithErrorReport =>
-          val expectedMessage = s"${upsert2.head.entityType} ${upsert2.head.name} already exists in ${workspaceContext.toWorkspaceName}"
-          er.errorReport.message shouldBe expectedMessage
+          val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities. Underlying error message:"
+          er.errorReport.message should startWith (expectedMessage)
         case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
       }
     }

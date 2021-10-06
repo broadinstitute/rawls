@@ -229,6 +229,17 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
           }
 
           traceDBIOWithParent("saveAction", rootSpan)(_ => saveAction)
+        } recover {
+          case bue:java.sql.BatchUpdateException =>
+            val maybeCaseIssue = bue.getMessage.startsWith("Duplicate entry")
+            val userMessage = if (maybeCaseIssue) {
+              s"Database error occurred. Check if you are uploading entity names or entity types that differ only in case " +
+                s"from pre-existing entities. Underlying error message: ${bue.getMessage}"
+            } else {
+              s"Database error occurred. Underlying error message: ${bue.getMessage}"
+            }
+
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, bue))
         }
       }
     }
