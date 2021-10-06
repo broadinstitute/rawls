@@ -29,7 +29,8 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
       None,
       None,
       None,
-      Option(currentTime())
+      Option(currentTime()),
+      Option(true)
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
@@ -70,7 +71,8 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
       None,
       None,
       None,
-      Option(currentTime())
+      Option(currentTime()),
+      Option(true)
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
