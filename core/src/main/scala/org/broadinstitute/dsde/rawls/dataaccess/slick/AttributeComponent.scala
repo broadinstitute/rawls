@@ -188,7 +188,7 @@ trait AttributeComponent {
 
     val sharded = shardedOpt.getOrElse(throw new RawlsException(s"Unexpected shard status for workspace $workspaceId. Shard value was null."))
 
-    if(sharded) "archive"
+    if(!sharded) "archive"
     else {
       val shardSize = 4 // range of characters in a shard, e.g. 4 = "00-03"
 
