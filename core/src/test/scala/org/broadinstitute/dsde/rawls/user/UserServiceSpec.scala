@@ -487,6 +487,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
+      
+      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccountName, isInvalid = true))
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(true))
@@ -503,9 +505,10 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       //assert that the spend report configuration has been fully cleared
       spendReportDatasetInDb.head shouldEqual (None, None)
-
-      runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
-        .getOrElse(fail("project not found")).billingAccount shouldEqual Option(billingAccountName)
+      val project = runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
+        .getOrElse(fail("project not found"))
+      project.billingAccount shouldEqual Option(billingAccountName)
+      project.invalidBillingAccount shouldBe false
     }
   }
 

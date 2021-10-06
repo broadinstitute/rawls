@@ -341,6 +341,28 @@ trait AttributeComponent {
       }
     }
 
+    def deleteAttributes(workspaceId: UUID, entityType: String, attributeNames: Set[AttributeName]) = {
+      DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceId, entityType, attributeNames)
+    }
+
+    object DeleteAttributeColumnQueries extends RawSqlQuery {
+      val driver: JdbcProfile = AttributeComponent.this.driver
+
+      def deleteAttributeColumn(workspaceId: UUID, entityType: String, attributeNames: Set[AttributeName]) = {
+        val attributeNamesSql = reduceSqlActionsWithDelim(attributeNames.map { attName =>
+          sql"""(${attName.namespace},${attName.name})"""
+        }.toSeq)
+
+        val deleteQueryBase = sql"""delete ea from ENTITY_ATTRIBUTE ea
+                                    join ENTITY e on e.id = ea.owner_id
+                                    where e.workspace_id = ${workspaceId}
+                                      and e.entity_type = ${entityType}
+                                      and (ea.namespace, ea.name) in """
+
+        concatSqlActions(deleteQueryBase, sql"(", attributeNamesSql, sql")").as[Int]
+      }
+    }
+
     /**
      * Compares a collection of pre-existing attributes to a collection of attributes requested to save by a user,
      * finds the differences, saves the differences, and then returns the ids of the parent (entity|workspace) objects

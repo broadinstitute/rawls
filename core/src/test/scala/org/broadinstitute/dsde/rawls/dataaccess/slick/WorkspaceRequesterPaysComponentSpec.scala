@@ -24,7 +24,8 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       GoogleProjectId("google_project_id"),
       None,
       None,
-      None
+      None,
+      Option(currentTime())
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))

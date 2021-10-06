@@ -36,7 +36,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     googleProjectId,
     Option(googleProjectNumber),
     Option(workspaceBillingAccount),
-    None
+    None,
+    Option(currentTime())
   )
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {

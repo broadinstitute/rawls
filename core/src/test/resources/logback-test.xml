@@ -30,15 +30,21 @@
 
     <!--
     <logger name="slick.jdbc.JdbcBackend.statement" level="DEBUG" additivity="false">
-        <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
-    </logger>
+        <appender-ref ref="file"/>
+        <appender-ref ref="console"/>
+    </logger>
     -->
     <!--
     <logger name="slick.jdbc.StatementInvoker.result" level="DEBUG" additivity="false">
-        <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
-    </logger>
+        <appender-ref ref="file"/>
+        <appender-ref ref="console"/>
+    </logger>
+    -->
+    <!--
+    <logger name="slick.jdbc.StatementInvoker.result" level="DEBUG" additivity="false">
+        <appender-ref ref="file"/>
+        <appender-ref ref="console"/>
+    </logger>
     -->
     <!-- netty (mock server) produces a huge amount of DEBUG output during tests without this line -->
     <logger name="io.netty" level="WARN"/>

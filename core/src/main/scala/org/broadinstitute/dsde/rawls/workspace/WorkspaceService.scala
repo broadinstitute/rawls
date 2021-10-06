@@ -411,14 +411,14 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceName}`", t)
-          throw t
+          Future.failed(t)
         }
       }
 
       workflowsToAbort <- gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName, workspaceContext) recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while gathering workflows that need to be aborted) for workspace `${workspaceName}`", t)
-          throw t
+          Future.failed(t)
         }
       }
 
@@ -429,7 +429,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) } recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while aborting workflows) for workspace `${workspaceName}`", t)
-          throw t
+          Future.failed(t)
         }
       }
 
@@ -437,7 +437,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo) recoverWith {
         case t:Throwable => {
           logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
-          throw t
+          Future.failed(t)
         }
       }
 
@@ -445,7 +445,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- deleteWorkspaceTransaction(workspaceName, workspaceContext) recoverWith {
         case t:Throwable => {
           logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Rawls DB) for workspace `${workspaceName}`", t)
-          throw t
+          Future.failed(t)
         }
       }
 
@@ -453,7 +453,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
         case t:Throwable => {
           logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
-          throw t
+          Future.failed(t)
         }
       }
       // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
@@ -470,13 +470,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- deltaLayer.deleteDataset(workspaceContext) recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while deleting Delta Layer) for workspace `${workspaceName}`", t)
-          throw t
+          Future.failed(t)
         }
       }
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
         case t:Throwable => {
           logger.warn(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`", t)
-          throw t
+          Future.failed(t)
         }
       }
     } yield {
@@ -733,7 +733,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
             //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
             //we also don't want to block returning a response on this call because it's already a slow endpoint
             destWorkspaceRequest.copyFilesWithPrefix.foreach { prefix =>
-              copyBucketFiles(sourceWorkspaceContext, destWorkspaceContext, prefix)
+              dataSource.inTransaction { dataAccess =>
+                dataAccess.cloneWorkspaceFileTransferQuery.save(destWorkspaceContext.workspaceIdAsUUID, sourceWorkspaceContext.workspaceIdAsUUID, prefix)
+              }
             }
 
             destWorkspaceContext
@@ -2125,7 +2127,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"
       ))
     }
-    
+
   /**
     * Checks that Rawls has the right permissions on the BillingProject's Billing Account, and then passes along the
     * BillingProject to op to be used by code in this context
@@ -2206,6 +2208,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                          dataAccess: DataAccess,
                                          parentSpan: Span = null): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
+    val completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix match {
+      case Some(_) => None
+      case None => Option(currentDate)
+    }
 
     val workspace = Workspace(
       namespace = workspaceRequest.namespace,
@@ -2222,7 +2228,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
       googleProjectId = googleProjectId,
       googleProjectNumber = googleProjectNumber,
       currentBillingAccountOnWorkspace,
-      billingAccountErrorMessage = None
+      billingAccountErrorMessage = None,
+      completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)
@@ -2244,6 +2251,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
           case None =>
             val workspaceId = UUID.randomUUID.toString
+            logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
             val bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
             // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
             // Option, so we are being thorough

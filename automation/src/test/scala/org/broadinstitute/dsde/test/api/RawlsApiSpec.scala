@@ -4,7 +4,6 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.Blocker
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.auth.AuthToken
@@ -635,7 +634,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     }
 
     "should clone a workspace and only copy files in the specified path" in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
       implicit val token: AuthToken = studentAToken
 
       withCleanBillingProject(studentA) { projectName =>
@@ -993,16 +992,11 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
   private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, Set[String])] = {
-    import org.typelevel.log4cats.Logger
-    import org.typelevel.log4cats.slf4j.Slf4jLogger
-    import org.apache.commons.io.IOUtils
     import cats.effect.IO
+    import cats.effect.unsafe.implicits.global
 
-    implicit val logger: org.typelevel.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
-
-    GoogleStorageService.resource(
-      RawlsConfig.pathToQAJson,
-      Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global)
+    GoogleStorageService.resource[IO](
+      RawlsConfig.pathToQAJson
     ).use {
       storage =>
         for {

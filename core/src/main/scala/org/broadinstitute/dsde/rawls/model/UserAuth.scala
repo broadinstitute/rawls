@@ -68,8 +68,8 @@ case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName,
                                        servicePerimeter: Option[ServicePerimeterName],
                                        invalidBillingAccount: Boolean,
                                        roles: Set[ProjectRoles.ProjectRole],
-                                       workspacesWithCorrectBillingAccount: Set[WorkspaceName],
-                                       workspacesWithIncorrectBillingAccount: Set[WorkspaceBillingAccount])
+                                       status: CreationStatuses.CreationStatus,
+                                       message: Option[String])
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 

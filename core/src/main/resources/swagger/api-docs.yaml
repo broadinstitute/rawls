@@ -1625,6 +1625,16 @@ paths:
           description: Filter terms
           schema:
             type: string
+        - name: fields
+          in: query
+          description: |
+            When specified, include only these attributes in the response payload and exclude other attributes. Accepts a comma-delimited list of values. If omitted, will return the full response payload.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
         - $ref: '#/components/parameters/dataReferenceQueryParam'
         - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:
@@ -1902,6 +1912,42 @@ paths:
                   $ref: '#/components/schemas/Entity'
         404:
           description: Workspace or entityType not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - entities
+      summary: delete column in entity table
+      description: Delete entity column
+      operationId: delete_entity_column
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - name: attributeNames
+          in: query
+          description: |
+             A comma-delimited list of attribute names to delete. Required.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        204:
+          description: Successful Request
+          content: {}
+        400:
+          description: Attributes do not exist
           content:
             'application/json':
               schema:
@@ -5845,6 +5891,11 @@ components:
         billingAccountErrorMessage:
           type: string
           description: Error message received during most recent attempt to update the current billing account on workspace's Google project. Empty if update was successful.
+        completedCloneWorkspaceFileTransfer:
+          type: string
+          description: The date all files were successfully transferred to the workspace bucket if applicable
+            in yyyy-MM-ddTHH:mm:ss.SSSZZ format
+          format: date-time
       description: ""
     WorkspaceSubmissionStats:
       required:
@@ -6329,6 +6380,7 @@ components:
             - Creating
             - Ready
             - Error
+            - AddingToPerimeter
         message:
           type: string
           description: informational message about the project
@@ -6348,6 +6400,7 @@ components:
             - Creating
             - Ready
             - Error
+            - AddingToPerimeter
       description: a billing project status
     RawlsBillingProjectMember:
       required:
@@ -6386,15 +6439,19 @@ components:
           items:
             type: string
           description: the roles the caller has on the project
-        workspacesWithCorrectBillingAccount:
-          type: array
-          items:
-            type: string
-          description: A list of workspace names with the correct billing account contained within this billing project
-        workspacesWithIncorrectBillingAccount:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceBillingAccount'
+        status:
+          deprecated: true
+          type: string
+          enum:
+            - Creating
+            - Ready
+            - Error
+            - AddingToPerimeter
+          description: the status of allocating the billing project's resources.
+        message:
+          deprecated: true
+          type: string
+          description: informational message about the project
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount

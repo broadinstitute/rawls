@@ -298,7 +298,15 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.Owner, ProjectRoles.User), Set(), Set())
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
+          project.projectName,
+          project.billingAccount,
+          project.servicePerimeter,
+          project.invalidBillingAccount,
+          Set(ProjectRoles.Owner, ProjectRoles.User),
+          project.status,
+          project.message
+        )
       }
   }
 
@@ -314,7 +322,15 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(project.projectName, project.billingAccount, project.servicePerimeter, project.invalidBillingAccount, Set(ProjectRoles.User), Set(), Set())
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
+          project.projectName,
+          project.billingAccount,
+          project.servicePerimeter,
+          project.invalidBillingAccount,
+          Set(ProjectRoles.User),
+          project.status,
+          project.message
+        )
       }
   }
 
@@ -464,14 +480,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
             case SamBillingProjectRoles.owner => ProjectRoles.Owner
             case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User
           },
-          workspaces
-            .filter(workspace => workspace.wsName.namespace == p.projectName.value
-              && workspace.billingAccount == p.billingAccount)
-            .map(workspace => workspace.wsName).toSet,
-          workspaces
-            .filter(workspace => workspace.wsName.namespace == p.projectName.value
-              && workspace.billingAccount != p.billingAccount)
-            .map(workspace => WorkspaceBillingAccount(workspace.wsName, workspace.billingAccount)).toSet
+          p.status,
+          p.message
         )
       }
     }
