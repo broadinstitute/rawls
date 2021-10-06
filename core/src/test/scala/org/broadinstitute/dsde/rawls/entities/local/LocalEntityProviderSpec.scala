@@ -1,13 +1,16 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor
+import org.scalatest.RecoverMethods.recoverToExceptionIf
+import org.scalatest.concurrent.ScalaFutures
 
 import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext
@@ -16,9 +19,8 @@ import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.sql.Timestamp
 import java.time.Instant
-import java.util.UUID
 
-class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDriverComponent with MethodConfigTestSupport {
+class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFutures with TestDriverComponent with MethodConfigTestSupport {
   import driver.api._
 
   val testConf = ConfigFactory.load()
@@ -350,6 +352,101 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val secondMessage = runAndWait(uniqueResult[Option[String]](workspaceFilter.map(_.errorMessage))).flatten
       secondMessage shouldBe empty
     }
+
+
+    "return helpful error message when upserting case-divergent entity names (create method)" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // create the first entity with name "myname"
+      val entity1 = Entity("myname", "casetest", Map())
+      val created1 = localEntityProvider.createEntity(entity1).futureValue
+      created1 shouldBe entity1
+
+      // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
+      val entity2 = Entity("MyName", "casetest", Map())
+      val ex = recoverToExceptionIf[Exception] {
+        localEntityProvider.createEntity(entity2)
+      }.futureValue
+
+      ex match {
+        case er:RawlsExceptionWithErrorReport =>
+          val expectedMessage = s"${entity2.entityType} ${entity2.name} already exists in ${workspaceContext.toWorkspaceName}"
+          er.errorReport.message shouldBe expectedMessage
+        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+      }
+    }
+
+    "return helpful error message when upserting case-divergent entity names (batchUpsert method)" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // create the first entity with name "myname"
+      val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
+      val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
+      created1.size shouldBe 1
+
+      // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
+      val upsert2 = Seq(EntityUpdateDefinition("MyName", "casetest", Seq()))
+      val ex = recoverToExceptionIf[Exception] {
+        localEntityProvider.batchUpsertEntities(upsert2)
+      }.futureValue
+
+      ex match {
+        case er:RawlsExceptionWithErrorReport =>
+          val expectedMessage = s"${upsert2.head.entityType} ${upsert2.head.name} already exists in ${workspaceContext.toWorkspaceName}"
+          er.errorReport.message shouldBe expectedMessage
+        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+      }
+    }
+
+    "return helpful error message when upserting case-divergent type names (create method)" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // create the first entity with type "casetest"
+      val entity1 = Entity("myname", "casetest", Map())
+      val created1 = localEntityProvider.createEntity(entity1).futureValue
+      created1 shouldBe entity1
+
+      // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
+      val entity2 = Entity("myname", "CaseTest", Map())
+      val ex = recoverToExceptionIf[Exception] {
+        localEntityProvider.createEntity(entity2)
+      }.futureValue
+
+      ex match {
+        case er:RawlsExceptionWithErrorReport =>
+          val expectedMessage = s"${entity2.entityType} ${entity2.name} already exists in ${workspaceContext.toWorkspaceName}"
+          er.errorReport.message shouldBe expectedMessage
+        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+      }
+    }
+
+    "return helpful error message when upserting case-divergent type names (batchUpsert method)" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // create the first entity with type "casetest"
+      val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
+      val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
+      created1.size shouldBe 1
+
+      // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
+      val upsert2 = Seq(EntityUpdateDefinition("myname", "CaseTest", Seq()))
+      val ex = recoverToExceptionIf[Exception] {
+        localEntityProvider.batchUpsertEntities(upsert2)
+      }.futureValue
+
+      ex match {
+        case er:RawlsExceptionWithErrorReport =>
+          val expectedMessage = s"${upsert2.head.entityType} ${upsert2.head.name} already exists in ${workspaceContext.toWorkspaceName}"
+          er.errorReport.message shouldBe expectedMessage
+        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+      }
+    }
+
+
 
   }
 }
