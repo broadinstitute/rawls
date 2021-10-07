@@ -395,7 +395,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         // Delete components of the workspace
         _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
         _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext)
 
         // Schedule bucket for deletion
         _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))

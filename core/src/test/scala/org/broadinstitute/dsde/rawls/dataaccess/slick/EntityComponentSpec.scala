@@ -113,9 +113,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(activeEntityCount2 + 1)(activeEntityCount3)
     assertResult(activeAttributeCount2)(activeAttributeCount3)
 
-    assertResult(entityCount3) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)) }
+    assertResult(entityCount3) { runAndWait(entityQuery.deleteFromDb(workspaceContext)) }
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "delete-me")) }
-    assertResult(0) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)) }
+    assertResult(0) { runAndWait(entityQuery.deleteFromDb(workspaceContext)) }
 
     val (entityCount4, attributeCount4) = countEntitiesAttrs(workspace)
     val (activeEntityCount4, activeAttributeCount4) = countActiveEntitiesAttrs(workspace)
