@@ -461,7 +461,15 @@ trait SubmissionComponent {
       implicit val getWorkflowMessagesListResult = GetResult { r =>
         val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val rootEntityTypeOption: Option[String] = r.<<
-        val entityRec = workflowRec.workflowEntityId.map(EntityRecord(_, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+        // val entityRec = workflowRec.workflowEntityId.map(EntityRecord(_, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+        val entityRec = workflowRec.workflowEntityId match {
+          case Some(eid) => Option(EntityRecord(eid, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+          case None =>
+            // consume the entity record columns, but ignore the result
+            val _ = EntityRecord(-1, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+            None
+        }
 
         val messageOption: Option[String] = r.<<
 
