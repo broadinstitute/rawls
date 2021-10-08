@@ -264,11 +264,14 @@ trait EntityComponent {
             "",
             // no additional join required
             sql"")
-          case _ => (
+          case _ =>
+            // sortFieldName may be a namespace:name delimited string
+            val sortAttr = AttributeName.fromDelimitedName(sortFieldName)
+            (
             // select each attribute column and the referenced entity name
             """, sort_a.list_length as sort_list_length, sort_a.value_string as sort_field_string, sort_a.value_number as sort_field_number, sort_a.value_boolean as sort_field_boolean, sort_a.value_json as sort_field_json, sort_e_ref.name as sort_field_ref""",
             // join to attribute and entity (for references) table, grab only the named sort attribute and only the first element of a list
-            sql"""left outer join ENTITY_ATTRIBUTE sort_a on sort_a.owner_id = e.id and sort_a.name = $sortFieldName and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """)
+            sql"""left outer join ENTITY_ATTRIBUTE sort_a on sort_a.owner_id = e.id and sort_a.namespace = ${sortAttr.namespace} and sort_a.name = ${sortAttr.name} and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """)
         }
 
         concatSqlActions(sql"""select e.id, e.name #$sortColumns from ENTITY e """, sortJoin, sql""" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId """)
