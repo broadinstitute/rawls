@@ -1708,7 +1708,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO: what if this.samples.type is a single element array ???
   it should "return 200 on successfully parsing a heterogeneous array with attribute references" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("""[1, 2, 3, this.samples.type, ["foo", "bar", this.samples.type]]""")) ~>
       sealRoute(services.entityRoutes) ~>

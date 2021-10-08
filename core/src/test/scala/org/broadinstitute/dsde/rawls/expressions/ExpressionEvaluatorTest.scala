@@ -37,7 +37,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
   def evalFinalAttribute(workspaceContext: Workspace, entityType: String, entityName: String, expression: String) = {
     entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, entityName).result flatMap { entityRec =>
       ExpressionEvaluator.withNewExpressionEvaluator(this, Some(entityRec)) { evaluator =>
-        evaluator.evalFinalAttribute(workspaceContext, expression, None)
+        evaluator.evalFinalAttribute(workspaceContext, expression)
       }
     }
   }
