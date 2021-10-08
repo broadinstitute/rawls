@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor
-import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.MIN_CACHE_TIME
+import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{MIN_CACHE_TIME, RESET_CACHE_TIME}
 import slick.jdbc.JdbcProfile
 
 import java.sql.Timestamp
@@ -67,6 +67,19 @@ trait EntityCacheComponent {
 
     def listInvalidCaches: ReadAction[Seq[(UUID, String)]] = {
       sql"""select c.workspace_id, c.error_message from WORKSPACE_ENTITY_CACHE c where c.entity_cache_last_updated = ${MIN_CACHE_TIME}""".as[(UUID, String)]
+    }
+
+    def resetInvalidCaches(workspaceIds: Seq[UUID]) = {
+      // use Slick updates here instead of raw sql, because inSetBind works so much better than
+      // doing the equivalent in raw sql
+      val q = for {
+        c <- entityCacheQuery if c.entityCacheLastUpdated === MIN_CACHE_TIME && c.workspaceId.inSetBind(workspaceIds)
+      } yield {
+        c.entityCacheLastUpdated
+      }
+      // we explicitly don't update the error_message here. When the cache monitor runs again and
+      // rebuilds the cache for these workspaces, it will null-out the error_message on success.
+      q.update(RESET_CACHE_TIME)
     }
   }
 

@@ -1898,6 +1898,20 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  def adminResetWorkspaceEntityCaches(ids: Seq[String]) = {
+    asFCAdmin {
+      // validate workspaceIds
+      val workspaceIds = ids.map(s => Try(UUID.fromString(s)).getOrElse(throw new RawlsException(s"all ids must be valid UUIDs. Found: $s")))
+      val updated = dataSource.inTransaction { dataAccess =>
+        dataAccess.entityCacheQuery.resetInvalidCaches(workspaceIds)
+      }
+      updated map { num =>
+        RequestComplete(StatusCodes.OK, Map("numReset" -> num))
+      }
+    }
+
+  }
+
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     //don't do the sam REST call inside the db transaction.
     getWorkspaceContext(workspaceName) flatMap { workspaceContext =>

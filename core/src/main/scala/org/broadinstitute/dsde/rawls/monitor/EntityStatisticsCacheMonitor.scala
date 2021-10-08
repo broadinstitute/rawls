@@ -28,6 +28,8 @@ object EntityStatisticsCacheMonitor {
 
   //Note: Ignored workspaces have a cacheLastUpdated timestamp of 1000ms after epoch
   val MIN_CACHE_TIME = new Timestamp(1000)
+  // when resetting an invalid cache so that it can be recalculated, use this timestamp
+  val RESET_CACHE_TIME = new Timestamp(2000)
 
 }
 

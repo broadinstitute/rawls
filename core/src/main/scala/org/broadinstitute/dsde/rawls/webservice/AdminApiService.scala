@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.json.DefaultJsonProtocol._
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 trait AdminApiService extends UserInfoDirectives {
@@ -93,6 +94,11 @@ trait AdminApiService extends UserInfoDirectives {
     path("admin" / "workspaces" / "entities" / "cache") {
       get {
         complete { workspaceServiceConstructor(userInfo).adminListWorkspacesWithInvalidEntityCaches }
+      } ~
+      post {
+        entity(as[Seq[String]]) { workspaceIds =>
+          complete { workspaceServiceConstructor(userInfo).adminResetWorkspaceEntityCaches(workspaceIds) }
+        }
       }
     } ~
     path("admin" / "refreshToken" / Segment ) { userSubjectId =>

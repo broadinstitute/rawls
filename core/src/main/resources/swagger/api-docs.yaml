@@ -951,7 +951,46 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/WorkspaceDetails'
+                  $ref: '#/components/schemas/WorkspaceDetailsAndCacheError'
+        403:
+          description: You must be an admin to list workspaces
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    post:
+      tags:
+        - admin
+        - workspaces
+      summary: reset entity statistics cache on specific workspaces
+      description: reset entity statistics cache on specific workspaces
+      operationId: resetInvalidEntityCacheWorkspaces
+      requestBody:
+          description: workspace ids for which to reset caches
+          required: true
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: string
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: object
+                properties:
+                  numReset:
+                    type: number
+                    description: number of workspace caches actually updated
         403:
           description: You must be an admin to list workspaces
           content:
@@ -5926,6 +5965,14 @@ components:
             in yyyy-MM-ddTHH:mm:ss.SSSZZ format
           format: date-time
       description: ""
+    WorkspaceDetailsAndCacheError:
+      type: object
+      properties:
+        cacheError:
+          type: string
+        workspace:
+          $ref: '#/components/schemas/WorkspaceDetails'
+    description: ""
     WorkspaceSubmissionStats:
       required:
         - runningSubmissionsCount
