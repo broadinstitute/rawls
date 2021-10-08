@@ -58,6 +58,10 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       runAndWait(testResolveInputs(context, configSampleSet, sampleSet2, arrayWdl, this)) shouldBe
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayNameWithWfName)))
 
+      // attribute reference with 1 element array should resolve as AttributeValueList
+      runAndWait(testResolveInputs(context, configSampleSet, sampleSet4, arrayWdl, this)) shouldBe
+        Map(sampleSet4.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(101)))), None, intArrayNameWithWfName)))
+
       // failure cases
       assertResult(true, "Missing values should return an error") {
         runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this)).get("sampleMissingValue").get match {
@@ -100,6 +104,30 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
       wdlInputs shouldBe """{"w1.aint_array":[[10,11,12],[1,2]]}"""
+    }
+
+    "correctly unpack wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configWdlStruct, sampleForWdlStruct2, wdlStructInputWdl, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct2.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"id":123,"sample":"sample1","samples":[101]}}"""
+    }
+
+    "correctly unpack nested wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configNestedWdlStruct, sampleForWdlStruct2, wdlStructInputWdlWithNestedStruct, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct2.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"id":123,"sample":"sample1","samples":[101],"foo":{"bar":[101]}}}"""
     }
 
     "unpack wdl struct expression with attribute references into WDL Struct input" in withConfigData {

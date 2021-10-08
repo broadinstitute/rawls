@@ -138,7 +138,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
 
       val resultsByType = runAndWait(entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
         ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
-          evaluator.evalFinalAttribute(workspaceContext, "this.library:chapter", None)
+          evaluator.evalFinalAttribute(workspaceContext, "this.library:chapter")
         }
       })
 
@@ -216,7 +216,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       assertResult(allTheTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
           ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
-            evaluator.evalFinalAttribute(workspaceContext, "this.type", None)
+            evaluator.evalFinalAttribute(workspaceContext, "this.type")
           }
         })
       }
@@ -234,7 +234,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       assertResult(allTheTumorTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
           ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
-            evaluator.evalFinalAttribute(workspaceContext, "this.tumortype", None)
+            evaluator.evalFinalAttribute(workspaceContext, "this.tumortype")
           }
         })
       }

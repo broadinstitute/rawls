@@ -179,33 +179,19 @@ object InputExpressionReassembler {
                                                 inputOption: Option[MethodInput]): Map[EntityName, Try[JsValue]] = {
 
     def updateInputExprValueMapForObjectInput(inputExprWithEvaluatedRef: Try[JsValue], input: MethodInput): Try[JsObject] = {
+      val objectFields: mutable.Seq[ValueTypeObjectFieldTypes] = input.workflowInput.getValueType.getObjectFieldTypes.asScala
+
       inputExprWithEvaluatedRef.map { evaluatedMap =>
         val updatedObject: Map[String, JsValue] = evaluatedMap.asJsObject.fields.map { case (inputName, evaluatedValue) =>
-          val objectFields: mutable.Seq[ValueTypeObjectFieldTypes] = input.workflowInput.getValueType.getObjectFieldTypes.asScala
           val isFieldAnArray: Boolean = objectFields.exists(x => x.getFieldName == inputName && x.getFieldType.getTypeName == TypeNameEnum.ARRAY)
-
-//          val updatedValue: JsValue = if(isFieldAnArray) {
-//            val arrayInput = input.workflowInput.getValueType.getObjectFieldTypes.asScala.filter {
-//              x => x.getFieldName == inputName
-//            }.map(x => x.getFieldType.getArrayType).head
-//
-//            arrayInput.getTypeName match {
-//              case TypeNameEnum.ARRAY => ???
-//              case _ => evaluatedValue match {
-//                case JsBoolean(_) | JsNumber(_) | JsString(_) => JsArray(evaluatedValue)
-//                case _ => evaluatedValue
-//              }
-//            }
-//          }
-//          else evaluatedValue
 
           val updatedValue: JsValue = if(isFieldAnArray) {
             evaluatedValue match {
-                case JsBoolean(_) | JsNumber(_) | JsString(_) => JsArray(evaluatedValue)
-                case JsNull => JsArray()
-                case _ => evaluatedValue
-              }
+              case JsNull => JsArray()
+              case JsArray(_) => evaluatedValue
+              case _ => JsArray(evaluatedValue)
             }
+          }
           else evaluatedValue
 
           inputName -> updatedValue

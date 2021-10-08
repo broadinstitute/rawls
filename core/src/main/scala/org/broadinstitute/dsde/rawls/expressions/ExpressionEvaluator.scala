@@ -57,7 +57,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
         )
     )
     */
-  def evalFinalAttribute(workspaceContext: Workspace, expression: String, input: Option[MethodInput])(implicit executionContext: ExecutionContext): ReadWriteAction[Map[EntityName, Try[Iterable[AttributeValue]]]] = {
+  def evalFinalAttribute(workspaceContext: Workspace, expression: String, input: Option[MethodInput] = None)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[EntityName, Try[Iterable[AttributeValue]]]] = {
 
     // parse expression using ANTLR TerraExpression parser
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
