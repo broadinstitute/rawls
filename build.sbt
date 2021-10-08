@@ -1,7 +1,8 @@
 import Settings._
 import Testing._
 
-ThisBuild / scalacOptions += "-P:semanticdb:synthetics:on"
+ThisBuild / libraryDependencySchemes += "org.typelevel" %% "cats-effect" % "always"
+ThisBuild / libraryDependencySchemes += "co.fs2" %% "fs2-io" % "always"
 
 val compileAndTest = "compile->compile;test->test"
 
