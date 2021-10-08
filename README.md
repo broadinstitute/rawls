@@ -31,13 +31,16 @@ See the wiki for detailed documentation.
 * Swagger UI: https://rawls.dsde-dev.broadinstitute.org
 * Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
 * Running locally in docker https://github.com/broadinstitute/firecloud-develop
+  * After having run `run-context/local/scripts/firecloud-setup.sh`, launch Rawls with `config/docker-rsync-local-rawls.sh`
+  * To start "Back Rawls", include `BACK_RAWLS=true` (ie., `BACK_RAWLS=true sh ./config/docker-rsync-local-rawls.sh`)
+  * If Docker containers started by `docker-rsync-local-rawls.sh` mysteriously terminate, try increasing your Docker memory. 
 
 ## Debugging in Intellij IDEA
 You can attach Intellij's interactive debugger to Rawls running locally in a 
-docker container configured via `scripts/firecloud-setup.sh` in 
+docker container configured via `run-context/local/scripts/firecloud-setup.sh` in 
 [firecloud-develop](https://github.com/broadinstitute/firecloud-develop/blob/dev/run-context/local/README.md).
 
-Add a "Remote JVM Debug" configuration that attaches to `localhost` on port `5050`.
+Add a "Remote JVM Debug" configuration that attaches to `localhost` on port `25050`.
 See the link below for more detailed steps.
 https://blog.jetbrains.com/idea/2019/04/debug-your-java-applications-in-docker-using-intellij-idea/
 
