@@ -178,26 +178,28 @@ object InputExpressionReassembler {
                                                 rootEntityNames: Option[Seq[EntityName]],
                                                 inputOption: Option[MethodInput]): Map[EntityName, Try[JsValue]] = {
 
-    def updateInputExprValueMapForObjectInput(inputExprWithEvaluatedRef: Try[JsValue], input: MethodInput): Try[JsObject] = {
-      val objectFields: mutable.Seq[ValueTypeObjectFieldTypes] = input.workflowInput.getValueType.getObjectFieldTypes.asScala
+    def updateInputExprValueMapForObjectInput(inputExprWithEvaluatedRef: JsValue, objectFieldsFromInput: mutable.Seq[ValueTypeObjectFieldTypes]): JsObject = {
+      val updatedObject: Map[String, JsValue] = inputExprWithEvaluatedRef.asJsObject.fields.map { case (inputName, evaluatedValue) =>
+        val inputObjectField: Option[ValueTypeObjectFieldTypes] = objectFieldsFromInput.find(x => x.getFieldName == inputName)
 
-      inputExprWithEvaluatedRef.map { evaluatedMap =>
-        val updatedObject: Map[String, JsValue] = evaluatedMap.asJsObject.fields.map { case (inputName, evaluatedValue) =>
-          val isFieldAnArray: Boolean = objectFields.exists(x => x.getFieldName == inputName && x.getFieldType.getTypeName == TypeNameEnum.ARRAY)
-
-          val updatedValue: JsValue = if(isFieldAnArray) {
-            evaluatedValue match {
+        val updatedValue: JsValue = inputObjectField match {
+          case Some(objectField) => objectField.getFieldType.getTypeName match {
+            case TypeNameEnum.OBJECT =>
+              // if there are nested objects, recursively call this method to reach leaf fields
+              updateInputExprValueMapForObjectInput(evaluatedValue, objectField.getFieldType.getObjectFieldTypes.asScala)
+            case TypeNameEnum.ARRAY => evaluatedValue match {
               case JsNull => JsArray()
               case JsArray(_) => evaluatedValue
               case _ => JsArray(evaluatedValue)
             }
+            case _ => evaluatedValue
           }
-          else evaluatedValue
-
-          inputName -> updatedValue
+          case None => evaluatedValue
         }
-        JsObject(updatedObject)
+        inputName -> updatedValue
       }
+
+      JsObject(updatedObject)
     }
 
     // when there are no root entities handle as a single root entity with empty string for name
@@ -209,15 +211,25 @@ object InputExpressionReassembler {
         visitor.visit(parsedTree)
       }
 
-      val updatedMap: Try[JsValue] = inputOption match {
+      /* In SlickExpressionEvaluator, for attribute references that evaluate to AttributeValueList type, the elements inside the list are extracted and returned.
+         As a result, for attributes that contain only 1 element, we can no longer identify whether the original value was a list or a single AttributeValue.
+         Because of this type erasure, when we are reconstructing object type inputs, List/Array with single element get incorrectly reconstructed as single AttributeValue,
+         which leads to Cromwell failing while processing inputs (https://broadworkbench.atlassian.net/browse/BW-678).
+         To fix this, once the object type inputs have been reconstructed, we iterate over each field for object input and verify for Array type inputs that the
+         evaluated value is also an Array. If it isn't we convert it into Array and updated the evaluated object.
+         Note: This approach does not fix the problem if there is single element array inside an array. This would be fixed in https://broadworkbench.atlassian.net/browse/BW-846.
+         Fixing this might possible require fixing the type erasure, changes to what AttributeValueList extends and update how we convert JsValue to AttributeValue
+         and vice-versa in JsonSupport class.
+       */
+      val updatedEvaluatedRefMap: Try[JsValue] = inputOption match {
         case Some(input) => input.workflowInput.getValueType.getTypeName match {
-          case TypeNameEnum.OBJECT => updateInputExprValueMapForObjectInput(inputExprWithEvaluatedRef, input)
+          case TypeNameEnum.OBJECT => inputExprWithEvaluatedRef.map(x => updateInputExprValueMapForObjectInput(x, input.workflowInput.getValueType.getObjectFieldTypes.asScala))
           case _ => inputExprWithEvaluatedRef
         }
         case None => inputExprWithEvaluatedRef
       }
 
-      entityName -> updatedMap
+      entityName -> updatedEvaluatedRefMap
     }.toMap
   }
 }

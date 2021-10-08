@@ -127,7 +127,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       }
       val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
-      wdlInputs shouldBe """{"wdlStructWf.obj":{"id":123,"sample":"sample1","samples":[101],"foo":{"bar":[101]}}}"""
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[101]},"id":123,"sample":"sample1","samples":[101]}}"""
     }
 
     "unpack wdl struct expression with attribute references into WDL Struct input" in withConfigData {
