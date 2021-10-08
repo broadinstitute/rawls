@@ -665,6 +665,8 @@ object WorkspaceDetails {
   }
 }
 
+case class WorkspaceDetailsAndCacheError(workspace: WorkspaceDetails, cacheError: String)
+
 case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID, sourceWorkspaceBucketName: String, destWorkspaceBucketName: String, copyFilesWithPrefix: String, destWorkspaceGoogleProjectId: GoogleProjectId)
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
@@ -890,6 +892,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
   implicit val WorkspaceDetailsFormat = jsonFormat17(WorkspaceDetails.apply)
+
+  implicit val WorkspaceDetailsAndCacheErrorFormat = jsonFormat2(WorkspaceDetailsAndCacheError)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

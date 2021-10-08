@@ -935,6 +935,35 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/admin/workspaces/entities/cache:
+    get:
+      tags:
+        - admin
+        - workspaces
+      summary: list workspaces with an invalid entity statistics cache
+      description: list workspaces with an invalid entity statistics cache
+      operationId: listInvalidEntityCacheWorkspaces
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceDetails'
+        403:
+          description: You must be an admin to list workspaces
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/admin/refreshToken/{userSubjectId}:
     delete:
       deprecated: true

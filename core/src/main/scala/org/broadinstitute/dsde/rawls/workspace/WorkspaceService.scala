@@ -1872,6 +1872,32 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  def adminListWorkspacesWithInvalidEntityCaches: Future[PerRequestMessage] = {
+    asFCAdmin {
+      for {
+        workspacesAndErrors <- dataSource.inTransaction { dataAccess =>
+          for {
+            workspaceIdsAndErrors <- dataAccess.entityCacheQuery.listInvalidCaches
+            workspaces <- dataAccess.workspaceQuery.listByIds(workspaceIdsAndErrors.map(_._1), Option(WorkspaceAttributeSpecs(all=false)))
+          } yield {
+            val errorMap = workspaceIdsAndErrors.toMap
+            workspaces.map { w =>
+              (w, errorMap.getOrElse(w.workspaceIdAsUUID, ""))
+            }
+          }
+        }
+        results <- Future.traverse(workspacesAndErrors) { workspaceAndError =>
+          val workspace = workspaceAndError._1
+          loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo).map(WorkspaceDetails(workspace, _)).map { details =>
+            WorkspaceDetailsAndCacheError(details, workspaceAndError._2)
+          }
+        }
+      } yield {
+        RequestComplete(StatusCodes.OK, results)
+      }
+    }
+  }
+
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     //don't do the sam REST call inside the db transaction.
     getWorkspaceContext(workspaceName) flatMap { workspaceContext =>

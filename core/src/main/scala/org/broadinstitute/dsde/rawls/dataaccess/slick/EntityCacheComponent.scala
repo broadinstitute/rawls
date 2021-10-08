@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor
+import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.MIN_CACHE_TIME
 import slick.jdbc.JdbcProfile
 
 import java.sql.Timestamp
@@ -64,6 +65,9 @@ trait EntityCacheComponent {
       }
     }
 
+    def listInvalidCaches: ReadAction[Seq[(UUID, String)]] = {
+      sql"""select c.workspace_id, c.error_message from WORKSPACE_ENTITY_CACHE c where c.entity_cache_last_updated = ${MIN_CACHE_TIME}""".as[(UUID, String)]
+    }
   }
 
 }

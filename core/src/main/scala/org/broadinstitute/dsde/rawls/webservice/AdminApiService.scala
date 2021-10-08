@@ -90,6 +90,11 @@ trait AdminApiService extends UserInfoDirectives {
         }
       }
     } ~
+    path("admin" / "workspaces" / "entities" / "cache") {
+      get {
+        complete { workspaceServiceConstructor(userInfo).adminListWorkspacesWithInvalidEntityCaches }
+      }
+    } ~
     path("admin" / "refreshToken" / Segment ) { userSubjectId =>
       delete {
         complete { userServiceConstructor(userInfo).adminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))) }
