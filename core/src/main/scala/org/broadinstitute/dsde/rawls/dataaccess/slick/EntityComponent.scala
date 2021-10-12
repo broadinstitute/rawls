@@ -375,7 +375,7 @@ trait EntityComponent {
     private object EntityDependenciesDeletionQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
-      def deleteAction(workspaceContext: Workspace): ReadWriteAction[Int] = {
+      def deleteAction(workspaceContext: Workspace): WriteAction[Int] = {
         val shardId = determineShard(workspaceContext.workspaceIdAsUUID, workspaceContext.sharded)
 
         sqlu"""delete ea from ENTITY_ATTRIBUTE_#$shardId ea
@@ -696,7 +696,7 @@ trait EntityComponent {
 
     // perform actual deletion (not hiding) of all entities in a workspace
 
-    def deleteFromDb(workspaceContext: Workspace): ReadWriteAction[Int] = {
+    def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] = {
       EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen {
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
       }
