@@ -305,7 +305,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] =
     requireProjectAction[PerRequestMessage](projectName, SamBillingProjectActions.deleteBillingProject) {
       for {
         _ <- failUnlessHasNoWorkspaces(projectName)
@@ -313,7 +313,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         _ <- unregisterBillingProjectWithUserInfo(projectName, userInfo)
       } yield RequestComplete(StatusCodes.NoContent)
     }
-  }
 
   def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, spendReportConfiguration: BillingProjectSpendConfiguration): Future[Int] = {
 
@@ -378,12 +377,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   private def failUnlessHasNoWorkspaces(projectName: RawlsBillingProjectName): Future[Unit] =
-    dataSource.inTransaction(_.workspaceQuery.countByNamespace(projectName))
-      .map(_ == 0)
-      .ifM(Future.unit, Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(
+    dataSource.inTransaction(_.workspaceQuery.countByNamespace(projectName)) map { count =>
+      if (count == 0) () else throw new RawlsExceptionWithErrorReport(ErrorReport(
         StatusCodes.BadRequest,
         "Project cannot be deleted because it contains workspaces."
-      ))))
+      ))
+    }
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   private def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName, userInfoForSam: UserInfo, deleteGoogleProjectWithGoogle: Boolean = true) = {
@@ -394,15 +393,17 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case Failure(t) => Failure(t)
       }
 
+    def F = Applicative[Future]
+
+    def deleteResourcesInGoogle(projectId: GoogleProjectId) =
+      deletePetsInProject(projectId, userInfoForSam) *>
+        F.whenA(deleteGoogleProjectWithGoogle)(gcsDAO.deleteV1Project(projectId))
+
     val projectId = GoogleProjectId(projectName.value)
     samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, userInfoForSam) flatMap { resourceChildren =>
-      Applicative[Future].whenA(resourceChildren contains SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))(
-        for {
-          _ <- googleProjectExists(projectId).ifM(deletePetsInProject(projectId, userInfoForSam)
-            *> Applicative[Future].whenA(deleteGoogleProjectWithGoogle)(gcsDAO.deleteV1Project(projectId)),
-            Future.unit)
-          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, userInfoForSam)
-        } yield ()
+      F.whenA(resourceChildren contains SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))(
+        googleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit) *>
+          samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, userInfoForSam)
       )
     }
   }
