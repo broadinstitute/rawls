@@ -396,14 +396,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     def F = Applicative[Future]
 
     def deleteResourcesInGoogle(projectId: GoogleProjectId) =
-      deletePetsInProject(projectId, userInfoForSam) *>
-        F.whenA(deleteGoogleProjectWithGoogle)(gcsDAO.deleteV1Project(projectId))
+      for {
+        _ <- deletePetsInProject(projectId, userInfoForSam)
+        _ <- F.whenA(deleteGoogleProjectWithGoogle)(gcsDAO.deleteV1Project(projectId))
+      } yield ()
 
     val projectId = GoogleProjectId(projectName.value)
     samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, userInfoForSam) flatMap { resourceChildren =>
       F.whenA(resourceChildren contains SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))(
-        googleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit) *>
-          samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, userInfoForSam)
+        for {
+          _ <- googleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit)
+          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, userInfoForSam)
+        } yield ()
       )
     }
   }
