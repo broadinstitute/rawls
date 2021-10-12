@@ -223,7 +223,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     }
   }
 
-  it should "Successfully to delete a billing project when the google project does not exist" in {
+  it should "Successfully to delete a billing project when the google project does not exist on GCP" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
