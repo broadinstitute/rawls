@@ -191,7 +191,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) { status }
         // TODO: why is this result returned out of order?
-        sortAndAssertWorkspaceResult(testData.allWorkspaces) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
+        sortAndAssertWorkspaceResult(testData.allWorkspaces) { responseAs[Seq[WorkspaceDetails]].map(_.copy(shardState = Some(WorkspaceShardStates.Sharded)).toWorkspace) }
       }
   }
 
@@ -200,7 +200,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
+        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.copy(shardState = Some(WorkspaceShardStates.Sharded)).toWorkspace) }
       }
   }
 
@@ -209,7 +209,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
+        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.copy(shardState = Some(WorkspaceShardStates.Sharded)).toWorkspace) }
       }
   }
 
@@ -218,7 +218,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(testData.workspacePublished)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
+        assertWorkspaceResult(Seq(testData.workspacePublished)) { responseAs[Seq[WorkspaceDetails]].map(_.copy(shardState = Some(WorkspaceShardStates.Sharded)).toWorkspace) }
       }
   }
 
