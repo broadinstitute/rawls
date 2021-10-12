@@ -319,7 +319,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
-      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, true))
+      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded))
       assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
       desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
@@ -361,7 +361,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
     //so we test the existence of all keys correctly here...
-    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, true))
+    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, WorkspaceShardStates.Sharded))
     assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
     desiredTypesAndAttrNames foreach { case (eType, attrNames) =>

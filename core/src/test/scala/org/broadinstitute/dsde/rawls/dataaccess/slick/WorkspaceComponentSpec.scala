@@ -38,7 +38,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     Option(workspaceBillingAccount),
     None,
     Option(currentTime()),
-    true
+    WorkspaceShardStates.Sharded
   )
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {

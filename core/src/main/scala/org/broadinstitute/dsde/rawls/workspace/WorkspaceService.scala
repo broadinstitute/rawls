@@ -2230,7 +2230,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       currentBillingAccountOnWorkspace,
       billingAccountErrorMessage = None,
       completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
-      sharded = true
+      shardState = WorkspaceShardStates.Sharded
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)
