@@ -656,6 +656,27 @@ object WorkspaceDetails {
   def apply(workspace: Workspace, authorizationDomain: Set[ManagedGroupRef]): WorkspaceDetails = {
     fromWorkspaceAndOptions(workspace, Option(authorizationDomain),true).copy(shardState = None)
   }
+
+  def applyOmitShardState(namespace: String,
+                        name: String,
+                        workspaceId: String,
+                        bucketName: String,
+                        workflowCollectionName: Option[String],
+                        createdDate: DateTime,
+                        lastModified: DateTime,
+                        createdBy: String,
+                        attributes: Option[AttributeMap],
+                        isLocked: Boolean = false,
+                        authorizationDomain: Option[Set[ManagedGroupRef]],
+                        workspaceVersion: WorkspaceVersion,
+                        googleProject: GoogleProjectId, // The response field is called "googleProject" rather than "googleProjectId" for backwards compatibility
+                        googleProjectNumber: Option[GoogleProjectNumber],
+                        billingAccount: Option[RawlsBillingAccountName],
+                        billingAccountErrorMessage: Option[String] = None,
+                        completedCloneWorkspaceFileTransfer: Option[DateTime]) = {
+    WorkspaceDetails(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, authorizationDomain, workspaceVersion, googleProject,googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, None)
+  }
+
   def fromWorkspaceAndOptions(workspace: Workspace, optAuthorizationDomain: Option[Set[ManagedGroupRef]], useAttributes: Boolean): WorkspaceDetails = {
     WorkspaceDetails(
       workspace.namespace,
@@ -904,7 +925,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceShardStateFormat = rawlsEnumerationFormat(WorkspaceShardStates.withName)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat18(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat17(WorkspaceDetails.applyOmitShardState)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
