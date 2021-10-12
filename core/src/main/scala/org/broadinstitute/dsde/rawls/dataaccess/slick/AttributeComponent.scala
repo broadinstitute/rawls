@@ -180,13 +180,11 @@ trait AttributeComponent {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
-  def determineShard(workspaceId: UUID, shardedOpt: Option[Boolean]): ShardId = {
+  def determineShard(workspaceId: UUID, sharded: Boolean): ShardId = {
     /* Sharded workspaces use a shard identifier such as "04_07", while unsharded workspaces
         use a shard identifier of "archived". This translates into referencing tables named
         ENTITY_ATTRIBUTE_04_07 or ENTITY_ATTRIBUTE_archive, respectively.
      */
-
-    val sharded = shardedOpt.getOrElse(throw new RawlsException(s"Unexpected shard status for workspace $workspaceId. Shard value was null."))
 
     if(!sharded) "archived"
     else {
@@ -205,13 +203,13 @@ trait AttributeComponent {
   }
 
   class EntityAttributeShardQuery(shard: ShardId) extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(shard)(_), EntityAttributeRecord)
-  def entityAttributeShardQuery(workspaceId: UUID, sharded: Option[Boolean]): EntityAttributeShardQuery = {
+  def entityAttributeShardQuery(workspaceId: UUID, sharded: Boolean): EntityAttributeShardQuery = {
     new EntityAttributeShardQuery(determineShard(workspaceId, sharded))
   }
   def entityAttributeShardQuery(workspace: Workspace): EntityAttributeShardQuery = {
     entityAttributeShardQuery(workspace.workspaceIdAsUUID, workspace.sharded)
   }
-  def entityAttributeShardQuery(entityRec: EntityRecord, sharded: Option[Boolean]): EntityAttributeShardQuery = {
+  def entityAttributeShardQuery(entityRec: EntityRecord, sharded: Boolean): EntityAttributeShardQuery = {
     entityAttributeShardQuery(entityRec.workspaceId, sharded)
   }
 

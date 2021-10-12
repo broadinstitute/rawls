@@ -41,9 +41,9 @@ trait DataAccess
     (0L to 15L) map { secondLong =>
       val first = firstLong.toHexString
       val second = secondLong.toHexString
-      determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000"), shardedOpt = Option(true)).toString
+      determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000"), sharded = true).toString
     }
-  }).toSet + determineShard(java.util.UUID.fromString(s"00000000-0000-0000-0000-000000000000"), shardedOpt = Option(false)).toString
+  }).toSet + determineShard(java.util.UUID.fromString(s"00000000-0000-0000-0000-000000000000"), sharded = false).toString
 
   // only called from TestDriverComponent
   def truncateAll: WriteAction[Int] = {

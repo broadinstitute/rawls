@@ -221,7 +221,7 @@ trait EntityComponent {
       // the where clause for this query is filled in specific to the use case
       def baseEntityAndAttributeSql(workspace: Workspace): String = baseEntityAndAttributeSql(workspace.workspaceIdAsUUID, workspace.sharded)
 
-      def baseEntityAndAttributeSql(workspaceId: UUID, sharded: Option[Boolean]): String = baseEntityAndAttributeSql(determineShard(workspaceId, sharded))
+      def baseEntityAndAttributeSql(workspaceId: UUID, sharded: Boolean): String = baseEntityAndAttributeSql(determineShard(workspaceId, sharded))
 
       private def baseEntityAndAttributeSql(shardId: ShardId): String = {
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
@@ -260,7 +260,7 @@ trait EntityComponent {
         * @param sortFieldName
         * @return
         */
-      private def paginationSubquery(workspaceId: UUID, sharded: Option[Boolean], entityType: String, sortFieldName: String) = {
+      private def paginationSubquery(workspaceId: UUID, sharded: Boolean, entityType: String, sortFieldName: String) = {
         val shardId = determineShard(workspaceId, sharded)
 
         val (sortColumns, sortJoin) = sortFieldName match {
@@ -340,7 +340,7 @@ trait EntityComponent {
         sql"""#${baseEntityAndAttributeSql(workspaceContext)} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
 
-      def actionForIds(workspaceId: UUID, sharded: Option[Boolean], entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def actionForIds(workspaceId: UUID, sharded: Boolean, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
         if( entityIds.isEmpty ) {
           DBIO.successful(Seq.empty[EntityAndAttributesResult])
         } else {
@@ -411,7 +411,7 @@ trait EntityComponent {
       EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
     }
 
-    private def findActiveAttributesByEntityId(workspaceId: UUID, sharded: Option[Boolean], entityId: Rep[Long]): EntityAttributeQuery = for {
+    private def findActiveAttributesByEntityId(workspaceId: UUID, sharded: Boolean, entityId: Rep[Long]): EntityAttributeQuery = for {
       entityAttrRec <- entityAttributeShardQuery(workspaceId, sharded) if entityAttrRec.ownerId === entityId && ! entityAttrRec.deleted
     } yield entityAttrRec
 
@@ -433,7 +433,7 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map(query => unmarshalEntities(query, workspaceContext.sharded)) map(_.headOption)
     }
 
-    def getEntities(workspaceId: UUID, sharded: Option[Boolean], entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
+    def getEntities(workspaceId: UUID, sharded: Boolean, entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
       EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, sharded, entityIds.toSet) map(query => unmarshalEntitiesWithIds(query, sharded))
     }
 
@@ -481,7 +481,7 @@ trait EntityComponent {
       }
     }
 
-    def getAttrNamesAndEntityTypes(workspaceId: UUID, sharded: Option[Boolean]): ReadAction[Map[String, Seq[AttributeName]]] = {
+    def getAttrNamesAndEntityTypes(workspaceId: UUID, sharded: Boolean): ReadAction[Map[String, Seq[AttributeName]]] = {
       val typesAndAttrNames = for {
         entityRec <- findActiveEntityByWorkspace(workspaceId)
         attrib <- findActiveAttributesByEntityId(workspaceId, sharded, entityRec.id)
@@ -670,7 +670,7 @@ trait EntityComponent {
       }
     }
 
-    private def rewriteAttributes(workspaceId: UUID, sharded: Option[Boolean], entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]) = {
+    private def rewriteAttributes(workspaceId: UUID, sharded: Boolean, entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]) = {
       val attributesToSave = for {
         entity <- entitiesToSave
         (attributeName, attribute) <- entity.attributes
@@ -901,11 +901,11 @@ trait EntityComponent {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 
-    private def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], sharded: Option[Boolean]): Seq[Entity] = {
+    private def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], sharded: Boolean): Seq[Entity] = {
       unmarshalEntitiesWithIds(entityAttributeRecords, sharded).map { case (_, entity) => entity }
     }
 
-    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], sharded: Option[Boolean]): Seq[(Long, Entity)] = {
+    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], sharded: Boolean): Seq[(Long, Entity)] = {
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
 
       // note that not all entities have attributes, thus the collect below

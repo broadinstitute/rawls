@@ -50,7 +50,7 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
 
   val testWorkspace = new EmptyWorkspace
   val testWorkspaceName = testWorkspace.workspace.toWorkspaceName
-  val testWorkspaceShardId = determineShard(testWorkspace.workspace.workspaceIdAsUUID, Option(true))
+  val testWorkspaceShardId = determineShard(testWorkspace.workspace.workspaceIdAsUUID, true)
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeString("c")))
   val s1 = Entity("s1", "samples", Map(
@@ -134,11 +134,11 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
     // the empty workspace was created with a random uuid. find another uuid that does not have the same
     // shard identifier.
     var tempId: UUID = UUID.randomUUID()
-    while (determineShard(tempId, Option(true)) == testWorkspaceShardId) {
+    while (determineShard(tempId, true) == testWorkspaceShardId) {
       tempId = UUID.randomUUID()
     }
     val secondWorkspaceId = UUID.fromString(tempId.toString)
-    val secondShardId = determineShard(secondWorkspaceId, Option(true))
+    val secondShardId = determineShard(secondWorkspaceId, true)
     secondShardId should not be testWorkspaceShardId
     val anotherWorkspace = Workspace("secondnamespace", "secondname", secondWorkspaceId.toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
