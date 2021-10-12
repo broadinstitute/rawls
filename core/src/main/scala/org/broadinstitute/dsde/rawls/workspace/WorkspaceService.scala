@@ -1882,7 +1882,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           } yield {
             val errorMap = workspaceIdsAndErrors.toMap
             workspaces.map { w =>
-              (w, errorMap.getOrElse(w.workspaceIdAsUUID, ""))
+              (w, errorMap.get(w.workspaceIdAsUUID).flatten.getOrElse(""))
             }
           }
         }

@@ -65,8 +65,8 @@ trait EntityCacheComponent {
       }
     }
 
-    def listInvalidCaches: ReadAction[Seq[(UUID, String)]] = {
-      sql"""select c.workspace_id, c.error_message from WORKSPACE_ENTITY_CACHE c where c.entity_cache_last_updated = ${MIN_CACHE_TIME}""".as[(UUID, String)]
+    def listInvalidCaches: ReadAction[Seq[(UUID, Option[String])]] = {
+      sql"""select c.workspace_id, c.error_message from WORKSPACE_ENTITY_CACHE c where c.entity_cache_last_updated = ${MIN_CACHE_TIME}""".as[(UUID,Option[String])]
     }
 
     def resetInvalidCaches(workspaceIds: Seq[UUID]) = {
