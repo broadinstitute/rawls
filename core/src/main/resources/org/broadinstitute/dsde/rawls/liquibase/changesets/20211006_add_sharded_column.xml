@@ -3,7 +3,7 @@
 
     <changeSet id="add_workspace_sharded_column" author="mbemis" logicalFilePath="dummy">
         <addColumn tableName="WORKSPACE">
-            <column name="sharded" type="boolean" defaultValueBoolean="false">
+            <column name="shard_state" type="VARCHAR(254)" defaultValue="unsharded">
                 <constraints nullable="false"/>
             </column>
         </addColumn>
