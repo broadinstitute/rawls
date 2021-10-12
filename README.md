@@ -20,7 +20,7 @@ cd rawls
 sbt antlr4:antlr4Generate # Generates source code for IntellIJ IDEA
 ./minnie-kenny.sh -f
 ./docker/run-mysql.sh start
-export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310"
+export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310 -Duser.timezone=UTC"
 sbt clean compile test
 ```
 
@@ -52,7 +52,7 @@ Spin up mysql locally and validate that it is working:
 Run tests.
 
 ```sh
-export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310"
+export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310 -Duser.timezone=UTC"
 sbt clean compile test
 ```
 

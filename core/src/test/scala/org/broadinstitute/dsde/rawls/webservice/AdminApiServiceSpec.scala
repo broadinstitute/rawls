@@ -349,6 +349,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     // in live environments, both server and client use UTC timezone; test behavior should mimic that.
     val min = MIN_CACHE_TIME
     min shouldBe new Timestamp(1000)
+    withClue("this failure may indicate a time zone mismatch between the mysql server and the client running the unit tests. " +
+      "Do you have -Duser.timezone=UTC set in your SBT_OPTS? Underlying test failure message: ")
     min.toString shouldBe "1970-01-01 00:00:01.0"
   }
 

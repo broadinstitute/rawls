@@ -48,6 +48,7 @@ jobs:
           -Denv.type=test
           -Dmysql.host=localhost
           -Dmysql.port=3310
+          -Duser.timezone=UTC
           it:compile
 
       # A known github bug results in 'annotations generated in a Github action during a step executed in

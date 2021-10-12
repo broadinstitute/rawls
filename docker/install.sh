@@ -16,7 +16,7 @@ if [ "$SKIP_TESTS" = "skip-tests" ]; then
 	echo skipping tests
 else
   echo "starting sbt test ..."
-	sbt -J-Xms5g -J-Xmx5g -J-XX:MaxMetaspaceSize=5g test -Dmysql.host=mysql -Dmysql.port=3306 -Dsecrets.skip=true
+	sbt -J-Xms5g -J-Xmx5g -J-XX:MaxMetaspaceSize=5g test -Dmysql.host=mysql -Dmysql.port=3306 -Duser.timezone=UTC -Dsecrets.skip=true
 	echo "sbt test done"
 fi
 
