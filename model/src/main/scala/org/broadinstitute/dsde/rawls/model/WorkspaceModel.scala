@@ -316,6 +316,7 @@ object WorkspaceShardStates {
 
   case object Unsharded extends WorkspaceShardState
   case object Sharded extends WorkspaceShardState
+  case object Unknown extends WorkspaceShardState
 }
 
 sealed trait MethodRepoMethod {
@@ -600,7 +601,7 @@ case class WorkspaceDetails(namespace: String,
                             billingAccountErrorMessage: Option[String] = None,
                             completedCloneWorkspaceFileTransfer: Option[DateTime],
                             shardState: Option[WorkspaceShardState]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, shardState.getOrElse(throw new RawlsException(s"Unexpected shard state for workspace $workspaceId. Shard state was null.")))
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, shardState.getOrElse(WorkspaceShardStates.Unknown))
 }
 
 
