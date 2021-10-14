@@ -64,14 +64,14 @@ object Settings {
   )
 
   val cross212and213 = Seq(
-    crossScalaVersions := List("2.12.14", "2.13.2")
+    crossScalaVersions := List("2.12.15", "2.13.2")
   )
 
   //common settings for all sbt subprojects
   val commonSettings =
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
     organization  := "org.broadinstitute.dsde",
-    scalaVersion  := "2.12.14", // `cromwell-client` needs to support 2.13 for rawls to be able to upgrade
+    scalaVersion  := "2.12.15", // `cromwell-client` needs to support 2.13 for rawls to be able to upgrade
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
     scalacOptions ++= commonCompilerSettings
   )
