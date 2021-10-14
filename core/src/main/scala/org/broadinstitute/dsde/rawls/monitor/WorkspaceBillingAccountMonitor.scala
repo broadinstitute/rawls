@@ -37,7 +37,14 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       }
       _ = logger.info(s"Attempting to update workspaces: ${workspacesToUpdate.toList}")
       _ <- workspacesToUpdate.toList.traverse {
-        case (googleProjectId, newBillingAccount) => IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount)))
+        case (googleProjectId, newBillingAccount) =>
+          IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount))).attempt.map {
+            case Left(e) => {
+              logger.warn(s"Failed to update billing account on $googleProjectId to $newBillingAccount", e)
+              ()
+            }
+            case Right(res) => res
+          }
       }.unsafeToFuture()
     } yield()
   }
