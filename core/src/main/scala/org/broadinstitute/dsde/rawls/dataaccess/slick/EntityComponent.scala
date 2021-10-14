@@ -779,7 +779,7 @@ trait EntityComponent {
 
     def deleteAttributes(workspaceContext: Workspace, entityType: String, attributesNames: Set[AttributeName]) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
-      entityAttributeQuery.deleteAttributes(workspaceContext.workspaceIdAsUUID, entityType, attributesNames)
+        entityAttributeShardQuery(workspaceContext).deleteAttributes(workspaceContext.workspaceIdAsUUID, entityType, attributesNames)
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace
