@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.coordination
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import slick.jdbc.TransactionIsolation
 
@@ -20,6 +20,10 @@ trait DataSourceAccess {
   def inTransaction[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
                                  isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
                                 ): Future[A]
+
+  def inTransactionWithAttrTempTable[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
+                                 isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
+                                ): Future[A]
 }
 
 /**
@@ -31,6 +35,12 @@ class UncoordinatedDataSourceAccess(override val slickDataSource: SlickDataSourc
                                           isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
                                          ): Future[A] = {
     slickDataSource.inTransaction(dataAccessFunction, isolationLevel)
+  }
+
+  override def inTransactionWithAttrTempTable[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
+                                          isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
+                                         ): Future[A] = {
+    slickDataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace))(dataAccessFunction, isolationLevel)
   }
 }
 
@@ -53,6 +63,23 @@ class CoordinatedDataSourceAccess(override val slickDataSource: SlickDataSource,
     // Throws a TimeoutException if the function does not run within the waitTimeout
     // Throws an AskTimeoutException if we do not hear back either way before askTimeout
     dataSourceActor.ask(CoordinatedDataSourceActor.Run(
+      slickDataSource = slickDataSource,
+      dataAccessFunction = dataAccessFunction,
+      isolationLevel = isolationLevel,
+      startDeadline = Deadline.now + starTimeout,
+      waitTimeout = waitTimeout,
+    )).mapTo[A]
+  }
+
+  override def inTransactionWithAttrTempTable[A: ClassTag](dataAccessFunction: DataAccess => ReadWriteAction[A],
+                                                           isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead,
+                                                          ): Future[A] = {
+    // How long to wait for the actor to get to and finish running the function
+    implicit val implicitTimeout: Timeout = Timeout(askTimeout)
+    // Throws a DeadlineTimeoutException the function is not started within startTimeout
+    // Throws a TimeoutException if the function does not run within the waitTimeout
+    // Throws an AskTimeoutException if we do not hear back either way before askTimeout
+    dataSourceActor.ask(CoordinatedDataSourceActor.RunWithTempTables(
       slickDataSource = slickDataSource,
       dataAccessFunction = dataAccessFunction,
       isolationLevel = isolationLevel,

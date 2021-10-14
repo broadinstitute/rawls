@@ -28,9 +28,11 @@ case class SubmissionRecord(id: UUID,
                             useCallCache: Boolean,
                             deleteIntermediateOutputFiles: Boolean,
                             useReferenceDisks: Boolean,
+                            memoryRetryMultiplier: Double,
                             workflowFailureMode: Option[String],
                             entityStoreId: Option[String],
-                            rootEntityType: Option[String]
+                            rootEntityType: Option[String],
+                            userComment: Option[String]
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -63,9 +65,11 @@ trait SubmissionComponent {
     def useCallCache = column[Boolean]("USE_CALL_CACHE")
     def deleteIntermediateOutputFiles = column[Boolean]("DELETE_INTERMEDIATE_OUTPUT_FILES")
     def useReferenceDisks = column[Boolean]("USE_REFERENCE_DISKS")
+    def memoryRetryMultiplier = column[Double]("MEMORY_RETRY_MULTIPLIER")
     def workflowFailureMode = column[Option[String]]("WORKFLOW_FAILURE_MODE", O.Length(32))
     def entityStoreId = column[Option[String]]("ENTITY_STORE_ID")
     def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")
+    def userComment = column[Option[String]]("USER_COMMENT")
 
     def * = (
       id,
@@ -78,9 +82,11 @@ trait SubmissionComponent {
       useCallCache,
       deleteIntermediateOutputFiles,
       useReferenceDisks,
+      memoryRetryMultiplier,
       workflowFailureMode,
       entityStoreId,
-      rootEntityType
+      rootEntityType,
+      userComment
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -208,6 +214,10 @@ trait SubmissionComponent {
         submissionStatusCounter(newStatus).countDBResult {
           findById(submissionId).map(_.status).update(newStatus.toString)
         }
+    }
+
+    def updateSubmissionUserComment(submissionId: UUID, newComment: String): ReadWriteAction[Int] = {
+      findById(submissionId).map(_.userComment).update(Option(newComment))
     }
 
     /* deletes a submission and all associated records */
@@ -402,9 +412,11 @@ trait SubmissionComponent {
         submission.useCallCache,
         submission.deleteIntermediateOutputFiles,
         submission.useReferenceDisks,
+        submission.memoryRetryMultiplier,
         submission.workflowFailureMode.map(_.toString),
         submission.externalEntityInfo.map(_.dataStoreId),
-        submission.externalEntityInfo.map(_.rootEntityType)
+        submission.externalEntityInfo.map(_.rootEntityType),
+        submission.userComment
       )
     }
 
@@ -421,11 +433,14 @@ trait SubmissionComponent {
         submissionRec.useCallCache,
         submissionRec.deleteIntermediateOutputFiles,
         submissionRec.useReferenceDisks,
+        submissionRec.memoryRetryMultiplier,
         WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode),
         externalEntityInfo = for {
           entityStoreId <- submissionRec.entityStoreId
           rootEntityType <- submissionRec.rootEntityType
-        } yield ExternalEntityInfo(entityStoreId, rootEntityType))
+        } yield ExternalEntityInfo(entityStoreId, rootEntityType),
+        userComment = submissionRec.userComment
+      )
     }
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: Option[AttributeEntityReference], workflows: Seq[Workflow]): ActiveSubmission = {
@@ -446,9 +461,10 @@ trait SubmissionComponent {
       implicit val getWorkflowMessagesListResult = GetResult { r =>
         val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val rootEntityTypeOption: Option[String] = r.<<
-        val entityRec = workflowRec.workflowEntityId.map(EntityRecord(_, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val messageOption: Option[String] = r.<<
+
+        val entityRec = workflowRec.workflowEntityId.map(EntityRecord(_, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val externalEntityOption = for {
           rootEntityType <- rootEntityTypeOption
@@ -461,8 +477,8 @@ trait SubmissionComponent {
       def action(submissionId: UUID) = {
         sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, w.EXTERNAL_ENTITY_ID,
         s.ROOT_ENTITY_TYPE,
-        e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
-        m.MESSAGE
+        m.MESSAGE,
+        e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date
         from WORKFLOW w
         join SUBMISSION s on w.submission_id = s.id
         left outer join ENTITY e on w.ENTITY_ID = e.id

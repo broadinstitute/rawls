@@ -18,6 +18,7 @@ tags:
   - name: notifications
   - name: servicePerimeters
   - name: snapshots
+  - name: snapshots_v2
   - name: status
   - name: submissions
   - name: users
@@ -268,7 +269,7 @@ paths:
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/CreateRawlsBillingProjectFullRequest'
+              $ref: '#/components/schemas/CreateRawlsV2BillingProjectFullRequest'
         required: true
       responses:
         201:
@@ -356,6 +357,84 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/billing/v2/{projectId}/billingAccount:
+    put:
+      tags:
+        - billing_v2
+      summary: update billing account on billing project
+      description: update billing account on billing project
+      operationId: updateBillingProjectBillingAccount
+      parameters:
+        - name: projectId
+          in: path
+          description: Id of the billing project
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: update billing account request
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/UpdateRawlsBillingAccountRequest'
+        required: true
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RawlsBillingProjectResponse'
+        400:
+          description: Billing account not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Internal Server Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - billing_v2
+      summary: deletes the billing account on billing project
+      description: deletes the billing account on billing project
+      operationId: deleteBillingProjectBillingAccount
+      parameters:
+        - name: projectId
+          in: path
+          description: Id of the billing project
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/RawlsBillingProjectResponse'
+        404:
+          description: Project Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Internal Server Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/billing/v2/{projectId}/members:
     get:
       tags:
@@ -381,6 +460,121 @@ paths:
                   $ref: '#/components/schemas/RawlsBillingProjectMember'
         403:
           description: You must be a project owner to view the members of a project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+  /api/billing/v2/{projectId}/spendReportConfiguration:
+    get:
+      tags:
+        - billing_v2
+      summary: get the spend report configuration for the billing project
+      description: get the spend report configuration for the billing project
+      operationId: getSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successfully retrieved spend report configuration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/SpendReportConfiguration'
+        204:
+          description: The specified billing project exists but does not have spend reporting configured
+        403:
+          description: You must be a billing project owner to view the spend report configuration of the billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: The specified billing project could not be found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    put:
+      tags:
+        - billing_v2
+      summary: set the spend configuration for the billing project
+      description: set the spend configuration for the billing project
+      operationId: setSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: billing project spend configuration information
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/SpendReportConfiguration'
+      responses:
+        204:
+          description: Successfully updated spend configuration
+        400:
+          description: Either the billing project does not have an active billing account, the specified dataset does not exist, or the specified table does not exist
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be a billing project owner to alter the spend configuration of the billing project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: The specified billing project could not be found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - billing_v2
+      summary: clear the spend configuration for the billing project
+      description: clear the spend configuration for the billing project
+      operationId: clearSpendReportConfiguration
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Successfully cleared spend configuration
+        403:
+          description: You must be a billing project owner to alter the spend configuration of the billing project
           content:
             'application/json':
               schema:
@@ -817,8 +1011,8 @@ paths:
           schema:
             type: string
       responses:
-        202:
-          description: Successful request, check the project's status for completion
+        204:
+          description: Project has been added to the perimeter
           content: {}
         400:
           description: Project is already in perimeter or is not in 'Ready' state
@@ -1090,6 +1284,53 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+    patch:
+      tags:
+        - submissions
+      summary: Update user comment for a submission
+      description: Update user comment for a submission
+      operationId: updateSubmissionUserComment
+      parameters:
+        - name: workspaceNamespace
+          in: path
+          description: Workspace Namespace
+          required: true
+          schema:
+            type: string
+        - name: workspaceName
+          in: path
+          description: Workspace Name
+          required: true
+          schema:
+            type: string
+        - name: submissionId
+          in: path
+          description: Submission Id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: User comment to be updated
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/UserCommentUpdateOperation'
+        required: true
+      responses:
+        200:
+          description: Successful Request
+        404:
+          description: Workspace or submission not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
     delete:
       tags:
         - submissions
@@ -1347,24 +1588,9 @@ paths:
       summary: Paginated query for entities in a workspace
       operationId: entityQuery
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
         - name: page
           in: query
           description: Page number, 1-indexed (default 1)
@@ -1399,6 +1625,18 @@ paths:
           description: Filter terms
           schema:
             type: string
+        - name: fields
+          in: query
+          description: |
+            When specified, include only these attributes in the response payload and exclude other attributes. Accepts a comma-delimited list of values. If omitted, will return the full response payload.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:
         200:
           description: List of entities in workspace
@@ -1545,24 +1783,15 @@ paths:
         of that type and all attribute names used'
       operationId: entity_type_metadata
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: useCache
           in: query
-          description: True to read entity statistics from cache if cache is up to date, false to bypass cache (slower). Default is false.
+          description: True to read entity statistics from cache if cache is up to date, false to bypass cache (slower). Default is true.
           schema:
             type: boolean
-            default: false
+            default: true
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
       responses:
         200:
           description: Successful Request
@@ -1693,6 +1922,42 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - entities
+      summary: delete column in entity table
+      description: Delete entity column
+      operationId: delete_entity_column
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - name: attributeNames
+          in: query
+          description: |
+             A comma-delimited list of attribute names to delete. Required.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        204:
+          description: Successful Request
+          content: {}
+        400:
+          description: Attributes do not exist
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}:
     get:
       tags:
@@ -1701,30 +1966,12 @@ paths:
       description: Get an entity
       operationId: get_entity
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
-        - name: entityName
-          in: path
-          description: Entity Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/entityNamePathParam'
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -1822,18 +2069,8 @@ paths:
       description: Delete entities
       operationId: delete_entities
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Set of entities to delete
         content:
@@ -3921,6 +4158,361 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/cloud-billing
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+    get:
+      deprecated: true
+      tags:
+        - snapshots
+      summary: List snapshots
+      description: Enumerate references to snapshots in the Terra Data Repo
+      operationId: enumerateDataRepoSnapshot
+      parameters:
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+            set.
+          required: true
+          schema:
+            type: integer
+          example: 0
+        - name: limit
+          in: query
+          description: The number of items to return.
+          required: true
+          schema:
+            type: integer
+          example: 10
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotReferenceList'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    post:
+      deprecated: true
+      tags:
+        - snapshots
+      summary: Create a snapshot
+      description: Add a reference to a snapshot in the Terra Data Repo
+      operationId: createDataRepoSnapshot
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/NamedDataRepoSnapshot'
+        required: true
+      responses:
+        201:
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotReference'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/{snapshotId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+      - $ref: '#/components/parameters/snapshotIdPathParam'
+    get:
+      deprecated: true
+      tags:
+        - snapshots
+      summary: Get a snapshot
+      description: Get a reference to a snapshot in the Terra Data Repo
+      operationId: getDataRepoSnapshot
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotReference'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    patch:
+      deprecated: true
+      summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
+      operationId: updateDataRepoSnapshot
+      tags:
+        - snapshots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDataReferenceRequestBody'
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      deprecated: true
+      tags:
+        - snapshots
+      summary: Delete a snapshot
+      description: Delete a workspace's reference to a snapshot in the Terra Data
+        Repo
+      operationId: deleteDataRepoSnapshot
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: List snapshots
+      description: Enumerate references to snapshots in the Terra Data Repo, or return only those that reference a given TDR snapshot id
+      operationId: enumerateDataRepoSnapshot_v2
+      parameters:
+        - name: offset
+          in: query
+          description: The number of items to skip before starting to collect the result
+            set.
+          required: true
+          schema:
+            type: integer
+          example: 0
+        - name: limit
+          in: query
+          description: The number of items to return.
+          required: true
+          schema:
+            type: integer
+          example: 10
+        - name: referencedSnapshotId
+          in: query
+          description: Optional; UUID of the Data Repo snapshot being referenced
+          required: false
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SnapshotListResponse'
+        404:
+          description: Workspace not found or user lacks permissions
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    post:
+      tags:
+        - snapshots_v2
+      summary: Create a snapshot
+      description: Add a reference to a snapshot in the Terra Data Repo
+      operationId: createDataRepoSnapshot_v2
+      requestBody:
+        description: Reference to the Data Repo snapshot
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/NamedDataRepoSnapshot'
+        required: true
+      responses:
+        201:
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/{snapshotId}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+      - $ref: '#/components/parameters/snapshotIdPathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: Get a snapshot
+      description: Get a reference to a snapshot in the Terra Data Repo
+      operationId: getDataRepoSnapshot_v2
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    patch:
+      summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
+      operationId: updateDataRepoSnapshot_v2
+      tags:
+        - snapshots_v2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDataReferenceRequestBody'
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    delete:
+      tags:
+        - snapshots_v2
+      summary: Delete a snapshot
+      description: Delete a workspace's reference to a snapshot in the Terra Data
+        Repo
+      operationId: deleteDataRepoSnapshot_v2
+      responses:
+        204:
+          description: Successful Request
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/name/{referenceName}:
+    parameters:
+      - $ref: '#/components/parameters/workspaceNamespacePathParam'
+      - $ref: '#/components/parameters/workspaceNamePathParam'
+      - $ref: '#/components/parameters/referenceNamePathParam'
+    get:
+      tags:
+        - snapshots_v2
+      summary: Get a snapshot by name
+      description: Get a reference to a snapshot in the Terra Data Repo by its name
+      operationId: getDataRepoSnapshotByName_v2
+      responses:
+        200:
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataRepoSnapshotResource'
+        404:
+          description: Workspace or snapshot not found
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
+
+
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -4035,6 +4627,115 @@ components:
           type: string
           description: display name of billing account
       description: Details for a single billing account
+    DataRepoSnapshot:
+      description: A raw data repo snapshot reference from workspace manager.
+      type: object
+      required: [ instanceName, snapshot ]
+      properties:
+        instanceName:
+          description: The name of the Data Repo instance
+          type: string
+        snapshot:
+          description: The ID of the Data Repo snapshot
+          type: string
+    NamedDataRepoSnapshot:
+      type: object
+      required: [ snapshotId, name ]
+      properties:
+        snapshotId:
+          type: string
+          description: The ID of the snapshot in Terra Data Repo
+        name:
+          type: string
+          description: The name of the snapshot
+        description:
+          type: string
+          description: A description for the snapshot
+          default: ""
+      description: A Data Repo snapshot
+    DataRepoSnapshotReference:
+      type: object
+      required: [ referenceId, name, description, workspaceId, referenceType, reference, cloningInstructions ]
+      properties:
+        referenceId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        workspaceId:
+          type: string
+        referenceType:
+          type: string
+        reference:
+          $ref: '#/components/schemas/DataRepoSnapshot'
+        cloningInstructions:
+          type: string
+      description: A Data Reference definition from Workspace Manager
+    UpdateDataReferenceRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    DataRepoSnapshotReferenceList:
+      type: object
+      required: [ resources ]
+      properties:
+        resources:
+          type: array
+          description: A list of Data Reference definitions from Workspace Manager
+          items:
+            $ref: '#/components/schemas/DataRepoSnapshotReference'
+      description: A list of DataRepoSnapshotReferences
+    ResourceMetadata:
+      type: object
+      required: [ workspaceId, resourceId, name, description, resourceType, stewardshipType, cloudPlatform, cloningIntructions ]
+      properties:
+        workspaceId:
+          type: string
+        resourceId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        resourceType:
+          type: string
+        stewardshipType:
+          type: string
+        cloudPlatform:
+          type: string
+        cloningInstructions:
+          type: string
+    DataRepoSnapshotAttributes:
+      type: object
+      required: [ instanceName, snapshot ]
+      properties:
+        instanceName:
+          type: string
+        snapshot:
+          description: The snapshot id
+          type: string
+    DataRepoSnapshotResource:
+      type: object
+      required: [ metadata, attributes ]
+      properties:
+        metadata:
+          $ref: '#/components/schemas/ResourceMetadata'
+        attributes:
+          $ref: '#/components/schemas/DataRepoSnapshotAttributes'
+    SnapshotListResponse:
+      type: object
+      required: [ gcpDataRepoSnapshots ]
+      properties:
+        gcpDataRepoSnapshots:
+          type: array
+          description: A list of DataRepoSnapshotResources from Workspace Manager
+          items:
+            $ref: '#/components/schemas/DataRepoSnapshotResource'
+      description: List of snapshot resources
     ErrorReport:
       required:
         - causes
@@ -4194,6 +4895,9 @@ components:
             - ContinueWhilePossible
         externalEntityInfo:
           $ref: '#/components/schemas/ExternalEntityInfo'
+        userComment:
+          type: string
+          description: Comment for the submission
       description: ""
     ExternalEntityInfo:
       type: object
@@ -4242,6 +4946,9 @@ components:
             - ContinueWhilePossible
         externalEntityInfo:
           $ref: '#/components/schemas/ExternalEntityInfo'
+        userComment:
+          type: string
+          description: Comment for the submission
       description: An abbreviated Submission, without workflow information, good for
         listings
     ActiveSubmission:
@@ -4345,6 +5052,12 @@ components:
           description: Whether or not to delete intermediate output files when the
             workflow completes. See [Cromwell docs](https://cromwell.readthedocs.io/en/stable/wf_options/Google#google-pipelines-api-workflow-options)
             for more information.
+        memoryRetryMultiplier:
+          type: number
+          description: If a task fails due to running out of memory and the `stderr` of the task contains one of error keys that is set in Cromwell config along with `maxRetries` in its runtime attributes,
+            then it will be retried with its memory multiplied by this amount.  See [Cromwell docs](https://cromwell.readthedocs.io/en/develop/cromwell_features/RetryWithMoreMemory/#retry-with-more-memory)
+            for more information.
+          default: 1.0
         workflowFailureMode:
           type: string
           description: What happens after a task fails. Choose from ContinueWhilePossible
@@ -4354,6 +5067,9 @@ components:
           enum:
             - NoNewCalls
             - ContinueWhilePossible
+        userComment:
+          type: string
+          description: Comment for the submission (max length 1000 characters)
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
@@ -4501,6 +5217,15 @@ components:
           items:
             $ref: '#/components/schemas/SubmissionValidationEntityInputs'
       description: information on a submission
+    UserCommentUpdateOperation:
+      required:
+        - userComment
+      type: object
+      properties:
+        userComment:
+          type: string
+          description: The updated value for user comment (max length 1000 characters)
+      description: Update user comment for submission
     WorkflowCost:
       type: object
       properties:
@@ -5153,10 +5878,24 @@ components:
           description: A UUID associated with the workspace
         googleProject:
           type: string
-          description: the google project used by the workspace for compute and storage
+          description: Google Project ID of the google project used by the workspace for compute and storage
+        googleProjectNumber:
+          type: string
+          description: A different google project identifier for the same project identified by the googleProject; required by google for certain actions
         workspaceVersion:
           type: string
           description: internal use
+        billingAccount:
+          type: string
+          description: The current billing account being charged for activity within this workspace. For desired billing account, look to the billing account specified on this workspace's billing project
+        billingAccountErrorMessage:
+          type: string
+          description: Error message received during most recent attempt to update the current billing account on workspace's Google project. Empty if update was successful.
+        completedCloneWorkspaceFileTransfer:
+          type: string
+          description: The date all files were successfully transferred to the workspace bucket if applicable
+            in yyyy-MM-ddTHH:mm:ss.SSSZZ format
+          format: date-time
       description: ""
     WorkspaceSubmissionStats:
       required:
@@ -5235,6 +5974,10 @@ components:
           type: boolean
           description: Optional, false if not specified. If true, the workspace is created with a Billing Project owner but no workspace owner. Requires being a Billing Project owner.
           default: false
+        bucketLocation:
+          type: string
+          required: false
+          description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
       description: ""
     BucketUsageResponse:
       required:
@@ -5586,6 +6329,38 @@ components:
             Caller must have the add_project action for this service perimeter in
             Sam.
       description: ""
+    CreateRawlsV2BillingProjectFullRequest:
+      required:
+        - billingAccount
+        - projectName
+      type: object
+      properties:
+        projectName:
+          type: string
+          description: the name of the project to create
+        billingAccount:
+          type: string
+          description: the id of the billing account to use, must start with 'billingAccounts/'
+        servicePerimeter:
+          type: string
+          description: The fully qualified name of the GCP service perimeter to put
+            this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
+            Caller must have the add_project action for this service perimeter in
+            Sam.
+      description: ""
+    SpendReportConfiguration:
+      required:
+        - datasetGoogleProject
+        - datasetName
+      type: object
+      properties:
+        datasetGoogleProject:
+          type: string
+          description: the name of the Google Project where the BigQuery dataset resides
+        datasetName:
+          type: string
+          description: the name of the BigQuery dataset containing project spend data
+      description: ""
     RawlsBillingProjectMembership:
       required:
         - projectName
@@ -5605,6 +6380,7 @@ components:
             - Creating
             - Ready
             - Error
+            - AddingToPerimeter
         message:
           type: string
           description: informational message about the project
@@ -5624,6 +6400,7 @@ components:
             - Creating
             - Ready
             - Error
+            - AddingToPerimeter
       description: a billing project status
     RawlsBillingProjectMember:
       required:
@@ -5662,6 +6439,38 @@ components:
           items:
             type: string
           description: the roles the caller has on the project
+        status:
+          deprecated: true
+          type: string
+          enum:
+            - Creating
+            - Ready
+            - Error
+            - AddingToPerimeter
+          description: the status of allocating the billing project's resources.
+        message:
+          deprecated: true
+          type: string
+          description: informational message about the project
+    UpdateRawlsBillingAccountRequest:
+      required:
+        - billingAccount
+      type: object
+      properties:
+        billingAccount:
+          type: string
+          description: The name of the billing account to use
+    WorkspaceBillingAccount:
+      required:
+        - workspaceName
+      type: object
+      properties:
+        workspaceName:
+          type: string
+          description: the name of the workspace
+        currentBillingAccountOnGoogleProject:
+          type: string
+          description: the billing project associated with the workspace
     RawlsBillingProjectTransfer:
       required:
         - bucket
@@ -5761,6 +6570,61 @@ components:
           items:
             type: string
       description: status of a subsystem Rawls depends on
+  parameters:
+    billingProjectQueryParam:
+      name: billingProject
+      in: query
+      description: Billing project to use for queries to the data reference
+      schema:
+        type: string
+    dataReferenceQueryParam:
+      name: dataReference
+      in: query
+      description: Data reference name to query for entity metadata
+      schema:
+        type: string
+    entityNamePathParam:
+      name: entityName
+      in: path
+      description: Entity Name
+      required: true
+      schema:
+        type: string
+    entityTypePathParam:
+      name: entityType
+      in: path
+      description: Entity Type
+      required: true
+      schema:
+        type: string
+    snapshotIdPathParam:
+      name: snapshotId
+      in: path
+      description: The snapshot's referenceId
+      required: true
+      schema:
+        type: string
+    referenceNamePathParam:
+      name: referenceName
+      in: path
+      description: The snapshot reference's name
+      required: true
+      schema:
+        type: string
+    workspaceNamespacePathParam:
+      name: workspaceNamespace
+      in: path
+      description: The workspace namespace
+      required: true
+      schema:
+        type: string
+    workspaceNamePathParam:
+      name: workspaceName
+      in: path
+      description: The workspace name
+      required: true
+      schema:
+        type: string
   securitySchemes:
     authorization:
       type: oauth2
@@ -5772,6 +6636,5 @@ components:
             email: email authorization
             profile: profile authorization
             https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
-
 security:
   - authorization: [openid, email, profile]

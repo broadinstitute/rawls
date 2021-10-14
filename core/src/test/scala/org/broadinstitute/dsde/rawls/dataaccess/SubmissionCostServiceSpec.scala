@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import com.google.api.services.bigquery.model.{TableCell, TableRow}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.joda.time.{DateTime, DateTimeZone}
 
@@ -45,7 +46,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY wflabels.key, workflowId""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
+      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate, "test")
     }
   }
 
@@ -64,7 +65,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY wflabels.key, workflowId""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate)
+      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate, "test")
     }
   }
 
@@ -82,7 +83,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |GROUP BY labels.key, workflowId
         |HAVING some having clause""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause")
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause", "test")
     }
   }
 
@@ -100,7 +101,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |GROUP BY labels.key, workflowId
         |HAVING some having clause""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause")
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause", "test")
     }
   }
 
@@ -112,7 +113,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
    */
   it should "bypass BigQuery with no workflow IDs" in {
     assertResult(Map.empty) {
-      Await.result(submissionCostService.getSubmissionCosts("submission-id", Seq.empty, "test", new DateTime(DateTimeZone.UTC), Option(new DateTime(DateTimeZone.UTC))), 1 minute)
+      Await.result(submissionCostService.getSubmissionCosts("submission-id", Seq.empty, GoogleProjectId("test"), new DateTime(DateTimeZone.UTC), Option(new DateTime(DateTimeZone.UTC))), 1 minute)
     }
   }
 }

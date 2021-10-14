@@ -5,47 +5,71 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.testkit.ScalatestRouteTest
+import com.google.api.services.cloudresourcemanager.model.Project
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
+import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.google.{MockGoogleAccessContextManagerDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockBondApiDAO, MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.scalatest.concurrent.Eventually
 import org.scalatest.BeforeAndAfterAll
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers._
-import org.mockito.Mockito
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify}
-import org.scalatest.prop.TableDrivenPropertyChecks
-
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext}
-import scala.language.postfixOps
-import scala.util.Try
+import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, spy, times, verify}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
+import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.prop.TableDrivenPropertyChecks
+import org.scalatest.time.{Seconds, Span}
+import org.scalatest.{BeforeAndAfterAll, OptionValues}
+
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.CollectionConverters.mapAsScalaMapConverter
+import scala.language.postfixOps
+import scala.util.Try
+import scala.concurrent.ExecutionContext.global
 
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
-class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll with TableDrivenPropertyChecks {
+class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll with TableDrivenPropertyChecks with OptionValues {
   import driver.api._
 
   val workspace = Workspace(
@@ -82,11 +106,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-    val samDAO = new MockSamDAO(dataSource)
+    val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
+    val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
+    val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new MockGooglePubSubDAO
     val workspaceManagerDAO = mock[MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO()
+    val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
@@ -100,19 +125,32 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
-      SubmissionMonitorConfig(1 second, true),
+      SubmissionMonitorConfig(1 second, true, 20000),
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))
+
+    val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(Map(ServicePerimeterName("theGreatBarrier") -> Seq(GoogleProjectNumber("555555"), GoogleProjectNumber("121212")),
+      ServicePerimeterName("anotherGoodName") -> Seq(GoogleProjectNumber("777777"), GoogleProjectNumber("343434"))), 1 second, 5 seconds)
+    val servicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+    when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess])).thenReturn(DBIO.successful(()))
 
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
       notificationDAO,
       samDAO,
+      MockBigQueryServiceFactory.ioFactory(),
+      testConf.getString("gcs.pathToCredentialJson"),
       "requesterPaysRole",
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
-      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
+      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
+      servicePerimeterService,
+      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
     )_
+
+    val deltaLayerSpy = spy(new DeltaLayer(MockBigQueryServiceFactory.ioFactory(), new MockDeltaLayerWriter, samDAO,
+      WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global)))
 
     val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
@@ -133,7 +171,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
-    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, new MockDeltaLayerWriter(), DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+
+    val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
+    val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
+    val resourceBufferService = Mockito.spy(new ResourceBufferService(resourceBufferDAO, resourceBufferConfig))
+    val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -145,7 +188,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       executionServiceCluster,
       execServiceBatchSize,
       workspaceManagerDAO,
-      dataRepoDAO,
+      deltaLayerSpy,
       methodConfigResolver,
       gcsDAO,
       samDAO,
@@ -158,7 +201,13 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService,
-      entityManager
+      entityManager,
+      resourceBufferService,
+      resourceBufferSaEmail,
+      servicePerimeterService,
+      googleIamDao = new MockGoogleIamDAO,
+      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
     )_
 
     def cleanupSupervisor = {
@@ -760,6 +809,30 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   }
 
+  it should "delete the Delta Layer companion dataset when deleting a workspace" in withTestDataServices { services =>
+    // see also the tests in DeltaLayerSpec, which provide greater and lower-level coverage
+
+    // check that the workspace to be deleted exists; it shouldn't matter which workspace we use for this test
+    assertWorkspaceResult(Option(testData.workspaceWithMultiGroupAD)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName10))
+    }
+    // delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName10), Duration.Inf)
+    // check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName10))
+    }
+    // check that deleting the workspace triggered a call to DeltaLayer.deleteDataset
+    val deleteWsCaptor: ArgumentCaptor[Workspace] = ArgumentCaptor.forClass(classOf[Workspace])
+    verify(services.deltaLayerSpy, times(1)).deleteDataset(deleteWsCaptor.capture())
+    // check that the workspace sent to the deleteDataset call is correct
+    // note that we cannot compare against workspaceWithMultiGroupAD directly, as its last-updated value has changed
+    // during fixture creation, so we just compare its id and name
+    val deleteArg = deleteWsCaptor.getValue
+    deleteArg.workspaceId shouldBe testData.workspaceWithMultiGroupAD.workspaceId
+    deleteArg.toWorkspaceName shouldBe testData.workspaceWithMultiGroupAD.toWorkspaceName
+  }
+
   it should "return the correct tags from autocomplete" in withTestDataServices { services =>
 
     // when no tags, return empty set
@@ -1180,4 +1253,495 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
+  "createWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProjectId.value should not be empty
+    workspace.googleProjectNumber should not be empty
+  }
+
+  it should "create Sam resource for google project" in withTestDataServices { services =>
+    val newWorkspaceName = "new-workspace"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    // Verify that samDAO.createResourceFull was called
+    verify(services.samDAO).createResourceFull(
+      ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+      ArgumentMatchers.eq(workspace.googleProjectId.value),
+      any[Map[SamResourcePolicyName, SamPolicy]],
+      any[Set[String]],
+      any[UserInfo],
+      any[Option[SamFullyQualifiedResourceId]]
+    )
+  }
+
+  // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
+  it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
+    (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
+      // Update the BillingProject with the CreationStatus under test
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(status = projectStatus))))
+
+      // Create a Workspace in the BillingProject
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_${projectStatus}")
+        val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+        Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      }
+
+      error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    }
+  }
+
+  it should "fail with 400 if specified Namespace/Billing Project does not exist" in withTestDataServices { services =>
+    val workspaceRequest = WorkspaceRequest("nonexistent_namespace", "kermits_pond", Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+  it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices { services =>
+    // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = None))))
+    val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    updatedBillingProject.value.billingAccount shouldBe empty
+
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+    error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+  }
+
+  it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices { services =>
+    // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
+    // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
+
+    val billingAccountName = services.gcsDAO.inaccessibleBillingAccountName
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
+    val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    originalBillingProject.value.invalidBillingAccount shouldBe false
+
+    // Make the call to createWorkspace and make sure it throws an exception with the correct StatusCode
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+    error.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+
+    // Make sure that the BillingProject.invalidBillingAccount field was properly updated while attempting to create the
+    // Workspace
+    val persistedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    persistedBillingProject.value.invalidBillingAccount shouldBe true
+  }
+
+  it should "fail with 502 if Rawls is unable to retrieve the Google Project Number from Google for Workspace's Google Project" in withTestDataServices { services =>
+    when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
+
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "whatever")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadGateway)
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    maybeWorkspace shouldBe None
+  }
+
+  it should "set the Billing Account on the Workspace's Google Project to match the Billing Project's Billing Account" in withTestDataServices { services =>
+    val billingProject = testData.testProject1
+    val workspaceName = WorkspaceName(billingProject.projectName.value, "cool_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
+    // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
+    // in the Billing Project
+    val billingAccountNameCaptor = captor[RawlsBillingAccountName]
+    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture))
+    billingAccountNameCaptor.getValue shouldEqual Option(billingProject.billingAccount.get)
+  }
+
+  it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
+      .thenReturn(Future.failed(new Exception("Fake error from Google")))
+
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    intercept[Exception] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    maybeWorkspace shouldBe None
+  }
+
+  it should "not try to modify the Service Perimeter if the Billing Project does not specify a Service Perimeter" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val billingProject = testData.testProject1
+
+    // Pre-condition: make sure that the Billing Project we're adding the Workspace to DOES NOT specify a Service
+    // Perimeter
+    billingProject.servicePerimeter shouldBe empty
+
+    val workspaceRequest = WorkspaceRequest(billingProject.projectName.value, newWorkspaceName, Map.empty)
+    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    // Verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was NOT called
+    verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]])
+  }
+
+  it should "claim a Google Project from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+  }
+
+  it should "Update a Google Project name after claiming a project from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceNamespace = "short_-NS1"
+    val newWorkspaceName = "plus Long_ name to get past 30 chars since the google-project name is truncated at 30 chars and formatted as namespace--name"
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(newWorkspaceNamespace), CreationStatuses.Ready, Option(RawlsBillingAccountName("fakeBillingAcct")), None)
+    runAndWait(rawlsBillingProjectQuery.create(billingProject))
+    val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
+    val captor = ArgumentCaptor.forClass(classOf[Project])
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
+    val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
+
+    val expectedProjectName = "short--NS1--plus Long- name to"
+    val actualProjectName = capturedProject.getName
+    actualProjectName shouldBe expectedProjectName
+  }
+
+  it should "Apply labels to a Google Project after claiming a project from Resource Buffering Service" in withTestDataServices { services =>
+    val newWorkspaceNamespace = "Long_Namespace---30-char-limit"
+    val newWorkspaceName = "Plus Long_ name to get past 63 chars since the labels are truncated at 63 chars"
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(newWorkspaceNamespace), CreationStatuses.Ready, Option(RawlsBillingAccountName("fakeBillingAcct")), None)
+    runAndWait(rawlsBillingProjectQuery.create(billingProject))
+    val workspaceRequest = WorkspaceRequest(newWorkspaceNamespace, newWorkspaceName, Map.empty)
+    val captor = ArgumentCaptor.forClass(classOf[Project])
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    verify(services.gcsDAO).updateGoogleProject(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), captor.capture())
+    val capturedProject = captor.getValue.asInstanceOf[Project] // Explicit cast needed since Scala type interference and capturing parameters with Mockito don't play nicely together here
+
+    val expectedNewLabels = Map("workspacenamespace" -> "long_namespace---30-char-limit",
+      "workspacename" -> "plus-long_-name-to-get-past-63-chars-since-the-labels-are-trunc",
+      "workspaceid" -> workspace.workspaceId)
+    val numberOfLabelsFromBuffer = 3
+    val expectedLabelSize = numberOfLabelsFromBuffer + expectedNewLabels.size
+    val actualLabels = capturedProject.getLabels.asScala
+
+    actualLabels.size shouldBe expectedLabelSize
+    actualLabels should contain allElementsOf expectedNewLabels
+  }
+
+  // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
+  // that should be within a Service Perimeter
+  "creating a Workspace in a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices { services =>
+    // Use the WorkspaceServiceConfig to determine which static projects exist for which perimeter
+    val servicePerimeterName: ServicePerimeterName = services.servicePerimeterServiceConfig.staticProjectsInPerimeters.keys.head
+    val staticProjectNumbersInPerimeter: Set[String] = services.servicePerimeterServiceConfig.staticProjectsInPerimeters(servicePerimeterName).map(_.value).toSet
+
+    val billingProject1 = testData.testProject1
+    val billingProject2 = testData.testProject2
+    val billingProjects = Seq(billingProject1, billingProject2)
+    val workspacesPerProject = 2
+
+    // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
+    // the Billing Projects and therefore in the Perimeter
+    val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(bp.copy(servicePerimeter = Option(servicePerimeterName)))))
+      val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName))
+      updatedBillingProject.value.servicePerimeter.value shouldBe servicePerimeterName
+
+      (1 to workspacesPerProject).map { n =>
+        val workspace = testData.workspace.copy(
+          namespace = bp.projectName.value,
+          name = s"${bp.projectName.value}Workspace${n}",
+          workspaceId = UUID.randomUUID().toString,
+          googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+        runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(workspace))
+      }
+    }
+
+    // Test setup is done, now we're getting to the test
+    // Make a call to Create a new Workspace in the same Billing Project
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val servicePerimeterNameCaptor = captor[ServicePerimeterName]
+    // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
+    // the arguments passed to it so that we can verify that they were correct
+    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture, any[DataAccess])
+    servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
+
+    // verify that we set the folder for the perimeter
+    verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProjectId), any[String])
+  }
+
+  "cloneWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProjectId.value should not be empty
+    workspace.googleProjectNumber should not be empty
+  }
+
+  it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val copyFilesWithPrefix = "copy_me"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty, copyFilesWithPrefix = Option(copyFilesWithPrefix))
+
+    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    eventually (timeout = timeout(Span(10, Seconds))) {
+      runAndWait(slickDataSource.dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers()).map(_.destWorkspaceId).contains(workspace.workspaceIdAsUUID) shouldBe true
+    }
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProjectId.value should not be empty
+    workspace.googleProjectNumber should not be empty
+  }
+
+  it should "fail with 400 if specified Namespace/Billing Project does not exist" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val workspaceRequest = WorkspaceRequest("nonexistent_namespace", "kermits_pond", Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+  // TODO: This test will need to be deleted when implementing https://broadworkbench.atlassian.net/browse/CA-947
+  it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
+    (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
+      // Update the BillingProject with the CreationStatus under test
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(status = projectStatus))))
+
+      // Create a Workspace in the BillingProject
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_${projectStatus}")
+        val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+        Await.result(services.workspaceService.cloneWorkspace(workspaceName, workspaceRequest), Duration.Inf)
+      }
+
+      error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+    }
+  }
+
+  it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices { services =>
+    // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = None))))
+    val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    updatedBillingProject.value.billingAccount shouldBe empty
+
+    val baseWorkspace = testData.workspace
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    }
+    error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+  }
+
+  it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices { services =>
+    // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
+    // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
+    val billingAccountName = services.gcsDAO.inaccessibleBillingAccountName
+    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
+    val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    originalBillingProject.value.invalidBillingAccount shouldBe false
+
+    // Make the call to createWorkspace and make sure it throws an exception with the correct StatusCode
+    val baseWorkspace = testData.workspace
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    }
+    error.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+
+    // Make sure that the BillingProject.invalidBillingAccount field was properly updated while attempting to create the
+    // Workspace
+    val persistedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
+    persistedBillingProject.value.invalidBillingAccount shouldBe true
+  }
+
+  it should "fail with 502 if Rawls is unable to retrieve the Google Project Number from Google for Workspace's Google Project" in withTestDataServices { services =>
+    when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
+
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "whatever")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    }
+
+    error.errorReport.statusCode shouldBe Some(StatusCodes.BadGateway)
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    maybeWorkspace shouldBe None
+  }
+
+  it should "set the Billing Account on the Workspace's Google Project to match the Billing Project's Billing Account" in withTestDataServices { services =>
+    val billingProject = testData.testProject1
+    val workspaceName = WorkspaceName(billingProject.projectName.value, "cool_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    val baseWorkspace = testData.workspace
+    Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
+    // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
+    // in the Billing Project
+    val billingAccountNameCaptor = captor[RawlsBillingAccountName]
+    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture))
+    billingAccountNameCaptor.getValue shouldEqual Option(billingProject.billingAccount.get)
+  }
+
+  it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
+      .thenReturn(Future.failed(new Exception("Fake error from Google")))
+
+    val baseWorkspace = testData.workspace
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+
+    intercept[Exception] {
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+    }
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    maybeWorkspace shouldBe None
+  }
+
+  it should "not try to modify the Service Perimeter if the Billing Project does not specify a Service Perimeter" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "space_for_workin"
+    val billingProject = testData.testProject1
+
+    // Pre-condition: make sure that the Billing Project we're adding the Workspace to DOES NOT specify a Service
+    // Perimeter
+    billingProject.servicePerimeter shouldBe empty
+
+    val workspaceRequest = WorkspaceRequest(billingProject.projectName.value, newWorkspaceName, Map.empty)
+    Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    // Verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was NOT called
+    verify(services.googleAccessContextManagerDAO, Mockito.never()).overwriteProjectsInServicePerimeter(any[ServicePerimeterName], any[Set[String]])
+  }
+
+  it should "claim a Google Project from Resource Buffering Service" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+  }
+
+  // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
+  // that should be within a Service Perimeter
+  "cloning a Workspace into a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices { services =>
+    // Use the WorkspaceServiceConfig to determine which static projects exist for which perimeter
+    val servicePerimeterName: ServicePerimeterName = services.servicePerimeterServiceConfig.staticProjectsInPerimeters.keys.head
+    val staticProjectNumbersInPerimeter: Set[String] = services.servicePerimeterServiceConfig.staticProjectsInPerimeters(servicePerimeterName).map(_.value).toSet
+
+    val billingProject1 = testData.testProject1
+    val billingProject2 = testData.testProject2
+    val billingProjects = Seq(billingProject1, billingProject2)
+    val workspacesPerProject = 2
+
+    // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
+    // the Billing Projects and therefore in the Perimeter
+    val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(bp.copy(servicePerimeter = Option(servicePerimeterName)))))
+      val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName))
+      updatedBillingProject.value.servicePerimeter.value shouldBe servicePerimeterName
+
+      (1 to workspacesPerProject).map { n =>
+        val workspace = testData.workspace.copy(
+          namespace = bp.projectName.value,
+          name = s"${bp.projectName.value}Workspace${n}",
+          workspaceId = UUID.randomUUID().toString,
+          googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+        runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(workspace))
+      }
+    }
+
+    // Test setup is done, now we're getting to the test
+    // Make a call to Create a new Workspace in the same Billing Project
+    val baseWorkspace = testData.workspace
+    val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
+    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+    val workspace = Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+
+    val servicePerimeterNameCaptor = captor[ServicePerimeterName]
+    // verify that googleAccessContextManagerDAO.overwriteProjectsInServicePerimeter was called exactly once and capture
+    // the arguments passed to it so that we can verify that they were correct
+    verify(services.servicePerimeterService).overwriteGoogleProjectsInPerimeter(servicePerimeterNameCaptor.capture, any[DataAccess])
+    servicePerimeterNameCaptor.getValue shouldBe servicePerimeterName
+
+    // verify that we set the folder for the perimeter
+    verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProjectId), any[String])
+  }
+
+  "getSpendReportTableName" should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices { services =>
+    val billingProjectName = RawlsBillingProjectName("test-project")
+    val billingProject = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None, None, None, None, false, Some(BigQueryDatasetName("bar")), Some(BigQueryTableName("baz")), Some(GoogleProject("foo")))
+    runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
+
+    val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+
+    result shouldBe Some("foo.bar.baz")
+  }
+
+  it should "return None if the spend report config is not set" in withTestDataServices { services =>
+    val billingProjectName = RawlsBillingProjectName("test-project")
+    val billingProject = RawlsBillingProject(billingProjectName, CreationStatuses.Ready, None, None, None, None, None, false, None, None, None)
+    runAndWait(services.workspaceService.dataSource.dataAccess.rawlsBillingProjectQuery.create(billingProject))
+
+    val result = Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+
+    result shouldBe None
+  }
+
+  it should "throw a RawlsExceptionWithErrorReport if the billing project does not exist" in withTestDataServices { services =>
+    val billingProjectName = RawlsBillingProjectName("test-project")
+
+    val actual = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.getSpendReportTableName(billingProjectName), Duration.Inf)
+    }
+
+    actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
+  }
 }

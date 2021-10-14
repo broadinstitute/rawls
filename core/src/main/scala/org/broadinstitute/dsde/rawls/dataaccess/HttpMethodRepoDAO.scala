@@ -50,7 +50,9 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
   }
 
   override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    getAgoraEntity(s"$agoraServiceURL/configurations/$namespace/$name/$version",userInfo)
+    retry(when500) { () =>
+      getAgoraEntity(s"$agoraServiceURL/configurations/$namespace/$name/$version", userInfo)
+    }
   }
 
   private def noneIfNotFound[T]: PartialFunction[Throwable, Option[T]] = {
@@ -58,24 +60,26 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
   }
 
   override def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[WDL]] = {
-    method match {
-      case agoraMethod: AgoraMethod =>
-        getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo) map { maybeEntity =>
+    retry(when500) { () =>
+      method match {
+        case agoraMethod: AgoraMethod =>
+          getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo) map { maybeEntity =>
+            for {
+              entity: AgoraEntity <- maybeEntity
+              payload <- entity.payload
+            } yield WdlSource(payload)
+          }
+        case dockstoreMethod: DockstoreMethod =>
+          getDockstoreMethod(dockstoreMethod) map { maybeTool =>
+            for {
+              tool: GA4GHTool <- maybeTool
+            } yield WdlUrl(tool.url) // We submit the Github URL to Cromwell so that relative imports work.
+          }
+        case method: DockstoreToolsMethod => {
           for {
-            entity: AgoraEntity <- maybeEntity
-            payload <- entity.payload
-          } yield WdlSource(payload)
+            maybeTool <- pipeline[Option[GA4GHTool]] apply Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) recover noneIfNotFound
+          } yield maybeTool.map(tool => WdlUrl(tool.url))
         }
-      case dockstoreMethod: DockstoreMethod =>
-        getDockstoreMethod(dockstoreMethod) map { maybeTool =>
-          for {
-            tool: GA4GHTool <- maybeTool
-          } yield WdlUrl(tool.url) // We submit the Github URL to Cromwell so that relative imports work.
-        }
-      case method: DockstoreToolsMethod => {
-        for {
-          maybeTool <- pipeline[Option[GA4GHTool]] apply Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) recover noneIfNotFound
-        } yield maybeTool.map(tool => WdlUrl(tool.url))
       }
     }
   }

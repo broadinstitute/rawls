@@ -50,7 +50,7 @@ case class EntityAttributeRecord(id: Long,
                                  deleted: Boolean,
                                  deletedDate: Option[Timestamp]) extends AttributeRecord[Long]
 
-case class EntityAttributeScratchRecord(id: Long,
+case class EntityAttributeTempRecord(id: Long,
                                      ownerId: Long, // entity id
                                      namespace: String,
                                      name: String,
@@ -79,7 +79,7 @@ case class WorkspaceAttributeRecord(id: Long,
                                     deleted: Boolean,
                                     deletedDate: Option[Timestamp]) extends AttributeRecord[UUID]
 
-case class WorkspaceAttributeScratchRecord(id: Long,
+case class WorkspaceAttributeTempRecord(id: Long,
                                         ownerId: UUID, // workspace id
                                         namespace: String,
                                         name: String,
@@ -170,12 +170,12 @@ trait AttributeComponent {
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
   }
 
-  class EntityAttributeScratchTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeScratchRecord](tag, "ENTITY_ATTRIBUTE_SCRATCH") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <> (EntityAttributeScratchRecord.tupled, EntityAttributeScratchRecord.unapply)
+  class EntityAttributeTempTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeTempRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <> (EntityAttributeTempRecord.tupled, EntityAttributeTempRecord.unapply)
   }
 
-  class WorkspaceAttributeScratchTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeScratchRecord](tag, "WORKSPACE_ATTRIBUTE_SCRATCH") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeScratchRecord.tupled, WorkspaceAttributeScratchRecord.unapply)
+  class WorkspaceAttributeTempTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeTempRecord](tag, "WORKSPACE_ATTRIBUTE_TEMP") {
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
@@ -195,8 +195,8 @@ trait AttributeComponent {
     }
   }
 
-  protected object entityAttributeScratchQuery extends AttributeScratchQuery[Long, EntityAttributeRecord, EntityAttributeScratchRecord, EntityAttributeScratchTable](new EntityAttributeScratchTable(_), EntityAttributeScratchRecord)
-  protected object workspaceAttributeScratchQuery extends AttributeScratchQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeScratchRecord, WorkspaceAttributeScratchTable](new WorkspaceAttributeScratchTable(_), WorkspaceAttributeScratchRecord)
+  protected object entityAttributeTempQuery extends AttributeScratchQuery[Long, EntityAttributeRecord, EntityAttributeTempRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_), EntityAttributeTempRecord)
+  protected object workspaceAttributeTempQuery extends AttributeScratchQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTempRecord, WorkspaceAttributeTempTable](new WorkspaceAttributeTempTable(_), WorkspaceAttributeTempRecord)
 
   /**
    * @param createRecord function to create a RECORD object, parameters: id, ownerId, name, valueString, valueNumber, valueBoolean, None, listIndex, listLength
@@ -329,23 +329,109 @@ trait AttributeComponent {
       recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
 
     def patchAttributesAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
-      deleteAttributeRecordsById(deleteIds.toSeq) andThen
-        batchInsertAttributes(inserts.toSeq) andThen
-        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+      for {
+        _ <- if (deleteIds.nonEmpty) deleteAttributeRecordsById(deleteIds.toSeq) else DBIO.successful(0)
+        _ <- if (inserts.nonEmpty) batchInsertAttributes(inserts.toSeq) else DBIO.successful(0)
+        updateResult <- if (updates.nonEmpty)
+                          AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+                        else
+                          DBIO.successful(0)
+      } yield {
+        updateResult
+      }
     }
 
-    def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
+    def deleteAttributes(workspaceId: UUID, entityType: String, attributeNames: Set[AttributeName]) = {
+      DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceId, entityType, attributeNames)
+    }
+
+    object DeleteAttributeColumnQueries extends RawSqlQuery {
+      val driver: JdbcProfile = AttributeComponent.this.driver
+
+      def deleteAttributeColumn(workspaceId: UUID, entityType: String, attributeNames: Set[AttributeName]) = {
+        val attributeNamesSql = reduceSqlActionsWithDelim(attributeNames.map { attName =>
+          sql"""(${attName.namespace},${attName.name})"""
+        }.toSeq)
+
+        val deleteQueryBase = sql"""delete ea from ENTITY_ATTRIBUTE ea
+                                    join ENTITY e on e.id = ea.owner_id
+                                    where e.workspace_id = ${workspaceId}
+                                      and e.entity_type = ${entityType}
+                                      and (ea.namespace, ea.name) in """
+
+        concatSqlActions(deleteQueryBase, sql"(", attributeNamesSql, sql")").as[Int]
+      }
+    }
+
+    /**
+     * Compares a collection of pre-existing attributes to a collection of attributes requested to save by a user,
+     * finds the differences, saves the differences, and then returns the ids of the parent (entity|workspace) objects
+     * that were affected.
+     *
+     * @param attributesToSave collection of attributes to be written
+     * @param existingAttributes collection of pre-existing attributes to compare against
+     * @param insertFunction function to use when writing attributes to the db (allows rewriteAttrsAction to be generic)
+     * @return the ids of the parent (entity|workspace) objects that had attribute inserts/updates/deletes
+     */
+    def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]): ReadWriteAction[Set[OWNER_ID]] = {
       val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
       val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
-      // update attributes which are in both to-save and currently-exists, insert attributes which are in save but not exists
-      val (attrsToUpdateMap, attrsToInsertMap) = toSaveAttrMap.partition { case (k, v) => existingAttrMap.keySet.contains(k) }
-      // delete attributes which currently exist but are not in the attributes to save
-      val attributesToDelete = existingAttrMap.filterKeys(! attrsToUpdateMap.keySet.contains(_)).values
+      // note that currently-existing attributes will have a populated id e.g. "1234", but to-save will have an id of "0"
+      // therefore, we use this ComparableRecord class which omits the id when checking equality between existing and to-save.
+      // note this does not include transactionId for AttributeScratchRecords. We do not expect AttributeScratchRecords
+      // here, and transactionId will eventually be going away, so don't bother
+      object ComparableRecord {
+        def fromRecord(rec: RECORD): ComparableRecord = {
+          new ComparableRecord(rec.ownerId, rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean,
+            rec.valueJson, rec.valueEntityRef, rec.listIndex, rec.listLength, rec.deleted, rec.deletedDate)
+        }
+      }
 
-      deleteAttributeRecordsById(attributesToDelete.map(_.id).toSeq) andThen
-        batchInsertAttributes(attrsToInsertMap.values.toSeq) andThen
-        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(attrsToUpdateMap.values.toSeq))
+      case class ComparableRecord (
+        ownerId: OWNER_ID,
+        namespace: String,
+        name: String,
+        valueString: Option[String],
+        valueNumber: Option[Double],
+        valueBoolean: Option[Boolean],
+        valueJson: Option[String],
+        valueEntityRef: Option[Long],
+        listIndex: Option[Int],
+        listLength: Option[Int],
+        deleted: Boolean,
+        deletedDate: Option[Timestamp]
+      )
+
+      // create a set of ComparableRecords representing the existing attributes
+      val existingAttributesSet: Set[ComparableRecord] = existingAttributes.toSet.map(r => ComparableRecord.fromRecord(r))
+
+      val existingKeys = existingAttrMap.keySet
+
+      // insert attributes which are in save but not exists
+      val attributesToInsert = toSaveAttrMap.filterKeys(! existingKeys.contains(_))
+
+      // delete attributes which are in exists but not save
+      val attributesToDelete = existingAttrMap.filterKeys(! toSaveAttrMap.keySet.contains(_))
+
+      val attributesToUpdate = toSaveAttrMap.filter {
+        case (k, v) =>
+            existingKeys.contains(k) && // if the attribute doesn't already exist, don't attempt to update it
+            !existingAttributesSet.contains(ComparableRecord.fromRecord(v)) // if the attribute exists and is unchanged, don't update it
+      }
+
+      // collect the parent objects (e.g. entity, workspace) that have writes, so we know which object rows to re-calculate
+      val ownersWithWrites: Set[OWNER_ID] = (attributesToInsert.values.map(_.ownerId) ++
+        attributesToUpdate.values.map(_.ownerId) ++
+        attributesToDelete.values.map(_.ownerId))
+        .toSet
+
+      // perform the inserts/updates/deletes
+      patchAttributesAction(attributesToInsert.values,
+        attributesToUpdate.values,
+        attributesToDelete.values.map(_.id),
+        insertFunction)
+        .map(_ => ownersWithWrites)
     }
 
     //noinspection SqlDialectInspection
@@ -360,9 +446,11 @@ trait AttributeComponent {
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
       def updateInMasterAction(transactionId: String) = {
+          val tableSuffix = getTableSuffix(baseTableRow.tableName)
+
           sql"""
           update #${baseTableRow.tableName} a
-              join #${baseTableRow.tableName}_SCRATCH ta
+              join #${baseTableRow.tableName}_#${tableSuffix} ta
               on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
                   and ta.transaction_id = $transactionId
@@ -378,7 +466,11 @@ trait AttributeComponent {
       }
 
       def clearAttributeScratchTableAction(transactionId: String) = {
-        sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
+        val tableSuffix = getTableSuffix(baseTableRow.tableName)
+
+        if(tableSuffix == "SCRATCH")
+          sqlu"""delete from #${baseTableRow.tableName}_#${tableSuffix} where transaction_id = $transactionId"""
+        else DBIO.successful(0)
       }
 
       def updateAction(insertIntoScratchFunction: String => WriteAction[Int]) = {
@@ -465,5 +557,12 @@ trait AttributeComponent {
     }
 
     private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
+
+    private def getTableSuffix(tableName: String): String = {
+      if (tableName == "ENTITY_ATTRIBUTE" || tableName == "WORKSPACE_ATTRIBUTE")
+        "TEMP"
+      else
+        "SCRATCH"
+    }
   }
 }

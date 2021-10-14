@@ -10,6 +10,7 @@ import com.google.api.services.cloudbilling.model.BillingAccount
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
 import org.joda.time.DateTime
 
 import scala.collection.mutable
@@ -33,7 +34,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   billingEmail: String,
   billingGroupEmail: String,
   billingGroupEmailAliases: List[String],
-  bucketLogsMaxAge: Int)
+  bucketLogsMaxAge: Int,
+  resourceBufferJsonFile: String)
   (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val cs: ContextShift[IO], override val timer: Timer[IO])
   extends HttpGoogleServicesDAO(
     true,
@@ -65,7 +67,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     cleanupDeploymentAfterCreating = true,
     terraBucketReaderRole = "fakeTerraBucketReader",
     terraBucketWriterRole = "fakeTerraBucketWriter",
-    accessContextManagerDAO = new MockGoogleAccessContextManagerDAO)(system, materializer, executionContext, cs, timer) {
+    accessContextManagerDAO = new MockGoogleAccessContextManagerDAO,
+    resourceBufferJsonFile = resourceBufferJsonFile)(system, materializer, executionContext, cs, timer) {
 
   private var token: String = null
   private var tokenDate: DateTime = null
@@ -101,7 +104,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
-  protected override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
+  override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
     billingAccountId match {
       case RawlsBillingAccountName("billingAccounts/firecloudHasThisOne") => Future.successful(true)
       case RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne") => Future.successful(false)

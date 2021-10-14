@@ -1,13 +1,12 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
-
 import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.Counter
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -15,7 +14,7 @@ import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputE
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, attributeCount, safePrint}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -203,7 +202,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         }
       } flatMap { case (workflowRecs, submitter, workspaceRec) =>
           for {
-            petUserInfo <- getPetSAUserInfo(GoogleProjectId(workspaceRec.googleProject), submitter)
+            petUserInfo <- getPetSAUserInfo(GoogleProjectId(workspaceRec.googleProjectId), submitter)
             abortResults <- Future.traverse(workflowRecs) { workflowRec =>
               Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, petUserInfo))
             }
@@ -233,7 +232,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         }
       } flatMap { case (externalWorkflowIds, submitter, workspaceRec) =>
         for {
-          petUserInfo <- getPetSAUserInfo(GoogleProjectId(workspaceRec.googleProject), submitter)
+          petUserInfo <- getPetSAUserInfo(GoogleProjectId(workspaceRec.googleProjectId), submitter)
           workflowOutputs <- gatherWorkflowOutputs(externalWorkflowIds, petUserInfo)
         } yield {
           workflowOutputs
@@ -313,7 +312,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     // and will be re-processed next time we call queryForWorkflowStatus().
     // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
     // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
-    datasource.inTransaction { dataAccess =>
+    datasource.inTransactionWithAttrTempTable { dataAccess =>
       handleOutputs(workflowsWithOutputs, dataAccess)
     } recoverWith {
       // If there is something fatally wrong handling outputs, mark the workflows as failed
@@ -393,6 +392,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         // figure out the updates that need to occur to entities and workspaces
         updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressionMap)
 
+        // for debugging purposes
+        workspacesToUpdate = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
+        entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
+        _ = if (workspacesToUpdate.nonEmpty && entityUpdates.nonEmpty)
+              logger.info("handleOutputs writing to both workspace and entity attributes")
+            else if (workspacesToUpdate.nonEmpty)
+              logger.info("handleOutputs writing to workspace attributes only")
+            else if (entityUpdates.nonEmpty)
+              logger.info("handleOutputs writing to entity attributes only")
+            else
+              logger.info("handleOutputs writing to neither workspace nor entity attributes; could be errors")
+
         // save everything to the db
         _ <- saveWorkspace(dataAccess, updatedEntitiesAndWorkspace)
         _ <- saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace)
@@ -424,7 +435,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     //note there is only 1 workspace (may be None if it is not updated) even though it may be updated multiple times so reduce it into 1 update
     val workspaces = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
     if (workspaces.isEmpty) DBIO.successful(0)
-    else dataAccess.workspaceQuery.save(workspaces.reduce((a, b) => a.copy(attributes = a.attributes ++ b.attributes)))
+    else dataAccess.workspaceQuery.createOrUpdate(workspaces.reduce((a, b) => a.copy(attributes = a.attributes ++ b.attributes)))
   }
 
   def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]])(implicit executionContext: ExecutionContext) = {
@@ -460,14 +471,28 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         val updates = updateEntityAndWorkspace(workflowRecord.workflowEntityId.map(id => Some(entitiesById(id))).getOrElse(None), workspace, boundExpressions)
 
         val (optEntityUpdates, optWs) = updates
-        optEntityUpdates foreach { update: WorkflowEntityUpdate =>
-          logger.debug(s"Updating ${update.upserts.size} attributes for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. First 100: ${update.upserts.take(100)}")
-        }
-        optWs foreach { workspace: Workspace =>
-          logger.debug(s"Updating ${workspace.attributes.size} workspace attributes in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. First 100: ${workspace.attributes.take(100)}")
-        }
 
-        Left(updates)
+        val entityAttributeCount = optEntityUpdates map { update: WorkflowEntityUpdate =>
+          val cnt = attributeCount(update.upserts)
+          logger.debug(s"Updating $cnt attribute values for entity ${update.entityRef.entityName} of type ${update.entityRef.entityType} in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}")
+          cnt
+        } getOrElse 0
+
+        val workspaceAttributeCount = optWs map { workspace: Workspace =>
+          val cnt = attributeCount(workspace.attributes)
+          logger.debug(s"Updating $cnt attribute values for workspace in ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}. ${safePrint(workspace.attributes)}")
+          cnt
+        } getOrElse 0
+
+        if (entityAttributeCount > config.attributeUpdatesPerWorkflow) {
+          logger.error(s"Cancelled update of $entityAttributeCount entity attributes for workflow ${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}.")
+          Right((workflowRecord, Seq(AttributeString(s"Cannot save outputs to entity because workflow's attribute count of $entityAttributeCount exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))))
+        } else if (workspaceAttributeCount > config.attributeUpdatesPerWorkflow) {
+          logger.error(s"Cancelled update of $workspaceAttributeCount workspace attributes for workflow ${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}.")
+          Right((workflowRecord, Seq(AttributeString(s"Cannot save outputs to workspace because workflow's attribute count of $workspaceAttributeCount exceeds Terra maximum of ${config.attributeUpdatesPerWorkflow}."))))
+        } else {
+          Left(updates)
+        }
       } else {
         Right((workflowRecord, parsedExpressions.collect { case Failure(t) => AttributeString(t.getMessage) }))
       }
@@ -485,7 +510,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     val entityAndUpsert = entity.map(e => WorkflowEntityUpdate(e.toReference, entityUpsert.toMap))
     val updatedWorkspace = if (workspaceAttributes.isEmpty) None else Option(workspace.copy(attributes = workspace.attributes ++ workspaceAttributes))
-    
+
     (entityAndUpsert, updatedWorkspace)
   }
 
@@ -517,4 +542,4 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   }
 }
 
-final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration, trackDetailedSubmissionMetrics: Boolean)
+final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration, trackDetailedSubmissionMetrics: Boolean, attributeUpdatesPerWorkflow: Int)

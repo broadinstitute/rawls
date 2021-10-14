@@ -5,7 +5,7 @@ import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -66,38 +66,30 @@ trait WorkspaceSupport {
   }
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
+  // Will process op only if User has the `createWorkspace` action on the specified Billing Project, otherwise will
+  // Fail with 403 Forbidden
   def requireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
     for {
       userHasAction <- traceDBIOWithParent("userHasAction", parentSpan)(_ => DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, userInfo)))
       response <- userHasAction match {
-        case true =>
-          traceDBIOWithParent("loadBillingProject", parentSpan)( _ => dataAccess.rawlsBillingProjectQuery.load(projectName)).flatMap {
-            case Some(RawlsBillingProject(_, CreationStatuses.Ready, _, _, _, _, _, _)) => op //Sam will check to make sure the Auth Domain selection is valid
-            case Some(RawlsBillingProject(RawlsBillingProjectName(name), CreationStatuses.Creating, _, _, _, _, _, _)) =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${name} is still being created")))
-
-            case Some(RawlsBillingProject(RawlsBillingProjectName(name), CreationStatuses.Error, _, messageOp, _, _, _, _)) =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Error creating ${name}: ${messageOp.getOrElse("no message")}")))
-            case Some(_) | None =>
-              // this can't happen with the current code but a 404 would be the correct response
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${workspaceRequest.toWorkspaceName.namespace} does not exist")))
-          }
-        case false =>
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
+        case true => op
+        case false => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
       }
     } yield response
   }
 
+  // Creating a Workspace without an Owner policy is allowed only if the requesting User has the `owner` role
+  // granted on the Workspace's Billing Project
   def maybeRequireBillingProjectOwnerAccess[T](workspaceRequest: WorkspaceRequest, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     workspaceRequest.noWorkspaceOwner match {
       case Some(true) =>
         for {
           billingProjectRoles <- traceDBIOWithParent("listUserRolesForResource", parentSpan)(_ => DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, userInfo)))
-          userIsBillingProjectOwner = billingProjectRoles.contains(SamProjectRoles.owner)
+          userIsBillingProjectOwner = billingProjectRoles.contains(SamBillingProjectRoles.owner)
           response <- userIsBillingProjectOwner match {
             case true => op
-            case false => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"Missing ${SamProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'.")))
+            case false => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"Missing ${SamBillingProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'.")))
           }
         } yield response
       case _ =>
@@ -146,12 +138,13 @@ trait WorkspaceSupport {
   def withWorkspaceBucketRegionCheck[T](bucketRegion: Option[String])(op: => Future[T]): Future[T] = {
     bucketRegion match {
       case Some(region) =>
-        // if the user specifies a region for the workspace bucket, it must be in the proper format for a single region
+        // if the user specifies a region for the workspace bucket, it must be in the proper format for a single region or the default bucket location (US multi region)
         val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
-        if (region.matches(singleRegionPattern)) op
+        val validUSPattern = "US"
+        if (region.matches(singleRegionPattern) || region.equals(validUSPattern)) op
         else {
           val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = s"Workspace bucket location must be a single " +
-            s"(not multi-) region of format: $singleRegionPattern.")
+            s"region of format: $singleRegionPattern or the default bucket location ('US').")
           throw new RawlsExceptionWithErrorReport(errorReport = err)
         }
       case None => op

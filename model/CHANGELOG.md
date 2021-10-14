@@ -6,5 +6,6 @@ This file documents changes to the `rawls-model` library, including notes on how
 
 Added:
 - Support 2.13
+- ExecutionModel classes moved from core to model
 
-SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "0.1-2356e282"`
+SBT dependency: `"org.broadinstitute.dsde" %% "rawls-model" % "0.1-384ab501b"`

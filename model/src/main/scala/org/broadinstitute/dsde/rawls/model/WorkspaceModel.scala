@@ -28,6 +28,33 @@ object Attributable {
   val entityTypeReservedAttribute = "entityType"
   val reservedAttributeNames = Set(nameReservedAttribute, entityTypeReservedAttribute, workspaceIdAttribute)
   type AttributeMap = Map[AttributeName, Attribute]
+
+  def attributeCount(map: AttributeMap): Int = {
+    def countAttributes(attribute: Attribute): Int = {
+      attribute match {
+        case _: AttributeListElementable => 1
+        case attributeList: AttributeList[_] => attributeList.list.map(countAttributes).sum
+      }
+    }
+
+    map.values.map(countAttributes).sum
+  }
+
+  def safePrint(map: AttributeMap, depth: Int = 10): String = {
+    def safePrintInner(attr: Attribute): String = {
+      attr match {
+        case attr: AttributeListElementable => attr.toString
+        case attrList: AttributeList[_] =>
+          // This is OK because lists of lists are not supported (see comment in WorkspaceModelSpec.scala)
+          attrList.list.take(depth).toString
+
+      }
+    }
+
+    val keys = map.keys.take(depth)
+    val values = map.values.take(depth).map(safePrintInner)
+    s"[First $depth items] " + (keys zip values).toMap.toString
+  }
 }
 
 trait Attributable {
@@ -119,6 +146,9 @@ case class WorkspaceRequest(namespace: String,
 
 case class GoogleProjectId(value: String) extends ValueObject
 
+// All Workspaces are backed by a Google Project identified by googleProjectId.  The googleProjectNumber is a different
+// identifier that we only really need when adding the Workspace to a Service Perimeter.  For efficiency, we added the
+// GoogleProjectNumber field here.
 case class Workspace(
                       namespace: String,
                       name: String,
@@ -131,7 +161,11 @@ case class Workspace(
                       attributes: AttributeMap,
                       isLocked: Boolean,
                       workspaceVersion: WorkspaceVersion,
-                      googleProject: GoogleProjectId
+                      googleProjectId: GoogleProjectId,
+                      googleProjectNumber: Option[GoogleProjectNumber],
+                      currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
+                      billingAccountErrorMessage: Option[String],
+                      completedCloneWorkspaceFileTransfer: Option[DateTime]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -139,21 +173,26 @@ case class Workspace(
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
 }
 
+/** convenience constructor (for unit tests only!)
+  * defaults workspace version to v2 and google project id and google project number to random strings
+  * TODO: to be refactored/removed in https://broadworkbench.atlassian.net/browse/CA-1128
+   */
 object Workspace {
-  /** convenience constructor that defaults workspace version to v1 and google project to namespace */
   def apply(namespace: String,
-           name: String,
-           workspaceId: String,
-           bucketName: String,
-           workflowCollectionName: Option[String],
-           createdDate: DateTime,
-           lastModified: DateTime,
-           createdBy: String,
-           attributes: AttributeMap,
-           isLocked: Boolean = false): Workspace = {
-    Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V1, GoogleProjectId(namespace))
+            name: String,
+            workspaceId: String,
+            bucketName: String,
+            workflowCollectionName: Option[String],
+            createdDate: DateTime,
+            lastModified: DateTime,
+            createdBy: String,
+            attributes: AttributeMap,
+            isLocked: Boolean = false): Workspace = {
+    val randomString = java.util.UUID.randomUUID().toString
+    val googleProjectId = GoogleProjectId(randomString)
+    val googleProjectNumber = GoogleProjectNumber(randomString)
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate))
   }
-
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -209,7 +248,10 @@ object SortDirections {
 
   def toSql(direction: SortDirection) = toString(direction)
 }
-case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
+case class EntityQuery(page: Int, pageSize: Int,
+                       sortField: String, sortDirection: SortDirections.SortDirection,
+                       filterTerms: Option[String],
+                       fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs())
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 
@@ -539,8 +581,12 @@ case class WorkspaceDetails(namespace: String,
                             isLocked: Boolean = false,
                             authorizationDomain: Option[Set[ManagedGroupRef]],
                             workspaceVersion: WorkspaceVersion,
-                            googleProject: GoogleProjectId) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject)
+                            googleProject: GoogleProjectId, // The response field is called "googleProject" rather than "googleProjectId" for backwards compatibility
+                            googleProjectNumber: Option[GoogleProjectNumber],
+                            billingAccount: Option[RawlsBillingAccountName],
+                            billingAccountErrorMessage: Option[String] = None,
+                            completedCloneWorkspaceFileTransfer: Option[DateTime]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer)
 }
 
 
@@ -610,10 +656,16 @@ object WorkspaceDetails {
       workspace.isLocked,
       optAuthorizationDomain,
       workspace.workspaceVersion,
-      workspace.googleProject
+      workspace.googleProjectId,
+      workspace.googleProjectNumber,
+      workspace.currentBillingAccountOnGoogleProject,
+      workspace.billingAccountErrorMessage,
+      workspace.completedCloneWorkspaceFileTransfer
     )
   }
 }
+
+case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID, sourceWorkspaceBucketName: String, destWorkspaceBucketName: String, copyFilesWithPrefix: String, destWorkspaceGoogleProjectId: GoogleProjectId)
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
 
@@ -710,6 +762,7 @@ case class WorkspaceTag(tag: String, count: Int)
 class WorkspaceJsonSupport extends JsonSupport {
   import DataReferenceModelJsonSupport.DataReferenceNameFormat
   import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
+  import UserModelJsonSupport.RawlsBillingAccountNameFormat
   import spray.json.DefaultJsonProtocol._
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
@@ -749,11 +802,13 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat7(WorkspaceRequest)
 
+  implicit val workspaceFieldSpecsFormat = jsonFormat1(WorkspaceFieldSpecs.apply)
+
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
   implicit val EntityTypeMetadataFormat = jsonFormat3(EntityTypeMetadata)
 
-  implicit val EntityQueryFormat = jsonFormat5(EntityQuery)
+  implicit val EntityQueryFormat = jsonFormat6(EntityQuery)
 
   implicit val EntityQueryResultMetadataFormat = jsonFormat3(EntityQueryResultMetadata)
 
@@ -818,6 +873,8 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val GoogleProjectIdFormat = ValueObjectFormat(GoogleProjectId)
 
+  implicit val GoogleProjectNumberFormat = ValueObjectFormat(GoogleProjectNumber)
+
   implicit val MethodConfigurationFormat = jsonFormat11(MethodConfiguration)
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
@@ -832,7 +889,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat13(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat17(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
@@ -868,16 +925,23 @@ class WorkspaceJsonSupport extends JsonSupport {
     val LINE_NUMBER = "lineNumber"
 
     def write(stackTraceElement: StackTraceElement) =
-      JsObject( CLASS_NAME -> JsString(stackTraceElement.getClassName),
-                METHOD_NAME -> JsString(stackTraceElement.getMethodName),
-                FILE_NAME -> JsString(stackTraceElement.getFileName),
-                LINE_NUMBER -> JsNumber(stackTraceElement.getLineNumber) )
+      JsObject( CLASS_NAME -> Option(stackTraceElement.getClassName).map(JsString(_)).getOrElse(JsNull),
+                METHOD_NAME -> Option(stackTraceElement.getMethodName).map(JsString(_)).getOrElse(JsNull),
+                FILE_NAME -> Option(stackTraceElement.getFileName).map(JsString(_)).getOrElse(JsNull),
+                LINE_NUMBER -> Option(stackTraceElement.getLineNumber).map(JsNumber(_)).getOrElse(JsNull) )
 
     def read(json: JsValue) =
       json.asJsObject.getFields(CLASS_NAME,METHOD_NAME,FILE_NAME,LINE_NUMBER) match {
         case Seq(JsString(className), JsString(methodName), JsString(fileName), JsNumber(lineNumber)) =>
-          new StackTraceElement(className,methodName,fileName,lineNumber.toInt)
-        case _ => throw new DeserializationException("unable to deserialize StackTraceElement")
+          new StackTraceElement(className, methodName, fileName, lineNumber.toInt)
+        case Seq(JsString(className), JsString(methodName), JsNull, JsNumber(lineNumber)) =>
+          // null in fileName indicates "Unknown Source" for the file
+          new StackTraceElement(className, methodName, null, lineNumber.toInt)
+        case _ =>
+          // it is technically possible for the write() method to serialize JsNull into
+          // className, methodName, and lineNumber - but those would indicate a very malformed
+          // stack trace; we don't want to deserialize those; error in that case is ok
+          throw new DeserializationException("unable to deserialize StackTraceElement")
       }
   }
 

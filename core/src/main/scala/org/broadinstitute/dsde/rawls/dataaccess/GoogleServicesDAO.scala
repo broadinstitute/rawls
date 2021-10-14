@@ -1,17 +1,20 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.model.StatusCodes
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.typesafe.config.Config
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import spray.json.JsObject
 
@@ -111,6 +114,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]]
 
+  def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean]
+
   /**
     * Lists Google billing accounts using the billing service account.
     *
@@ -122,6 +127,12 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return sequence of RawlsBillingAccounts
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
+
+  def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo]
+
+  def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
+
+  def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
 
@@ -153,9 +164,11 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getBucketServiceAccountCredential: Credential
 
-  def getServiceAccountRawlsUser(): Future[RawlsUser]
+  def getResourceBufferServiceAccountCredential: Credential
 
-  def getServiceAccountUserInfo(): Future[UserInfo]
+  def getServiceAccountRawlsUser: Future[RawlsUser]
+
+  def getServiceAccountUserInfo: Future[UserInfo]
 
   def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions]
 
@@ -182,7 +195,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def removePolicyBindings(googleProject: GoogleProjectId, policiesToRemove: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(googleProject) { existingPolicies =>
     val updatedKeysWithRemovedPolicies: Map[String, Set[String]] = policiesToRemove.keys.map { k =>
-      val existingForKey = existingPolicies.get(k).getOrElse(Set.empty)
+      val existingForKey = existingPolicies.getOrElse(k, Set.empty)
       val updatedForKey = existingForKey diff policiesToRemove(k)
       k -> updatedForKey
     }.toMap
@@ -205,7 +218,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   /**
     * Internal function to update project IAM bindings.
     *
-    * @param googleProject  google project name
+    * @param googleProject  google project id
     * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
     *                       which will be handled appropriately when sent to google.
     * @return true if google was called to update policies, false otherwise
@@ -222,15 +235,61 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def pollOperation(operationId: OperationId): Future[OperationStatus]
 
-  def deleteProject(googleProject: GoogleProjectId): Future[Unit]
+
+  def deleteV1Project(googleProject: GoogleProjectId): Future[Unit]
+
+  def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project]
+
+  def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]
 
   def getAccessTokenUsingJson(saKey: String): Future[String]
 
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]
 
+  /**
+    * Convert a string to a legal gcp label text, with an optional prefix
+    * See: https://cloud.google.com/compute/docs/labeling-resources#restrictions
+    *
+    * @param s
+    * @param prefix defaults to "fc-"
+    * @return
+    */
   def labelSafeString(s: String, prefix: String = "fc-"): String = {
-    // https://cloud.google.com/compute/docs/labeling-resources#restrictions
     prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
+  }
+
+  /**
+    * Convert a map of labels to legal gcp label text. Runs [[labelSafeString]] on all keys and values in the map.
+    * @param m Map of label key value pairs
+    * @param prefix defaults to "fc-"
+    * @return
+    */
+  def labelSafeMap(m: Map[String, String], prefix: String = "fc-"): Map[String, String] = m.map { case (key, value) =>
+    labelSafeString(key, prefix) -> labelSafeString(value, prefix) }
+
+  /**
+    * Valid text for google project name.
+    *
+    * "The optional user-assigned display name of the Project. It must be 4 to 30 characters. Allowed
+    * characters are: lowercase and uppercase letters, numbers, hyphen, single-quote, double-quote,
+    * space, and exclamation point."
+    *
+    * For more info see: https://cloud.google.com/resource-manager/reference/rest/v1/projects
+    * @param name
+    * @return
+    */
+  def googleProjectNameSafeString(name: String): String = {
+    name.replaceAll("[^a-zA-Z0-9\\-'\" !]", "-").take(30)
+  }
+
+  /**
+    * Handles getting the google project number from the google [[Project]]
+    * @param googleProject
+    * @return GoogleProjectNumber
+    */
+  def getGoogleProjectNumber(googleProject: Project): GoogleProjectNumber = googleProject.getProjectNumber match {
+    case null => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProject.getProjectId}"))
+    case googleProjectNumber: java.lang.Long => GoogleProjectNumber(googleProjectNumber.toString)
   }
 
   def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit]

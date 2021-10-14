@@ -144,7 +144,7 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
       provider.queryEntities("table1", defaultEntityQuery)
     }
     futureEx map { ex =>
-      assertResult("Error attempting to use project namespace. The project does not exist or you do not have permission to use it: sam error") { ex.getMessage }
+      assertResult(s"Error attempting to use project ${provider.googleProject}. The project does not exist or you do not have permission to use it: sam error") { ex.getMessage }
     }
   }
 

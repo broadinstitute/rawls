@@ -25,10 +25,14 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
         AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
       false,
       WorkspaceVersions.V2,
-      GoogleProjectId("test_google_project")
+      GoogleProjectId("test_google_project"),
+      None,
+      None,
+      None,
+      Option(currentTime())
     )
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
 
     val testStats = Map(
       "sample" -> Seq(AttributeName("namespace1", "value1"), AttributeName("namespace1", "value2")),
@@ -63,10 +67,14 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
         AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
       false,
       WorkspaceVersions.V2,
-      GoogleProjectId("test_google_project")
+      GoogleProjectId("test_google_project"),
+      None,
+      None,
+      None,
+      Option(currentTime())
     )
 
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
 
     val testStats = Map(
       "sample" -> Seq(AttributeName("namespace1", "value1"), AttributeName("namespace1", "value2")),

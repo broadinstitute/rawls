@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls
 
 import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, ErrorReport, ErrorReportSource}
 import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.workbench.model.google.BigQueryDatasetName
 
 import scala.concurrent.Future
 
@@ -32,6 +33,14 @@ trait StringValidationUtils {
     }
   }
 
+  private lazy val billingAccountNameRegex = "billingAccounts/[A-z0-9]{6}-[A-z0-9]{6}-[A-z0-9]{6}$".r
+  def validateBillingAccountName(s: String): Unit = {
+    if(! billingAccountNameRegex.pattern.matcher(s).matches) {
+      val msg = s"Invalid input: $s. Input must be of the format billingAccounts/XXXXXX-XXXXXX-XXXXXX."
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
+    }
+  }
+
   private lazy val billingProjectNameRegex = "[A-z0-9_-]{6,30}".r
   def validateBillingProjectName(s: String): Future[Unit] = {
     if(! billingProjectNameRegex.pattern.matcher(s).matches) {
@@ -42,8 +51,28 @@ trait StringValidationUtils {
     }
   }
 
-  def validateMaxStringLength(s: String, maxLength: Int): Unit = {
-    if(s.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: $s. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
+  //See Google docs for naming requirements: https://cloud.google.com/resource-manager/docs/creating-managing-projects#before_you_begin
+  private lazy val googleProjectNameRegex = "^[a-z]([-a-z0-9]){4,28}[a-z0-9]$".r
+  def validateGoogleProjectName(s: String): Future[Unit] = {
+    if(! googleProjectNameRegex.pattern.matcher(s).matches) {
+      val msg = s"Invalid name for Google project. Input must be 6 to 30 lowercase letters, digits, or hyphens. It must start with a letter. Trailing hyphens are prohibited."
+      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest)))
+    } else {
+      Future.successful(())
+    }
+  }
+
+  //See https://cloud.google.com/bigquery/docs/datasets#dataset-naming
+  private lazy val bigQueryDatasetNameRegex = "[A-z0-9_]{1,1024}".r
+  def validateBigQueryDatasetName(s: BigQueryDatasetName): Unit = {
+    if(! bigQueryDatasetNameRegex.pattern.matcher(s.value).matches) {
+      val msg = s"Invalid name for dataset. Input must be between 1 and 1024 characters in length and may only contain alphanumeric characters and underscores."
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
+    }
+  }
+
+  def validateMaxStringLength(str: String, inputName: String, maxLength: Int): Unit = {
+    if(str.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input $inputName. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
   }
 
   def validateAttributeName(an: AttributeName, entityType: String): Unit = {

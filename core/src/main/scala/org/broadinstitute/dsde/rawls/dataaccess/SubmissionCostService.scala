@@ -1,37 +1,40 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.util
-
-import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
-import com.google.api.services.bigquery.model.{GetQueryResultsResponse, QueryParameter, QueryParameterType, QueryParameterValue, TableRow}
+import com.google.api.services.bigquery.model._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.model.GoogleProjectId
+import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 
+import java.util
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 object SubmissionCostService {
-  def constructor(tableName: String, serviceProject: String, billingSearchWindowDays: Int, bigQueryDAO: GoogleBigQueryDAO)(implicit executionContext: ExecutionContext) =
-    new SubmissionCostService(tableName, serviceProject, billingSearchWindowDays, bigQueryDAO)
+  def constructor(defaultTableName: String, serviceProject: String, billingSearchWindowDays: Int, bigQueryDAO: GoogleBigQueryDAO)(implicit executionContext: ExecutionContext) =
+    new SubmissionCostService(defaultTableName, serviceProject, billingSearchWindowDays, bigQueryDAO)
 }
 
-class SubmissionCostService(tableName: String, serviceProject: String, billingSearchWindowDays: Int, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) extends LazyLogging {
+class SubmissionCostService(defaultTableName: String, serviceProject: String, billingSearchWindowDays: Int, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) extends LazyLogging {
 
   val stringParamType = new QueryParameterType().setType("STRING")
 
-  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], workspaceNamespace: String, submissionDate: DateTime, terminalStatusDate: Option[DateTime]): Future[Map[String, Float]] = {
+
+  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], googleProjectId: GoogleProjectId, submissionDate: DateTime, terminalStatusDate: Option[DateTime], tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
+    val tableName = tableNameOpt.getOrElse(defaultTableName)
+
     if( workflowIds.isEmpty ) {
       Future.successful(Map.empty[String, Float])
     } else {
       for {
         //try looking up the workflows via the submission ID.
         //this makes for a smaller query string (though no faster).
-        submissionCosts <- executeSubmissionCostsQuery(submissionId, workspaceNamespace, submissionDate, terminalStatusDate)
+        submissionCosts <- executeSubmissionCostsQuery(submissionId, googleProjectId, submissionDate, terminalStatusDate, tableName)
         //if that doesn't return anything, fall back to
         fallbackCosts <- if (submissionCosts.size() == 0)
-          executeWorkflowCostsQuery(workflowIds, workspaceNamespace, submissionDate, terminalStatusDate)
+          executeWorkflowCostsQuery(workflowIds, googleProjectId, submissionDate, terminalStatusDate, tableName)
         else
           Future.successful(submissionCosts)
       } yield {
@@ -42,10 +45,13 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
 
 
   def getWorkflowCost(workflowId: String,
-                      workspaceNamespace: String,
+                      googleProjectId: GoogleProjectId,
                       submissionDate: DateTime,
-                      terminalStatusDate: Option[DateTime]): Future[Map[String, Float]] = {
-    executeWorkflowCostsQuery(Seq(workflowId), workspaceNamespace, submissionDate, terminalStatusDate) map extractCostResults
+                      terminalStatusDate: Option[DateTime],
+                      tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
+    val tableName = tableNameOpt.getOrElse(defaultTableName)
+
+    executeWorkflowCostsQuery(Seq(workflowId), googleProjectId, submissionDate, terminalStatusDate, tableName) map extractCostResults
   }
 
   /*
@@ -70,20 +76,23 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
       // add a day so we never have to deal with timezones
       .plusDays(1)
       .toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
-    
+
     s"""AND _PARTITIONDATE BETWEEN "$windowStartDate" AND "$windowEndDate""""
   }
 
-  private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String,
-                                          submissionDate: DateTime, terminalStatusDate: Option[DateTime]): Future[util.List[TableRow]] = {
+  private def executeSubmissionCostsQuery(submissionId: String,
+                                          googleProjectId: GoogleProjectId,
+                                          submissionDate: DateTime,
+                                          terminalStatusDate: Option[DateTime],
+                                          tableName: String): Future[util.List[TableRow]] = {
 
     val querySql: String =
-      generateSubmissionCostsQuery(submissionId, submissionDate, terminalStatusDate)
+      generateSubmissionCostsQuery(submissionId, submissionDate, terminalStatusDate, tableName)
 
     val namespaceParam =
       new QueryParameter()
         .setParameterType(stringParamType)
-        .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
+        .setParameterValue(new QueryParameterValue().setValue(googleProjectId.value))
 
     val queryParameters: List[QueryParameter] = List(namespaceParam)
 
@@ -99,20 +108,21 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
    * Queries BigQuery for compute costs associated with the workflowIds.
    */
   private def executeWorkflowCostsQuery(workflowIds: Seq[String],
-                                        workspaceNamespace: String,
+                                        googleProjectId: GoogleProjectId,
                                         submissionDate: DateTime,
-                                        terminalStatusDate: Option[DateTime]): Future[util.List[TableRow]] = {
+                                        terminalStatusDate: Option[DateTime],
+                                        tableName: String): Future[util.List[TableRow]] = {
     workflowIds match {
       case Seq() => Future.successful(Seq.empty.asJava)
       case ids =>
         val subquery = ids.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
         val querySql: String =
-          generateWorkflowCostsQuery(submissionDate, terminalStatusDate, subquery)
+          generateWorkflowCostsQuery(submissionDate, terminalStatusDate, subquery, tableName)
 
         val namespaceParam =
           new QueryParameter()
             .setParameterType(stringParamType)
-            .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
+            .setParameterValue(new QueryParameterValue().setValue(googleProjectId.value))
         val subqueryParams = workflowIds.toList map { workflowId =>
           new QueryParameter()
             .setParameterType(stringParamType)
@@ -130,7 +140,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
     }
   }
 
-  def generateSubmissionCostsQuery(submissionId: String, submissionDate: DateTime, terminalStatusDate: Option[DateTime]): String = {
+  def generateSubmissionCostsQuery(submissionId: String, submissionDate: DateTime, terminalStatusDate: Option[DateTime], tableName: String): String = {
     s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
        |FROM `$tableName` as billing, UNNEST(labels) as wflabels
        |CROSS JOIN UNNEST(billing.labels) as blabels
@@ -141,7 +151,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, billingSe
        |GROUP BY wflabels.key, workflowId""".stripMargin
   }
 
-  def generateWorkflowCostsQuery(submissionDate: DateTime, terminalStatusDate: Option[DateTime], subquery: String): String = {
+  def generateWorkflowCostsQuery(submissionDate: DateTime, terminalStatusDate: Option[DateTime], subquery: String, tableName: String): String = {
     s"""|SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
         |FROM `$tableName`, UNNEST(labels) as labels
         |WHERE project.id = ?

@@ -1,13 +1,16 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.UUID
-
 import cats.effect._
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery.{BigQuery, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, TableResult}
+import com.google.cloud.bigquery.Acl.Entity
+import com.google.cloud.bigquery.Dataset.Builder
+import com.google.cloud.bigquery.{Acl, BigQuery, Dataset, DatasetId, DatasetInfo, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, Table, TableInfo, TableResult}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
@@ -87,15 +90,23 @@ object MockBigQueryServiceFactory {
     lazy val blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)
     implicit val ec = TestExecutionContext.testExecutionContext
 
-    new MockBigQueryServiceFactory(blocker, queryResponse)
+    new MockBigQueryServiceFactory("dummy-credential-path", blocker, queryResponse)
   }
 
 }
 
-class MockBigQueryServiceFactory(blocker: Blocker, queryResponse: Either[Throwable, TableResult])(implicit val executionContext: ExecutionContext)
-  extends GoogleBigQueryServiceFactory(blocker: Blocker)(executionContext: ExecutionContext) {
+class MockBigQueryServiceFactory(credentialPath: String, blocker: Blocker, queryResponse: Either[Throwable, TableResult])(implicit val executionContext: ExecutionContext)
+  extends GoogleBigQueryServiceFactory(credentialPath: String, blocker: Blocker)(executionContext: ExecutionContext) {
 
   override def getServiceForPet(petKey: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
+    Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
+  }
+
+  override def getServiceForProject(projectId: GoogleProjectId): Resource[IO, GoogleBigQueryService[IO]] = {
+    Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
+  }
+
+  override def getServiceFromJson(json: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))
   }
 }
@@ -110,4 +121,53 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
       case Right(results) => IO.pure(results)
     }
   }
+
+  override def createDataset(datasetName: String, labels: Map[String, String], aclBindings: Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]): IO[DatasetId] = {
+    IO.pure(DatasetInfo.newBuilder(datasetName).build().getDatasetId)
+  }
+
+  override def deleteDataset(datasetName: String): IO[Boolean] = IO.pure(true)
+
+  override def getTable(datasetName: String, tableName: String): IO[Option[Table]] = {
+    if(tableName.equals("gcp_billing_export_v1_billing_account_for_google_project_without_table")) IO.none
+    else IO.pure(Some(null))
+    // Note that this Some(null) is intentional. We just need the method
+    // to succeed, and no code actually looks at the contents of this option.
+  }
+
+  override def getDataset(datasetName: String): IO[Option[Dataset]] = {
+    if(datasetName.equals("dataset_does_not_exist")) IO.none
+    else IO.pure(Some(null))
+    // Note that this Some(null) is intentional. We just need the method
+    // to succeed, and no code actually looks at the contents of this option.
+  }
+
+  override def getTable(googleProject: GoogleProject, datasetName: BigQueryDatasetName, tableName: BigQueryTableName): IO[Option[Table]] = {
+    if(tableName.value.equals("gcp_billing_export_v1_billing_account_for_google_project_without_table")) IO.none
+    else IO.pure(Some(null))
+    // Note that this Some(null) is intentional. We just need the method
+    // to succeed, and no code actually looks at the contents of this option.
+  }
+
+  override def getDataset(googleProject: GoogleProject, datasetName: BigQueryDatasetName): IO[Option[Dataset]] = {
+    if(datasetName.value.equals("dataset_does_not_exist")) IO.none
+    else IO.pure(Some(null))
+    // Note that this Some(null) is intentional. We just need the method
+    // to succeed, and no code actually looks at the contents of this option.
+  }
+
+  override def getTable(datasetName: BigQueryDatasetName, tableName: BigQueryTableName): IO[Option[Table]] = {
+    if(tableName.value.equals("gcp_billing_export_v1_billing_account_for_google_project_without_table")) IO.none
+    else IO.pure(Some(null))
+    // Note that this Some(null) is intentional. We just need the method
+    // to succeed, and no code actually looks at the contents of this option.
+  }
+
+  override def getDataset(datasetName: BigQueryDatasetName): IO[Option[Dataset]] = {
+    if(datasetName.value.equals("dataset_does_not_exist")) IO.none
+    else IO.pure(Some(null))
+    // Note that this Some(null) is intentional. We just need the method
+    // to succeed, and no code actually looks at the contents of this option.
+  }
+
 }

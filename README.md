@@ -14,6 +14,7 @@
 
 ## Getting started
 
+
 ```sh
 git clone git@github.com:broadinstitute/rawls.git
 brew install git-secrets # if not already installed
@@ -117,7 +118,12 @@ Supported Scala versions: 2.12, 2.13
 
 Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory. You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
 - [Jenkins runs `publishSnapshot.sh` on every dev build](https://fc-jenkins.dsp-techops.broadinstitute.org/job/rawls-build/), but that makes "unofficial" `-SNAP` versions.
-- Note that you need `ARTIFACTORY_USERNAME` and `ARTIFACTORY_PASSWORD` in your env for either of these to work.
+
+To publish a temporary or test version, use `publishSnapshot.sh` like so:
+
+```sh
+VAULT_TOKEN=$(cat ~/.vault-token) ARTIFACTORY_USERNAME=dsdejenkins ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins) core/src/bin/publishSnapshot.sh
+```
 
 To publish an official release, you can run the following command:
 
@@ -127,4 +133,25 @@ VAULT_TOKEN=$(cat ~/.vault-token) ARTIFACTORY_USERNAME=dsdejenkins ARTIFACTORY_P
 
 You can view what is in the artifactory here: https://broadinstitute.jfrog.io/broadinstitute/webapp/#/home
 
-After publishing, update [model/CHANGELOG.md](model/CHANGELOG.md) properly.
+After publishing:
+* update [model/CHANGELOG.md](model/CHANGELOG.md) properly
+* update the rawls-model dependency in the automation subdirectory, and ensure that sbt project is healthy
+* update the rawls-model dependency in workbench-libs serviceTest, and ensure that sbt project is healthy
+
+
+## Troubleshooting
+
+If you get this error message: `java.lang.IllegalArgumentException: invalid flag: --release`:
+* Run `java -version` and verify that you're running jdk11. If not, you will need to install / update your PATH.
+
+For integration test issues, see [automation/README.md](automation/README.md).
+
+
+## Debugging in Intellij IDEA
+You can attach Intellij's interactive debugger to Rawls running locally in a 
+docker container configured via `run-context/local/scripts/firecloud-setup.sh` in 
+[firecloud-develop](https://github.com/broadinstitute/firecloud-develop/blob/dev/run-context/local/README.md).
+
+Add a "Remote JVM Debug" configuration that attaches to `localhost` on port `25050`.
+See the link below for more detailed steps.
+https://blog.jetbrains.com/idea/2019/04/debug-your-java-applications-in-docker-using-intellij-idea/

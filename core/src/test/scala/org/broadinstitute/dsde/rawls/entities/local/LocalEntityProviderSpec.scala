@@ -1,12 +1,16 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor
+import org.scalatest.RecoverMethods.recoverToExceptionIf
+import org.scalatest.concurrent.ScalaFutures
 
 import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext
@@ -14,9 +18,9 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.sql.Timestamp
-import java.util.UUID
+import java.time.Instant
 
-class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDriverComponent with MethodConfigTestSupport {
+class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFutures with TestDriverComponent with MethodConfigTestSupport {
   import driver.api._
 
   val testConf = ConfigFactory.load()
@@ -151,7 +155,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
@@ -170,7 +174,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
@@ -189,7 +193,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false)))
 
@@ -208,7 +212,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, false)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(workspaceQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(true)))
 
@@ -221,6 +225,228 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
 
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
+
+    "consider cache out of date if no cache record" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be out of date") {
+        assert(!isCurrent)
+      }
+    }
+
+    "consider cache out of date if cache record exists but is old" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+      val wsLastModifiedTimestamp = Timestamp.from(Instant.ofEpochMilli(localEntityProviderTestData.workspace.lastModified.getMillis-10000))
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      // update cache timestamp
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, wsLastModifiedTimestamp))
+
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be out of date") {
+        assert(!isCurrent)
+      }
+    }
+
+    "consider cache to be current if cache record exists and is equal to workspace last-modified" in withLocalEntityProviderTestDatabase { da =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      val existingWorkspace = runAndWait(workspaceQuery.findById(wsid.toString))
+      existingWorkspace should not be empty
+      val wsLastModifiedTimestamp = new Timestamp(existingWorkspace.get.lastModified.getMillis)
+
+      // update cache timestamp
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, wsLastModifiedTimestamp))
+
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be current") {
+        assert(isCurrent)
+      }
+    }
+
+    "insert cache record when updating if non-existent" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+      val expectedTimestamp = Timestamp.from(Instant.now())
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      // update cache timestamp
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, expectedTimestamp))
+
+      withClue("cache record should exist after updating") {
+        assert(runAndWait(workspaceFilter.exists.result))
+      }
+
+      val actualTimestamp = runAndWait(uniqueResult(workspaceFilter.map(_.entityCacheLastUpdated).result))
+
+      withClue("actual timestamp should match expected timestamp after updating") {
+        actualTimestamp should contain(expectedTimestamp)
+      }
+    }
+
+    "update cache record when updating if existent" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+
+      val firstTimestamp = Timestamp.valueOf("2000-01-01 12:34:56")
+      val secondTimestamp = Timestamp.valueOf("2020-09-09 01:23:45")
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      // update cache timestamp - should cause insert
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, firstTimestamp))
+
+      withClue("cache record should exist after updating") {
+        assert(runAndWait(workspaceFilter.exists.result))
+      }
+
+      val actualTimestamp = runAndWait(uniqueResult(workspaceFilter.map(_.entityCacheLastUpdated).result))
+
+      withClue("actual timestamp should match expected timestamp after updating") {
+        actualTimestamp should contain(firstTimestamp)
+      }
+
+      // update cache timestamp - should cause update
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, secondTimestamp))
+      val actualUpdatedTimestamp = runAndWait(uniqueResult(workspaceFilter.map(_.entityCacheLastUpdated).result))
+
+      withClue("actual timestamp should match expected timestamp after second update") {
+        actualUpdatedTimestamp should contain(secondTimestamp)
+      }
+    }
+
+    "nullify error message if cache update succeeds after previous failure" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+      val expectedErrorMsg = "intentional error message"
+
+      // save a cache entry that includes a failure
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, EntityStatisticsCacheMonitor.MIN_CACHE_TIME, Some(expectedErrorMsg)))
+
+      val actualMessage = runAndWait(uniqueResult[Option[String]](workspaceFilter.map(_.errorMessage))).flatten
+      actualMessage should contain(expectedErrorMsg)
+
+      // save a cache entry that is successful
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, Timestamp.from(Instant.now())))
+
+      val secondMessage = runAndWait(uniqueResult[Option[String]](workspaceFilter.map(_.errorMessage))).flatten
+      secondMessage shouldBe empty
+    }
+
+
+    "return helpful error message when upserting case-divergent entity names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // create the first entity with name "myname"
+      val entity1 = Entity("myname", "casetest", Map())
+      val created1 = localEntityProvider.createEntity(entity1).futureValue
+      created1 shouldBe entity1
+
+      // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
+      val entity2 = Entity("MyName", "casetest", Map())
+      val ex = recoverToExceptionIf[Exception] {
+        localEntityProvider.createEntity(entity2)
+      }.futureValue
+
+      ex match {
+        case er:RawlsExceptionWithErrorReport =>
+          val expectedMessage = s"${entity2.entityType} ${entity2.name} already exists in ${workspaceContext.toWorkspaceName}"
+          er.errorReport.message shouldBe expectedMessage
+        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+      }
+    }
+
+    "return helpful error message when upserting case-divergent entity names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // create the first entity with name "myname"
+      val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
+      val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
+      created1.size shouldBe 1
+
+      // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
+      val upsert2 = Seq(EntityUpdateDefinition("MyName", "casetest", Seq()))
+      val ex = recoverToExceptionIf[Exception] {
+        localEntityProvider.batchUpsertEntities(upsert2)
+      }.futureValue
+
+      ex match {
+        case er:RawlsExceptionWithErrorReport =>
+          val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities."
+          er.errorReport.message shouldBe expectedMessage
+        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+      }
+    }
+
+    "return helpful error message when upserting case-divergent type names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // create the first entity with type "casetest"
+      val entity1 = Entity("myname", "casetest", Map())
+      val created1 = localEntityProvider.createEntity(entity1).futureValue
+      created1 shouldBe entity1
+
+      // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
+      val entity2 = Entity("myname", "CaseTest", Map())
+      val ex = recoverToExceptionIf[Exception] {
+        localEntityProvider.createEntity(entity2)
+      }.futureValue
+
+      ex match {
+        case er:RawlsExceptionWithErrorReport =>
+          val expectedMessage = s"${entity2.entityType} ${entity2.name} already exists in ${workspaceContext.toWorkspaceName}"
+          er.errorReport.message shouldBe expectedMessage
+        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+      }
+    }
+
+    "return helpful error message when upserting case-divergent type names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // create the first entity with type "casetest"
+      val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
+      val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
+      created1.size shouldBe 1
+
+      // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
+      val upsert2 = Seq(EntityUpdateDefinition("myname", "CaseTest", Seq()))
+      val ex = recoverToExceptionIf[Exception] {
+        localEntityProvider.batchUpsertEntities(upsert2)
+      }.futureValue
+
+      ex match {
+        case er:RawlsExceptionWithErrorReport =>
+          val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities."
+          er.errorReport.message shouldBe expectedMessage
+        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+      }
+    }
+
+
 
   }
 }

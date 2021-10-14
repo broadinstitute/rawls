@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -17,11 +18,16 @@ import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.model.headers._
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
+import com.google.api.services.cloudresourcemanager.model.Project
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import spray.json.{JsObject, enrichAny}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -91,7 +97,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   def withApiServicesMockitoSam[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
+    val apiService = new TestApiService(dataSource, user, spy(new MockGoogleServicesDAO("test")), new MockGooglePubSubDAO) {
       override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     }
     try {
@@ -147,6 +153,24 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   def withTestDataApiServicesCustomizableMockSam[T](testCode: TestApiServiceCustomizableMockSam => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServicesCustomizableMockSam(dataSource)(testCode)
+    }
+  }
+
+  def withEmptyDatabaseAndApiServices[T](testCode: TestApiService =>  T): T = {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
+  def withApiServicesMockitoGcsDao[T](testCode: TestApiService => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource => {
+      val apiService = new TestApiService(dataSource, testData.userProjectOwner.userEmail.value, mock[MockGoogleServicesDAO](RETURNS_SMART_NULLS), new MockGooglePubSubDAO)
+      try {
+        testCode(apiService)
+      } finally {
+        apiService.cleanupSupervisor
+      }
+    }
     }
   }
 
@@ -212,8 +236,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
 
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspace2),
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(workspace2),
 
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
@@ -277,29 +301,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           header("Location")
         }
       }
-  }
-
-  it should "return 400 for post to workspaces with not ready project" in withTestDataApiServices { services =>
-    val newWorkspace = WorkspaceRequest(
-      namespace = testData.billingProject.projectName.value,
-      name = "newWorkspace",
-      Map.empty
-    )
-
-    Seq(CreationStatuses.Creating, CreationStatuses.Error).foreach { projectStatus =>
-      runAndWait(rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.billingProject.copy(status = projectStatus))))
-
-      Post(s"/workspaces", httpJson(newWorkspace)) ~>
-        sealRoute(services.workspaceRoutes) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
-          assertResult(None) {
-            header("Location")
-          }
-        }
-    }
   }
 
   it should "return 403 on create workspace with invalid-namespace attributes" in withTestDataApiServices { services =>
@@ -395,7 +396,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       _ <- services.samDAO.registerUser(toUserInfo(testData.userProjectOwner))
 
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.billingProject, workspace.namespace, SamBillingProjectPolicyNames.owner,
-        SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamBillingProjectActions.createWorkspace), Set(SamProjectRoles.owner)), userInfo)
+        SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamBillingProjectActions.createWorkspace), Set(SamBillingProjectRoles.owner)), userInfo)
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.reader,
         SamPolicy(Set(WorkbenchEmail(testData.userProjectOwner.userEmail.value)), Set(SamWorkspaceActions.read), Set(SamWorkspaceRoles.reader)), userInfo)
 
@@ -445,7 +446,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(testData.billingProject.projectName.value),
       any[UserInfo]
-    )).thenReturn(Future.successful(Set[SamResourceRole](SamProjectRoles.workspaceCreator, SamProjectRoles.batchComputeUser)))
+    )).thenReturn(Future.successful(Set[SamResourceRole](SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.batchComputeUser)))
 
     // User has BP user permissions and therefore can create workspaces
     when(services.samDAO.userHasAction(
@@ -600,6 +601,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       any[UserInfo]
     )).thenReturn(Future.successful(()))
 
+    // mocking for deleting a google project
+    val petSAJson = "petJson"
+    val googleProjectId = testData.workspace.googleProjectId
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
+    when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+    when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))))
+    when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(Future.successful()) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+    when(services.samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful())
+
     Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -619,6 +629,94 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
       any[UserInfo]
     )
+  }
+
+  it should "delete the google project in the workspace when deleting a workspace" in withTestDataApiServicesMockitoSam { services =>
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      ArgumentMatchers.eq(SamWorkspaceActions.delete),
+      any[UserInfo]
+    )).thenReturn(Future.successful(true))
+
+    when(services.samDAO.deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      any[UserInfo]
+    )).thenReturn(Future.successful(()))
+
+    when(services.samDAO.deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
+      ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
+      any[UserInfo]
+    )).thenReturn(Future.successful(()))
+
+    // mocking for deleting a google project
+    val petSAJson = "petJson"
+    val googleProjectId = testData.workspace.googleProjectId
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
+    when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+    when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))))
+    when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(Future.successful()) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+    when(services.samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful())
+
+    Delete(testData.workspace.path) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, responseAs[String]) {
+          status
+        }
+      }
+
+    verify(services.samDAO).deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+      ArgumentMatchers.eq(googleProjectId.value),
+      any[UserInfo]
+    )
+    verify(services.gcsDAO).deleteGoogleProject(ArgumentMatchers.eq(googleProjectId))
+  }
+
+  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
+  it should "delete a v1 workspace" in withEmptyDatabaseAndApiServices { services =>
+
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("v1-test-ns"), CreationStatuses.Ready, None, None)
+    val v1Workspace = new Workspace(
+      billingProject.projectName.value,
+      "myWorkspaceV1",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "test",
+      Map.empty,
+      false,
+      WorkspaceVersions.V1,
+      GoogleProjectId("googleprojectid"),
+      Option(GoogleProjectNumber("googleProjectNumber")),
+      Option(RawlsBillingAccountName("fakeBillingAcct")),
+      None,
+      Option(currentTime())
+    )
+
+    runAndWait(
+      DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject),
+        workspaceQuery.createOrUpdate(v1Workspace),
+      )
+    )
+
+    Delete(v1Workspace.path) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, responseAs[String]) {
+          status
+        }
+      }
+
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(v1Workspace.toWorkspaceName))
+    }
   }
 
   // see also WorkspaceApiListOptionsSpec for tests against list-workspaces that use the ?fields query param
@@ -777,7 +875,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       name = "newWorkspace",
       attributes = Map.empty,
       authorizationDomain = None,
-      bucketLocation = Option("US")
+      bucketLocation = Option("EU")
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
@@ -785,7 +883,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         val errorText = responseAs[ErrorReport].message
         assert(status == StatusCodes.BadRequest)
-        assert(errorText.contains("Workspace bucket location must be a single (not multi-) region of format: [A-Za-z]+-[A-Za-z]+[0-9]+"))
+        assert(errorText.contains("Workspace bucket location must be a single region of format: [A-Za-z]+-[A-Za-z]+[0-9]+ or the default bucket location ('US')."))
+      }
+  }
+
+  it should "return 201 if the bucket location requested is the default bucket location" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      attributes = Map.empty,
+      authorizationDomain = None,
+      bucketLocation = Option("US")
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assert(status == StatusCodes.Created)
       }
   }
 
@@ -953,7 +1067,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "return 201 on clone workspace with existing library-namespace attributes" in withTestDataApiServices { services =>
 
     val updatedWorkspace = testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo")))
-    runAndWait(workspaceQuery.save(updatedWorkspace))
+    runAndWait(workspaceQuery.createOrUpdate(updatedWorkspace))
 
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
@@ -1094,7 +1208,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(testData.billingProject.projectName.value),
       any[UserInfo]
-    )).thenReturn(Future.successful(Set[SamResourceRole](SamProjectRoles.workspaceCreator, SamProjectRoles.batchComputeUser)))
+    )).thenReturn(Future.successful(Set[SamResourceRole](SamBillingProjectRoles.workspaceCreator, SamBillingProjectRoles.batchComputeUser)))
 
     // User has BP user permissions and therefore can create workspaces
     when(services.samDAO.userHasAction(
@@ -1127,6 +1241,87 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(None) {
           header("Location")
         }
+      }
+  }
+
+
+  it should "clone workspace use different bucket location if bucketLocation is in request" in withApiServicesMockitoGcsDao { services =>
+    val newBucketLocation = Option("us-terra1");
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = newBucketLocation)
+
+    // mock(ito) out the workspace creation
+    when(services.gcsDAO.testDMBillingAccountAccess(any[RawlsBillingAccountName])).thenReturn(Future.successful(true))
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), Option(any[RawlsBillingAccountName])))
+      .thenReturn(Future.successful(new ProjectBillingInfo().setBillingAccountName(testData.workspace.currentBillingAccountOnGoogleProject.map(_.value).getOrElse("")).setProjectId(testData.workspace.googleProjectId.value)))
+    when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
+    when(services.gcsDAO.labelSafeMap(any[Map[String, String]], any[String])).thenReturn(Map.empty[String, String])
+    when(services.gcsDAO.updateGoogleProject(any[GoogleProjectId], any[Project])).thenReturn(Future.successful(new Project()))
+    when(services.gcsDAO.removePolicyBindings(any[GoogleProjectId], any[Map[String, Set[String]]])).thenReturn(Future.successful(true))
+    when(services.gcsDAO.getGoogleProjectNumber(any[Project])).thenReturn(GoogleProjectNumber("GoogleProjectNumber"))
+
+    when(services.gcsDAO.setupWorkspace(
+      any[UserInfo],
+      ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
+      any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
+      any[String],
+      any[Map[String, String]],
+      any[Span],
+      ArgumentMatchers.eq(newBucketLocation)))
+      .thenReturn(Future.successful(mock[GoogleWorkspaceInfo]))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          assert(copiedWorkspace.attributes == testData.workspace.attributes)
+
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
+            }
+          }
+          verify(services.gcsDAO).setupWorkspace(
+            any[UserInfo],
+            ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
+            any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
+            any[String],
+            any[Map[String, String]],
+            any[Span],
+            ArgumentMatchers.eq(newBucketLocation))
+        }
+
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "return 201 if the cloned bucket location requested is the default bucket location" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("US"))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assert(status == StatusCodes.Created)
+      }
+  }
+
+  it should "return 400 if the cloned bucket location requested is in an invalid format" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, bucketLocation = Option("EU"))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        val errorText = responseAs[ErrorReport].message
+        assert(status == StatusCodes.BadRequest)
+        assert(errorText.contains("Workspace bucket location must be a single region of format: [A-Za-z]+-[A-Za-z]+[0-9]+ or the default bucket location ('US')."))
       }
   }
 
@@ -1483,11 +1678,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServicesMockitoSam { services =>
+    val billingProjectName = testData.wsName.namespace.value
     when(services.samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
-    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, "no_access", SamBillingProjectActions.createWorkspace, userInfo)).thenReturn(Future.successful(false))
+    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, billingProjectName, SamBillingProjectActions.createWorkspace, userInfo)).thenReturn(Future.successful(false))
 
     val newWorkspace = WorkspaceRequest(
-      namespace = "no_access",
+      namespace = billingProjectName,
       name = "newWorkspace",
       Map.empty
     )
@@ -1495,7 +1691,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.Forbidden, responseAs[String]) {
           status
         }
       }
@@ -1584,8 +1780,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   private def createSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
-                                         submissionEntity: Entity, submissionExpression: Option[String],
-                                         services: TestApiService, exectedStatus: StatusCode): Unit = {
+                               submissionEntity: Entity, submissionExpression: Option[String],
+                               services: TestApiService, expectedStatus: StatusCode, userComment: Option[String] = None): Option[String] = {
 
     Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -1605,8 +1801,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
-
     val submissionRq = SubmissionRequest(
       methodConfigurationNamespace = methodConf.namespace,
       methodConfigurationName = methodConf.name,
@@ -1615,14 +1809,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       expression = submissionExpression,
       useCallCache = false,
       deleteIntermediateOutputFiles = false,
-      workflowFailureMode = None
+      workflowFailureMode = None,
+      userComment = userComment
     )
     Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
       sealRoute(services.submissionRoutes) ~>
       check {
-        assertResult(exectedStatus, responseAs[String]) {
+        assertResult(expectedStatus, responseAs[String]) {
           status
         }
+        if (expectedStatus == StatusCodes.Created) {
+          val response = responseAs[SubmissionReport]
+          Option(response.submissionId)
+        }
+        else None
       }
   }
 
@@ -1640,5 +1840,46 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "fail when user with only read access to workspace tries to edit comments" in {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      // mock service for user that has owner access to workspace
+      withApiServicesSecure(dataSource) { servicesForOwner =>
+        // mock service for user that has only read access to the same workspace
+        withApiServicesSecure(dataSource, testData.userReader.userEmail.value) { servicesForReader =>
+          val wsName = testData.wsName
+          val userComment = Option("Comment for submission by workspace owner")
+          val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+
+          // submission created by user with owner access
+          val submissionId = createSubmission(wsName, agoraMethodConf, testData.sample1, None, servicesForOwner, StatusCodes.Created, userComment).get
+
+          // user with read access to workspace should be able to get submission details and read the user comment
+          Get(s"${wsName.path}/submissions/$submissionId") ~>
+            sealRoute(servicesForReader.submissionRoutes) ~>
+            check {
+              assertResult(StatusCodes.OK) {
+                status
+              }
+              val response = responseAs[Submission]
+              response.userComment shouldBe Option("Comment for submission by workspace owner")
+            }
+
+          // user with read access should not be able to update the submission comment
+          Patch(
+            s"${wsName.path}/submissions/$submissionId",
+            JsObject(
+              List("userComment" -> "user comment updated".toJson): _*
+            )
+          ) ~>
+            sealRoute(servicesForReader.submissionRoutes) ~>
+            check {
+              val response = responseAs[String]
+              status should be(StatusCodes.Forbidden)
+              response should include ("insufficient permissions to perform operation on myNamespace/myWorkspace")
+            }
+        }
+      }
+    }
+  }
 }
 

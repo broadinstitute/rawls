@@ -126,7 +126,7 @@ class PetSASpec extends ApiServiceSpec {
     override def save() = {
       DBIO.seq(
         rawlsBillingProjectQuery.create(billingProject),
-        workspaceQuery.save(workspace)
+        workspaceQuery.createOrUpdate(workspace)
       )
     }
   }

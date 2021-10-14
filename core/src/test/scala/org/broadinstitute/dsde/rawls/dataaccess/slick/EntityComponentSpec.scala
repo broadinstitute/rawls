@@ -28,7 +28,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   "EntityComponent" should "crud entities" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     val workspaceContext = workspace
 
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
@@ -332,7 +332,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "list all entity types with their namespaced attribute names" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     val workspaceContext = workspace
 
     // this entity also tests that namespaced and default attributes of the same name are tracked separately
@@ -457,7 +457,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     override def save() = {
       DBIOAction.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         entityQuery.save(workspace, aliquot1),
         entityQuery.save(workspace, sample1))
     }
@@ -520,7 +520,36 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "update an entity's attributes many times concurrently" in withDefaultTestDatabase {
+  it should "update a workspace's lastModified date when saving an entity" in withDefaultTestDatabase {
+
+    withWorkspaceContext(testData.workspace) { context =>
+
+      // get the workspace prior to saving the entity
+      val workspaceBefore = runAndWait(workspaceQuery.findById(context.workspaceId))
+        .getOrElse(fail(s"could not retrieve workspace ${context.workspaceId} before saving entity"))
+
+      // save the entity, assert it saved correctly
+      val pair2 = Entity("pair2", "Pair",
+        Map(
+          AttributeName.withDefaultNS("case") -> AttributeEntityReference("Sample", "sample3"),
+          AttributeName.withDefaultNS("control") -> AttributeEntityReference("Sample", "sample1")))
+      runAndWait(entityQuery.save(context, pair2))
+      assert {
+        runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
+      }
+
+      // get the workspace after to saving the entity
+      val workspaceAfter = runAndWait(workspaceQuery.findById(context.workspaceId))
+        .getOrElse(fail(s"could not retrieve workspace ${context.workspaceId} after saving entity"))
+
+      assert(workspaceAfter.lastModified.isAfter(workspaceBefore.lastModified),
+        s"workspace lastModified of ${workspaceAfter.lastModified} should be after lastModified of ${workspaceBefore.lastModified}, " +
+          s"since we saved an entity to that workspace.")
+    }
+
+  }
+
+  it should "not re-update an entity's attributes over many writes if attribute do not change" in withDefaultTestDatabase {
     val pair2 = Entity("pair2", "Pair",
       Map(
         AttributeName.withDefaultNS("case") -> AttributeEntityReference("Sample", "sample3"),
@@ -539,9 +568,46 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       assert {
         runAndWait(entityQuery.get(testData.workspace, "Pair", "pair2")).isDefined
       }
-      assertResult(count+1) {
+      assertResult(0) { // the additional writes should not increment this entity's version
         runAndWait(entityQuery.findEntityByName(testData.workspace.workspaceIdAsUUID, "Pair", "pair2").map(_.version).result).head
       }
+    }
+  }
+
+  it should "update an entity's attributes many times concurrently if attributes change" in withDefaultTestDatabase {
+    def makeEntity(idx: Int): Entity = {
+      Entity("some-sample", "Sample",
+        Map(
+          AttributeName.withDefaultNS("indexValue") -> AttributeString(s"index-$idx")
+        )
+      )
+    }
+
+    withWorkspaceContext(testData.workspace) { context =>
+      runAndWait(entityQuery.save(context, makeEntity(0)))
+
+      // did we save the entity?
+      // did we populate its all_attribute_values?
+      val entityWithAllAttrs = runAndWait(entityQueryWithInlineAttributes.findEntityByName(testData.workspace.workspaceIdAsUUID, "Sample", "some-sample").result)
+      entityWithAllAttrs should have length 1
+      entityWithAllAttrs.head.recordVersion shouldBe 0
+      entityWithAllAttrs.head.allAttributeValues should not be empty
+      entityWithAllAttrs.head.allAttributeValues.get should include ("index-0")
+    }
+
+    withWorkspaceContext(testData.workspace) { context =>
+      val count = 20
+      (1 to count) foreach { idx =>
+        runAndWait(entityQuery.save(context, makeEntity(idx)))
+      }
+
+      // did we update the record versions and populate its all_attribute_values?
+      val entityWithAllAttrs = runAndWait(entityQueryWithInlineAttributes.findEntityByName(testData.workspace.workspaceIdAsUUID, "Sample", "some-sample").result)
+      entityWithAllAttrs should have length 1
+      entityWithAllAttrs.head.recordVersion shouldBe count
+      entityWithAllAttrs.head.allAttributeValues should not be empty
+      entityWithAllAttrs.head.allAttributeValues.get should not be empty
+      entityWithAllAttrs.head.allAttributeValues.get should include ("index-20") // we should have updated to the newest value
     }
   }
 
@@ -575,8 +641,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val c2 = Entity("c2", "samples", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("cycle2") -> AttributeEntityReference("samples", "c3")))
       val c3 = Entity("c3", "samples", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3)))
 
-      runAndWait(workspaceQuery.save(workspaceOriginal))
-      runAndWait(workspaceQuery.save(workspaceClone))
+      runAndWait(workspaceQuery.createOrUpdate(workspaceOriginal))
+      runAndWait(workspaceQuery.createOrUpdate(workspaceClone))
 
       withWorkspaceContext(workspaceOriginal) { originalContext =>
         withWorkspaceContext(workspaceClone) { cloneContext =>
@@ -757,7 +823,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   )
 
   it should "copy entities without a conflict" in withDefaultTestDatabase {
-    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
     withWorkspaceContext(testData.workspace) { context1 =>
       withWorkspaceContext(workspace2) { context2 =>
         runAndWait(entityQuery.save(context2, x2))
@@ -784,7 +850,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "copy entities without a conflict with a cycle" in withDefaultTestDatabase {
 
-    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
     withWorkspaceContext(testData.workspace) { context1 =>
       withWorkspaceContext(workspace2) { context2 =>
         val a = Entity("a", "test", Map.empty)
@@ -841,8 +907,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "copy entities with a conflict in the entity subtrees and properly link already existing entities" in withDefaultTestDatabase {
 
-    runAndWait(workspaceQuery.save(workspace2))
-    runAndWait(workspaceQuery.save(workspace3))
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
+    runAndWait(workspaceQuery.createOrUpdate(workspace3))
     withWorkspaceContext(workspace2) { context2 =>
       withWorkspaceContext(workspace3) { context3 =>
         val participant1 = Entity("participant1", "participant", Map.empty)
@@ -915,7 +981,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "save a new entity with the same name as a deleted entity" in withDefaultTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", Some("workflow-collection"), currentTime(), currentTime(), "me", Map.empty, false)
-    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
     val workspaceContext = workspace
 
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
@@ -1082,6 +1148,82 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       val updatedResult = runAndWait(entityQuery.get(wsctx, entityToSave.entityType, entityToSave.name))
       assert(updatedResult.get.attributes.isEmpty)
+    }
+  }
+
+  private def caseSensitivityFixtures(context: Workspace) = {
+    val entitiesToSave = Seq(
+      Entity("name-1", "mytype", Map(
+        AttributeName.withDefaultNS("case") -> AttributeString("value1"),
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name-2", "mytype", Map(
+        AttributeName.withDefaultNS("CASE") -> AttributeString("value2"),
+        AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+      Entity("name-3", "mytype", Map(
+        AttributeName.withDefaultNS("case") -> AttributeString("value3"),
+        AttributeName.withDefaultNS("CASE") -> AttributeString("value4"))),
+
+      Entity("name-4", "anothertype", Map(AttributeName.withDefaultNS("case") -> AttributeString("value5"))),
+      Entity("name-5", "anothertype", Map(AttributeName.withDefaultNS("CASE") -> AttributeString("value6"))),
+    )
+    runAndWait(entityQuery.save(context, entitiesToSave))
+
+    assume(runAndWait(entityQuery.listEntities(context)).size == 5, "filteredCount tests did not set up fixtures correctly")
+
+  }
+
+  // following set of filteredCount tests all use the same entity fixtures on top of an empty workspace
+  val emptyWorkspace = new EmptyWorkspace
+
+
+  List("mytype", "anothertype") foreach { typeName =>
+    List("name", "case", "CASE") foreach { sortKey =>
+      List(SortDirections.Ascending, SortDirections.Descending) foreach { sortDir =>
+        it should s"return filteredCount == unfilteredCount if no filter terms, type=[$typeName], sortKey=[$sortKey], sortDir=[$sortDir]" in withCustomTestDatabase(emptyWorkspace) { _ =>
+          withWorkspaceContext(emptyWorkspace.workspace) { context =>
+            caseSensitivityFixtures(context)
+
+            assume(runAndWait(entityQuery.listEntities(context)).size == 5, "filteredCount tests did not set up fixtures correctly, within first test")
+            val unfilteredQuery = EntityQuery(1, 1, sortKey, sortDir, None)
+            val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, unfilteredQuery))
+            pageResult._2 should be > 0
+            pageResult._2 shouldBe pageResult._1
+          }
+        }
+      }
+    }
+  }
+
+  val filterFixtures = Map(
+    "mytype" -> Map(
+      "bar" -> 2,
+      "value1" -> 1,
+      "value" -> 3,
+      "nonexistent" -> 0),
+    "anothertype" -> Map(
+      "value5" -> 1,
+      "value" -> 2,
+      "alsononexistent" -> 0)
+  )
+
+  filterFixtures foreach { typeFixtures =>
+    val typeName = typeFixtures._1
+    val typeTests = typeFixtures._2
+    typeTests foreach { test =>
+      val filterTerm = test._1
+      val expectedCount = test._2
+      List("name", "case", "CASE") foreach { sortKey =>
+        List(SortDirections.Ascending, SortDirections.Descending) foreach { sortDir =>
+          it should s"return expected count ($expectedCount) for type=[$typeName], sortKey=[$sortKey], sortDir=[$sortDir], term [$filterTerm]" in withCustomTestDatabase(emptyWorkspace) { _ =>
+            withWorkspaceContext(emptyWorkspace.workspace) { context =>
+              caseSensitivityFixtures(context)
+              val filterQuery = EntityQuery(1, 1, sortKey, sortDir, Some(filterTerm))
+              val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, filterQuery))
+              pageResult._2 shouldBe expectedCount
+            }
+          }
+        }
+      }
     }
   }
 

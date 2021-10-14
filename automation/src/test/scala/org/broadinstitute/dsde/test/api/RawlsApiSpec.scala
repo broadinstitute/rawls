@@ -4,7 +4,6 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.Blocker
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.auth.AuthToken
@@ -167,7 +166,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -258,6 +259,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
+            val start = System.currentTimeMillis()
+
             val submissionId = Rawls.submissions.launchWorkflow(
               projectName,
               workspaceName,
@@ -267,13 +270,20 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
-            // clean up: Abort submission
+
+            logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
+
+            // Clean up: Abort submission. This doesn't abort the submission immediately, but only registers it to be aborted
+            // as part of clean up process. Once the test finishes (or times out), an abort request is sent to Cromwell to undo any
+            // side effects of the test. If the workflow has reached terminal state, Cromwell will return 404 for the abort request
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             // may need to wait for Cromwell to start processing workflows
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(20, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             // Get workflow ID from submission details
@@ -302,6 +312,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
+            logger.info(s"Submission in $projectName/$workspaceName/$submissionId returned root workflow ID: $rootWorkflowId " +
+              s"and sub-workflow IDs: ${subWorkflowIds.mkString(",")}")
+
             // Get the sub-workflows call metadata once they finish running
             val subWorkflowCallMetadata: List[JsonNode] = eventually {
               val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
@@ -311,6 +324,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
               subWorkflowCallMetadata
             }
+
+            val finish = System.currentTimeMillis()
+            logger.info(s"All sub-workflows in submission $projectName/$workspaceName/$submissionId have finished execution after ${finish - start} milliseconds")
 
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
@@ -357,6 +373,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
+            val start = System.currentTimeMillis()
+
             val submissionId = Rawls.submissions.launchWorkflow(
               projectName,
               workspaceName,
@@ -366,13 +384,20 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
-            // clean up: Abort submission
+
+            logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
+
+            // Clean up: Abort submission. This doesn't abort the submission immediately, but only registers it to be aborted
+            // as part of clean up process. Once the test finishes (or times out), an abort request is sent to Cromwell to undo any
+            // side effects of the test. If the workflow has reached terminal state, Cromwell will return 404 for the abort request
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             // may need to wait for Cromwell to start processing workflows
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(20, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             // Get workflow ID from submission details
@@ -401,6 +426,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               }
             }
 
+            logger.info(s"Submission in $projectName/$workspaceName/$submissionId returned root workflow ID: $rootWorkflowId " +
+              s"and sub-workflow IDs: ${subWorkflowIds.mkString(",")}")
+
             // Get the sub-workflows call metadata once they finish running
             val subWorkflowCallMetadata = eventually {
               val subWorkflowsMetadata = subWorkflowIds map { Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, _) }
@@ -410,6 +438,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
               subWorkflowCallMetadata
             }
+
+            val finish = System.currentTimeMillis()
+            logger.info(s"All sub-workflows in submission $projectName/$workspaceName/$submissionId have finished execution after ${finish - start} milliseconds")
 
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
@@ -603,7 +634,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     }
 
     "should clone a workspace and only copy files in the specified path" in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
       implicit val token: AuthToken = studentAToken
 
       withCleanBillingProject(studentA) { projectName =>
@@ -679,7 +710,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               SingleParticipant.entityId,
               "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -837,6 +870,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               expression = "this",
               useCallCache = false,
               deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
 
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -921,6 +956,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
                   expression = "this",
                   useCallCache = false,
                   deleteIntermediateOutputFiles = false,
+                  useReferenceDisks = false,
+                  memoryRetryMultiplier = 1.0
                 )
               )
 
@@ -955,9 +992,11 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
   private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, Set[String])] = {
-    GoogleStorageService.resource(
-      RawlsConfig.pathToQAJson,
-      Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global)
+    import cats.effect.IO
+    import cats.effect.unsafe.implicits.global
+
+    GoogleStorageService.resource[IO](
+      RawlsConfig.pathToQAJson
     ).use {
       storage =>
         for {

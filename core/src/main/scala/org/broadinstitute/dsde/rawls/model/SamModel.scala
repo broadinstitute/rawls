@@ -37,7 +37,7 @@ object SamWorkspaceRoles {
   val canCatalog = SamResourceRole("can-catalog")
 }
 
-object SamProjectRoles {
+object SamBillingProjectRoles {
   val workspaceCreator = SamResourceRole("workspace-creator")
   val batchComputeUser = SamResourceRole("batch-compute-user")
   val notebookUser = SamResourceRole("notebook-user")
@@ -73,6 +73,9 @@ object SamBillingProjectActions {
   val alterPolicies = SamResourceAction("alter_policies")
   val readPolicies = SamResourceAction("read_policies")
   val addToServicePerimeter = SamResourceAction("add_to_service_perimeter")
+  val alterSpendReportConfiguration = SamResourceAction("alter_spend_report_configuration")
+  val readSpendReportConfiguration = SamResourceAction("read_spend_report_configuration")
+  val updateBillingAccount = SamResourceAction("update_billing_account")
   val deleteBillingProject = SamResourceAction("delete")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
 }

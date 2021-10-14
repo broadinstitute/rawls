@@ -53,7 +53,9 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
               entityName = "participant1",
               expression = "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
           )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
@@ -87,7 +89,9 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             entityName = "participant1",
             expression = "this",
             useCallCache = false,
-            deleteIntermediateOutputFiles = false
+            deleteIntermediateOutputFiles = false,
+            useReferenceDisks = false,
+            memoryRetryMultiplier = 1.0
           )
 
           // make sure the submission has not errored out
@@ -138,7 +142,9 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
             entityName = "participant1",
             expression = "this",
             useCallCache = false,
-            deleteIntermediateOutputFiles = false
+            deleteIntermediateOutputFiles = false,
+            useReferenceDisks = false,
+            memoryRetryMultiplier = 1.0
           )(ownerAuthToken)
 
           val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
@@ -182,7 +188,9 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
               entityName = "participant1",
               expression = "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
           )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)") shouldBe true
@@ -221,7 +229,9 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
               entityName = "participantSet1",
               expression = "this",
               useCallCache = false,
-              deleteIntermediateOutputFiles = false
+              deleteIntermediateOutputFiles = false,
+              useReferenceDisks = false,
+              memoryRetryMultiplier = 1.0
             )
           )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true

@@ -77,4 +77,19 @@
     <include file="changesets/20201105_add_use_reference_disks.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20210111_retroactive_default_cromwell_backend_per_project.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20210129_add_entity_statistics_cache_tables.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210407_add_entity_attr_temp_table_procedure.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210524_add_memory_retry_multiplier.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210609_add_workspace_attr_temp_table_procedure.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210609_change_workspace_attr_temp_owner_id.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210510_add_billing_project_export_columns.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210712_add_user_comment_in_submission.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20201106_workspace_google_project_columns.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20201113_add_billing_account_workspace.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210430_add_workspace_billing_account_error_message.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210524_add_memory_retry_multiplier.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210609_add_workspace_attr_temp_table_procedure.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210609_change_workspace_attr_temp_owner_id.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210510_add_billing_project_export_columns.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210915_create_entity_cache_table.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210916_clone_workspace_file_transfer.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

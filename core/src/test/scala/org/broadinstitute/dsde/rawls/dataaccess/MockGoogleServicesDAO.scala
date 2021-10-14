@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import io.opencensus.trace.Span
@@ -13,6 +14,7 @@ import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogle
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import spray.json._
 
@@ -20,6 +22,8 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters.mapAsJavaMapConverter
+import scala.util.Random
 
 class MockGoogleServicesDAO(groupsPrefix: String,
                             override val accessContextManagerDAO: AccessContextManagerDAO = new MockGoogleAccessContextManagerDAO) extends GoogleServicesDAO(groupsPrefix) {
@@ -32,8 +36,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   private val groups: TrieMap[RawlsGroupRef, Set[Either[RawlsUser, RawlsGroup]]] = TrieMap()
   val policies: TrieMap[GoogleProjectId, Map[String, Set[String]]] = TrieMap()
 
-  val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
-  val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+  val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/123456-abcdef-789012")
+  val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/badbad-badbad-badbad")
 
   val mockJobIds = Seq("operations/dummy-job-id", "projects/dummy-project/operations/dummy-job-id")
 
@@ -41,6 +45,13 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true, "testBillingAccount")
     val firecloudDoesntHaveThisOne = RawlsBillingAccount(inaccessibleBillingAccountName, false, "testBillingAccount")
     Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
+  }
+
+  override def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] = {
+    if (billingAccountName == inaccessibleBillingAccountName)
+      Future.successful(false)
+    else
+      Future.successful(true)
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
@@ -77,6 +88,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   }
 
   override def getBucketServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
+  lazy val getResourceBufferServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
 
   override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
     Future.successful(Option(token))
@@ -107,7 +119,12 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def getAccessTokenUsingJson(saKey: String): Future[String] = Future.successful("token")
   override def getUserInfoUsingJson(saKey: String): Future[UserInfo] = Future.successful(UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000")))
 
-  override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] = Future.successful(new Project().setProjectNumber(42L))
+  val mockLabelsFromRbs = Map(
+    "vpc-network-name" -> "value for vpc-network-name",
+    "vpc-subnetwork-name" -> "value for vpc-subnetwork-name",
+    "buffer-config-name" -> "value for buffer-config-name"
+  )
+  override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] = Future.successful(new Project().setProjectNumber(Random.nextLong()).setLabels(mockLabelsFromRbs.asJava))
 
   override def deleteBucket(bucketName: String) = Future.successful(true)
 
@@ -218,14 +235,23 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(OperationStatus(true, None))
   }
 
-  override def deleteProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
 
-  override def addProjectToFolder(googleProject: GoogleProjectId, folderName: String): Future[Unit] = Future.successful(())
+  override def updateGoogleProject(googleProjectId: GoogleProjectId, googleProjectWithUpdates: Project): Future[Project] = Future.successful((googleProjectWithUpdates))
+
+  override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
+
+  override def deleteV1Project(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
+
+  override def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit] = Future.successful(())
 
   override def getFolderId(folderName: String): Future[Option[String]] = Future.successful(Option("folders/1234567"))
 
   override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] = {
     Future.successful(billingAccount == accessibleBillingAccountName)
+  }
+
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+    Future.successful(new ProjectBillingInfo().setBillingAccountName(newBillingAccount.map(_.value).getOrElse("")).setProjectId(googleProjectId.value))
   }
 
   override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] = {
@@ -245,4 +271,19 @@ class MockGoogleServicesDAO(groupsPrefix: String,
       }
     }
   }
+
+  override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {
+    val billingAccount = googleProject.value match {
+      case "project_without_table" => Some("billing_account_for_google_project_without_table")
+      case "project_without_billing_account" => None
+      case _ => Some("some-billing-account")
+    }
+
+    Future.successful(billingAccount)
+  }
+
+  override def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
+    Future.unit
+  }
+
 }

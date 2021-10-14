@@ -299,8 +299,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       ArgumentMatchers.eq(Option(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.billingProject.value))))).
       thenReturn(Future.successful(SamCreateResourceResponse(SamResourceTypeNames.billingProject.value, projectName.value, Set.empty, Set.empty)))
 
-    when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.workspaceCreator), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator))), any[UserInfo])).thenReturn(Future.successful(()))
-    when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser))), any[UserInfo])).thenReturn(Future.successful(()))
+    when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.workspaceCreator), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator))), any[UserInfo])).thenReturn(Future.successful(()))
+    when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.batchComputeUser, SamBillingProjectRoles.notebookUser))), any[UserInfo])).thenReturn(Future.successful(()))
     when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
     when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser))).thenReturn(Future.successful(Map(WorkbenchEmail("can-compute-policy@google.group") -> Seq())))
   }
@@ -392,7 +392,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 202 when adding a billing project to a service perimeter with all the right permissions" in withTestDataApiServices { services =>
+  it should "return 204 when adding a billing project to a service perimeter with all the right permissions" in withTestDataApiServices { services =>
     val projectName = testData.billingProject.projectName
     val servicePerimeterName = ServicePerimeterName("accessPolicies/123/servicePerimeters/service_perimeter")
     val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
@@ -402,10 +402,42 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
       sealRoute(services.servicePerimeterRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted) {
+        assertResult(StatusCodes.NoContent) {
           status
         }
       }
   }
 
+  it should "return 403 when adding a billing project to a service perimeter without the right permission on the billing project" in withTestDataApiServices { services =>
+    val projectName = testData.billingProject.projectName
+    val servicePerimeterName = ServicePerimeterName("accessPolicies/123/servicePerimeters/service_perimeter")
+    val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
+
+    when(services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, encodedServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
+    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(false))
+
+    Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
+      sealRoute(services.servicePerimeterRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when adding a billing project to a service perimeter without the right permission on the service perimeter" in withTestDataApiServices { services =>
+    val projectName = testData.billingProject.projectName
+    val servicePerimeterName = ServicePerimeterName("accessPolicies/123/servicePerimeters/service_perimeter")
+    val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
+
+    when(services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, encodedServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(false))
+
+    Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
+      sealRoute(services.servicePerimeterRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
 }

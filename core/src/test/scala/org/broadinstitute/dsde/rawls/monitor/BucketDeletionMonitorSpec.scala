@@ -47,12 +47,12 @@ class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) w
     when(mockGoogleServicesDAO.deleteBucket(nonEmptyBucketName)).thenReturn(Future.successful(false))
     when(mockGoogleServicesDAO.deleteBucket(errorBucketName)).thenReturn(Future.failed(new RuntimeException(":(")))
 
-    system.actorOf(BucketDeletionMonitor.props(slickDataSource, mockGoogleServicesDAO, 0 seconds, 100 milliseconds))
+    system.actorOf(BucketDeletionMonitor.props(slickDataSource, mockGoogleServicesDAO, 0 seconds, 1 second))
 
     // `eventually` now requires an implicit `Retrying` instance. When the statement inside returns future, it'll
     // try to use `Retrying[Future[T]]`, which gets weird when we're using mockito together with it.
     // Hence adding ascribing [Unit] explicitly here so that `eventually` will use `Retrying[Unit]`
-    eventually[Unit](timeout = timeout(Span(1, Seconds))) {
+    eventually[Unit](timeout = timeout(Span(10, Seconds))) {
       verify(mockGoogleServicesDAO, times(1)).deleteBucket(emptyBucketName)
       verify(mockGoogleServicesDAO, Mockito.atLeast(5)).deleteBucket(nonEmptyBucketName)
       verify(mockGoogleServicesDAO, Mockito.atLeast(5)).deleteBucket(errorBucketName)

@@ -3,14 +3,18 @@ package org.broadinstitute.dsde.rawls.webservice
 import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model._
 import spray.json.DefaultJsonProtocol._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.AttributeName
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.StatusCodes.BadRequest
 import CustomDirectives._
+import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.entities.EntityService
 
 import scala.concurrent.ExecutionContext
@@ -34,29 +38,39 @@ trait EntityApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
         get {
           parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
-            val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
-            val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+            traceRequest { span =>
+              parameterSeq { allParams =>
+                val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
+                val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
 
-            val errors = toIntTries.collect {
-              case (k, Failure(t)) => s"$k must be a positive integer"
-              case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
-            } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
+                val errors = toIntTries.collect {
+                  case (k, Failure(t)) => s"$k must be a positive integer"
+                  case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
+                } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
 
-            if (errors.isEmpty) {
-              val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
-              complete { entityServiceConstructor(userInfo).QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject) }
-            } else {
-              complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
+                if (errors.isEmpty) {
+                  val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10),
+                    sortField.getOrElse("name"), sortDirectionTry.get,
+                    filterTerms,
+                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"))
+                  complete {
+                    entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject, span)
+                  }
+                } else {
+                  complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
+                }
+              }
             }
           }
         }
       } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
           get {
+            //if useCache param is unset or set to a value that won't coerce to a boolean, default to true
             parameters('useCache.?) { (useCache) =>
-              val useCacheBool = Try(useCache.getOrElse("false").toBoolean).getOrElse(false)
+              val useCacheBool = Try(useCache.getOrElse("true").toBoolean).getOrElse(true)
               complete {
-                entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, billingProject, useCacheBool)
+                entityServiceConstructor(userInfo).entityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, None, useCacheBool)
               }
             }
           }
@@ -66,7 +80,7 @@ trait EntityApiService extends UserInfoDirectives {
             entity(as[Entity]) { entity =>
               addLocationHeader(entity.path(WorkspaceName(workspaceNamespace, workspaceName))) {
                 complete {
-                  entityServiceConstructor(userInfo).CreateEntity(WorkspaceName(workspaceNamespace, workspaceName), entity).map(StatusCodes.Created -> _)
+                  entityServiceConstructor(userInfo).createEntity(WorkspaceName(workspaceNamespace, workspaceName), entity).map(StatusCodes.Created -> _)
                 }
               }
             }
@@ -74,20 +88,22 @@ trait EntityApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           get {
-            complete { entityServiceConstructor(userInfo).GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, dataReference, billingProject) }
+            complete { entityServiceConstructor(userInfo).getEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, dataReference, billingProject) }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           patch {
             entity(as[Array[AttributeUpdateOperation]]) { operations =>
-              complete { entityServiceConstructor(userInfo).UpdateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations) }
+              complete { entityServiceConstructor(userInfo).updateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / "delete") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[AttributeEntityReference]]) { entities =>
-              complete { entityServiceConstructor(userInfo).DeleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, dataReference, billingProject) }
+              complete {
+                entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, None, None)
+              }
             }
           }
         } ~
@@ -96,7 +112,7 @@ trait EntityApiService extends UserInfoDirectives {
             withSizeLimit(batchUpsertMaxBytes) {
               entity(as[Array[EntityUpdateDefinition]]) { operations =>
                 complete {
-                  entityServiceConstructor(userInfo).BatchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations)
+                  entityServiceConstructor(userInfo).batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject)
                 }
               }
             }
@@ -105,27 +121,47 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[EntityUpdateDefinition]]) { operations =>
-              complete { entityServiceConstructor(userInfo).BatchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+              complete {
+                entityServiceConstructor(userInfo).batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject)
+              }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
           post {
             entity(as[EntityName]) { newEntityName =>
-              complete { entityServiceConstructor(userInfo).RenameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name) }
+              complete { entityServiceConstructor(userInfo).renameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
           post {
             entity(as[String]) { expression =>
-              complete { entityServiceConstructor(userInfo).EvaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression) }
+              complete { entityServiceConstructor(userInfo).evaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
           get {
-            complete { entityServiceConstructor(userInfo).ListEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType) }
+            traceRequest { span =>
+              complete {
+                entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, span)
+              }
+            }
+          } ~
+          delete {
+            parameterSeq { allParams =>
+              def parseAttributeNames() = {
+                val paramName = "attributeNames"
+                WorkspaceFieldSpecs.fromQueryParams(allParams, paramName).fields match {
+                  case None => throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' must be included.")(ErrorReportSource("rawls")))
+                  case Some(atts) => atts.toSet.map{ (value: String) => AttributeName.fromDelimitedName(value.trim) }
+                }
+              }
+              complete {
+                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames())
+              }
+            }
           }
         } ~
         path("workspaces" / "entities" / "copy") {
@@ -134,8 +170,10 @@ trait EntityApiService extends UserInfoDirectives {
               extractRequest { request =>
                 val linkExistingEntitiesBool = Try(linkExistingEntities.getOrElse("false").toBoolean).getOrElse(false)
                 entity(as[EntityCopyDefinition]) { copyDefinition =>
-                  complete {
-                    entityServiceConstructor(userInfo).CopyEntities(copyDefinition, request.uri, linkExistingEntitiesBool)
+                  traceRequest { span =>
+                    complete {
+                      entityServiceConstructor(userInfo).copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool, span)
+                    }
                   }
                 }
               }

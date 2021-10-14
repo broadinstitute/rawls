@@ -1,7 +1,9 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, SubmissionValidationEntityInputs}
 
 import scala.concurrent.Future
@@ -47,5 +49,9 @@ trait EntityProvider {
 
   def getEntity(entityType: String, entityName: String): Future[Entity]
 
-  def queryEntities(entityType: String, query: EntityQuery): Future[EntityQueryResponse]
+  def queryEntities(entityType: String, query: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse]
+
+  def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
+
+  def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]]
 }

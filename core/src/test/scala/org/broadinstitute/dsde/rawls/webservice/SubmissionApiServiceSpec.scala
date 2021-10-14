@@ -9,6 +9,7 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.testkit.RouteTestTimeout
 import akka.testkit.TestProbe
+import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData, WorkflowAuditStatusRecord}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -105,6 +106,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       false,
       false,
       CromwellBackend("PAPIv2"),
+      CromwellBackend("PAPIv2-CloudNAT"),
       methodConfigResolver
     ))
 
@@ -717,7 +719,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       import driver.api._
 
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        rawlsBillingProjectQuery.create(billingProject),
+        workspaceQuery.createOrUpdate(workspace),
         entityQuery.save(workspace, lotsOfSamples :+ sampleSet)
       )
     }
@@ -902,7 +905,63 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
             }
         }
       }
+  }
 
+  private val validMemoryRetryMultiplierCases = Table(
+    ("description", "memoryRetryMultiplierOption", "memoryRetryMultiplierResult"),
+    ("allow submission with memoryRetryMultiplier unset", None, 1.0),
+    ("allow submission with memoryRetryMultiplier set to the default", Option(1.0), 1.0),
+    ("allow submission with memoryRetryMultiplier set to something different", Option(1.618), 1.618),
+  )
+
+  forAll(validMemoryRetryMultiplierCases) {
+    (description, memoryRetryMultiplierOption, memoryRetryMultiplierResult) =>
+      it should description in {
+        withTestDataApiServices { services =>
+          val workspaceName = testData.wsName
+          val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+          ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+          Post(
+            s"${workspaceName.path}/submissions",
+            JsObject(
+              requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+                List(
+                  memoryRetryMultiplierOption.map(x => "memoryRetryMultiplier" -> x.toJson),
+                ).flatten: _*
+            )
+          ) ~>
+            sealRoute(services.submissionRoutes) ~>
+            check {
+              val response = responseAs[String]
+              status should be(StatusCodes.Created)
+              val requestMemoryRetryMultiplier = getResponseField(response, "memoryRetryMultiplier")
+              requestMemoryRetryMultiplier should be(Option(JsNumber(memoryRetryMultiplierResult)))
+            }
+        }
+      }
+  }
+
+  it should "return a parameter error if the memoryRetryMultiplier is invalid" in {
+    withTestDataApiServices { services =>
+      val workspaceName = testData.wsName
+      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+      Post(
+        s"${workspaceName.path}/submissions",
+        JsObject(
+          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+            List("memoryRetryMultiplier" -> "oh gosh, I don't know... maybe seven?".toJson): _*
+        )
+      ) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          val response = responseAs[String]
+          status should be(StatusCodes.BadRequest)
+          response should be("The request content was malformed:\nExpected Double as JsNumber, but got \"oh gosh, I don't know... maybe seven?\"")
+        }
+    }
   }
 
   it should "return 400 Bad Request when deleteIntermediateOutputFiles is an integer" in {
@@ -929,4 +988,131 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
+  private val userComment1000character = RandomStringUtils.randomGraph(1000)
+  private val validUserCommentCases = Table(
+    ("description", "userCommentInput", "userCommentResult"),
+    ("allow submission with userComment unset", None, JsNull),
+    ("allow submission with userComment", Option("This submission outputs hello world. Cost: $0.5"), JsString("This submission outputs hello world. Cost: $0.5")),
+    ("allow submission with userComment that has special characters", Option("This comment has special characters: `~!@#$%^&*()_+-=[]\\{}|;':\",./<>?"), JsString("""This comment has special characters: `~!@#$%^&*()_+-=[]\{}|;':",./<>?""")),
+    ("allow submission with userComment that has unescaped special characters", Option("""This comment has special characters: `~!@#$%^&*()_+-=[]\{}|;':",./<>?"""), JsString("""This comment has special characters: `~!@#$%^&*()_+-=[]\{}|;':",./<>?""")),
+    ("allow submission with userComment containing url", Option("This comment contains url - https://github.com/broadinstitute/rawls/workflows/Scala%20tests%20with%20coverage/badge.svg?branch=develop"), JsString("This comment contains url - https://github.com/broadinstitute/rawls/workflows/Scala%20tests%20with%20coverage/badge.svg?branch=develop")),
+    ("allow submission with non-ASCII special characters", Option("•ªº§¶œ∑´©˙∆˚˜∫µ˜≤"), JsString("•ªº§¶œ∑´©˙∆˚˜∫µ˜≤")),
+    ("allow submission with userComment containing 1000 characters", Option(userComment1000character), JsString(userComment1000character))
+  )
+
+  forAll(validUserCommentCases) {
+    (description, userCommentInput, userCommentResult) =>
+      it should description in {
+        withTestDataApiServices { services =>
+          val workspaceName = testData.wsName
+          val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+          ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+          Post(
+            s"${workspaceName.path}/submissions",
+            JsObject(
+              requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+                List(
+                  userCommentInput.map(x => "userComment" -> x.toJson),
+                ).flatten: _*
+            )
+          ) ~>
+            sealRoute(services.submissionRoutes) ~>
+            check {
+              val response = responseAs[String]
+              status should be(StatusCodes.Created)
+              val requestUserComment = getResponseField(response, "userComment")
+              requestUserComment.get shouldBe userCommentResult
+            }
+        }
+      }
+  }
+
+  it should "return a parameter error if the userComment is invalid" in {
+    withTestDataApiServices { services =>
+      val workspaceName = testData.wsName
+      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+      val invalidUserComment = RandomStringUtils.randomGraph(1010)
+
+      Post(
+        s"${workspaceName.path}/submissions",
+        JsObject(
+          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+            List("userComment" -> invalidUserComment.toJson): _*
+        )
+      ) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          val response = responseAs[String]
+          status should be(StatusCodes.BadRequest)
+          response should include ("Invalid input userComment. Input may be a max of 1000 characters.")
+        }
+    }
+  }
+
+  it should "successfully update userComment after submission creation" in {
+    withTestDataApiServices { services =>
+      val workspaceName = testData.wsName
+      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+      Post(
+        s"${workspaceName.path}/submissions",
+        JsObject(
+          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+            List("userComment" -> "user comment during submission".toJson): _*
+        )
+      ) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created, responseAs[String]) { status }
+          val submission = responseAs[SubmissionReport]
+          submission.request.userComment shouldBe Option("user comment during submission")
+
+          Patch(
+            s"${workspaceName.path}/submissions/${submission.submissionId}",
+            JsObject(
+              List("userComment" -> "user comment updated".toJson): _*
+            )
+          ) ~>
+            sealRoute(services.submissionRoutes) ~>
+            check {
+              assertResult(StatusCodes.NoContent, responseAs[String]) {
+                status
+              }
+            }
+
+          Get(s"${workspaceName.path}/submissions/${submission.submissionId}") ~>
+            sealRoute(services.submissionRoutes) ~>
+            check {
+              assertResult(StatusCodes.OK) {
+                status
+              }
+              val response = responseAs[Submission]
+              response.userComment shouldBe Option("user comment updated")
+            }
+        }
+    }
+  }
+
+  it should "fail to update comment if submission doesn't exist" in {
+    withTestDataApiServices { services =>
+      val workspaceName = testData.wsName
+
+      Patch(
+        s"${workspaceName.path}/submissions/00001111-2222-3333-aaaa-bbbbccccdddd",
+        JsObject(
+          List("userComment" -> "user comment updated".toJson): _*
+        )
+      ) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          val response = responseAs[String]
+          status should be(StatusCodes.NotFound)
+          response should include ("Submission with id 00001111-2222-3333-aaaa-bbbbccccdddd not found in workspace myNamespace/myWorkspace")
+        }
+    }
+  }
 }

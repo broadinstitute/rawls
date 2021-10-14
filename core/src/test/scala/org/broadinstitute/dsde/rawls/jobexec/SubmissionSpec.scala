@@ -1,34 +1,38 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
-
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, ReferenceTypeEnum}
+import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, DataRepoSnapshotAttributes, ReferenceResourceCommonFields, ReferenceTypeEnum}
+import cats.effect.IO
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
+import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
-import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually
@@ -42,6 +46,8 @@ import scala.language.postfixOps
 import scala.util.Try
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+
+import scala.concurrent.ExecutionContext.global
 
 /**
  * Created with IntelliJ IDEA.
@@ -95,7 +101,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
   val subTestData = new SubmissionTestData()
 
   class SubmissionTestData() extends TestData {
-    val wsName = WorkspaceName("myNamespacexxx", "myWorkspace")
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespacexxx"), CreationStatuses.Ready, None, None)
+    val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val user = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user))
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
@@ -258,7 +265,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        rawlsBillingProjectQuery.create(billingProject),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sample1),
@@ -289,7 +297,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
-      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true)
+      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 20000)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val samDAO = new MockSamDAO(dataSource)
       val gpsDAO = new MockGooglePubSubDAO
@@ -309,15 +317,26 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
 
+      val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(testConf)
+      val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterServiceConfig)
+
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
         notificationDAO,
         samDAO,
+        MockBigQueryServiceFactory.ioFactory(),
+        testConf.getString("gcs.pathToCredentialJson"),
         "requesterPaysRole",
         DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
-        ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
+        ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
+        servicePerimeterService,
+        RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
       )_
+
+      val deltaLayer = new DeltaLayer(bigQueryServiceFactory, new MockDeltaLayerWriter, samDAO,
+        WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
+        WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global))
 
       val genomicsServiceConstructor = GenomicsService.constructor(
         slickDataSource,
@@ -336,7 +355,13 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
-      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, new MockDeltaLayerWriter(), DataRepoEntityProviderConfig(100, 10000, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+
+      val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
+      val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
+      val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
+      val resourceBufferSaEmail = resourceBufferConfig.saEmail
+
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
@@ -348,7 +373,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         execServiceCluster,
         execServiceBatchSize,
         workspaceManagerDAO,
-        dataRepoDAO,
+        deltaLayer,
         methodConfigResolver,
         gcsDAO,
         samDAO,
@@ -361,7 +386,13 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         mockSubmissionCostService,
         workspaceServiceConfig,
         requesterPaysSetupService,
-        entityManager
+        entityManager,
+        resourceBufferService,
+        resourceBufferSaEmail,
+        servicePerimeterService,
+        googleIamDao = new MockGoogleIamDAO,
+        terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+        terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
@@ -887,7 +918,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val workspaceAttrValue = "foobar"
       val inputsWithWorkspaceExpression = methodConfig.inputs.map { case (name, expr) => name -> AttributeString(s"""{"entity": ${expr.value}, "workspace": workspace.$workspaceAttrName}""")}
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(inputs =  inputsWithWorkspaceExpression)))
-      runAndWait(workspaceQuery.save(minimalTestData.workspace.copy(attributes = Map(AttributeName.withDefaultNS(workspaceAttrName) -> AttributeString(workspaceAttrValue)))))
+      runAndWait(workspaceQuery.createOrUpdate(minimalTestData.workspace.copy(attributes = Map(AttributeName.withDefaultNS(workspaceAttrName) -> AttributeString(workspaceAttrValue)))))
 
       val vComplete = Await.result(workspaceService.createSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
       val (vStatus, resultSubmission) = vComplete.response
@@ -1125,7 +1156,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
 
     withDataAndService({ workspaceService =>
-      workspaceService.workspaceManagerDAO.createDataReference(minimalTestData.workspace.workspaceIdAsUUID, dataReferenceName, dataReferenceDescription, ReferenceTypeEnum.DATA_REPO_SNAPSHOT, new DataRepoSnapshot().instanceName(dataRepoDAO.getInstanceName).snapshot(snapshotUUID.toString), CloningInstructionsEnum.NOTHING, userInfo.accessToken)
+      workspaceService.workspaceManagerDAO.createDataRepoSnapshotReference(minimalTestData.workspace.workspaceIdAsUUID, snapshotUUID, dataReferenceName, dataReferenceDescription, dataRepoDAO.getInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken )
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
       test(workspaceService, methodConfig, snapshotUUID)
     }, withMinimalTestDatabase[Any], bigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)), dataRepoDAO = dataRepoDAO)

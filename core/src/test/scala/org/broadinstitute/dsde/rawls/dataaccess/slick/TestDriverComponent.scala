@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
@@ -78,8 +78,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val wdlParser = new CachingWDLParser(wdlParserConfig, mockCromwellSwaggerClient)
   val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
+  // TODO: can we be any more targeted about inTransaction vs. inTransactionWithAttrTempTable here?
+  // this is used by many tests to set up fixture data, which includes saving entities, therefore it needs
+  // the temp table.
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
-    Await.result(DbResource.dataSource.inTransaction { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
+    Await.result(DbResource.dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace))
+    { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
   }
 
   protected def runMultipleAndWait[R](count: Int, duration: Duration = 1 minutes)(actionGenerator: Int => DBIOAction[R, _ <: NoStream, _ <: Effect]): R = {
@@ -88,7 +92,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   private def retryConcurrentModificationException[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect]): Future[R] = {
-    DbResource.dataSource.database.run(action.map{ x => Thread.sleep((Math.random() * 500).toLong); x }).recoverWith {
+
+    import scala.language.existentials
+
+    val chain = (DbResource.dataSource.createEntityAttributeTempTable andThen action.map{ x => Thread.sleep((Math.random() * 500).toLong); x } andFinally DbResource.dataSource.dropEntityAttributeTempTable).withPinnedSession
+
+    DbResource.dataSource.database.run(chain).recoverWith {
       case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action)
       case rollbackException: MySQLTransactionRollbackException if rollbackException.getMessage.contains("try restarting transaction") => retryConcurrentModificationException(action)
     }
@@ -120,6 +129,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            useCallCache: Boolean = false,
                            deleteIntermediateOutputFiles: Boolean = false,
                            useReferenceDisks: Boolean = false,
+                           memoryRetryMultiplier: Double = 1.0,
                            workflowFailureMode: Option[WorkflowFailureMode] = None,
                            individualWorkflowCost: Option[Float] = None,
                            externalEntityInfo: Option[ExternalEntityInfo] = None
@@ -142,6 +152,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       useCallCache = useCallCache,
       deleteIntermediateOutputFiles = deleteIntermediateOutputFiles,
       useReferenceDisks = useReferenceDisks,
+      memoryRetryMultiplier = memoryRetryMultiplier,
       workflowFailureMode = workflowFailureMode,
       cost = individualWorkflowCost.map(_ * workflows.length),
       externalEntityInfo
@@ -154,17 +165,36 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, groups)
 
   def makeWorkspaceWithUsers(project: RawlsBillingProject,
-                    name: String,
-                    workspaceId: String,
-                    bucketName: String,
-                    workflowCollectionName: Option[String],
-                    createdDate: DateTime,
-                    lastModified: DateTime,
-                    createdBy: String,
-                    attributes: AttributeMap,
-                    isLocked: Boolean) = {
+                             name: String,
+                             workspaceId: String,
+                             bucketName: String,
+                             workflowCollectionName: Option[String],
+                             createdDate: DateTime,
+                             lastModified: DateTime,
+                             createdBy: String,
+                             attributes: AttributeMap,
+                             isLocked: Boolean) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount, None, Option(createdDate))
+  }
+  def makeWorkspaceWithUsers(project: RawlsBillingProject,
+                             name: String,
+                             workspaceId: String,
+                             bucketName: String,
+                             workflowCollectionName: Option[String],
+                             createdDate: DateTime,
+                             lastModified: DateTime,
+                             createdBy: String,
+                             attributes: AttributeMap,
+                             isLocked: Boolean,
+                             workspaceVersion: WorkspaceVersion,
+                             googleProjectId: GoogleProjectId,
+                             googleProjectNumber: Option[GoogleProjectNumber],
+                             currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
+                             billingAccountErrorMessage: Option[String],
+                             completedCloneWorkspaceFileTransfer: Option[DateTime]) = {
+
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer)
   }
 
   class EmptyWorkspace() extends TestData {
@@ -180,7 +210,29 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace)
+        workspaceQuery.createOrUpdate(workspace)
+      )
+    }
+  }
+
+  class EmptyWorkspaceWithProjectAndBillingAccount(project: RawlsBillingProject, maybeBillingAccount: Option[RawlsBillingAccountName]) extends TestData {
+    val userOwner = RawlsUser(userInfo)
+    val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
+    val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
+    val wsName = WorkspaceName(project.projectName.value, UUID.randomUUID().toString)
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
+    val workspaceVersion = WorkspaceVersions.V2
+    val googleProjectId = project.googleProjectId
+    val googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
+    val billingAccount = maybeBillingAccount
+
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount, None, Option(currentTime()))
+
+    override def save() = {
+      DBIO.seq(
+        workspaceQuery.createOrUpdate(workspace)
       )
     }
   }
@@ -198,7 +250,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq (
-        workspaceQuery.save(workspace)
+        workspaceQuery.createOrUpdate(workspace)
       )
     }
   }
@@ -230,16 +282,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
     val dbGapAuthorizedUsersGroup = ManagedGroupRef(RawlsGroupName("dbGapAuthorizedUsers"))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), CreationStatuses.Ready, None, None)
+    val billingAccountName = RawlsBillingAccountName("fakeBillingAcct")
+
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1 = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, None, None)
+    val testProject1 = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject2Name = RawlsBillingProjectName("project2")
-    val testProject2 = RawlsBillingProject(testProject2Name, CreationStatuses.Ready, None, None)
+    val testProject2 = RawlsBillingProject(testProject2Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject3Name = RawlsBillingProjectName("project3")
-    val testProject3 = RawlsBillingProject(testProject3Name, CreationStatuses.Ready, None, None)
+    val testProject3 = RawlsBillingProject(testProject3Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -251,6 +305,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs)
 
     val (workspace) = makeWorkspaceWithUsers(billingProject, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (v1Workspace) = makeWorkspaceWithUsers(billingProject, wsName.name + "v1", UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, billingProject.billingAccount, None, Option(currentTime()))
 
     val (regionalWorkspace) = makeWorkspaceWithUsers(billingProject, wsRegionalName.name, UUID.randomUUID().toString, "fc-regional-bucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
 
@@ -366,6 +421,26 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       agoraMethod
     )
 
+    val agoraMethodConfigMaxWorkspaceAttributes = MethodConfiguration(
+      "ns",
+      "testConfigMaxWorkspaceAttributes",
+      Some("Sample"),
+      None,
+      Map("i1" -> AttributeString("input")),
+      Map("o1" -> AttributeString("workspace.long_attributes")),
+      agoraMethod
+    )
+
+    val agoraMethodConfigMaxEntityAttributes = MethodConfiguration(
+      "ns",
+      "testConfigMaxEntityAttributes",
+      Some("Sample"),
+      None,
+      Map("i1" -> AttributeString("input")),
+      Map("o1" -> AttributeString("this.long_attributes")),
+      agoraMethod
+    )
+
     val goodAndBadMethod = AgoraMethod("dsde", "good_and_bad", 1)
 
     val goodAndBadMethodConfig = MethodConfiguration(
@@ -395,6 +470,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Sample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
     val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+
+    val methodConfigWorkspaceMaxAttributes = MethodConfiguration("ns", "testConfigMaxWorkspaceAttributes", Some("Sample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigEntityMaxAttributes = MethodConfiguration("ns", "testConfigMaxEntityAttributes", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+
     val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.library:foo")), AgoraMethod("ns-config", "meth1", 1))
     val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", Some("Sample"), None, Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), AgoraMethod("ns-config", "meth1", 1))
 
@@ -491,6 +570,24 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val submissionUpdateEntityReservedOutput = createTestSubmission(
       workspace = workspace,
       methodConfig = methodConfigEntityUpdateReservedOutput,
+      submissionEntity = indiv1,
+      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
+      workflowEntities = Seq(indiv1),
+      inputResolutions = Map(indiv1 -> inputResolutions),
+    )
+
+    val submissionMaxWorkspaceAttributes = createTestSubmission(
+      workspace = workspace,
+      methodConfig = methodConfigWorkspaceMaxAttributes,
+      submissionEntity = indiv1,
+      rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
+      workflowEntities = Seq(indiv1),
+      inputResolutions = Map(indiv1 -> inputResolutions),
+    )
+
+    val submissionMaxEntityAttributes = createTestSubmission(
+      workspace = workspace,
+      methodConfig = methodConfigEntityMaxAttributes,
       submissionEntity = indiv1,
       rawlsUserEmail = WorkbenchEmail(userOwner.userEmail.value),
       workflowEntities = Seq(indiv1),
@@ -812,6 +909,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val allWorkspaces = Seq(
       workspace,
+      v1Workspace,
       controlledWorkspace,
       workspacePublished,
       workspaceNoAttrs,
@@ -830,7 +928,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceToTestGrant,
       workspaceConfigCopyDestination,
       regionalWorkspace)
-    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
+    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
 
     override def save() = {
       DBIO.seq(
@@ -844,6 +942,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
                 methodConfigurationQuery.create(context, agoraMethodConfig),
+                methodConfigurationQuery.create(context, agoraMethodConfigMaxWorkspaceAttributes),
+                methodConfigurationQuery.create(context, agoraMethodConfigMaxEntityAttributes),
                 methodConfigurationQuery.create(context, dockstoreMethodConfig),
                 methodConfigurationQuery.create(context, goodAndBadMethodConfig),
                 methodConfigurationQuery.create(context, methodConfig2),
@@ -973,9 +1073,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   class MinimalTestData() extends TestData {
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"), CreationStatuses.Ready, None, None)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"), CreationStatuses.Ready, Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")), None)
     val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val wsName2 = WorkspaceName(billingProject.projectName.value, "myWorkspace2")
+    val v1WsName = WorkspaceName(billingProject.projectName.value, "myV1Workspace")
+    val v1WsName2 = WorkspaceName(billingProject.projectName.value, "myV1Workspace2")
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set.empty)
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set.empty)
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set.empty)
@@ -985,11 +1087,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     val workspace2 = Workspace(wsName2.namespace, wsName2.name, UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
+    // TODO (CA-1235): Remove these after PPW Migration is complete
+    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()))
+    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()))
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspace2)
+        workspaceQuery.createOrUpdate(workspace),
+        workspaceQuery.createOrUpdate(workspace2),
+        // TODO (CA-1235): Remove these after PPW Migration is complete
+        workspaceQuery.createOrUpdate(v1Workspace),
+        workspaceQuery.createOrUpdate(v1Workspace2),
+        rawlsBillingProjectQuery.create(billingProject)
       )
     }
   }
@@ -1013,7 +1122,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
             //note that we don't save sample1 here, it was only used to generate cache entries that will differ from what full queries return
@@ -1123,6 +1232,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Spample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
     val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
 
+    val methodConfigMaxAttributeWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigMaxAttributeEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Spample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
+
     val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
     val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
     val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
@@ -1157,7 +1269,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        workspaceQuery.save(workspace),
+        workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
             entityQuery.save(context, allEntities),
