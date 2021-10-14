@@ -75,8 +75,7 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
     when500orGoogleError(buildGoogleJsonResponseException(403)) shouldBe true
     when500orGoogleError(buildGoogleJsonResponseException(429)) shouldBe true
     when500orGoogleError(buildGoogleJsonResponseException(400)) shouldBe true
-    // 404 requires special handing
-    when500orGoogleError(buildGoogleJsonResponseException(404)) shouldBe false
+    when500orGoogleError(buildGoogleJsonResponseException(404)) shouldBe true
 
     when500orGoogleError(buildGoogleJsonResponseException(500)) shouldBe true
     when500orGoogleError(buildGoogleJsonResponseException(502)) shouldBe true
