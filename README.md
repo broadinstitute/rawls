@@ -54,7 +54,7 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 ```sh
 sh run-context/local/scripts/firecloud-setup.sh
 ```
-Note: this script will offer to set up configuration for several other services as well. You can skip those if you only want to set up configuration for Rawls. If this is your first time running Rawls or rendering congiguration files, you will want to run through the "Setup vault" step.
+Note: this script will offer to set up configuration for several other services as well. You can skip those if you only want to set up configuration for Rawls. If this is your first time running Rawls or rendering configuration files, you will want to run through the "Setup vault" step.
 
 *  The `/etc/hosts` file on your machine must contain this entry (for calling Rawls endpoints):
 ```sh
