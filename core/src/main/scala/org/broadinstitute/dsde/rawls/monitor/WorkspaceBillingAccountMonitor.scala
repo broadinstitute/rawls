@@ -68,7 +68,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
           }
       }
       dbResult <- dataSource.inTransaction( { dataAccess =>
-        logger.info(s"Updating billing account on ${googleProjectId} to ${newBillingAccount.get}")
+        logger.info(s"Updating billing account on ${googleProjectId} to ${newBillingAccount}")
         dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
       })
     } yield dbResult
