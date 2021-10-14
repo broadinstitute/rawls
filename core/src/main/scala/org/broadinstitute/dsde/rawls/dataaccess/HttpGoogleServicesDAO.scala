@@ -886,17 +886,6 @@ class HttpGoogleServicesDAO(
   }
 
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
-    // Sadly when500orGoogleError retries on 404s which is not always the behaviour we want. 404s
-    // mean different things in different contexts. Sometimes they mean the resource does not
-    // exist/you can't access it; sometimes it means it does not exist *yet* and sometimes something
-    // else. As such, it should have been handled explicitly depending on the context and not rolled
-    // into a default retrying handler. This ship has sailed - it's used everywhere and changing it
-    // might cause a bunch of failures.
-    def when500orNon404GoogleError(throwable: Throwable) = throwable match {
-      case e: HttpResponseException if e.getStatusCode == 404 => false
-      case t => when500orGoogleError(t)
-    }
-
     implicit val service = GoogleInstrumentedService.Billing
     val cloudResManager = getCloudResourceManagerWithBillingServiceAccountCredential
     retryExponentially(when500orNon404GoogleError)(() =>
