@@ -386,7 +386,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       for {
         // load all the starting data
         workspace <-            getWorkspace(dataAccess).map(_.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found")))
-        entitiesById <-         listWorkflowEntitiesById(workspace.workspaceIdAsUUID, workflowsWithOutputs, dataAccess)
+        entitiesById <-         listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess)
         outputExpressionMap <-  listMethodConfigOutputsForSubmission(dataAccess)
 
         // figure out the updates that need to occur to entities and workspaces
@@ -420,7 +420,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     dataAccess.submissionQuery.getMethodConfigOutputExpressions(submissionId)
   }
 
-  def listWorkflowEntitiesById(workspaceId: UUID, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)
+  def listWorkflowEntitiesById(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)
                               (implicit executionContext: ExecutionContext): ReadAction[scala.collection.Map[Long, Entity]] = {
     //Note that we can't look up entities for workflows that didn't run on entities (obviously), so they get dropped here.
     //Those are handled in handle/attachOutputs.
@@ -428,7 +428,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     //yank out of Seq[(Long, Option[Entity])] and into Seq[(Long, Entity)]
     val entityIds = workflowsWithEntities.flatMap{ case (workflowRec, outputs) => workflowRec.workflowEntityId }
-    dataAccess.entityQuery.getEntities(workspaceId, entityIds).map(_.toMap)
+
+    dataAccess.entityQuery.getEntities(workspace.workspaceIdAsUUID, workspace.shardState, entityIds).map(_.toMap)
   }
 
   def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {

@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates
 
 import java.util.UUID
 
@@ -40,7 +41,14 @@ class AttributeShardingSpec extends TestDriverComponentWithFlatSpecAndMatchers w
   uuidCases foreach {
     case (uuidString, expectedShardId) =>
       it should s"calculate shardId for UUID('$uuidString') correctly" in {
-        assertResult(expectedShardId) { determineShard(UUID.fromString(uuidString)) }
+        assertResult(expectedShardId) { determineShard(UUID.fromString(uuidString), WorkspaceShardStates.Sharded) }
+      }
+  }
+
+  uuidCases foreach {
+    case (uuidString, _) =>
+      it should s"calculate archived shardId for UUID('$uuidString') correctly" in {
+        assertResult("archived") { determineShard(UUID.fromString(uuidString), WorkspaceShardStates.Unsharded) }
       }
   }
 

@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, M
 import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, RemoveAttribute}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueList, Entity, RawlsUser, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueList, Entity, RawlsUser, UserInfo, Workspace, WorkspaceShardStates}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
@@ -50,7 +50,7 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
 
   val testWorkspace = new EmptyWorkspace
   val testWorkspaceName = testWorkspace.workspace.toWorkspaceName
-  val testWorkspaceShardId = determineShard(testWorkspace.workspace.workspaceIdAsUUID)
+  val testWorkspaceShardId = determineShard(testWorkspace.workspace.workspaceIdAsUUID, WorkspaceShardStates.Sharded)
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeString("c")))
   val s1 = Entity("s1", "samples", Map(
@@ -134,11 +134,11 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
     // the empty workspace was created with a random uuid. find another uuid that does not have the same
     // shard identifier.
     var tempId: UUID = UUID.randomUUID()
-    while (determineShard(tempId) == testWorkspaceShardId) {
+    while (determineShard(tempId, WorkspaceShardStates.Sharded) == testWorkspaceShardId) {
       tempId = UUID.randomUUID()
     }
     val secondWorkspaceId = UUID.fromString(tempId.toString)
-    val secondShardId = determineShard(secondWorkspaceId)
+    val secondShardId = determineShard(secondWorkspaceId, WorkspaceShardStates.Sharded)
     secondShardId should not be testWorkspaceShardId
     val anotherWorkspace = Workspace("secondnamespace", "secondname", secondWorkspaceId.toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 

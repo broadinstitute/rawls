@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import javax.naming.NameNotFoundException
 import javax.naming.directory.DirContext
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
+import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates
 import slick.jdbc.JdbcProfile
 import slick.jdbc.meta.MTable
 
@@ -41,9 +42,9 @@ trait DataAccess
     (0L to 15L) map { secondLong =>
       val first = firstLong.toHexString
       val second = secondLong.toHexString
-      determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000")).toString
+      determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000"), shardState = WorkspaceShardStates.Sharded).toString
     }
-  }).toSet
+  }).toSet + determineShard(java.util.UUID.fromString(s"00000000-0000-0000-0000-000000000000"), shardState = WorkspaceShardStates.Unsharded).toString
 
   // only called from TestDriverComponent
   def truncateAll: WriteAction[Int] = {

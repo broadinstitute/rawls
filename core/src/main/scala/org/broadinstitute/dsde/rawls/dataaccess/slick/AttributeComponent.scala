@@ -2,9 +2,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.{Sharded, Unsharded, WorkspaceShardState}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.ast.{BaseTypedType, TypedType}
@@ -180,38 +180,39 @@ trait AttributeComponent {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
-  def determineShard(workspaceId: UUID): ShardId = {
-    /* David An: if we wanted to roll out sharding incrementally, workspace-by-workspace,
-        we could modify this function. It would need to inspect, or look up, some flag on the workspace
-        that indicates whether or not the workspace is sharded.
-
-        Sharded workspaces would use a shard identifier such as "04_07", while unsharded workspaces
-        would use a shard identifier of "archive". This would translate into referencing tables named
+  def determineShard(workspaceId: UUID, shardState: WorkspaceShardState): ShardId = {
+    /* Sharded workspaces use a shard identifier such as "04_07", while unsharded workspaces
+        use a shard identifier of "archived". This translates into referencing tables named
         ENTITY_ATTRIBUTE_04_07 or ENTITY_ATTRIBUTE_archive, respectively.
      */
 
-    val shardSize = 4 // range of characters in a shard, e.g. 4 = "00-03"
+    shardState match {
+      case Unsharded => "archived"
+      case Sharded =>
+        val shardSize = 4 // range of characters in a shard, e.g. 4 = "00-03"
 
-    // see the liquibase changeset "20210923_sharded_entity_tables.xml" for expected shard identifier values
-    val idString = workspaceId.toString.take(2).toCharArray
-    val firstChar = idString(0) // first char of workspaceid
-    val secondInt = Integer.parseInt(idString(1).toString, 16) // second character of workspaceId, as integer 0-15
+        // see the liquibase changeset "20210923_sharded_entity_tables.xml" for expected shard identifier values
+        val idString = workspaceId.toString.take(2).toCharArray
+        val firstChar = idString(0) // first char of workspaceid
+        val secondInt = Integer.parseInt(idString(1).toString, 16) // second character of workspaceId, as integer 0-15
 
-    val lower = Math.floor(secondInt / shardSize) * shardSize
-    val upper = lower + shardSize - 1
+        val lower = Math.floor(secondInt / shardSize) * shardSize
+        val upper = lower + shardSize - 1
 
-    s"$firstChar${lower.toLong.toHexString}_$firstChar${upper.toLong.toHexString}"
+        s"$firstChar${lower.toLong.toHexString}_$firstChar${upper.toLong.toHexString}"
+      case unrecognizedState => throw new RawlsException(s"Unrecognized shard state [$unrecognizedState] for workspace $workspaceId.")
+    }
   }
 
   class EntityAttributeShardQuery(shard: ShardId) extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(shard)(_), EntityAttributeRecord)
-  def entityAttributeShardQuery(workspaceId: UUID): EntityAttributeShardQuery = {
-    new EntityAttributeShardQuery(determineShard(workspaceId))
+  def entityAttributeShardQuery(workspaceId: UUID, shardState: WorkspaceShardState): EntityAttributeShardQuery = {
+    new EntityAttributeShardQuery(determineShard(workspaceId, shardState))
   }
   def entityAttributeShardQuery(workspace: Workspace): EntityAttributeShardQuery = {
-    entityAttributeShardQuery(workspace.workspaceIdAsUUID)
+    entityAttributeShardQuery(workspace.workspaceIdAsUUID, workspace.shardState)
   }
-  def entityAttributeShardQuery(entityRec: EntityRecord): EntityAttributeShardQuery = {
-    entityAttributeShardQuery(entityRec.workspaceId)
+  def entityAttributeShardQuery(entityRec: EntityRecord, shardState: WorkspaceShardState): EntityAttributeShardQuery = {
+    entityAttributeShardQuery(entityRec.workspaceId, shardState)
   }
 
 

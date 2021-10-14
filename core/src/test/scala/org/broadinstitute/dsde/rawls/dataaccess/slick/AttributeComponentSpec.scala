@@ -168,7 +168,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, Option(defaultTimeStamp)))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, Option(defaultTimeStamp), WorkspaceShardStates.Sharded.toString))
     val entityId = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name", "type", workspaceId, 0, deleted = false, None))
     val testAttribute = AttributeEntityReference("type", "name")
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
@@ -177,7 +177,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, Option(defaultTimeStamp)))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, Option(defaultTimeStamp), WorkspaceShardStates.Sharded.toString))
     val entityId1 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name1", "type", workspaceId, 0, deleted = false, None))
     val entityId2 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name2", "type", workspaceId, 0, deleted = false, None))
     val entityId3 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name3", "type", workspaceId, 0, deleted = false, None))
@@ -195,7 +195,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "throw exception inserting ref to nonexistent entity" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, Option(defaultTimeStamp)))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0, WorkspaceVersions.V1.value, "gp", None, None, None, Option(defaultTimeStamp), WorkspaceShardStates.Sharded.toString))
     val testAttribute = AttributeEntityReference("type", "name")
     intercept[RawlsException] {
       runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
@@ -702,7 +702,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       baseRec.copy(id = 2, name = "attr2", valueString = None, valueNumber = Some(2)),
       baseRec.copy(id = 3, name = "attr3", valueString = None, valueBoolean = Some(true)))
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID(), WorkspaceShardStates.Sharded))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(existingAttributes, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 
@@ -746,7 +746,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID(), WorkspaceShardStates.Sharded))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 
@@ -786,7 +786,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID(), WorkspaceShardStates.Sharded))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 
@@ -822,7 +822,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID(), WorkspaceShardStates.Sharded))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 
@@ -866,7 +866,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatesCaptor: ArgumentCaptor[Traversable[EntityAttributeRecord]] = ArgumentCaptor.forClass(classOf[Traversable[EntityAttributeRecord]])
     val deletesCaptor: ArgumentCaptor[Traversable[Long]] = ArgumentCaptor.forClass(classOf[Traversable[Long]])
 
-    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID()))
+    val spiedAttrQuery = spy(entityAttributeShardQuery(UUID.randomUUID(), WorkspaceShardStates.Sharded))
 
     runAndWait(spiedAttrQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeTempQuery.insertScratchAttributes))
 

@@ -2,12 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
-
 import cats.instances.int._
 import cats.instances.option._
 import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.WorkspaceShardState
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
@@ -34,7 +34,8 @@ case class WorkspaceRecord(
                             googleProjectNumber: Option[String],
                             currentBillingAccountOnGoogleProject: Option[String],
                             billingAccountErrorMessage: Option[String],
-                            completedCloneWorkspaceFileTransfer: Option[Timestamp]) {
+                            completedCloneWorkspaceFileTransfer: Option[Timestamp],
+                            shardState: String) {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
 }
 
@@ -67,10 +68,11 @@ trait WorkspaceComponent {
     def currentBillingAccountOnGoogleProject = column[Option[String]]("billing_account_on_google_project", O.Length(254))
     def billingAccountErrorMessage = column[Option[String]]("billing_account_error_message")
     def completedCloneWorkspaceFileTransfer = column[Option[Timestamp]]("completed_clone_workspace_file_transfer")
+    def shardState = column[String]("shard_state")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnGoogleProject, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnGoogleProject, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, shardState) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   /** raw/optimized SQL queries for working with workspace attributes
@@ -280,6 +282,10 @@ trait WorkspaceComponent {
       uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
     }
 
+    def getWorkspaceShardState(workspaceId: UUID): ReadAction[WorkspaceShardState] = {
+      uniqueResult(workspaceQuery.filter(_.id === workspaceId).map(_.shardState).result).map(opt => opt.getOrElse(throw new RawlsException(s"Unexpected shard state for workspace $workspaceId. Shard state was null."))).map(WorkspaceShardStates.withName)
+    }
+
     /**
       * Lists all workspaces with a particular attribute name/value pair.
       *
@@ -471,15 +477,15 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.currentBillingAccountOnGoogleProject.map(_.value), workspace.billingAccountErrorMessage, workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)))
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.currentBillingAccountOnGoogleProject.map(_.value), workspace.billingAccountErrorMessage, workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)), shardState = WorkspaceShardStates.Sharded.toString)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, Map.empty, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProjectId), workspaceRec.googleProjectNumber.map(GoogleProjectNumber), workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName), workspaceRec.billingAccountErrorMessage, workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)))
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, Map.empty, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProjectId), workspaceRec.googleProjectNumber.map(GoogleProjectNumber), workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName), workspaceRec.billingAccountErrorMessage, workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)), WorkspaceShardStates.withName(workspaceRec.shardState))
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProjectId), workspaceRec.googleProjectNumber.map(GoogleProjectNumber), workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName), workspaceRec.billingAccountErrorMessage, workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)))
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProjectId), workspaceRec.googleProjectNumber.map(GoogleProjectNumber), workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName), workspaceRec.billingAccountErrorMessage, workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)), WorkspaceShardStates.withName(workspaceRec.shardState))
     }
   }
 

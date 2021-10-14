@@ -93,5 +93,7 @@
     <include file="changesets/20210915_create_entity_cache_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20210916_clone_workspace_file_transfer.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20210924_sharded_entity_tables.xml" relativeToChangelogFile="true"/>
-    <include file="changesets/20210924_populate_sharded_entity_tables.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20211006_add_sharded_column.xml" relativeToChangelogFile="true"/>
+    <!--Do not enable the following changeset until Phase 2 of sharding rollout begins-->
+    <!--<include file="changesets/20210924_populate_sharded_entity_tables.xml" relativeToChangelogFile="true"/>-->
 </databaseChangeLog>
