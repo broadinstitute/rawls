@@ -40,6 +40,9 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
         case (googleProjectId, newBillingAccount) =>
           IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount))).attempt.map {
             case Left(e) => {
+              // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
+              // want to continue traversing the list to update the rest of the google project billing accounts even
+              // if one of the update operations fails.
               logger.warn(s"Failed to update billing account on $googleProjectId to $newBillingAccount", e)
               ()
             }

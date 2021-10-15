@@ -407,7 +407,7 @@ paths:
       tags:
         - billing_v2
       summary: removes the billing account from the billing project
-      description: removes the billing account on the billing project
+      description: removes the billing account from the billing project
       operationId: removeBillingProjectBillingAccount
       parameters:
         - name: projectId

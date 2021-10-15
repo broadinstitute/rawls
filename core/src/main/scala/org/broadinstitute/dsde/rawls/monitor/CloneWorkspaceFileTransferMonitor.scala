@@ -41,6 +41,9 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, va
       _ <- pendingTransfers.toList.traverse { pendingTransfer =>
         IO.fromFuture(IO(copyBucketFiles(pendingTransfer))).attempt.map {
           case Left(e) => {
+            // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
+            // want to continue traversing the list to transfer the rest of the buckets even if one of the
+            // copy operations fails.
             logger.warn(s"Failed to copy files from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName}", e)
             List.empty
           }
