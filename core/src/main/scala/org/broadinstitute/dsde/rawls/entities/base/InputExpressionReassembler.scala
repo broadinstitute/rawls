@@ -178,6 +178,9 @@ object InputExpressionReassembler {
                                                 rootEntityNames: Option[Seq[EntityName]],
                                                 inputOption: Option[MethodInput]): Map[EntityName, Try[JsValue]] = {
 
+    /* This method is called below and used to re-format inputs that are like JSON objects. For each field in the object, we verify for
+       Array type inputs that the evaluated value is also an Array. If it isn't we convert it into Array and updated the evaluated object.
+     */
     def updateInputExprValueMapForObjectInput(inputExprWithEvaluatedRef: JsValue, objectFieldsFromInput: mutable.Seq[ValueTypeObjectFieldTypes]): JsObject = {
       val updatedObject: Map[String, JsValue] = inputExprWithEvaluatedRef.asJsObject.fields.map { case (inputName, evaluatedValue) =>
         val inputObjectField: Option[ValueTypeObjectFieldTypes] = objectFieldsFromInput.find(x => x.getFieldName == inputName)

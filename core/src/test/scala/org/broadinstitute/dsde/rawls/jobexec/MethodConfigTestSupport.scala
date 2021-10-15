@@ -213,6 +213,94 @@ trait MethodConfigTestSupport {
                 |}
     """.stripMargin)
 
+  val wdlStructInputWdlWithNestedArray =
+    WdlSource("""
+                |version 1.0
+                |
+                |struct Foo {
+                |  Array[Array[[Int]] bar
+                |}
+                |
+                |struct Participant {
+                |  Int id
+                |  String sample_name
+                |  Array[Array[[Int]] samples
+                |  Foo nested_struct
+                |}
+                |
+                |task do_something {
+                |  input {
+                |    Int id
+                |    String sample_name
+                |  }
+                |
+                |  command {
+                |    echo "Hello participant ~{id} ~{sample_name} !"
+                |  }
+                |
+                |  runtime {
+                |    docker: "docker image"
+                |  }
+                |}
+                |
+                |workflow wdlStructWf {
+                |  input {
+                |    Participant obj
+                |  }
+                |
+                |  call do_something {input: id = obj.id, sample_name = obj.sample_name, samples = obj.samples}
+                |
+                |  output {
+                |    Int count1 = length(obj.samples)
+                |    Int count2 = length(obj.nested_struct.bar)
+                |  }
+                |}
+    """.stripMargin)
+
+  val wdlStructInputWdlWithTripleArray =
+    WdlSource("""
+                |version 1.0
+                |
+                |struct Foo {
+                |  Array[Array[Array[[Int]]] bar
+                |}
+                |
+                |struct Participant {
+                |  Int id
+                |  String sample_name
+                |  Array[Array[Array[[Int]]] samples
+                |  Foo nested_struct
+                |}
+                |
+                |task do_something {
+                |  input {
+                |    Int id
+                |    String sample_name
+                |  }
+                |
+                |  command {
+                |    echo "Hello participant ~{id} ~{sample_name} !"
+                |  }
+                |
+                |  runtime {
+                |    docker: "docker image"
+                |  }
+                |}
+                |
+                |workflow wdlStructWf {
+                |  input {
+                |    Participant obj
+                |  }
+                |
+                |  call do_something {input: id = obj.id, sample_name = obj.sample_name, samples = obj.samples}
+                |
+                |  output {
+                |    Int count1 = length(obj.samples)
+                |    Int count2 = length(obj.nested_struct.bar)
+                |  }
+                |}
+    """.stripMargin)
+
   val badWdl = WdlSource("This is not a valid workflow [MethodConfigResolverSpec]")
 
   val littleWdlName = "w1"
@@ -277,6 +365,30 @@ trait MethodConfigTestSupport {
   val nestedWdlStructWfInput = makeToolInputParameter(wdlStructInput, false, makeObjectValueType(wdlStructWithNestedStructFields), "Participant")
   val nestedWdlStructWfDescription = makeWorkflowDescription("wdlStructWf", List(nestedWdlStructWfInput), List.empty)
 
+  val nestedArrayStructFields = Map(
+    "bar" -> makeArrayValueType(makeArrayValueType(makeValueType("Int")))
+  )
+  val wdlStructWithNestedArrayStructFields = Map(
+    "id" -> makeValueType("Int"),
+    "sample_name" -> makeValueType("String"),
+    "samples" -> makeArrayValueType(makeArrayValueType(makeValueType("Int"))),
+    "foo" -> makeObjectValueType(nestedArrayStructFields)
+  )
+  val nestedArrayWdlStructWfInput = makeToolInputParameter(wdlStructInput, false, makeObjectValueType(wdlStructWithNestedArrayStructFields), "Participant")
+  val nestedArrayWdlStructWfDescription = makeWorkflowDescription("wdlStructWf", List(nestedArrayWdlStructWfInput), List.empty)
+
+  val tripleArrayStructFields = Map(
+    "bar" -> makeArrayValueType(makeArrayValueType(makeArrayValueType(makeValueType("Int"))))
+  )
+  val wdlStructWithTripleArrayStructFields = Map(
+    "id" -> makeValueType("Int"),
+    "sample_name" -> makeValueType("String"),
+    "samples" -> makeArrayValueType(makeArrayValueType(makeArrayValueType(makeValueType("Int")))),
+    "foo" -> makeObjectValueType(tripleArrayStructFields)
+  )
+  val tripleArrayWdlStructWfInput = makeToolInputParameter(wdlStructInput, false, makeObjectValueType(wdlStructWithTripleArrayStructFields), "Participant")
+  val tripleArrayWdlStructWfDescription = makeWorkflowDescription("wdlStructWf", List(tripleArrayWdlStructWfInput), List.empty)
+
   mockCromwellSwaggerClient.workflowDescriptions += (littleWdl -> littleWdlWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl  -> requiredArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
@@ -286,6 +398,8 @@ trait MethodConfigTestSupport {
   mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl -> wdlVersionOneWdlWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (wdlStructInputWdl -> wdlStructWfDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (wdlStructInputWdlWithNestedStruct -> nestedWdlStructWfDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (wdlStructInputWdlWithNestedArray -> nestedArrayWdlStructWfDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (wdlStructInputWdlWithTripleArray -> tripleArrayWdlStructWfDescription)
 
   val workspace = Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
@@ -325,7 +439,8 @@ trait MethodConfigTestSupport {
       AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
         sampleGood.toReference,
         sampleGood2.toReference
-      ))
+      )),
+      AttributeName.withDefaultNS("rawJsonDoubleArray") -> AttributeValueRawJson( "[[0,1,2],[3,4,5]]".parseJson )
     )
   )
 
@@ -377,6 +492,15 @@ trait MethodConfigTestSupport {
   val configNestedWdlStruct = MethodConfiguration("config_namespace", "configNestedWdlStruct", Some("SampleSet"),
     None, Map(wdlStructInputWithWfName -> AttributeString("""{"id":this.participant_id,"sample":"sample1","samples":this.samples.blah,"foo":{"bar":this.samples.blah}}""")), Map.empty, dummyMethod)
 
+  val configNestedWdlStructWithEmptyList = MethodConfiguration("config_namespace", "configNestedWdlStruct", Some("SampleSet"),
+    None, Map(wdlStructInputWithWfName -> AttributeString("""{"id":this.participant_id,"sample":"sample1","samples":this.nonexistent,"foo":{"bar":this.nonexistent}}""")), Map.empty, dummyMethod)
+
+  val configNestedArrayWdlStruct = MethodConfiguration("config_namespace", "configNestedWdlStruct", Some("SampleSet"),
+    None, Map(wdlStructInputWithWfName -> AttributeString("""{"id":this.participant_id,"sample":"sample1","samples":this.rawJsonDoubleArray,"foo":{"bar":this.rawJsonDoubleArray}}""")), Map.empty, dummyMethod)
+
+  val configTripleArrayWdlStruct = MethodConfiguration("config_namespace", "configNestedWdlStruct", Some("SampleSet"),
+    None, Map(wdlStructInputWithWfName -> AttributeString("""{"id":this.participant_id,"sample":"sample1","samples":this.samples.rawJsonDoubleArray,"foo":{"bar":this.samples.rawJsonDoubleArray}}""")), Map.empty, dummyMethod)
+
   class ConfigData extends TestData {
     override def save() = {
       DBIO.seq(
@@ -396,7 +520,10 @@ trait MethodConfigTestSupport {
             methodConfigurationQuery.create(context, configGood),
             methodConfigurationQuery.create(context, configMissingExpr),
             methodConfigurationQuery.create(context, configSampleSet),
-            methodConfigurationQuery.create(context, configNestedWdlStruct)
+            methodConfigurationQuery.create(context, configNestedWdlStruct),
+            methodConfigurationQuery.create(context, configNestedArrayWdlStruct),
+            methodConfigurationQuery.create(context, configTripleArrayWdlStruct),
+            methodConfigurationQuery.create(context, configNestedWdlStructWithEmptyList)
           )
         }
       )

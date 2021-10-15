@@ -82,6 +82,18 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayNameWithWfName)))
     }
 
+    "resolve empty lists into empty Array in nested WDL Struct" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configNestedWdlStructWithEmptyList, sampleForWdlStruct, wdlStructInputWdlWithNestedStruct, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[]},"id":101,"sample":"sample1","samples":[]}}"""
+    }
+
     "unpack AttributeValueRawJson into WDL-arrays" in withConfigData {
       val context = workspace
 
@@ -154,6 +166,18 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
     }
 
+    "unpack nested Array into WDL Struct" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configNestedArrayWdlStruct, sampleForWdlStruct, wdlStructInputWdlWithNestedArray, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[0,1,2],[3,4,5]]},"id":101,"sample":"sample1","samples":[[0,1,2],[3,4,5]]}}"""
+    }
+
     "unpack AttributeValueRawJson into lists-of WDL-arrays" in withConfigData {
       val context = workspace
 
@@ -164,6 +188,18 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with TestDri
       val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
       wdlInputs shouldBe """{"w1.aaint_array":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}"""
+    }
+
+    "unpack triple Array into WDL Struct" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configTripleArrayWdlStruct, sampleForWdlStruct, wdlStructInputWdlWithTripleArray, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]},"id":101,"sample":"sample1","samples":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}}"""
     }
 
     //The test data for the following entity cache tests are set up so that the cache will return results that are different
