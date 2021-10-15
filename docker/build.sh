@@ -101,7 +101,7 @@ function make_jar()
     fi
 
     # Get the last commit hash and set it as an environment variable
-    GIT_HASH=$(git log -n 1 --pretty=format:%h model)
+    GIT_HASH=$(git log -n 1 --pretty=format:%h)
 
     # make jar.  cache sbt dependencies. capture output and stop db before returning.
     DOCKER_RUN="docker run --rm"
