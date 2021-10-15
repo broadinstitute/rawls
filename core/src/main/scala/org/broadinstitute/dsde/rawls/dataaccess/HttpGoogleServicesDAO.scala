@@ -887,12 +887,10 @@ class HttpGoogleServicesDAO(
 
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
-
     val cloudResManager = getCloudResourceManagerWithBillingServiceAccountCredential
-
-    retryWhen500orGoogleError(() => {
-      executeGoogleRequest(cloudResManager.projects().get(googleProject.value))
-    })
+    retryExponentially(when500orNon404GoogleError)(() =>
+      Future(blocking(executeGoogleRequest(cloudResManager.projects().get(googleProject.value))))
+    )
   }
 
   def getDMConfigYamlString(googleProject: GoogleProjectId, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
