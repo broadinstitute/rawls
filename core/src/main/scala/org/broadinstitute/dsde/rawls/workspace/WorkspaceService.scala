@@ -2181,6 +2181,16 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   private def syncPolicies(workspaceId: String, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], workspaceRequest: WorkspaceRequest, parentSpan: Span): Future[Unit] = {
+    // Seq[String] of the policy names on a Workspace that need to be sync'd with their corresponding policy group on
+    // GSuite. Only syncs policies with bucket access (which need a google group)
+    // If there is not an AuthDomain, then we do not need to sync the Project Owner policy. Instead of syncing an extra
+    // group, we will use the billing project admin policy email directly on workspace to help keep the number of google
+    // groups a user is in below the limit of 2000.
+    def policyNamesThatRequireSync(withAuthDomain: Boolean): Seq[String] = {
+      val policyNames = WorkspaceAccessLevels.all.map(_.toString) :+ SamWorkspacePolicyNames.canCompute.toString()
+      if (withAuthDomain) policyNames else policyNames.filterNot(_ == WorkspaceAccessLevels.ProjectOwner.toString)
+    }
+
     traceWithParent("traversePolicies", parentSpan) { s1 =>
       // This used to be Future.traverse but that runs all the futures eagerly and concurrently. This led to a perf
       // issue with hitting the akka subscription timeout. We switched to use cats traverse to make these calls serially.
@@ -2189,10 +2199,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
           // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
           // the limit of 2000
-          // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
-          // granted bucket access (and thus need a google group)
-          !(policyName.isProjectOwner && !workspaceRequest.hasAuthorizationDomain) &&
-            (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined || policyName.isCanCompute)) (
+          policyNamesThatRequireSync(workspaceRequest.hasAuthorizationDomain).contains(policyName.value)) (
           IO.fromFuture(IO(traceWithParent(s"syncPolicy-${policyName}", s1)(_ =>
             samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName))))
         )
