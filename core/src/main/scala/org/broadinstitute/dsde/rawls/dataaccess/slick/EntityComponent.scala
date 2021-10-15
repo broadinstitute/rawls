@@ -279,7 +279,7 @@ trait EntityComponent {
             // select each attribute column and the referenced entity name
             """, sort_a.list_length as sort_list_length, sort_a.value_string as sort_field_string, sort_a.value_number as sort_field_number, sort_a.value_boolean as sort_field_boolean, sort_a.value_json as sort_field_json, sort_e_ref.name as sort_field_ref""",
             // join to attribute and entity (for references) table, grab only the named sort attribute and only the first element of a list
-            sql"""left outer join ENTITY_ATTRIBUTE_$shardId sort_a on sort_a.owner_id = e.id and sort_a.namespace = ${sortAttr.namespace} and sort_a.name = ${sortAttr.name} and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """)
+            sql"""left outer join ENTITY_ATTRIBUTE_#$shardId sort_a on sort_a.owner_id = e.id and sort_a.namespace = ${sortAttr.namespace} and sort_a.name = ${sortAttr.name} and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """)
         }
 
         concatSqlActions(sql"""select e.id, e.name #$sortColumns from ENTITY e """, sortJoin, sql""" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId """)
@@ -397,7 +397,7 @@ trait EntityComponent {
                              a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
                              e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
                              from ENTITY e
-                             left outer join ENTITY_ATTRIBUTE_$shardId a on a.owner_id = e.id and a.deleted = e.deleted """,
+                             left outer join ENTITY_ATTRIBUTE_#$shardId a on a.owner_id = e.id and a.deleted = e.deleted """,
               attrSelectionSql(" and "),
               sql""" left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id """,
               paginationJoin, order("p")).as[EntityAndAttributesResult]
@@ -444,7 +444,7 @@ trait EntityComponent {
         val deletedDate = new Timestamp(new Date().getTime)
         // issue bulk rename/hide for all entity attributes, given a set of entities
         val baseUpdate =
-          sql"""update ENTITY_ATTRIBUTE_$shardId ea join ENTITY e on ea.owner_id = e.id
+          sql"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
                 set ea.deleted=1, ea.deleted_date=$deletedDate, ea.name=CONCAT(ea.name, $renameSuffix)
                 where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and (e.entity_type, e.name) in ("""
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
@@ -779,7 +779,7 @@ trait EntityComponent {
 
     def deleteAttributes(workspaceContext: Workspace, entityType: String, attributesNames: Set[AttributeName]) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
-        entityAttributeShardQuery(workspaceContext).deleteAttributes(workspaceContext.workspaceIdAsUUID, entityType, attributesNames)
+        entityAttributeShardQuery(workspaceContext).deleteAttributes(workspaceContext, entityType, attributesNames)
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace

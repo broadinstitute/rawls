@@ -378,21 +378,23 @@ trait AttributeComponent {
       }
     }
 
-    def deleteAttributes(workspaceId: UUID, entityType: String, attributeNames: Set[AttributeName]) = {
-      DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceId, entityType, attributeNames)
+    def deleteAttributes(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) = {
+      DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceContext, entityType, attributeNames)
     }
 
     object DeleteAttributeColumnQueries extends RawSqlQuery {
       val driver: JdbcProfile = AttributeComponent.this.driver
 
-      def deleteAttributeColumn(workspaceId: UUID, entityType: String, attributeNames: Set[AttributeName]) = {
+      def deleteAttributeColumn(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) = {
         val attributeNamesSql = reduceSqlActionsWithDelim(attributeNames.map { attName =>
           sql"""(${attName.namespace},${attName.name})"""
         }.toSeq)
 
-        val deleteQueryBase = sql"""delete ea from ENTITY_ATTRIBUTE ea
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID, workspaceContext.shardState)
+
+        val deleteQueryBase = sql"""delete ea from ENTITY_ATTRIBUTE_#$shardId ea
                                     join ENTITY e on e.id = ea.owner_id
-                                    where e.workspace_id = ${workspaceId}
+                                    where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
                                       and e.entity_type = ${entityType}
                                       and (ea.namespace, ea.name) in """
 
