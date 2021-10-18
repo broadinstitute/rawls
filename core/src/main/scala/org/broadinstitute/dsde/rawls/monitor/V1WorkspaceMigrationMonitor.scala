@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
+import cats.effect.IO
 import com.google.api.services.accesscontextmanager.v1.model.Operation
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
@@ -63,4 +64,24 @@ trait V1WorkspaceMigrationMonitor extends LazyLogging with FutureSupport {
 
   def checkForMigratingWorkspaces(): Future[Unit] { Future.unit }
 
+  def getWorkspaceForMigration(): Some[(Workspace, RawlsBillingProject)]
+  def createV2Workspace(billingProject: RawlsBillingProject, name: WorkspaceName): Some[(Workspace, RawlsBillingProject)]
+  def lockWorkspace(v1Workspace: Workspace) = {
+    // Should block new workflows
+    // Should block new cloud environments
+  }
+
+  def migrate(v1Workspace: Workspace, billingProject: RawlsBillingProject): IO[Unit] = {
+    // Allocate destination workspace
+    for {
+      lock <- lockWorkspace(v1Workspace)
+      v2Workspace <- createV2Workspace(billingProject, WorkspaceName(v1Workspace.namespace, v1Workspace.name))
+      googleProject = getGoogleProject(v2Workspace)
+      _ <- migrateWorkspaceBucket(v1Workspace, googleProject)
+      _ <- migrateSubmissionHistory(v1Workspace, v2Workspace)
+      _ <- migrateCloudEnvironments(v1Workspace, v2Workspace)
+      _ <- unlockWorkspace(lock)
+    }
+    IO[Unit]
+  }
 }
