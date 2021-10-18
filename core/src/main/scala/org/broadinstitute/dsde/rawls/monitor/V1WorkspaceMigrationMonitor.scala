@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor._
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.util.FutureSupport
 
 import scala.collection.JavaConverters._
@@ -71,15 +72,41 @@ trait V1WorkspaceMigrationMonitor extends LazyLogging with FutureSupport {
     // Should block new cloud environments
   }
 
+  def migrateWorkspaceBucket(v1Workspace: Workspace, googleProject: GoogleProject) = {
+    // Create temp bucket
+    // Copy Files to temp bucket
+    // Delete original bucket
+    // Create new bucket with same name
+    // Copy files from temp bucket
+  }
+
+  def migrateCloudEnvironments(v1Workspace: Workspace, googleProject: GoogleProject) = {
+    /* covers:
+     apps, (known to be ephemeral, maybe we don't need to do?)
+      dataproc clusters, (known to be ephemeral, maybe we don't need to do?)
+       persistent disks (punting on this)
+     */
+  }
+
+  def getGoogleProject(v1Workspace: Workspace) = {
+    // We could avoid doing this for 1-1 billingProject Workspace relationships (Punting)
+    // claim project from rbs
+    // Create sam resource and assoc with workspace
+  }
+
+  def assocWorkspaceWithGoogleProject(v1Workspace: Workspace, googleProject: GoogleProject) = {
+    // Create sam resource and assoc with workspace
+    // shuts down old project
+  }
+
   def migrate(v1Workspace: Workspace, billingProject: RawlsBillingProject): IO[Unit] = {
     // Allocate destination workspace
     for {
       lock <- lockWorkspace(v1Workspace)
-      v2Workspace <- createV2Workspace(billingProject, WorkspaceName(v1Workspace.namespace, v1Workspace.name))
-      googleProject = getGoogleProject(v2Workspace)
+      googleProject = getGoogleProject(v1Workspace)
       _ <- migrateWorkspaceBucket(v1Workspace, googleProject)
-      _ <- migrateSubmissionHistory(v1Workspace, v2Workspace)
-      _ <- migrateCloudEnvironments(v1Workspace, v2Workspace)
+      _ <- migrateCloudEnvironments(v1Workspace, googleProject)
+      _ <- assocWorkspaceWithGoogleProject(v1Workspace, googleProject)
       _ <- unlockWorkspace(lock)
     }
     IO[Unit]
