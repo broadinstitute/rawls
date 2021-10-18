@@ -7,11 +7,14 @@ import cats.effect.IO
 import com.google.api.services.accesscontextmanager.v1.model.Operation
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.util.FutureSupport
 
@@ -58,18 +61,24 @@ class V1WorkspaceMigrationActor(val datasource: SlickDataSource, val gcsDAO: Goo
 trait V1WorkspaceMigrationMonitor extends LazyLogging with FutureSupport {
   implicit val executionContext: ExecutionContext
   val datasource: SlickDataSource
+  val workspaceService: WorkspaceService
   val gcsDAO: GoogleServicesDAO
   val projectTemplate: ProjectTemplate
   val samDAO: SamDAO
   val requesterPaysRole: String
 
-  def checkForMigratingWorkspaces(): Future[Unit] { Future.unit }
+  // todo: CA-1183 create second monitor to clean up old Google projects from fully migrated Terra billing projects
+
+  def checkForMigratingWorkspaces(): Future[Unit] = { Future.unit }
 
   def getWorkspaceForMigration(): Some[(Workspace, RawlsBillingProject)]
   def createV2Workspace(billingProject: RawlsBillingProject, name: WorkspaceName): Some[(Workspace, RawlsBillingProject)]
   def lockWorkspace(v1Workspace: Workspace) = {
     // Should block new workflows
     // Should block new cloud environments
+
+    // todo: abstract lock logic from business logic
+    workspaceService.lockWorkspace(v1Workspace.toWorkspaceName)
   }
 
   def migrateWorkspaceBucket(v1Workspace: Workspace, googleProject: GoogleProject) = {
@@ -88,10 +97,17 @@ trait V1WorkspaceMigrationMonitor extends LazyLogging with FutureSupport {
      */
   }
 
-  def getGoogleProject(v1Workspace: Workspace) = {
+  def getGoogleProject(v1Workspace: Workspace, billingProject: RawlsBillingProject) = {
     // We could avoid doing this for 1-1 billingProject Workspace relationships (Punting)
     // claim project from rbs
-    // Create sam resource and assoc with workspace
+    workspaceService.setupGoogleProject(
+      billingProject,
+      billingProject.billingAccount.getOrElse(throw new Exception),
+      v1Workspace.workspaceId,
+      v1Workspace.toWorkspaceName,
+      policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], // todo: get these from Sam
+      billingProjectOwnerPolicyEmail: WorkbenchEmail,
+      span: Span = null)
   }
 
   def assocWorkspaceWithGoogleProject(v1Workspace: Workspace, googleProject: GoogleProject) = {
@@ -103,11 +119,12 @@ trait V1WorkspaceMigrationMonitor extends LazyLogging with FutureSupport {
     // Allocate destination workspace
     for {
       lock <- lockWorkspace(v1Workspace)
-      googleProject = getGoogleProject(v1Workspace)
+      googleProject = getGoogleProject(v1Workspace, billingProject)
       _ <- migrateWorkspaceBucket(v1Workspace, googleProject)
       _ <- migrateCloudEnvironments(v1Workspace, googleProject)
       _ <- assocWorkspaceWithGoogleProject(v1Workspace, googleProject)
       _ <- unlockWorkspace(lock)
+      _ <- deleteBillingProjectGoogleProjectIfLastWorkspace()
     }
     IO[Unit]
   }
