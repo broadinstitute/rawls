@@ -1,12 +1,17 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
+import cromwell.client.model.ValueType.TypeNameEnum
+import cromwell.client.model.ValueTypeObjectFieldTypes
 import org.antlr.v4.runtime.tree.ParseTree
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.expressions.JsonExpressionEvaluator
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ReconstructExpressionVisitor
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson}
-import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsString, JsValue}
+import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.{Success, Try}
 
 object InputExpressionReassembler {
@@ -32,7 +37,8 @@ object InputExpressionReassembler {
     */
   def constructFinalInputValues(lookupExpressionAndResults: Seq[ExpressionAndResult],
                                 parsedInputExpression: ParseTree,
-                                rootEntityNames: Option[Seq[EntityName]]): Map[EntityName, Try[Iterable[AttributeValue]]] = {
+                                rootEntityNames: Option[Seq[EntityName]],
+                                input: Option[MethodInput]): Map[EntityName, Try[Iterable[AttributeValue]]] = {
     // unpack the evaluated AttributeValue to JsValue and transform it into sequence of tuples with entity name as key
     val seqOfEntityToLookupExprAndValue: Seq[(EntityName, (LookupExpression, Try[JsValue]))] = unpackAndTransformEvaluatedOutput(lookupExpressionAndResults)
 
@@ -43,7 +49,7 @@ object InputExpressionReassembler {
     val mapOfEntityToEvaluatedExprMap: Map[EntityName, Try[Map[LookupExpression, JsValue]]] = convertEvaluatedExprSeqToMap(mapOfEntityToSeqOfEvaluatedExpr)
 
     // replace the value for evaluated attribute references in the input expression for each entity name
-    val mapOfEntityToInputExpr: Map[EntityName, Try[JsValue]] = reconstructInputExprForEachEntity(mapOfEntityToEvaluatedExprMap, parsedInputExpression, rootEntityNames)
+    val mapOfEntityToInputExpr: Map[EntityName, Try[JsValue]] = reconstructInputExprForEachEntity(mapOfEntityToEvaluatedExprMap, parsedInputExpression, rootEntityNames, input)
 
     /*
       For each entity name and it's generated expression call JsonExpressionEvaluator to reconstruct the desired return type
@@ -169,17 +175,64 @@ object InputExpressionReassembler {
    */
   private def reconstructInputExprForEachEntity(mapOfEntityToEvaluatedExprMap: Map[EntityName, Try[Map[LookupExpression, JsValue]]],
                                                 parsedTree: ParseTree,
-                                                rootEntityNames: Option[Seq[EntityName]]): Map[EntityName, Try[JsValue]] = {
+                                                rootEntityNames: Option[Seq[EntityName]],
+                                                inputOption: Option[MethodInput]): Map[EntityName, Try[JsValue]] = {
+
+    /* This method is called below and used to re-format inputs that are like JSON objects. For each field in the object, we verify for
+       Array type inputs that the evaluated value is also an Array. If it isn't we convert it into Array and updated the evaluated object.
+     */
+    def updateInputExprValueMapForObjectInput(inputExprWithEvaluatedRef: JsValue, objectFieldsFromInput: mutable.Seq[ValueTypeObjectFieldTypes]): JsObject = {
+      val updatedObject: Map[String, JsValue] = inputExprWithEvaluatedRef.asJsObject.fields.map { case (inputName, evaluatedValue) =>
+        val inputObjectField: Option[ValueTypeObjectFieldTypes] = objectFieldsFromInput.find(x => x.getFieldName == inputName)
+
+        val updatedValue: JsValue = inputObjectField match {
+          case Some(objectField) => objectField.getFieldType.getTypeName match {
+            case TypeNameEnum.OBJECT =>
+              // if there are nested objects, recursively call this method to reach leaf fields
+              updateInputExprValueMapForObjectInput(evaluatedValue, objectField.getFieldType.getObjectFieldTypes.asScala)
+            case TypeNameEnum.ARRAY => evaluatedValue match {
+              case JsNull => JsArray()
+              case JsArray(_) => evaluatedValue
+              case _ => JsArray(evaluatedValue)
+            }
+            case _ => evaluatedValue
+          }
+          case None => evaluatedValue
+        }
+        inputName -> updatedValue
+      }
+
+      JsObject(updatedObject)
+    }
+
     // when there are no root entities handle as a single root entity with empty string for name
     rootEntityNames.getOrElse(Seq("")).map { entityName =>
       // in the case of literal JSON there are no LookupExpressions
       val evaluatedLookupMapTry = mapOfEntityToEvaluatedExprMap.getOrElse(entityName, Success(Map.empty[LookupExpression, JsValue]))
-      val inputExprWithEvaluatedRef = evaluatedLookupMapTry.map { lookupMap =>
+      val inputExprWithEvaluatedRef: Try[JsValue] = evaluatedLookupMapTry.map { lookupMap =>
         val visitor = new ReconstructExpressionVisitor(lookupMap)
         visitor.visit(parsedTree)
       }
 
-      entityName -> inputExprWithEvaluatedRef
+      /* In SlickExpressionEvaluator, for attribute references that evaluate to AttributeValueList type, the elements inside the list are extracted and returned.
+         As a result, for attributes that contain only 1 element, we can no longer identify whether the original value was a list or a single AttributeValue.
+         Because of this type erasure, when we are reconstructing object type inputs, List/Array with single element get incorrectly reconstructed as single AttributeValue,
+         which leads to Cromwell failing while processing inputs (https://broadworkbench.atlassian.net/browse/BW-678).
+         To fix this, once the object type inputs have been reconstructed, we iterate over each field for object input and verify for Array type inputs that the
+         evaluated value is also an Array. If it isn't we convert it into Array and updated the evaluated object.
+         Note: This approach does not fix the problem if there is single element array inside an array. This would be fixed in https://broadworkbench.atlassian.net/browse/BW-846.
+         Fixing this might possible require fixing the type erasure, changes to what AttributeValueList extends and update how we convert JsValue to AttributeValue
+         and vice-versa in JsonSupport class.
+       */
+      val updatedEvaluatedRefMap: Try[JsValue] = inputOption match {
+        case Some(input) => input.workflowInput.getValueType.getTypeName match {
+          case TypeNameEnum.OBJECT => inputExprWithEvaluatedRef.map(x => updateInputExprValueMapForObjectInput(x, input.workflowInput.getValueType.getObjectFieldTypes.asScala))
+          case _ => inputExprWithEvaluatedRef
+        }
+        case None => inputExprWithEvaluatedRef
+      }
+
+      entityName -> updatedEvaluatedRefMap
     }.toMap
   }
 }
