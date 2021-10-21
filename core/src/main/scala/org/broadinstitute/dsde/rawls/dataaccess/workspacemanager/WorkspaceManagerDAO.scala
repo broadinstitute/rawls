@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
-import java.util.UUID
-
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
 import org.broadinstitute.dsde.workbench.model.ErrorReportSource
+
+import java.util.UUID
 
 trait WorkspaceManagerDAO {
   val errorReportSource = ErrorReportSource("WorkspaceManager")

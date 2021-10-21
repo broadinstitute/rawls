@@ -1,26 +1,23 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.util.UUID
-
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
-import cats.implicits._
 import cats.effect.IO
 import com.typesafe.scalalogging.LazyLogging
 import fs2.concurrent.SignallingRef
 import io.circe.fs2._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, Workspace, WorkspaceName, ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
+import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, Workspace, WorkspaceName, ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, KeepAlive, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
@@ -28,6 +25,7 @@ import org.broadinstitute.dsde.workbench.util.FutureSupport
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.util.UUID
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps

@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding.Get
@@ -9,11 +7,11 @@ import akka.http.scaladsl.model.Uri.Path
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.ImportStatuses
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
-import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{ImportStatuses, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 object ImportServiceJsonSupport {
@@ -28,8 +26,8 @@ class HttpImportServiceDAO(url: String)(implicit val system: ActorSystem, val ma
   val httpClientUtils = HttpClientUtilsStandard()
 
   def getImportStatus(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Option[ImportStatus]] = {
-    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
     import ImportServiceJsonSupport._
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 
     val requestUrl = Uri(url).withPath(Path(s"/${workspaceName.namespace}/${workspaceName.name}/imports/$importId"))
 

@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.user
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
-import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -10,8 +7,8 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
@@ -25,6 +22,9 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 

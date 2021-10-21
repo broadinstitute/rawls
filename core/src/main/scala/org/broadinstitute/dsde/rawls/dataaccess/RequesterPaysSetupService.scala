@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import cats.effect.IO
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace, WorkspaceVersions}
 import cats.implicits._
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace}
 
 import scala.concurrent.{ExecutionContext, Future}
 

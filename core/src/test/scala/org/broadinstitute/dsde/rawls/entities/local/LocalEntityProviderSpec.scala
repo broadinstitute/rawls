@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
@@ -9,16 +8,16 @@ import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.concurrent.ScalaFutures
-
-import scala.collection.immutable.Map
-import scala.concurrent.ExecutionContext
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.sql.Timestamp
 import java.time.Instant
+import scala.collection.immutable.Map
+import scala.concurrent.ExecutionContext
 
 class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFutures with TestDriverComponent with MethodConfigTestSupport {
   import driver.api._

@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.util
 
-import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorRefFactory
 import akka.http.scaladsl.HttpExt
 import akka.http.scaladsl.coding.Gzip
@@ -14,6 +12,7 @@ import nl.grons.metrics4.scala.{Counter, Timer}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.ErrorReport
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Success
 

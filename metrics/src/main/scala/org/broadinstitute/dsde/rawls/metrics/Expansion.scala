@@ -1,9 +1,8 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import java.util.UUID
-
 import akka.http.scaladsl.model.{HttpMethod, StatusCode, Uri}
 
+import java.util.UUID
 import scala.annotation.implicitNotFound
 
 /**

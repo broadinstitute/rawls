@@ -1,18 +1,18 @@
 package org.broadinstitute.dsde.rawls.util
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props, SupervisorStrategy}
 import akka.actor.SupervisorStrategy.{Directive, Restart}
-import akka.testkit.TestKit
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatestplus.mockito.MockitoSugar
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.time.{Seconds, Span}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props, SupervisorStrategy}
 import akka.pattern.ask
+import akka.testkit.TestKit
 import akka.util.Timeout
-
-import scala.concurrent.duration._
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Seconds, Span}
+import org.scalatestplus.mockito.MockitoSugar
+
+import scala.concurrent.duration._
 
 class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneForOneStrategySpec")) with ScalaFutures with Eventually with AnyFlatSpecLike with MockitoSugar with Matchers with BeforeAndAfterAll {
 

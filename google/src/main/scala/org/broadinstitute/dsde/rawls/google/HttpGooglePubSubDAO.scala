@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.google
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCodes
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -11,7 +12,6 @@ import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.util.FutureSupport
-import akka.http.scaladsl.model.StatusCodes
 
 import scala.collection.JavaConverters._
 import scala.concurrent._

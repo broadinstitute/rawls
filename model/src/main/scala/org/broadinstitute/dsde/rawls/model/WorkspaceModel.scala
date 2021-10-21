@@ -1,11 +1,8 @@
 package org.broadinstitute.dsde.rawls.model
 
-import java.net.{URLDecoder, URLEncoder}
-import java.nio.charset.StandardCharsets.UTF_8
-import java.util.UUID
-import cats.implicits._
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
+import cats.implicits._
 import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
@@ -18,6 +15,9 @@ import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
 import org.joda.time.DateTime
 import spray.json._
 
+import java.net.{URLDecoder, URLEncoder}
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.UUID
 import scala.util.Try
 
 object Attributable {
@@ -803,8 +803,8 @@ case class WorkspaceTag(tag: String, count: Int)
 
 class WorkspaceJsonSupport extends JsonSupport {
   import DataReferenceModelJsonSupport.DataReferenceNameFormat
-  import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
   import UserModelJsonSupport.RawlsBillingAccountNameFormat
+  import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
   import spray.json.DefaultJsonProtocol._
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {

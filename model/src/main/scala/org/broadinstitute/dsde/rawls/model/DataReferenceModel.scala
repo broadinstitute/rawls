@@ -1,12 +1,11 @@
 package org.broadinstitute.dsde.rawls.model
 
-import java.util.UUID
-
-import bio.terra.workspace.model.{ResourceMetadata, _}
+import bio.terra.workspace.model._
 import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
 import spray.json.DefaultJsonProtocol._
 import spray.json.{DeserializationException, JsArray, JsNull, JsObject, JsString, JsValue, RootJsonFormat, enrichAny}
 
+import java.util.UUID
 import scala.collection.JavaConverters._
 
 case class DataReferenceName(value: String) extends ValueObject

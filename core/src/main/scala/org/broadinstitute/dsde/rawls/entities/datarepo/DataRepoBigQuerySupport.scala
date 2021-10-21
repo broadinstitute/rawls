@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{RelationshipModel, SnapshotModel, TableModel}
 import com.google.cloud.bigquery.Field.Mode
@@ -12,6 +10,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, E
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
 import org.broadinstitute.dsde.rawls.model._
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 import scala.util.{Failure, Success, Try}

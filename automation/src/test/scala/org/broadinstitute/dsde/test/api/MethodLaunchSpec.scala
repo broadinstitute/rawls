@@ -1,20 +1,19 @@
 package org.broadinstitute.dsde.test.api
 
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.UserPool
-import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, MethodData, WorkspaceFixtures}
-import org.broadinstitute.dsde.workbench.service.{AclEntry, Rawls, RestException, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.workbench.fixture._
-import spray.json._
-import DefaultJsonProtocol._
-import org.scalatest.time.{Minutes, Seconds, Span}
+import org.broadinstitute.dsde.workbench.service.{AclEntry, Rawls, RestException, WorkspaceAccessLevel}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.matchers.should.Matchers
 import org.scalatest.freespec.AnyFreeSpecLike
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Minutes, Seconds, Span}
+import spray.json.DefaultJsonProtocol._
+import spray.json._
+
+import java.util.UUID
 
 //noinspection TypeAnnotation
 class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually

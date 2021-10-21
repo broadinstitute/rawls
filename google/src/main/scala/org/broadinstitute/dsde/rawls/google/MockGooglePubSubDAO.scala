@@ -1,15 +1,14 @@
 package org.broadinstitute.dsde.rawls.google
 
-import java.util
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
-import java.util.{Collections, UUID}
-
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.pubsub.model.Topic
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.{MessageRequest, PubSubMessage}
 
+import java.util
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
+import java.util.{Collections, UUID}
 import scala.collection.JavaConverters._
 import scala.collection.{mutable, _}
 import scala.concurrent.{ExecutionContext, Future}

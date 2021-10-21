@@ -1,18 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.nio.charset.Charset
-import cats.effect.IO
+import cats.effect.{IO, Temporal}
 import com.google.api.client.util.Charsets
 import com.google.auth.oauth2.ServiceAccountCredentials
-import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.apache.commons.io.IOUtils
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 import java.io.ByteArrayInputStream
+import java.nio.charset.Charset
 import scala.concurrent.ExecutionContext
-import cats.effect.Temporal
 
 /**
  * DataRepoEntityProvider, and potential future callers of this class, need to create a new

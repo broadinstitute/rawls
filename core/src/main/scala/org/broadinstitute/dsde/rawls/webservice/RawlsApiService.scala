@@ -2,37 +2,34 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.event.Logging.LogLevel
 import akka.event.{Logging, LoggingAdapter}
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.dataaccess.ExecutionServiceCluster
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, UserInfo}
-import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
-import org.broadinstitute.dsde.rawls.status.StatusService
-import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.{Directive0, ExceptionHandler, RejectionHandler}
 import akka.http.scaladsl.server.RouteResult.Complete
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, LoggingMagnet}
+import akka.http.scaladsl.server.{Directive0, ExceptionHandler, RejectionHandler}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
 import bio.terra.workspace.client.ApiException
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
-import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
+import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, UserInfo}
+import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
+import org.broadinstitute.dsde.rawls.status.StatusService
+import org.broadinstitute.dsde.rawls.user.UserService
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.FiniteDuration
-import scala.util.Try
+import scala.concurrent.{ExecutionContext, Future}
 
 object RawlsApiService extends LazyLogging {
   val exceptionHandler = {
@@ -136,8 +133,8 @@ trait VersionApiService {
   val executionServiceCluster: ExecutionServiceCluster
 
   val versionRoutes = {
-    import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ApplicationVersionFormat
     import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceVersionFormat
+    import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ApplicationVersionFormat
     implicit val ec: ExecutionContext = ExecutionContext.global
     path("version") {
       get {

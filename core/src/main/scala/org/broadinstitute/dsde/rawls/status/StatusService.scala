@@ -10,8 +10,8 @@ import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, Subsystems}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.GetCurrentStatus
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 
 /**

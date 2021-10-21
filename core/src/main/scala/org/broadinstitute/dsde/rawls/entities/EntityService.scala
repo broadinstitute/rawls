@@ -5,7 +5,6 @@ import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerException

@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.IO
@@ -20,6 +18,7 @@ import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}

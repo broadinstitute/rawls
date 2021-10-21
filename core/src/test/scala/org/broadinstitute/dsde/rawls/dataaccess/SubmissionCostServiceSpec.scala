@@ -6,12 +6,12 @@ import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.joda.time.{DateTime, DateTimeZone}
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.collection.JavaConverters._
-import scala.concurrent.duration._
 import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.language.postfixOps
-import org.scalatest.flatspec.AnyFlatSpec
 
 class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
   implicit val actorSystem = ActorSystem("SubmissionCostServiceSpec")

@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls
 
-import java.io.StringReader
-import java.net.InetAddress
-import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
@@ -14,17 +11,17 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
-import org.typelevel.log4cats.Logger
-import org.typelevel.log4cats.slf4j.Slf4jLogger
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
+import org.typelevel.log4cats.Logger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, GcsDeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -47,17 +44,17 @@ import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoog
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import cats.effect.unsafe.implicits.global
-
 import org.http4s.Uri
+import org.http4s.blaze.client.BlazeClientBuilder
 
+import java.io.StringReader
+import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.{higherKinds, postfixOps}
-import cats.effect.Temporal
-import org.http4s.blaze.client.BlazeClientBuilder
 
 object Boot extends IOApp with LazyLogging {
   override def run(

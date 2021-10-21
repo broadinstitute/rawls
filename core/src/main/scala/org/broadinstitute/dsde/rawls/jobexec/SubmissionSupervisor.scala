@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.util.UUID
-
 import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import akka.pattern._
@@ -19,6 +17,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.ThresholdOneForOneStrategy
 
+import java.util.UUID
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps

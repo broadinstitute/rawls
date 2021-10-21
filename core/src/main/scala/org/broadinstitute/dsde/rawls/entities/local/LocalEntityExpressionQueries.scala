@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
-import java.sql.Timestamp
-
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeString, Workspace}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
+
+import java.sql.Timestamp
 
 case class LocalEntityExpressionContext(workspaceContext: Workspace, rootEntities: Option[Seq[EntityRecord]], transactionId: String) {
   def rootEntityNames(): Seq[String] = rootEntities match {

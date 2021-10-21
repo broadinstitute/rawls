@@ -1,21 +1,20 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
-import org.broadinstitute.dsde.rawls.model._
-import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.AttributeName
-import akka.http.scaladsl.server
-import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-import CustomDirectives._
+import akka.http.scaladsl.server
+import akka.http.scaladsl.server.Directives._
 import io.opencensus.scala.akka.http.TracingDirective.traceRequest
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}

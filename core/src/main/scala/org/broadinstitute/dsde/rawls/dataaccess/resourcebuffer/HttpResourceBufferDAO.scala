@@ -3,8 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.buffer.client.{ApiClient, ApiException}
 import bio.terra.buffer.api.BufferApi
+import bio.terra.buffer.client.{ApiClient, ApiException}
 import bio.terra.buffer.model.{HandoutRequestBody, ResourceInfo}
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging

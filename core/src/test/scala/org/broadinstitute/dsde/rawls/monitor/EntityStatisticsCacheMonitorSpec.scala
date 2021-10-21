@@ -2,13 +2,11 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
-import org.broadinstitute.dsde.rawls.model.{Entity, EntityTypeMetadata}
+import org.broadinstitute.dsde.rawls.model.Entity
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{ScheduleDelayedSweep, Sweep}
 import org.broadinstitute.dsde.rawls.util
 import org.scalatest.BeforeAndAfterAll
@@ -20,7 +18,6 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.sql.Timestamp
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
-import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.language.postfixOps

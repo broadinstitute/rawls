@@ -10,8 +10,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSou
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName}
 import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 object WorkspaceBillingAccountMonitor {
   def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {

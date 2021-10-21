@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
-import java.util.{Date, UUID}
 import cats.instances.int._
 import cats.instances.option._
 import cats.{Monoid, MonoidK}
@@ -13,6 +11,8 @@ import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcProfile}
 
+import java.sql.Timestamp
+import java.util.{Date, UUID}
 import scala.language.postfixOps
 
 /**

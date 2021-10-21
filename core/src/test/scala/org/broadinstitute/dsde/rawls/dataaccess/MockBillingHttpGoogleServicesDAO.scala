@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import akka.stream.Materializer
-import cats.effect.IO
+import cats.effect.{IO, Temporal}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
@@ -10,12 +10,10 @@ import com.google.api.services.cloudbilling.model.BillingAccount
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
 import org.joda.time.DateTime
 
 import scala.collection.mutable
 import scala.concurrent._
-import cats.effect.Temporal
 
 class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   override val clientSecrets: GoogleClientSecrets,

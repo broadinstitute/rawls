@@ -1,15 +1,14 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.util.UUID
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataRepoSnapshot, DataRepoSnapshotAttributes, ReferenceResourceCommonFields, ReferenceTypeEnum}
+import bio.terra.workspace.model.CloningInstructionsEnum
 import cats.effect.IO
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, LegacySQLTypeName, Schema, TableResult}
+import com.google.cloud.bigquery._
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -35,19 +34,19 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito._
-import org.scalatest.concurrent.Eventually
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 import spray.json._
 
+import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
+import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Try
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
-
-import scala.concurrent.ExecutionContext.global
 
 /**
  * Created with IntelliJ IDEA.

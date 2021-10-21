@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.crypto
 
-import java.security.SecureRandom
-
-import javax.crypto.Cipher
-import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import org.apache.commons.codec.binary.Base64
 
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import scala.util.{Failure, Success, Try}
 
 case object Aes256Cbc {

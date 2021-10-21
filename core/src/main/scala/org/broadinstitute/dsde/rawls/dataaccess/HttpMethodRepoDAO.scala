@@ -3,32 +3,31 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
+import akka.http.scaladsl.client.RequestBuilding._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.{StatusCodes, Uri}
+import akka.http.scaladsl.server.PathMatchers.Segment
+import akka.http.scaladsl.server.directives.PathDirectives._
+import akka.stream.Materializer
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsExpansion, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
+import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.HttpClientUtilsGzipInstrumented
 import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
-import akka.http.scaladsl.client.RequestBuilding._
-import akka.http.scaladsl.model.{StatusCodes, Uri}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import akka.http.scaladsl.server.directives.PathDirectives._
-import akka.http.scaladsl.server.PathMatchers.Segment
-import org.broadinstitute.dsde.rawls.util.HttpClientUtilsGzipInstrumented
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.stream.Materializer
-import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
-import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
 
 /**
  * @author tsharpe
  */
 class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConfig: MethodRepoConfig[Dockstore.type], override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented with ServiceDAOWithStatus {
-  import system.dispatcher
 
   override val http = Http(system)
   override val httpClientUtils = HttpClientUtilsGzipInstrumented()

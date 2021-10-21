@@ -2,13 +2,12 @@ package org.broadinstitute.dsde.rawls.deltalayer
 
 import akka.actor.ActorSystem
 import cats.effect.IO
+import cats.effect.std.Semaphore
 import com.google.cloud.storage.Storage
 import com.google.cloud.storage.contrib.nio.testing.LocalStorageHelper
-import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageInterpreter
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
-import cats.effect.std.Semaphore
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 trait GcsStorageTestSupport {
 
