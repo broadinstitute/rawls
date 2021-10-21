@@ -1240,8 +1240,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     }
   }
 
-  it should "No Content for a valid submission" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, subGoodWorkflow)
+  it should "return successfully for a valid submission" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = Await.result(workspaceService.abortSubmission(subTestData.wsName, subGoodWorkflow), Duration.Inf)
     assertResult(1) {
       rqComplete
     }
