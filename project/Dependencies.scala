@@ -1,13 +1,12 @@
 import sbt._
 
 object Dependencies {
-  val akkaV = "2.6.8"
-  val akkaHttpV = "10.2.0"
+  val akkaV = "2.6.17"
+  val akkaHttpV = "10.2.6"
   val slickV = "3.3.2"
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
-  val workbenchGoogle2V = "0.21-9d25534"
 
   val cromwellVersion = "40-2754783"
 
@@ -74,7 +73,7 @@ object Dependencies {
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.10"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.4"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
-  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.3.0"
+  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.1"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
   val swaggerUI: ModuleID =       "org.webjars.npm"               % "swagger-ui-dist"       % "3.37.2"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
@@ -95,16 +94,20 @@ object Dependencies {
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
-  val workbenchModelV  = "0.14-d415128"
+  val workbenchLibsHash = "ae11b9f"
+
+  val workbenchModelV  = s"0.14-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.22-${workbenchLibsHash}"
+
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
-  val workbenchGoogleV = "0.21-ae11b9f"
   val workbenchGoogle: ModuleID =       workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV)
   val workbenchGoogleMocks: ModuleID =  workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests")
   val workbenchGoogle2: ModuleID =      workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V)
   val workbenchGoogle2Tests: ModuleID = workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests")
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.122.11" % "test"
 
-  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
+  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}" excludeAll(excludeWorkbenchModel)
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.13.1"
 
