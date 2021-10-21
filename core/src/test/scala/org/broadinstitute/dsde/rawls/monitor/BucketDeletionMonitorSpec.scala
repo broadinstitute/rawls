@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.IO
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{PendingBucketDeletionRecord, TestDriverComponent}
 import org.mockito.Mockito
@@ -14,7 +13,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import org.scalatestplus.mockito.MockitoSugar
 
-import scala.concurrent.ExecutionContext.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps

@@ -6,7 +6,6 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
 import bio.terra.workspace.model.CloningInstructionsEnum
-import cats.effect.IO
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory

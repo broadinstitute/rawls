@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import com.google.cloud.storage.Storage.BlobWriteOption
 import com.google.cloud.storage.contrib.nio.testing.LocalStorageHelper
 import com.google.cloud.storage.{BlobInfo, Storage, StorageException}
-import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 import org.broadinstitute.dsde.rawls.model.deltalayer.v1.{DeltaInsert, DeltaRow, InsertDestination, InsertSource}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUserSubjectId}

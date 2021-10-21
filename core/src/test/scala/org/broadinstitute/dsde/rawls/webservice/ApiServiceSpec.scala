@@ -9,7 +9,6 @@ import akka.http.scaladsl.server._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKitBase
-import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
@@ -43,7 +42,6 @@ import org.scalatest.concurrent.Eventually
 import spray.json._
 
 import java.util.concurrent.TimeUnit
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
 

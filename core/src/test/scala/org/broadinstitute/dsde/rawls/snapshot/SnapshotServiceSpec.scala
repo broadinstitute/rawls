@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.snapshot
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
-import cats.effect.IO
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -21,7 +20,6 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
 import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
