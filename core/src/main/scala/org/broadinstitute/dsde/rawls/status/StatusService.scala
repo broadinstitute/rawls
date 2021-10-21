@@ -18,12 +18,12 @@ import scala.language.postfixOps
   * Created by rtitle on 5/20/17.
   */
 object StatusService {
-  def constructor(healthMonitor: ActorRef)()(implicit executionContext: ExecutionContext): StatusService = {
+  def constructor(healthMonitor: ActorRef): StatusService = {
     new StatusService(healthMonitor)
   }
 }
 
-class StatusService(val healthMonitor: ActorRef)(implicit val executionContext: ExecutionContext) {
+class StatusService(val healthMonitor: ActorRef) {
   implicit val timeout = Timeout(1 minute)
 
   def getStatus: Future[PerRequestMessage] = {

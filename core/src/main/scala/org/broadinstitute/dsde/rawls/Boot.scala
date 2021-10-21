@@ -47,9 +47,9 @@ import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoog
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import org.broadinstitute.dsde.workbench.util.ExecutionContexts
+import cats.effect.unsafe.implicits.global
+
 import org.http4s.Uri
-import org.http4s.client.blaze.BlazeClientBuilder
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
@@ -57,6 +57,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.{higherKinds, postfixOps}
 import cats.effect.Temporal
+import org.http4s.blaze.client.BlazeClientBuilder
 
 object Boot extends IOApp with LazyLogging {
   override def run(
