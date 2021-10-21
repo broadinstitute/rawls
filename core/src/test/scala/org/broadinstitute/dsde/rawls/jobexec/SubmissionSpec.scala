@@ -8,7 +8,7 @@ import bio.terra.datarepo.model.{ColumnModel, TableModel}
 import bio.terra.workspace.model.CloningInstructionsEnum
 import cats.effect.IO
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery._
+import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -335,7 +335,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
       val deltaLayer = new DeltaLayer(bigQueryServiceFactory, new MockDeltaLayerWriter, samDAO,
         WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
-        WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global))
+        WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global)
 
       val genomicsServiceConstructor = GenomicsService.constructor(
         slickDataSource,

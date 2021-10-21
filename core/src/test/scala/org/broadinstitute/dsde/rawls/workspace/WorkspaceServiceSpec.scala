@@ -136,7 +136,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val deltaLayerSpy = spy(new DeltaLayer(MockBigQueryServiceFactory.ioFactory(), new MockDeltaLayerWriter, samDAO,
       WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
-      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global)))
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global))
 
     val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,

@@ -27,8 +27,6 @@ import scala.concurrent.{Await, Future}
 
 class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSugar with TestDriverComponent {
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(global)
-
   //test constants
   val fakeRawlsClientEmail: WorkbenchEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
   val fakeDeltaLayerStreamerEmail: WorkbenchEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")

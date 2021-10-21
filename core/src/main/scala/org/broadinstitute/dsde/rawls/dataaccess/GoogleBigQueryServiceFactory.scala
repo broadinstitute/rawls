@@ -21,23 +21,22 @@ import scala.concurrent.ExecutionContext
  * This factory class contains boilerplate and allows callers to easily and quickly get
  * a new service instance for each user's credentials.
  */
-class GoogleBigQueryServiceFactory(pathToCredentialJson: String, blocker: Blocker)(implicit executionContext: ExecutionContext) {
+class GoogleBigQueryServiceFactory(pathToCredentialJson: String)(implicit executionContext: ExecutionContext) {
 
   implicit lazy val logger = Slf4jLogger.getLogger[IO]
-  implicit lazy val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(executionContext)
-  implicit lazy val timer: Temporal[IO] = cats.effect.IO.timer(executionContext)
+  implicit lazy val timer = Temporal[IO]
 
   def getServiceForPet(petKey: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
     val petCredentials = ServiceAccountCredentials.fromStream(IOUtils.toInputStream(petKey, Charset.defaultCharset))
-    GoogleBigQueryService.resource[IO](petCredentials, blocker, projectId)
+    GoogleBigQueryService.resource[IO](petCredentials, projectId)
   }
 
   def getServiceForProject(projectId: GoogleProjectId): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
-    GoogleBigQueryService.resource[IO](pathToCredentialJson, GoogleProject(projectId.value), blocker)
+    GoogleBigQueryService.resource[IO](pathToCredentialJson, GoogleProject(projectId.value))
   }
 
   def getServiceFromJson(json: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
     val creds = ServiceAccountCredentials.fromStream(new ByteArrayInputStream(json.getBytes(Charsets.UTF_8)))
-    GoogleBigQueryService.resource[IO](creds, blocker, projectId)
+    GoogleBigQueryService.resource[IO](creds, projectId)
   }
 }

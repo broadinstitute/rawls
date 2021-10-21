@@ -26,7 +26,6 @@ import scala.language.postfixOps
 
 class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with OptionValues {
   val defaultExecutionContext: ExecutionContext = executionContext
-  implicit val cs = IO.contextShift(global)
   def this() = this(ActorSystem("WorkspaceBillingAccountMonitorSpec"))
 
   val defaultGoogleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("42")

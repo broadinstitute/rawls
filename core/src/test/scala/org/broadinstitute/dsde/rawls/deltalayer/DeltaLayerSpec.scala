@@ -28,8 +28,6 @@ import scala.concurrent.{ExecutionContext, Future}
 class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with PrivateMethodTester with MockitoSugar with Matchers with Eventually  {
 
   override implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
-  implicit lazy val blocker: Blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)
-  implicit lazy val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(executionContext)
 
   // durations for async/eventually calls
   val timeout: FiniteDuration = 10000.milliseconds
@@ -57,7 +55,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
       val deltaLayerStreamerEmailUnderTest = WorkbenchEmail("Nemo")
 
       // create the Delta Layer object and grab the private method "calculateDatasetAcl"
-      val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
+      val bqFactory = new MockBigQueryServiceFactory("credentialPath", Left(new RuntimeException))
       val deltaLayer = testDeltaLayer(bqFactory,
         clientEmail = clientEmailUnderTest,
         deltaLayerStreamerEmail = deltaLayerStreamerEmailUnderTest)
@@ -80,7 +78,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
       val deltaLayerStreamerEmailUnderTest = WorkbenchEmail("Mugsy")
 
       // create the Delta Layer object and grab the private method "calculateDatasetAcl"
-      val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
+      val bqFactory = new MockBigQueryServiceFactory("credentialPath", Left(new RuntimeException))
       val deltaLayer = testDeltaLayer(bqFactory,
         clientEmail = clientEmailUnderTest,
         deltaLayerStreamerEmail = deltaLayerStreamerEmailUnderTest)
@@ -179,7 +177,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           // we just test that we properly call the low-level DeltaLayer.bqCreate method, which contains the call to the cloud
 
           // create the Delta Layer instance and spy on it
-          val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
+          val bqFactory = new MockBigQueryServiceFactory("credentialPath", Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory))
           // find the createDataset/createDatasetIfNotExist method we want to test, then invoke it
           val methodUnderTest = deltaLayerSpy.getClass.getMethod(method, constantData.workspace.getClass, userInfo.getClass)
@@ -194,7 +192,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
 
         s"should add appropriate labels to the companion dataset in $method" in {
           // create the Delta Layer instance and spy on it
-          val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
+          val bqFactory = new MockBigQueryServiceFactory("credentialPath", Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory))
           // find the createDataset/createDatasetIfNotExist method we want to test, then invoke it
           val methodUnderTest = deltaLayerSpy.getClass.getMethod(method, constantData.workspace.getClass, userInfo.getClass)
@@ -217,7 +215,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           val deltaLayerStreamerEmailUnderTest = WorkbenchEmail("Patches")
 
           // create the Delta Layer instance and spy on it
-          val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
+          val bqFactory = new MockBigQueryServiceFactory("credentialPath", Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory,
             clientEmail = clientEmailUnderTest,
             deltaLayerStreamerEmail = deltaLayerStreamerEmailUnderTest))
@@ -255,7 +253,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
 
         s"should use the specified workspace's project for the companion dataset in $method" in {
           // create the Delta Layer instance and spy on it
-          val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
+          val bqFactory = new MockBigQueryServiceFactory("credentialPath", Left(new RuntimeException))
           val deltaLayerSpy = spy(testDeltaLayer(bqFactory))
           // find the createDataset/createDatasetIfNotExist method we want to test, then invoke it
           val methodUnderTest = deltaLayerSpy.getClass.getMethod(method, constantData.workspace.getClass, userInfo.getClass)
@@ -321,7 +319,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           val throwingSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
           when(throwingSamDAO.listPoliciesForResource(any(), any(), any())).thenThrow(new RuntimeException(s"Sam synchronous errors should bubble up in $method"))
           // create the Delta Layer instance (no need to spy), using the throwing SamDAO
-          val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
+          val bqFactory = new MockBigQueryServiceFactory("credentialPath", Left(new RuntimeException))
           val deltaLayer = testDeltaLayer(bqFactory, samDAO = throwingSamDAO)
           // find the createDataset/createDatasetIfNotExist method we want to test, then invoke it
           val methodUnderTest = deltaLayer.getClass.getMethod(method, constantData.workspace.getClass, userInfo.getClass)
@@ -343,7 +341,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
           val throwingSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
           when(throwingSamDAO.listPoliciesForResource(any(), any(), any())).thenReturn(Future.failed(new RuntimeException(s"Sam async errors should bubble up in $method")))
           // create the Delta Layer instance (no need to spy), using the throwing SamDAO
-          val bqFactory = new MockBigQueryServiceFactory("credentialPath", blocker, Left(new RuntimeException))
+          val bqFactory = new MockBigQueryServiceFactory("credentialPath", Left(new RuntimeException))
           val deltaLayer = testDeltaLayer(bqFactory, samDAO = throwingSamDAO)
 
           val futureEx = recoverToExceptionIf[RuntimeException] {

@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.deltalayer
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.Uri
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import com.google.cloud.storage.StorageException
 import fs2._
 import org.broadinstitute.dsde.rawls.google.GoogleUtilities

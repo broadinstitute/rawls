@@ -20,7 +20,6 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with ScalaFutures {
-  implicit val cs = IO.contextShift(global)
   def this() = this(ActorSystem("BucketDeletionMonitorSpec"))
 
   override def beforeAll(): Unit = {

@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.{Actor, Props}
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.google.api.services.storage.model.StorageObject
@@ -25,7 +26,7 @@ object CloneWorkspaceFileTransferMonitor {
   case object CheckAll extends CloneWorkspaceFileTransferMonitorMessage
 }
 
-class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val initialDelay: FiniteDuration, val pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
+class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val initialDelay: FiniteDuration, val pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext) extends Actor with LazyLogging {
 
   context.system.scheduler.scheduleWithFixedDelay(initialDelay, pollInterval, self, CheckAll)
 

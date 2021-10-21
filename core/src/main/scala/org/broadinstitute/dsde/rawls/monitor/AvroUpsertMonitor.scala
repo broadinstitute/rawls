@@ -5,6 +5,7 @@ import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
 import fs2.concurrent.SignallingRef
 import io.circe.fs2._
@@ -92,7 +93,7 @@ class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
                                   importServicePubSubDAO: GooglePubSubDAO,
                                   importServiceDAO: ImportServiceDAO,
                                   avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
-                                  dataSource: SlickDataSource)(implicit cs: ContextShift[IO])
+                                  dataSource: SlickDataSource)
   extends Actor
     with LazyLogging {
   import AvroUpsertMonitorSupervisor._
@@ -165,7 +166,7 @@ class AvroUpsertMonitorActor(
                               importStatusPubSubTopic: String,
                               importServiceDAO: ImportServiceDAO,
                               batchSize: Int,
-                              dataSource: SlickDataSource)(implicit cs: ContextShift[IO])
+                              dataSource: SlickDataSource)
   extends Actor
     with LazyLogging
     with FutureSupport

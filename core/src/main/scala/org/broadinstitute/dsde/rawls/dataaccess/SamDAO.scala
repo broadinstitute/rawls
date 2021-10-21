@@ -82,5 +82,5 @@ object SamDAO {
     com.google.api.services.oauth2.Oauth2Scopes.USERINFO_EMAIL,
     com.google.api.services.oauth2.Oauth2Scopes.USERINFO_PROFILE
   )
-  val bigQueryReadOnlyScope = com.google.api.services.bigquery.BigqueryScopes.BIGQUERY_READONLY
+  val bigQueryReadOnlyScope = com.google.api.services.bigquery.BigqueryScopes.DEVSTORAGE_READ_ONLY
 }

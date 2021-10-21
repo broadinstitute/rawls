@@ -43,7 +43,7 @@ import org.scalatest.concurrent.Eventually
 import spray.json._
 
 import java.util.concurrent.TimeUnit
-import scala.concurrent.ExecutionContext.global
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -117,7 +117,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     def actorRefFactory = system
 
     override implicit val materializer = ActorMaterializer()
-    implicit val cs = IO.contextShift(global)
     override val workbenchMetricBaseName: String = "test"
     override val swaggerConfig: SwaggerConfig = SwaggerConfig("foo", "bar")
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
@@ -173,7 +172,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val deltaLayer = new DeltaLayer(bigQueryServiceFactory, new MockDeltaLayerWriter, samDAO,
       WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
-      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global, IO.contextShift(global))
+      WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
       slickDataSource,
@@ -198,7 +197,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers.map(c => c.key->c.dao).toMap,
       Seq("my-favorite-group"), Seq.empty, Seq("my-favorite-bucket")))
-    override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
+    override val statusServiceConstructor = () => StatusService.constructor(healthMonitor)
     val bigQueryDAO = new MockGoogleBigQueryDAO
     val submissionCostService = new MockSubmissionCostService("test", "test", 31, bigQueryDAO)
     val execServiceBatchSize = 3

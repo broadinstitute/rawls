@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{RelationshipModel, SnapshotModel, TableModel}
 import com.google.cloud.bigquery.Field.Mode
-import com.google.cloud.bigquery._
+import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException, IllegalIdentifierException}
@@ -19,7 +19,7 @@ object DataRepoBigQuerySupport {
   val illegalBQChars: Regex = """[^a-zA-Z0-9\-_]""".r
   val datarepoRowIdColumn = "datarepo_row_id"
 
-  def tableNameInQuery(dataProject: String, viewName: String, tableName: String, alias: scala.Option[String] = None): String = {
+  def tableNameInQuery(dataProject: String, viewName: String, tableName: String, alias: Option[String] = None): String = {
     val aliasString = alias.map(a => s" `${validateSql(a)}`").getOrElse("")
     s"`${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(tableName)}`$aliasString"
   }
@@ -53,7 +53,7 @@ object DataRepoBigQuerySupport {
     */
   def validateSql(input: String): String = {
     if (input == null || DataRepoBigQuerySupport.illegalBQChars.findFirstIn(input).isDefined) {
-      val inputSubstring = scala.Option(input).getOrElse("null").take(64)
+      val inputSubstring = Option(input).getOrElse("null").take(64)
       val sanitizedForOutput = DataRepoBigQuerySupport.illegalBQChars.replaceAllIn(inputSubstring, "_")
       throw new IllegalIdentifierException(s"Illegal identifier used in BigQuery SQL. Original input was like [$sanitizedForOutput]")
     } else {
@@ -85,7 +85,7 @@ object DataRepoBigQuerySupport {
     }
   }
   case class EntityTable(dataProject: String, viewName: String, name: String, alias: String) {
-    lazy val nameInQuery: String = tableNameInQuery(dataProject, viewName, name, scala.Option(alias))
+    lazy val nameInQuery: String = tableNameInQuery(dataProject, viewName, name, Option(alias))
   }
 
   object EntityColumn {
@@ -119,7 +119,7 @@ object DataRepoBigQuerySupport {
     *                      use of STRUCTs we can't rely on the names of fields to extract values from the result and
     *                      must use indexes.
     */
-  case class SelectAndFrom(fromTable: EntityTable, join: scala.Option[EntityJoin], selectColumns: Seq[EntityColumn])
+  case class SelectAndFrom(fromTable: EntityTable, join: Option[EntityJoin], selectColumns: Seq[EntityColumn])
 }
 
 /**
@@ -407,8 +407,8 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         val dedupFunctionDef = dedupFunction(dedupFunctionName, selectAndFrom)
         (
           // important that selectAndFrom.selectColumns added in order so that the indexes in the result set are as expected
-          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(_.qualifiedName).mkString(", ")}))) `${relationship.alias}`"),
-          scala.Option(dedupFunctionDef)
+          Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(_.qualifiedName).mkString(", ")}))) `${relationship.alias}`"),
+          Option(dedupFunctionDef)
         )
       }
       val fromFragment = joinClause(relationship)
@@ -489,7 +489,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
     * @return
     */
   private[datarepo] def figureOutQueryStructureForExpressions(snapshotModel: SnapshotModel, fromTable: EntityTable, parsedExpressions: Set[ParsedEntityLookupExpression], entityNameColumn: String, traversedRelationships: Seq[String] = Seq.empty): Seq[SelectAndFrom] = {
-    def groupAndOrderByRelationshipHead(parsedExpressions: Set[ParsedEntityLookupExpression]): Seq[(scala.Option[String], Set[ParsedEntityLookupExpression])] = {
+    def groupAndOrderByRelationshipHead(parsedExpressions: Set[ParsedEntityLookupExpression]): Seq[(Option[String], Set[ParsedEntityLookupExpression])] = {
       parsedExpressions.groupBy(_.relationshipPath.headOption).toSeq.sortBy { case (name, _) => name.getOrElse("") }
     }
 
@@ -536,7 +536,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         }
 
         // sort columns by name for consistency in tests
-        Seq(SelectAndFrom(fromTable, scala.Option(entityJoin), columns.toSeq.sortBy(_.column))) ++
+        Seq(SelectAndFrom(fromTable, Option(entityJoin), columns.toSeq.sortBy(_.column))) ++
           figureOutQueryStructureForExpressions(snapshotModel, entityJoin.to.table, continueRecursing, entityNameColumn, currentRelationshipPath)
     }
 
