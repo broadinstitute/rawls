@@ -7,7 +7,7 @@ import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
 import cats.implicits._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import com.typesafe.scalalogging.LazyLogging
 import fs2.concurrent.SignallingRef
 import io.circe.fs2._
@@ -59,7 +59,7 @@ object AvroUpsertMonitorSupervisor {
             importServicePubSubDAO: GooglePubSubDAO,
             importServiceDAO: ImportServiceDAO,
             avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
-            dataSource: SlickDataSource)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
+            dataSource: SlickDataSource)(implicit executionContext: ExecutionContext): Props =
     Props(
       new AvroUpsertMonitorSupervisor(
         entityService,
@@ -149,7 +149,7 @@ object AvroUpsertMonitor {
              importStatusPubSubTopic: String,
              importServiceDAO: ImportServiceDAO,
              batchSize: Int,
-             dataSource: SlickDataSource)(implicit cs: ContextShift[IO]): Props =
+             dataSource: SlickDataSource): Props =
     Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO,
       pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize, dataSource))
 }

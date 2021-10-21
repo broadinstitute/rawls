@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace, WorkspaceVersions}
 import cats.implicits._
 

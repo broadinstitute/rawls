@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import akka.stream.Materializer
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.IO
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
@@ -15,6 +15,7 @@ import org.joda.time.DateTime
 
 import scala.collection.mutable
 import scala.concurrent._
+import cats.effect.Temporal
 
 class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   override val clientSecrets: GoogleClientSecrets,
@@ -36,7 +37,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   billingGroupEmailAliases: List[String],
   bucketLogsMaxAge: Int,
   resourceBufferJsonFile: String)
-  (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val cs: ContextShift[IO], override val timer: Timer[IO])
+  (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val cs: ContextShift[IO], override val timer: Temporal[IO])
   extends HttpGoogleServicesDAO(
     true,
     clientSecrets,

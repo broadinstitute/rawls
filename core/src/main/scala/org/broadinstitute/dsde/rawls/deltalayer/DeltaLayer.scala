@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import com.google.cloud.bigquery.Acl.Entity
 import com.google.cloud.bigquery.{Acl, BigQueryException, DatasetId}
 import com.typesafe.scalalogging.LazyLogging

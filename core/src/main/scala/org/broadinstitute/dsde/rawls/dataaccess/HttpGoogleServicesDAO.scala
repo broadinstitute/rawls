@@ -10,7 +10,7 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.IO
 import cats.data.NonEmptyList
 import cats.syntax.functor._
 import cats.instances.future._
@@ -73,6 +73,7 @@ import scala.util.matching.Regex
 import io.opencensus.scala.Tracing._
 
 import scala.util.control.NoStackTrace
+import cats.effect.Temporal
 
 case class Resources (
                        name: String,
@@ -130,7 +131,7 @@ class HttpGoogleServicesDAO(
                              terraBucketReaderRole: String,
                              terraBucketWriterRole: String,
                              override val accessContextManagerDAO: AccessContextManagerDAO,
-                             resourceBufferJsonFile: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+                             resourceBufferJsonFile: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Temporal[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]

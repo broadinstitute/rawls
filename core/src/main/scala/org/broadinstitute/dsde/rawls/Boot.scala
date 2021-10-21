@@ -56,6 +56,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.{higherKinds, postfixOps}
+import cats.effect.Temporal
 
 object Boot extends IOApp with LazyLogging {
   override def run(
@@ -521,7 +522,7 @@ object Boot extends IOApp with LazyLogging {
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
-  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
+  def initAppDependencies[F[_]: ConcurrentEffect: Temporal: Logger: ContextShift](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")

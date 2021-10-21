@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.nio.charset.Charset
-import cats.effect.{Blocker, ContextShift, IO, Timer}
+import cats.effect.IO
 import com.google.api.client.util.Charsets
 import com.google.auth.oauth2.ServiceAccountCredentials
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
 import java.io.ByteArrayInputStream
 import scala.concurrent.ExecutionContext
+import cats.effect.Temporal
 
 /**
  * DataRepoEntityProvider, and potential future callers of this class, need to create a new
@@ -25,7 +26,7 @@ class GoogleBigQueryServiceFactory(pathToCredentialJson: String, blocker: Blocke
 
   implicit lazy val logger = Slf4jLogger.getLogger[IO]
   implicit lazy val contextShift: ContextShift[IO] = cats.effect.IO.contextShift(executionContext)
-  implicit lazy val timer: Timer[IO] = cats.effect.IO.timer(executionContext)
+  implicit lazy val timer: Temporal[IO] = cats.effect.IO.timer(executionContext)
 
   def getServiceForPet(petKey: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
     val petCredentials = ServiceAccountCredentials.fromStream(IOUtils.toInputStream(petKey, Charset.defaultCharset))

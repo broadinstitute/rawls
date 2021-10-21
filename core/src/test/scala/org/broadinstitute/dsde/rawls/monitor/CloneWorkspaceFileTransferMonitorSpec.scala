@@ -4,7 +4,7 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.storage.model.StorageObject
 import org.broadinstitute.dsde.rawls.dataaccess._

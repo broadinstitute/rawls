@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
-import cats.effect.{Blocker, ContextShift, IO, Resource}
+import cats.effect.{IO, Resource}
 import com.google.cloud.bigquery.Acl.Entity
 import com.google.cloud.bigquery.{Acl, BigQueryException, DatasetId}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
@@ -423,7 +423,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
                              samDAO: SamDAO = new MockSamDAO(slickDataSource),
                              clientEmail: WorkbenchEmail = WorkbenchEmail("unittest-clientEmail"),
                              deltaLayerStreamerEmail: WorkbenchEmail = WorkbenchEmail("unittest-detlaLayerStreamerEmail"))
-                            (implicit executionContext: ExecutionContext, contextShift: ContextShift[IO]): DeltaLayer = {
+                            (implicit executionContext: ExecutionContext): DeltaLayer = {
 
     new DeltaLayer(bqServiceFactory, deltaLayerWriter, samDAO, clientEmail, deltaLayerStreamerEmail)
   }
