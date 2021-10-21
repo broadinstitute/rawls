@@ -175,7 +175,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              attributes: AttributeMap,
                              isLocked: Boolean) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount, None, Option(createdDate))
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount, None, Option(createdDate), WorkspaceShardStates.Sharded)
   }
   def makeWorkspaceWithUsers(project: RawlsBillingProject,
                              name: String,
@@ -194,7 +194,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              billingAccountErrorMessage: Option[String],
                              completedCloneWorkspaceFileTransfer: Option[DateTime]) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, WorkspaceShardStates.Sharded)
   }
 
   class EmptyWorkspace() extends TestData {
@@ -228,7 +228,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
     val billingAccount = maybeBillingAccount
 
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount, None, Option(currentTime()))
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount, None, Option(currentTime()), WorkspaceShardStates.Sharded)
 
     override def save() = {
       DBIO.seq(
@@ -1088,8 +1088,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     val workspace2 = Workspace(wsName2.namespace, wsName2.name, UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     // TODO (CA-1235): Remove these after PPW Migration is complete
-    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()))
-    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()))
+    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()), WorkspaceShardStates.Sharded)
+    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()), WorkspaceShardStates.Sharded)
 
     override def save() = {
       DBIO.seq(

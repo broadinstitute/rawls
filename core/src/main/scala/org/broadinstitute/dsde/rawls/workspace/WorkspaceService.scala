@@ -395,7 +395,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         // Delete components of the workspace
         _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
         _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext)
 
         // Schedule bucket for deletion
         _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))
@@ -2229,7 +2229,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
       googleProjectNumber = googleProjectNumber,
       currentBillingAccountOnWorkspace,
       billingAccountErrorMessage = None,
-      completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer
+      completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
+      shardState = WorkspaceShardStates.Sharded
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)
