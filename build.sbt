@@ -2,7 +2,10 @@ import Settings._
 import Testing._
 
 ThisBuild / libraryDependencySchemes += "org.typelevel" %% "cats-effect" % "always"
+ThisBuild / libraryDependencySchemes += "org.typelevel" %% "cats-core" % "always"
+ThisBuild / libraryDependencySchemes += "org.typelevel" %% "log4cats-slf4j" % "always"
 ThisBuild / libraryDependencySchemes += "co.fs2" %% "fs2-io" % "always"
+ThisBuild / libraryDependencySchemes += "co.fs2" %% "fs2-core" % "always"
 
 val compileAndTest = "compile->compile;test->test"
 
