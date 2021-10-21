@@ -80,7 +80,7 @@ object Dependencies {
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
-  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.2.0"
+  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
@@ -97,7 +97,7 @@ object Dependencies {
 
   val workbenchModelV  = "0.14-d415128"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
-  val workbenchGoogleV = "0.21-64a7b29"
+  val workbenchGoogleV = "0.21-ae11b9f"
   val workbenchGoogle: ModuleID =       workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV)
   val workbenchGoogleMocks: ModuleID =  workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests")
   val workbenchGoogle2: ModuleID =      workbenchGoogleExcludes("org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V)
