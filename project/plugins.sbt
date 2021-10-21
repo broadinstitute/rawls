@@ -8,4 +8,4 @@ addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.10.0-RC1")
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.2")
 
-addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.9.21")
+addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.9.31")

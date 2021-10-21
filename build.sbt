@@ -1,6 +1,8 @@
 import Settings._
 import Testing._
 
+ThisBuild / scalacOptions += "-P:semanticdb:synthetics:on"
+
 val compileAndTest = "compile->compile;test->test"
 
 lazy val workbenchUtil = project.in(file("util"))
