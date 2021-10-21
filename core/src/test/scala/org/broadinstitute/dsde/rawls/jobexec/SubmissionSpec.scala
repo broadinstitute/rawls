@@ -27,7 +27,6 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
@@ -424,8 +423,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     val submissionStatusRqComplete = workspaceService.getSubmissionStatus(workspaceName, submissionId)
 
     Await.result(submissionStatusRqComplete, Duration.Inf) match {
-      case RequestComplete((submissionStatus: StatusCode, submissionData: Any)) =>
-        assertResult(StatusCodes.OK) { submissionStatus }
+      case submissionData: Any =>
         val submissionStatusResponse = submissionData.asInstanceOf[Submission]
         assertResult(submissionId) { submissionStatusResponse.submissionId }
         submissionStatusResponse
@@ -444,7 +442,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf)
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -472,11 +470,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
+    val newSubmissionReport = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
 
     val monitorActor = waitForSubmissionActor(newSubmissionReport.submissionId)
     //not really necessary, failing to find the actor above will throw an exception and thus fail this test
@@ -497,11 +491,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
+    val newSubmissionReport = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
 
     runAndWait(entityQuery.hide(testData.workspace, Seq(testData.pair1.toReference)))
 
@@ -552,12 +542,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
+    val newSubmissionReport = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf)
 
     assert( newSubmissionReport.workflows.size == 6 )
 
@@ -617,12 +602,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
+    val newSubmissionReport = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
 
     assert( newSubmissionReport.workflows.size == 4 )
 
@@ -645,7 +625,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -663,7 +643,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
 
     assertResult(StatusCodes.BadRequest) {
@@ -686,7 +666,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
 
     assertResult(StatusCodes.BadRequest) {
@@ -709,7 +689,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
 
     assertResult(StatusCodes.BadRequest) {
@@ -734,11 +714,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
+    val newSubmissionReport = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf)
 
     assert( newSubmissionReport.workflows.size == 3 )
 
@@ -755,11 +731,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
+    val newSubmissionReport = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf)
 
     assert( newSubmissionReport.workflows.size == 2 )
 
@@ -777,7 +749,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -795,7 +767,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -812,17 +784,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
+    val newSubmissionReport = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
 
-    val submissionStatusRq = Await.result(workspaceService.getSubmissionStatus(testData.wsName, newSubmissionReport.submissionId), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, Submission)]]
-    val (submissionStatus, submissionStatusResponse) = submissionStatusRq.response
-    assertResult(StatusCodes.OK) {
-      submissionStatus
-    }
+    val submissionStatusResponse = Await.result(workspaceService.getSubmissionStatus(testData.wsName, newSubmissionReport.submissionId), Duration.Inf)
 
     // Only the workflow with the dodgy expression (sample.tumortype on a normal) should fail
     assert(submissionStatusResponse.workflows.size == 3)
@@ -842,19 +806,14 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val createSub = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    val newSubmissionReport = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
 
-    val (status, newSubmissionReport) = createSub.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
     assert( newSubmissionReport.workflows.size == 1 )
 
     val submissionData = checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
     assert(submissionData.workflows.size == 1)
 
-    val listSubs = Await.result(workspaceService.listSubmissions(testData.wsName), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, Seq[SubmissionListResponse])]]
-    val (_, subList) = listSubs.response
+    val subList = Await.result(workspaceService.listSubmissions(testData.wsName), Duration.Inf)
 
     val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
     assert( oneSub.nonEmpty )
@@ -871,7 +830,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf)
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -890,7 +849,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
 
     assertResult(StatusCodes.BadRequest) {
@@ -918,11 +877,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig.copy(inputs =  inputsWithWorkspaceExpression)))
       runAndWait(workspaceQuery.createOrUpdate(minimalTestData.workspace.copy(attributes = Map(AttributeName.withDefaultNS(workspaceAttrName) -> AttributeString(workspaceAttrValue)))))
 
-      val vComplete = Await.result(workspaceService.createSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-      val (vStatus, resultSubmission) = vComplete.response
-      assertResult(StatusCodes.Created) {
-        vStatus
-      }
+      val resultSubmission = Await.result(workspaceService.createSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
 
       resultSubmission.header.entityStoreId shouldBe Some(snapshotId.toString)
       resultSubmission.header.entityType shouldBe methodConfig.rootEntityType
@@ -946,7 +901,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -963,11 +918,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val vComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
-    val (vStatus, vData) = vComplete.response
-    assertResult(StatusCodes.OK) {
-      vStatus
-    }
+    val vData = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf)
 
     assertResult(1) { vData.validEntities.length }
     assert(vData.invalidEntities.isEmpty)
@@ -983,11 +934,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val vComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
-    val (vStatus, vData) = vComplete.response
-    assertResult(StatusCodes.OK) {
-      vStatus
-    }
+    val vData = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf)
 
     assertResult(testData.sset1.attributes(AttributeName.withDefaultNS("samples")).asInstanceOf[AttributeEntityReferenceList].list.size) { vData.validEntities.length }
     assert(vData.invalidEntities.isEmpty)
@@ -1004,7 +951,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -1022,7 +969,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
 
     assertResult(StatusCodes.BadRequest) {
@@ -1045,7 +992,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
 
     assertResult(StatusCodes.BadRequest) {
@@ -1067,11 +1014,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val rqComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
-    val (status, validation) = rqComplete.response
-    assertResult(StatusCodes.OK) {
-      status
-    }
+    val validation = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf)
 
     assertResult(3) { validation.validEntities.size }
     assert { validation.invalidEntities.isEmpty }
@@ -1087,11 +1030,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
-    val vComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
-    val (vStatus, vData) = vComplete.response
-    assertResult(StatusCodes.OK) {
-      vStatus
-    }
+    val vData = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf)
 
     assertResult(testData.sset1.attributes(AttributeName.withDefaultNS("samples")).asInstanceOf[AttributeEntityReferenceList].list.size-1) { vData.validEntities.length }
     assertResult(1) { vData.invalidEntities.length }
@@ -1108,7 +1047,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -1126,7 +1065,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -1190,11 +1129,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         deleteIntermediateOutputFiles = false
       )
 
-      val vComplete = Await.result(workspaceService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
-      val (vStatus, vData) = vComplete.response
-      assertResult(StatusCodes.OK) {
-        vStatus
-      }
+      val vData = Await.result(workspaceService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
 
       val expectedValidInputs = tableData.map { case (rowId, resultVal) => SubmissionValidationEntityInputs(rowId, Set(SubmissionValidationValue(Option(AttributeString(resultVal)), None, methodConfig.inputs.keys.head))) }
       vData.validEntities should contain theSameElementsAs expectedValidInputs
@@ -1215,11 +1150,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         deleteIntermediateOutputFiles = false
       )
 
-      val vComplete = Await.result(workspaceService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
-      val (vStatus, vData) = vComplete.response
-      assertResult(StatusCodes.OK) {
-        vStatus
-      }
+      val vData = Await.result(workspaceService.validateSubmission(minimalTestData.wsName, submissionRq), Duration.Inf)
 
       assert(vData.validEntities.isEmpty)
       val expectedInvalidInputs = tableData.keys.map(rowId => SubmissionValidationEntityInputs(rowId, Set(SubmissionValidationValue(None, Some("Expected single value for workflow input, but evaluated result set was empty"), methodConfig.inputs.keys.head))))
@@ -1293,7 +1224,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
   "Aborting submissions" should "404 if the workspace doesn't exist" in withSubmissionTestWorkspaceService { workspaceService =>
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.abortSubmission(WorkspaceName(name = "nonexistent", namespace = "workspace"), "12345"), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.abortSubmission(WorkspaceName(name = "nonexistent", namespace = "workspace"), "12345"), Duration.Inf)
     }
     assertResult(StatusCodes.NotFound) {
       rqComplete.errorReport.statusCode.get
@@ -1302,18 +1233,17 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
   it should "404 if the submission doesn't exist" in withSubmissionTestWorkspaceService { workspaceService =>
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.abortSubmission(subTestData.wsName, "12345"), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.abortSubmission(subTestData.wsName, "12345"), Duration.Inf)
     }
     assertResult(StatusCodes.NotFound) {
       rqComplete.errorReport.statusCode.get
     }
   }
 
-  it should "204 No Content for a valid submission" in withSubmissionTestWorkspaceService { workspaceService =>
+  it should "No Content for a valid submission" in withSubmissionTestWorkspaceService { workspaceService =>
     val rqComplete = workspaceService.abortSubmission(subTestData.wsName, subGoodWorkflow)
-    val status = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[StatusCode]].response
-    assertResult(StatusCodes.NoContent) {
-      status
+    assertResult(1) {
+      rqComplete
     }
   }
 
@@ -1322,9 +1252,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       subTestData.wsName,
       subTestData.submissionTestAbortGoodWorkflow.submissionId,
       subTestData.existingWorkflowId.get)
-    val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkflowOutputs)]].response
+    val data = Await.result(rqComplete, Duration.Inf)
 
-    assertResult(StatusCodes.OK) {status}
     assertResult(subTestData.extantWorkflowOutputs) {data}
   }
 
@@ -1334,7 +1263,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       subTestData.submissionTestAbortTerminalWorkflow.submissionId,
       subTestData.existingWorkflowId.get)
     val errorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
+      Await.result(rqComplete, Duration.Inf)
     }
 
     assertResult(StatusCodes.NotFound) {errorReport.errorReport.statusCode.get}
@@ -1345,9 +1274,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       subTestData.wsName,
       subTestData.submissionTestAbortGoodWorkflow.submissionId,
       subTestData.existingWorkflowId.get)
-    val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkflowCost)]].response
+    val data = Await.result(rqComplete, Duration.Inf)
 
-    assertResult(StatusCodes.OK) {status}
     assertResult(WorkflowCost(subTestData.existingWorkflowId.get, Some(mockSubmissionCostService.fixedCost))) {data}
   }
 
@@ -1357,7 +1285,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       subTestData.submissionTestAbortTerminalWorkflow.submissionId,
       subTestData.existingWorkflowId.get)
     val errorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
+      Await.result(rqComplete, Duration.Inf)
     }
 
     assertResult(StatusCodes.NotFound) {errorReport.errorReport.statusCode.get}
@@ -1376,7 +1304,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       subTestData.submissionTestCromwellBadWorkflows.submissionId,
       subTestData.badLogsAndMetadataWorkflowId.get)
     val errorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
+      Await.result(rqComplete, Duration.Inf)
     }
 
     assertResult(StatusCodes.BadGateway) {errorReport.errorReport.statusCode.get}
@@ -1389,11 +1317,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       subTestData.submissionTestAbortGoodWorkflow.submissionId,
       subTestData.existingWorkflowId.get,
       MetadataParams())
-    val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, JsObject)]].response
+    val data = Await.result(rqComplete, Duration.Inf)
 
-    assertResult(StatusCodes.OK) {
-      status
-    }
+    assert(data.fields.nonEmpty)
   }
 
   "ExecutionService" should "parse unsupported output data types" in {

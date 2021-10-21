@@ -21,7 +21,6 @@ import scala.concurrent.ExecutionContext
   */
 
 trait WorkspaceApiService extends UserInfoDirectives {
-  import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
@@ -43,7 +42,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           parameterSeq { allParams =>
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+                workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span).map(StatusCodes.OK -> _)
               }
             }
           }
@@ -52,33 +51,41 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
-            complete { workspaceServiceConstructor(userInfo).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+            complete {
+              workspaceServiceConstructor(userInfo).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations).map(StatusCodes.OK -> _)
+            }
           }
         } ~
-          get {
-            parameterSeq { allParams =>
-              traceRequest { span =>
-                complete {
-                  workspaceServiceConstructor(userInfo).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
-                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
-                }
+        get {
+          parameterSeq { allParams =>
+            traceRequest { span =>
+              complete {
+                workspaceServiceConstructor(userInfo).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
+                  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span).map(StatusCodes.OK -> _)
               }
             }
-          } ~
-          delete {
-            traceRequest { span =>
-              complete { workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName), span) }
+          }
+        } ~
+        delete {
+          traceRequest { span =>
+            complete {
+              workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName), span).map(bucketName => StatusCodes.Accepted -> s"Your Google bucket $bucketName will be deleted within 24h.")
             }
           }
+        }
       } ~
       path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).getAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "bucketOptions") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getBucketOptions(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).getBucketOptions(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "clone") { (sourceNamespace, sourceWorkspace) =>
@@ -101,7 +108,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
           patch {
             parameter('inviteUsersNotFound.?) { inviteUsersNotFound =>
               entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
-                complete { workspaceServiceConstructor(userInfo).updateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean) }
+                complete {
+                  workspaceServiceConstructor(userInfo).updateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean).map(StatusCodes.OK -> _)
+                }
               }
             }
           }
@@ -109,65 +118,92 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "library") { (workspaceNamespace, workspaceName) =>
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
-            complete { workspaceServiceConstructor(userInfo).updateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+            complete {
+              workspaceServiceConstructor(userInfo).updateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations).map(StatusCodes.OK -> _)
+            }
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "catalog") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getCatalog(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).getCatalog(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+          }
         } ~
-          patch {
-            entity(as[Array[WorkspaceCatalog]]) { catalogUpdate =>
-              complete { workspaceServiceConstructor(userInfo).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate) }
+        patch {
+          entity(as[Array[WorkspaceCatalog]]) { catalogUpdate =>
+            complete {
+              workspaceServiceConstructor(userInfo).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate).map(StatusCodes.OK -> _)
             }
           }
+        }
       } ~
       path("workspaces" / Segment / Segment / "checkBucketReadAccess") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).checkBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).checkBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.OK)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "checkIamActionWithLock" / Segment) { (workspaceNamespace, workspaceName, requiredAction) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).checkSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName), SamResourceAction(requiredAction)) }
+          complete {
+            workspaceServiceConstructor(userInfo).checkSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName), SamResourceAction(requiredAction)).map {
+              case true => StatusCodes.NoContent
+              case false => StatusCodes.Forbidden
+            }
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "lock") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).lockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).lockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "unlock") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).unlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).unlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "bucketUsage") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+          }
         }
       } ~
       path("workspaces" / "tags") {
         parameter('q.?) { queryString =>
           get {
-            complete { workspaceServiceConstructor(userInfo).getTags(queryString) }
+            complete {
+              workspaceServiceConstructor(userInfo).getTags(queryString).map(StatusCodes.OK -> _)
+            }
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
         post {
-          complete { workspaceServiceConstructor(userInfo).sendChangeNotifications(WorkspaceName(namespace, name)) }
+          complete {
+            workspaceServiceConstructor(userInfo).sendChangeNotifications(WorkspaceName(namespace, name)).map(StatusCodes.OK -> _)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "enableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "disableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
         put {
-          complete { workspaceServiceConstructor(userInfo).disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
+          complete {
+            workspaceServiceConstructor(userInfo).disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+          }
         }
       }
   }

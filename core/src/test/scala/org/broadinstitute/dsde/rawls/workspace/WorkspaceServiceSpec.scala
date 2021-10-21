@@ -27,7 +27,6 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
@@ -243,18 +242,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     populateWorkspacePolicies(services)
 
     val vComplete = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-    val (vStatus, vData) = vComplete.response
-
-    assertResult(StatusCodes.OK) {
-      vStatus
-    }
 
     assertResult(WorkspaceACL(Map(
       testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
       testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, true),
       testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)))) {
-      vData
+      vComplete
     }
   }
 
@@ -303,11 +296,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     //add ACL
     val aclAdd = Set(WorkspaceACLUpdate(user1.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(user2.userEmail.value, WorkspaceAccessLevels.Read, Option(true)))
     val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
     val responseFromAdd = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(user1.userEmail.value, WorkspaceAccessLevels.Owner, Some(true), Some(true)), WorkspaceACLUpdate(user2.userEmail.value, WorkspaceAccessLevels.Read, Some(true), Some(false))), Set.empty, Set.empty)
 
-    assertResult((StatusCodes.OK, responseFromAdd), aclAddResponse.response.toString()) {
-      aclAddResponse.response
+    assertResult(responseFromAdd, aclAddResponse.toString) {
+      aclAddResponse
     }
 
     services.samDAO.callsToAddToPolicy should contain theSameElementsAs Seq(
@@ -324,11 +316,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     //update ACL
     val aclUpdates = Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None))
     val aclUpdateResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
     val responseFromUpdate = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, Some(false), Some(true))), Set.empty, Set.empty)
 
-    assertResult((StatusCodes.OK, responseFromUpdate), "Update ACL shouldn't error") {
-      aclUpdateResponse.response
+    assertResult(responseFromUpdate, "Update ACL shouldn't error") {
+      aclUpdateResponse
     }
 
     services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Seq(
@@ -347,11 +338,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     //remove ACL
     val aclRemove = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess, None))
     val aclRemoveResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove, false), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, List[WorkspaceACLUpdateResponseList])]]
     val responseFromRemove = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess, Some(false), Some(false))), Set.empty, Set.empty)
 
-    assertResult((StatusCodes.OK, responseFromRemove), "Remove ACL shouldn't error") {
-      aclRemoveResponse.response
+    assertResult(responseFromRemove, "Remove ACL shouldn't error") {
+      aclRemoveResponse
     }
 
     services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Seq(
@@ -400,19 +390,18 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val aclUpdates = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
     val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
     val responseFromUpdate = WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
 
-    assertResult((StatusCodes.OK, responseFromUpdate), "Add ACL shouldn't error") {
-      vComplete.response
+    assertResult(responseFromUpdate, "Add ACL shouldn't error") {
+      vComplete
     }
   }
 
   it should "pass sam read action check for a user with read access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
     populateWorkspacePolicies(services)
-    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.read), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
-    assertResult(StatusCodes.NoContent) {
-      rqComplete.response
+    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.read), Duration.Inf)
+    assertResult(true) {
+      rqComplete
     }
   }
 
@@ -423,26 +412,26 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
       //generate a new workspace service with a reader user info so we can ask if a reader can access it
       val readerWorkspaceService = services.workspaceServiceConstructor(UserInfo(testData.userReader.userEmail, OAuth2BearerToken("token"), 0, testData.userReader.userSubjectId))
-      val rqComplete = Await.result(readerWorkspaceService.checkSamActionWithLock(testData.workspaceNoSubmissions.toWorkspaceName, SamWorkspaceActions.read), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
-      assertResult(StatusCodes.NoContent) {
-        rqComplete.response
+      val rqComplete = Await.result(readerWorkspaceService.checkSamActionWithLock(testData.workspaceNoSubmissions.toWorkspaceName, SamWorkspaceActions.read), Duration.Inf)
+      assertResult(true) {
+        rqComplete
       }
     }
   }
 
   it should "fail sam write action check for a user with read access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
     populateWorkspacePolicies(services)
-    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
-    assertResult(StatusCodes.Forbidden) {
-      rqComplete.response
+    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf)
+    assertResult(false) {
+      rqComplete
     }
   }
 
   it should "pass sam write action check for a user with write access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userWriter) { services =>
     populateWorkspacePolicies(services)
-    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
-    assertResult(StatusCodes.NoContent) {
-      rqComplete.response
+    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf)
+    assertResult(true) {
+      rqComplete
     }
   }
 
@@ -454,20 +443,19 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     //now as a writer, ask if we can write it. but it's locked!
     val readerWorkspaceService = services.workspaceServiceConstructor(UserInfo(testData.userWriter.userEmail, OAuth2BearerToken("token"), 0, testData.userWriter.userSubjectId))
-    val rqComplete = Await.result(readerWorkspaceService.checkSamActionWithLock(testData.workspaceNoSubmissions.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
-    assertResult(StatusCodes.Forbidden) {
-      rqComplete.response
+    val rqComplete = Await.result(readerWorkspaceService.checkSamActionWithLock(testData.workspaceNoSubmissions.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf)
+    assertResult(false) {
+      rqComplete
     }
   }
 
   it should "invite a user to a workspace" in withTestDataServicesCustomSam { services =>
     val aclUpdates2 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
     val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
     val responseFromUpdate2 = WorkspaceACLUpdateResponseList(Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, Some(true), Some(true))), Set.empty)
 
-    assertResult((StatusCodes.OK, responseFromUpdate2), "Add ACL shouldn't error") {
-      vComplete2.response
+    assertResult(responseFromUpdate2, "Add ACL shouldn't error") {
+      vComplete2
     }
 
     services.samDAO.invitedUsers.keySet should contain theSameElementsAs Set("obama@whitehouse.gov")
@@ -484,10 +472,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     Await.result(populateAcl, Duration.Inf)
 
     val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[WorkspaceCatalog])]]
-    val (vStatus, vData) = vComplete.response
-    assertResult((StatusCodes.OK, Set.empty)) {
-      (vStatus, vData.filter(wc => wc.catalog))
+    assertResult(Set.empty) {
+      vComplete.filter(wc => wc.catalog)
     }
   }
 
@@ -503,11 +489,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     //add catalog perm
     val catalogUpdateResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
       Seq(WorkspaceCatalog("obama@whitehouse.gov", true))), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
     val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(WorkspaceCatalogResponse("obama@whitehouse.gov", true)), Seq.empty)
 
-    assertResult((StatusCodes.OK, expectedResponse)) {
-      catalogUpdateResponse.response
+    assertResult(expectedResponse) {
+      catalogUpdateResponse
     }
 
     //check result
@@ -522,12 +507,11 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     //remove catalog perm
     val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
       Seq(WorkspaceCatalog(testData.userOwner.userEmail.value, false))), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
 
     val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(WorkspaceCatalogResponse(testData.userOwner.userEmail.value, false)), Seq.empty)
 
-    assertResult((StatusCodes.OK, expectedResponse)) {
-      catalogRemoveResponse.response
+    assertResult(expectedResponse) {
+      catalogRemoveResponse
     }
 
     //check result
@@ -541,10 +525,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     assert(!testData.workspaceTerminatedSubmissions.isLocked)
 
     val rqComplete = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
-        .asInstanceOf[RequestComplete[StatusCode]]
 
-    assertResult(StatusCodes.NoContent) {
-      rqComplete.response
+    assertResult(1) {
+      rqComplete
     }
 
     //check workspace is locked
@@ -822,9 +805,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     // when no tags, return empty set
     val res1 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
     assertResult(Vector.empty[WorkspaceTag]) {
-      res1.response._2
+      res1
     }
 
     // add some tags
@@ -839,37 +821,32 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     // searching for tag that doesn't exist should return empty set
     val res2 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Vector[String])]]
     assertResult(Vector.empty[String]) {
-      res2.response._2
+      res2
     }
 
     // searching for tag that does exist should return the tag (query string case doesn't matter)
     val res3 = Await.result(services.workspaceService.getTags(Some("bUf")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
     assertResult(Vector(WorkspaceTag("buffalo", 1))) {
-      res3.response._2
+      res3
     }
 
     val res4 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
     assertResult(Vector(WorkspaceTag("cancer", 1))) {
-      res4.response._2
+      res4
     }
 
     // searching for multiple tag that does exist should return the tags (query string case doesn't matter)
     // should be sorted by counts of tags
     val res5 = Await.result(services.workspaceService.getTags(Some("cAn")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
     assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("cancer", 1))) {
-      res5.response._2
+      res5
     }
 
     // searching for with no query should return all tags
     val res6 = Await.result(services.workspaceService.getTags(None), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
     assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("buffalo", 1), WorkspaceTag("cancer", 1))) {
-      res6.response._2
+      res6
     }
 
     // remove tags
@@ -879,9 +856,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     // make sure that tags no longer exists
     val res7 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
     assertResult(Vector.empty[WorkspaceTag]) {
-      res7.response._2
+      res7
     }
 
   }
@@ -1159,7 +1135,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "204 on add linked service accounts to workspace" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
-      assertResult(RequestComplete(StatusCodes.NoContent)) {
+      assertResult(()) {
         rqComplete
       }
     }
@@ -1203,7 +1179,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "204 on remove linked service accounts to workspace" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
-      assertResult(RequestComplete(StatusCodes.NoContent)) {
+      assertResult(()) {
         rqComplete
       }
     }
@@ -1212,7 +1188,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "204 on remove linked service accounts to workspace which does not exist" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName.copy(name = "DNE")), Duration.Inf)
-      assertResult(RequestComplete(StatusCodes.NoContent)) {
+      assertResult(()) {
         rqComplete
       }
     }
@@ -1222,7 +1198,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     populateWorkspacePolicies(services)
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
-      assertResult(RequestComplete(StatusCodes.NoContent)) {
+      assertResult(()) {
         rqComplete
       }
     }
@@ -1232,7 +1208,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     populateWorkspacePolicies(services)
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
-      assertResult(RequestComplete(StatusCodes.NoContent)) {
+      assertResult(()) {
         rqComplete
       }
     }

@@ -11,7 +11,6 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -77,7 +76,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, servicePerimeterService = mockServicePerimeterService)
 
       val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
-      val expected = RequestComplete(StatusCodes.NoContent)
+      val expected = ()
       actual shouldEqual expected
       verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName, dataSource.dataAccess)
 
@@ -111,7 +110,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, gcsDAO = mockGcsDAO, servicePerimeterService = mockServicePerimeterService)
 
       val actual = userService.addProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).futureValue
-      val expected = RequestComplete(StatusCodes.NoContent)
+      val expected = ()
       actual shouldEqual expected
       verify(mockServicePerimeterService).overwriteGoogleProjectsInPerimeter(defaultServicePerimeterName, dataSource.dataAccess)
 
@@ -219,7 +218,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       verify(mockGcsDAO).deleteV1Project(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
-      actual shouldEqual RequestComplete(StatusCodes.NoContent)
+      actual shouldEqual ()
     }
   }
 
@@ -252,7 +251,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
-      actual shouldEqual RequestComplete(StatusCodes.NoContent)
+      actual shouldEqual ()
     }
   }
 
@@ -281,7 +280,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf)
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
     }
@@ -298,7 +297,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+        Await.result(userService.deleteBillingProject(defaultBillingProjectName), Duration.Inf)
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }
@@ -336,7 +335,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
-      actual shouldEqual RequestComplete(StatusCodes.NoContent)
+      actual shouldEqual ()
     }
   }
 

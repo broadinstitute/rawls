@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.model._
@@ -18,14 +19,12 @@ import scala.concurrent.ExecutionContext
 trait ServicePerimeterApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
-  import PerRequest.requestCompleteMarshaller
-
   val userServiceConstructor: UserInfo => UserService
   val servicePerimeterRoutes: server.Route = requireUserInfo() { userInfo =>
     path("servicePerimeters" / Segment / "projects" / Segment) { (servicePerimeterName, projectId) =>
       put {
         complete {
-          userServiceConstructor(userInfo).addProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)), RawlsBillingProjectName(projectId))
+          userServiceConstructor(userInfo).addProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)), RawlsBillingProjectName(projectId)).map(_ => StatusCodes.Accepted)
         }
       }
     }

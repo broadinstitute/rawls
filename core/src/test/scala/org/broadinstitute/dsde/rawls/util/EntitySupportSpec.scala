@@ -4,7 +4,6 @@ import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -34,14 +33,14 @@ class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverCompone
           assertResult("sample1") {
             entityRecs.get.head.name
           }
-          DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+          DBIO.successful(())
         })
 
       //Lookup fails because it's not there
       val notFoundExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
           entitySupport.withEntityRecsForExpressionEval(subRq.copy(entityName = Some("sampel1")), ctx, this) { entityRecs =>
-            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+            DBIO.successful(())
           })
       }
       assertResult(StatusCodes.NotFound) {
@@ -52,7 +51,7 @@ class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverCompone
       val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
           entitySupport.withEntityRecsForExpressionEval(subRq.copy(rootEntityType = Some("Pair")), ctx, this) { entityRecs =>
-            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+            DBIO.successful(())
           })
       }
       assertResult(StatusCodes.BadRequest) {
@@ -85,14 +84,14 @@ class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverCompone
           assertResult(Set("sample1", "sample2", "sample3")) {
             entityRecs.get.map(_.name).toSet
           }
-          DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+          DBIO.successful(())
         })
 
       //Lookup fails due to parse failure
       val badExpressionExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
           entitySupport.withEntityRecsForExpressionEval(subRq.copy(expression = Some("nonsense!")), ctx, this) { entityRecs =>
-            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+            DBIO.successful(())
           })
       }
       assertResult(StatusCodes.BadRequest) {
@@ -103,7 +102,7 @@ class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverCompone
       val noResultExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
           entitySupport.withEntityRecsForExpressionEval(subRq.copy(expression = Some("this.bonk")), ctx, this) { entityRecs =>
-            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+            DBIO.successful(())
           })
       }
       assertResult(StatusCodes.BadRequest) {
@@ -114,7 +113,7 @@ class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverCompone
       val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
           entitySupport.withEntityRecsForExpressionEval(subRq.copy(rootEntityType = Some("Pair")), ctx, this) { entityRecs =>
-            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+            DBIO.successful(())
           })
       }
       assertResult(StatusCodes.BadRequest) {

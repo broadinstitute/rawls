@@ -16,8 +16,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityCopyDefinition, EntityQuery, ErrorReport, SamResourceTypeNames, SamWorkspaceActions, UserInfo, WorkspaceName, _}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.webservice.PerRequest
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.json.DefaultJsonProtocol._
@@ -49,7 +47,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
   }
 
-  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
+  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Entity] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
@@ -58,17 +56,17 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         entity <- entityProvider.getEntity(entityType, entityName)
       } yield {
-        PerRequest.RequestComplete(StatusCodes.OK, entity)
+        entity
       }
 
       entityFuture.recover {
         case _: EntityNotFoundException =>
           // could move this error message into EntityNotFoundException and allow it to bubble up
-          RequestComplete(ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName"))
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in $workspaceName"))
       }.recover(bigQueryRecover)
     }
 
-  def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
+  def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[Entity] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
@@ -82,13 +80,13 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
                 DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update entity ${entityType}/${entityName} in ${workspaceName}", ErrorReport(e))))
               case Failure(regrets) => DBIO.failed(regrets)
             }
-            updateAction.map(RequestComplete(StatusCodes.OK, _))
+            updateAction
           }
         }
       }
     }
 
-  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
+  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Set[AttributeEntityReference]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
@@ -97,37 +95,37 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         _ <- entityProvider.deleteEntities(entRefs)
       } yield {
-        PerRequest.RequestComplete(StatusCodes.NoContent)
+        Set[AttributeEntityReference]()
       }
 
       deleteFuture.recover {
-        case delEx: DeleteEntitiesConflictException => RequestComplete(StatusCodes.Conflict, delEx.referringEntities)
+        case delEx: DeleteEntitiesConflictException => delEx.referringEntities
       }.recover(bigQueryRecover)
     }
 
-  def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName]): Future[PerRequestMessage] =
+  def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName]): Future[Unit] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.entityQuery.deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
           case Vector(0) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names."))
           case _ => DBIO.successful(())
-        } map (_ => RequestComplete(StatusCodes.NoContent))
+        }
       }
     }
 
-  def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =
+  def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
           dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
             case None => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
             case Some(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists"))
-          } map(_ => RequestComplete(StatusCodes.NoContent))
+          }
         }
       }
     }
 
-  def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[PerRequestMessage] =
+  def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[Seq[AttributeValue]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
@@ -142,7 +140,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
                 } else {
                   assert(valuesByEntity.head._1 == entityName)
                   valuesByEntity.head match {
-                    case (_, Success(result)) => RequestComplete(StatusCodes.OK, result.toSeq)
+                    case (_, Success(result)) => result.toSeq
                     case (_, Failure(regret)) =>
                       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}", ErrorReport(regret)))
                   }
@@ -154,7 +152,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], useCache: Boolean): Future[PerRequestMessage] =
+  def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
@@ -163,24 +161,24 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         metadata <- entityProvider.entityTypeMetadata(useCache)
       } yield {
-        PerRequest.RequestComplete(StatusCodes.OK, metadata)
+        metadata
       }
 
       metadataFuture.recover(bigQueryRecover)
     }
 
-  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[PerRequestMessage] =
+  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("listActiveEntitiesOfType", parentSpan) { _ =>
           dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
         }.map { r =>
-          RequestComplete(StatusCodes.OK, r.toSeq)
+          r.toSeq
         }
       }
     }
 
-  def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[PerRequestMessage] = {
+  def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[EntityQueryResponse] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
@@ -189,14 +187,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         entities <- entityProvider.queryEntities(entityType, query, parentSpan)
       } yield {
-        PerRequest.RequestComplete(StatusCodes.OK, entities)
+        entities
       }
 
       queryFuture.recover(bigQueryRecover)
     }
   }
 
-  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean, parentSpan: Span = null): Future[PerRequestMessage] =
+  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean, parentSpan: Span = null): Future[EntityCopyResponse] =
 
     getWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { destWorkspaceContext =>
       getWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { sourceWorkspaceContext =>
@@ -208,10 +206,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
               val entityNames = entityCopyDef.entityNames
               val entityType = entityCopyDef.entityType
               val copyResults = traceDBIOWithParent("checkAndCopyEntities", parentSpan)( s1 => dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities, s1))
-              copyResults.map { response =>
-                if (response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntities)) RequestComplete(StatusCodes.Created, response)
-                else RequestComplete(StatusCodes.Conflict, response)
-              }
+              copyResults
             }
           } yield result
         }
@@ -236,26 +231,24 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
-    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject).map (_ =>
-      RequestComplete(StatusCodes.NoContent))
+  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Traversable[Entity]] =
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = false, dataReference, billingProject)
 
-  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =
-    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject).map (_ =>
-      RequestComplete(StatusCodes.NoContent))
+  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Traversable[Entity]] =
+    batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject)
 
-  private def bigQueryRecover: PartialFunction[Throwable, PerRequestMessage] = {
+  private def bigQueryRecover[U]: PartialFunction[Throwable, U] = {
     case dee:DataEntityException =>
-      RequestComplete(ErrorReport(dee.code, dee.getMessage))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(dee.code, dee.getMessage))
     case bqe:BigQueryException =>
-      RequestComplete(ErrorReport(StatusCodes.getForKey(bqe.getCode).getOrElse(StatusCodes.InternalServerError), bqe.getMessage))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.getForKey(bqe.getCode).getOrElse(StatusCodes.InternalServerError), bqe.getMessage))
     case gjre:GoogleJsonResponseException =>
       // unlikely to hit this case; we should see BigQueryExceptions instead of GoogleJsonResponseExceptions
-      RequestComplete(ErrorReport(StatusCodes.getForKey(gjre.getStatusCode).getOrElse(StatusCodes.InternalServerError), gjre.getMessage))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.getForKey(gjre.getStatusCode).getOrElse(StatusCodes.InternalServerError), gjre.getMessage))
     case report:RawlsExceptionWithErrorReport =>
       throw report // don't rewrap these, just rethrow
     case ex:Exception =>
-      RequestComplete(ErrorReport(StatusCodes.InternalServerError, s"Unexpected error: ${ex.getMessage}", ex))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unexpected error: ${ex.getMessage}", ex))
   }
 
 }
