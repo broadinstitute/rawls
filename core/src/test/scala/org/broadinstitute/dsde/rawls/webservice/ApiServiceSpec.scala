@@ -195,7 +195,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers.map(c => c.key->c.dao).toMap,
       Seq("my-favorite-group"), Seq.empty, Seq("my-favorite-bucket")))
-    override val statusServiceConstructor = () => StatusService.constructor(healthMonitor)
+    override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
     val bigQueryDAO = new MockGoogleBigQueryDAO
     val submissionCostService = new MockSubmissionCostService("test", "test", 31, bigQueryDAO)
     val execServiceBatchSize = 3
