@@ -6,6 +6,7 @@ import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
@@ -29,8 +30,8 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
           get {
             complete {
               userServiceConstructor(userInfo).getBillingProject(RawlsBillingProjectName(projectId)).map {
-                case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse)
-                case None => StatusCodes.NotFound -> None
+                case Some(projectResponse) => StatusCodes.OK -> Right(Option(projectResponse))
+                case None => StatusCodes.NotFound -> Left(Option(StatusCodes.NotFound.defaultMessage))
               }
             }
           } ~

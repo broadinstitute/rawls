@@ -55,8 +55,8 @@ trait UserApiService extends UserInfoDirectives {
           get {
             complete {
               userServiceConstructor(userInfo).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
-                case Some(status) => StatusCodes.OK -> Option(status)
-                case _ => StatusCodes.NotFound -> None
+                case Some(status) => StatusCodes.OK -> Right(Option(status))
+                case _ => StatusCodes.NotFound -> Left(Option(StatusCodes.NotFound.defaultMessage))
               }
             }
           }
