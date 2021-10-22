@@ -1132,7 +1132,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   }
 
 
-  it should "204 on add linked service accounts to workspace" in withTestDataServices { services =>
+  it should "return Unit when adding linked service accounts to workspace" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
       assertResult(()) {
@@ -1141,7 +1141,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  it should "404 on add linked service accounts to workspace which does not exist" in withTestDataServices { services =>
+  it should "return a 404 ErrorReport when adding linked service accounts to workspace which does not exist" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val error = intercept[RawlsExceptionWithErrorReport] {
         Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName.copy(name = "DNE")), Duration.Inf)
@@ -1152,7 +1152,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  it should "404 on add linked service accounts to workspace with no access" in withTestDataServicesCustomSamAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))) { services =>
+  it should "return a 404 ErrorReport when adding linked service accounts to workspace with no access" in withTestDataServicesCustomSamAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))) { services =>
     populateWorkspacePolicies(services)
     withWorkspaceContext(testData.workspace) { ctx =>
       val error = intercept[RawlsExceptionWithErrorReport] {
@@ -1164,7 +1164,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  it should "403 on add linked service accounts to workspace with read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+  it should "return a 403 Error Report when adding add linked service accounts to workspace with read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
     populateWorkspacePolicies(services)
     withWorkspaceContext(testData.workspace) { ctx =>
       val error = intercept[RawlsExceptionWithErrorReport] {
@@ -1176,7 +1176,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  it should "204 on remove linked service accounts to workspace" in withTestDataServices { services =>
+  it should "return Unit when removing linked service accounts from workspace" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
       assertResult(()) {
@@ -1185,7 +1185,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  it should "204 on remove linked service accounts to workspace which does not exist" in withTestDataServices { services =>
+  it should "return Unit when removing linked service accounts from workspace which does not exist" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName.copy(name = "DNE")), Duration.Inf)
       assertResult(()) {
@@ -1194,7 +1194,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  it should "204 on remove linked service accounts to workspace with no access" in withTestDataServicesCustomSamAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))) { services =>
+  it should "return Unit when removing linked service accounts from workspace with no access" in withTestDataServicesCustomSamAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))) { services =>
     populateWorkspacePolicies(services)
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
@@ -1204,7 +1204,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  it should "204 on remove linked service accounts to workspace with read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+  it should "return Unit when removing linked service accounts from workspace with read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
     populateWorkspacePolicies(services)
     withWorkspaceContext(testData.workspace) { ctx =>
       val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
