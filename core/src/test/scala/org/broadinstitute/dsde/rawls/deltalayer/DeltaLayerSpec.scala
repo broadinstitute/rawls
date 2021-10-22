@@ -395,7 +395,7 @@ class DeltaLayerSpec extends AsyncFreeSpec with TestDriverComponent with Private
       "should bubble up BigQuery async exceptions" in {
         // mock GoogleBigQueryService that throws error on deleteDataset
         val throwingBQService = mock[GoogleBigQueryService[IO]]
-        when(throwingBQService.deleteDataset(any())).thenThrow(new BigQueryException(444, "BigQuery errors via deleteDataset should bubble up"))
+        when(throwingBQService.deleteDataset(any())).thenReturn(IO.raiseError(new BigQueryException(444, "BigQuery errors via deleteDataset should bubble up")))
         // mock GoogleBigQueryServiceFactory that returns the mock GoogleBigQueryService
         val mockBQFactory = mock[GoogleBigQueryServiceFactory]
         when(mockBQFactory.getServiceForProject(any())).thenReturn(Resource.pure[IO, GoogleBigQueryService[IO]](throwingBQService))
