@@ -29,9 +29,10 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
         pathEnd {
           get {
             complete {
+              import spray.json._
               userServiceConstructor(userInfo).getBillingProject(RawlsBillingProjectName(projectId)).map {
-                case Some(projectResponse) => StatusCodes.OK -> Right(Option(projectResponse))
-                case None => StatusCodes.NotFound -> Left(Option(StatusCodes.NotFound.defaultMessage))
+                case Some(projectResponse) => StatusCodes.OK -> Option(projectResponse).toJson
+                case None => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
               }
             }
           } ~

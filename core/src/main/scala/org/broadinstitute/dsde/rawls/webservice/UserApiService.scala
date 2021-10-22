@@ -54,9 +54,10 @@ trait UserApiService extends UserInfoDirectives {
         path(Segment) { projectName =>
           get {
             complete {
+              import spray.json._
               userServiceConstructor(userInfo).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
-                case Some(status) => StatusCodes.OK -> Right(Option(status))
-                case _ => StatusCodes.NotFound -> Left(Option(StatusCodes.NotFound.defaultMessage))
+                case Some(status) => StatusCodes.OK -> Option(status).toJson
+                case _ => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
               }
             }
           }
