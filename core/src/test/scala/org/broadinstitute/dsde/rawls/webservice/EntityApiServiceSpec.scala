@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -108,7 +109,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   def dbId(ent: Entity): Long = runAndWait(entityQuery.getEntityRecords(testData.workspace.workspaceIdAsUUID, Set(ent.toReference))).head.id
-  def dbName(id: Long): String = runAndWait(entityQuery.getEntities(Seq(id))).head._2.name
+  def dbName(id: Long): String = runAndWait(entityQuery.getEntities(testData.workspace.workspaceIdAsUUID, WorkspaceShardStates.Sharded, Seq(id))).head._2.name
 
   def entityOfSize(size: Long) = {
     val json = s"""[{"name":"${"0" * (size - 56).toInt}","entityType":"participant","operations":[]}]""" //template already includes 56 bytes, subtract that from repeated string
@@ -2245,7 +2246,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       AttributeName.withDefaultNS("mixedNumeric") -> (i % 2 match {
         case 0 => AttributeNumber(i.toDouble)
         case 1 => AttributeValueList(1 to i map (AttributeNumber(_)) reverse)
-      })
+      }),
+      // pfb:number collides with default:number unless namespaces are honored
+      AttributeName.fromDelimitedName("pfb:number") -> AttributeNumber(Math.random())
     )))
 
     override def save(): ReadWriteAction[Unit] = {
@@ -2602,6 +2605,25 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         val resultEntities = responseAs[EntityQueryResponse].results
         assertResult(paginationTestData.entities.filter(_.attributes.getOrElse(AttributeName.withDefaultNS("sparse"), AttributeNull) != AttributeNull).sortBy(_.attributes(AttributeName.withDefaultNS("sparse")).asInstanceOf[AttributeNumber].value)) {
           resultEntities.dropWhile(_.attributes.getOrElse(AttributeName.withDefaultNS("sparse"), AttributeNull) == AttributeNull)
+        }
+      }
+  }
+
+  it should "return sorted results on entity query for namespaced attributes" in withPaginationTestDataApiServices { services =>
+    val sortAttr = AttributeName.fromDelimitedName("pfb:number")
+
+    Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=${toDelimitedName(sortAttr)}") ~>
+      services.sealedInstrumentedRoutes ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(sortField = toDelimitedName(sortAttr)),
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
+          paginationTestData.entities.sortBy(_.attributes(sortAttr).asInstanceOf[AttributeNumber].value).take(defaultQuery.pageSize))) {
+
+          responseAs[EntityQueryResponse]
         }
       }
   }

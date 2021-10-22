@@ -1,13 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
-
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats._
 import cats.implicits._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+
+import java.sql.Timestamp
 
 
 /**
@@ -236,6 +237,72 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     assertResult(None) {
       runAndWait(submissionQuery.confirmInWorkspace(noWorkspaceId, submissionId))
+    }
+  }
+
+  it should "return workflow failure messages even when workflowRec.workflowEntityId is None" in withDefaultTestDatabase {
+    // example submission, no workflows as of yet
+    val sid = UUID.randomUUID()
+    val submissionNoEntitiesYesMessages = Submission(
+      submissionId = sid.toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(testData.userOwner.userEmail.value),
+      methodConfigurationNamespace = testData.methodConfigValid.namespace,
+      methodConfigurationName = testData.methodConfigValid.name,submissionEntity = None,
+      workflows = Seq(),
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+
+    withWorkspaceContext(testData.workspace) { context =>
+      // save the submission
+      runAndWait(DBIO.seq(
+        submissionQuery.create(context, submissionNoEntitiesYesMessages),
+        updateWorkflowExecutionServiceKey("unittestdefault") ))
+
+      // save a couple workflow rows to this submission.
+      val workflows = Seq(
+        WorkflowRecord(11111, Option("workflow1"), sid, WorkflowStatuses.Failed.toString, Timestamp.from(java.time.Instant.now()),
+          None, 1, Option("unittestdefault"), None),
+        WorkflowRecord(22222, Option("workflow2"), sid, WorkflowStatuses.Failed.toString, Timestamp.from(java.time.Instant.now()),
+          None, 1, Option("unittestdefault"), None),
+      )
+      val saveWorkflows = workflowQuery ++= workflows
+      runAndWait(saveWorkflows)
+      val actualWorkflows = runAndWait(workflowQuery.findWorkflowsBySubmissionId(sid).result)
+      withClue("checking count of saved workflows from findWorkflowsBySubmissionId: ") {
+        actualWorkflows.size shouldBe 2
+      }
+
+      // save failure messages for these workflows
+      actualWorkflows.foreach { w =>
+        runAndWait(workflowQuery.saveMessages(Seq(AttributeString(s"failure message for ${w.externalId.getOrElse("")}")), w.id))
+      }
+
+      // validate the submission and workflows saved properly
+      val actual = runAndWait(submissionQuery.loadSubmission(sid))
+      withClue("checking existence of submission: ") {
+        actual should not be empty
+      }
+      actual.map { submission =>
+        withClue("checking id of submission: ") {
+          submission.submissionId shouldBe sid.toString
+        }
+        withClue("checking count of saved workflows from loadSubmission: ") {
+          submission.workflows.size shouldBe 2
+        }
+      }
+
+      // validate the workflow failure messages
+      actual.map(_.workflows.foreach { w =>
+        withClue(s"checking count of workflow failure messages returned from loadSubmission for ${w.workflowId}: ") {
+          w.messages.size shouldBe 1
+        }
+        withClue(s"checking content of workflow failure messages returned from loadSubmission for ${w.workflowId}: ") {
+          w.messages.head.value shouldBe s"failure message for ${w.workflowId.getOrElse("")}"
+        }
+      })
     }
   }
 

@@ -37,7 +37,17 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       }
       _ = logger.info(s"Attempting to update workspaces: ${workspacesToUpdate.toList}")
       _ <- workspacesToUpdate.toList.traverse {
-        case (googleProjectId, newBillingAccount) => IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount)))
+        case (googleProjectId, newBillingAccount) =>
+          IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount))).attempt.map {
+            case Left(e) => {
+              // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
+              // want to continue traversing the list to update the rest of the google project billing accounts even
+              // if one of the update operations fails.
+              logger.warn(s"Failed to update billing account on $googleProjectId to $newBillingAccount", e)
+              ()
+            }
+            case Right(res) => res
+          }
       }.unsafeToFuture()
     } yield()
   }
@@ -61,7 +71,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
           }
       }
       dbResult <- dataSource.inTransaction( { dataAccess =>
-        logger.info(s"Updating billing account on ${googleProjectId} to ${newBillingAccount.get}")
+        logger.info(s"Updating billing account on ${googleProjectId} to ${newBillingAccount}")
         dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
       })
     } yield dbResult

@@ -132,7 +132,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
         //Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
         val resultsByInput = inputs.toSeq.map { input =>
-          evaluator.evalFinalAttribute(workspaceContext, input.expression).asTry.map { tryAttribsByEntity =>
+          evaluator.evalFinalAttribute(workspaceContext, input.expression, Option(input)).asTry.map { tryAttribsByEntity =>
             val validationValuesByEntity: Seq[(EntityName, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>
                 //The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
@@ -229,6 +229,21 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
           }
 
           traceDBIOWithParent("saveAction", rootSpan)(_ => saveAction)
+        } recover {
+          case icve:com.mysql.jdbc.exceptions.jdbc4.MySQLIntegrityConstraintViolationException =>
+            val userMessage =
+              s"Database error occurred. Check if you are uploading entity names or entity types that differ only in case " +
+                s"from pre-existing entities."
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, icve))
+          case bue:java.sql.BatchUpdateException =>
+            val maybeCaseIssue = bue.getMessage.startsWith("Duplicate entry")
+            val userMessage = if (maybeCaseIssue) {
+              s"Database error occurred. Check if you are uploading entity names or entity types that differ only in case " +
+                s"from pre-existing entities."
+            } else {
+              s"Database error occurred. Underlying error message: ${bue.getMessage}"
+            }
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, bue))
         }
       }
     }

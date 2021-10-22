@@ -406,9 +406,9 @@ paths:
     delete:
       tags:
         - billing_v2
-      summary: deletes the billing account on billing project
-      description: deletes the billing account on billing project
-      operationId: deleteBillingProjectBillingAccount
+      summary: removes the billing account from the billing project
+      description: removes the billing account from the billing project
+      operationId: removeBillingProjectBillingAccount
       parameters:
         - name: projectId
           in: path
