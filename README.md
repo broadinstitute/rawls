@@ -1,4 +1,4 @@
-test 1 
+test 2
 
 [![Build Status](https://github.com/broadinstitute/rawls/workflows/Scala%20tests%20with%20coverage/badge.svg?branch=develop
 )](https://travis-ci.com/broadinstitute/rawls?branch=develop)
