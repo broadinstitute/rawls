@@ -63,7 +63,7 @@ trait AdminApiService extends UserInfoDirectives {
         complete {
           workspaceServiceConstructor(userInfo).adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId).map { count =>
             if(count == 1) StatusCodes.NoContent -> None
-            else StatusCodes.NotFound -> Option(s"Unable to abort submission. Submission ${submissionId} could not be found.")
+            else StatusCodes.NotFound -> Option(ErrorReport(StatusCodes.NotFound, s"Unable to abort submission. Submission ${submissionId} could not be found."))
           }
         }
       }

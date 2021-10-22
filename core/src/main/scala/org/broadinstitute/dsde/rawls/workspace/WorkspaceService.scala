@@ -1614,15 +1614,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def updateSubmissionUserComment(workspaceName: WorkspaceName, submissionId: String, newComment: UserCommentUpdateOperation): Future[(UUID, Int)] = {
+  def updateSubmissionUserComment(workspaceName: WorkspaceName, submissionId: String, newComment: UserCommentUpdateOperation): Future[Int] = {
     validateMaxStringLength(newComment.userComment, "userComment", UserCommentMaxLength)
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
-          dataAccess.submissionQuery.updateSubmissionUserComment(submissionId, newComment.userComment).map { rowsUpdated =>
-            (submissionId, rowsUpdated)
-          }
+          dataAccess.submissionQuery.updateSubmissionUserComment(submissionId, newComment.userComment)
         }
       }
     }

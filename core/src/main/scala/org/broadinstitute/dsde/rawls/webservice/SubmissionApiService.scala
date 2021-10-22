@@ -59,7 +59,7 @@ trait SubmissionApiService extends UserInfoDirectives {
         patch {
           entity(as[UserCommentUpdateOperation]) { newComment =>
             complete {
-              workspaceServiceConstructor(userInfo).updateSubmissionUserComment(WorkspaceName(workspaceNamespace, workspaceName), submissionId, newComment).map { case (submissionId, rowsUpdated) =>
+              workspaceServiceConstructor(userInfo).updateSubmissionUserComment(WorkspaceName(workspaceNamespace, workspaceName), submissionId, newComment).map { rowsUpdated =>
                 if (rowsUpdated == 1) StatusCodes.NoContent -> None
                 else StatusCodes.NotFound -> Option(ErrorReport(StatusCodes.NotFound, s"Unable to update userComment for submission. Submission ${submissionId} could not be found."))
               }
