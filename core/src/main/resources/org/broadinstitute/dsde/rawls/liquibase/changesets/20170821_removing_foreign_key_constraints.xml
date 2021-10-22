@@ -8,7 +8,7 @@
     <changeSet id="dropForeignKeyConstraint_managedGroupMembers" author="ursas">
         <dropForeignKeyConstraint baseTableName="MANAGED_GROUP" constraintName="FK_MANAGED_GROUP_MEMBERS"/>
     </changeSet>
-
+    
     <changeSet id="dropForeignKeyConstraint_managedGroupAdmins" author="ursas">
         <dropForeignKeyConstraint baseTableName="MANAGED_GROUP" constraintName="FK_MANAGED_GROUP_ADMINS"/>
     </changeSet>
@@ -24,11 +24,11 @@
     <changeSet id="dropForeignKeyConstraint_groupSharePermsUser" author="ursas">
         <dropForeignKeyConstraint baseTableName="WORKSPACE_GROUP_SHARE" constraintName="FK_GROUP_SHARE_PERMS_USER"/>
     </changeSet>
-
+    
     <changeSet id="dropForeignKeyConstraint_userCatalogPermsUser" author="ursas">
         <dropForeignKeyConstraint baseTableName="WORKSPACE_USER_CATALOG" constraintName="FK_USER_CATALOG_PERMS_USER"/>
     </changeSet>
-
+    
     <changeSet id="dropForeignKeyConstraint_pendingWsAccessOriginUser" author="ursas">
         <dropForeignKeyConstraint baseTableName="PENDING_WORKSPACE_ACCESS" constraintName="FK_PENDING_WS_ACCESS_ORIGIN_USER"/>
     </changeSet>

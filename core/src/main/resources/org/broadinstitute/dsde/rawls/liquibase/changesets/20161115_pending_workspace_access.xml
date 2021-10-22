@@ -25,5 +25,5 @@
             alter table PENDING_WORKSPACE_ACCESS add constraint FK_PENDING_WS_ACCESS_ORIGIN_USER foreign key (origin_subject_id) references USER(SUBJECT_ID);
         </sql>
     </changeSet>
-
+    
 </databaseChangeLog>
