@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
-                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
     <changeSet logicalFilePath="dummy" author="ursas" id="dropForeignKeyConstraint_wsAccessGroup">
         <dropForeignKeyConstraint baseTableName="WORKSPACE_ACCESS" constraintName="FK_WS_ACCESS_GROUP"/>
@@ -10,7 +8,7 @@
     <changeSet id="dropForeignKeyConstraint_managedGroupMembers" author="ursas">
         <dropForeignKeyConstraint baseTableName="MANAGED_GROUP" constraintName="FK_MANAGED_GROUP_MEMBERS"/>
     </changeSet>
-    
+
     <changeSet id="dropForeignKeyConstraint_managedGroupAdmins" author="ursas">
         <dropForeignKeyConstraint baseTableName="MANAGED_GROUP" constraintName="FK_MANAGED_GROUP_ADMINS"/>
     </changeSet>
@@ -26,11 +24,11 @@
     <changeSet id="dropForeignKeyConstraint_groupSharePermsUser" author="ursas">
         <dropForeignKeyConstraint baseTableName="WORKSPACE_GROUP_SHARE" constraintName="FK_GROUP_SHARE_PERMS_USER"/>
     </changeSet>
-    
+
     <changeSet id="dropForeignKeyConstraint_userCatalogPermsUser" author="ursas">
         <dropForeignKeyConstraint baseTableName="WORKSPACE_USER_CATALOG" constraintName="FK_USER_CATALOG_PERMS_USER"/>
     </changeSet>
-    
+
     <changeSet id="dropForeignKeyConstraint_pendingWsAccessOriginUser" author="ursas">
         <dropForeignKeyConstraint baseTableName="PENDING_WORKSPACE_ACCESS" constraintName="FK_PENDING_WS_ACCESS_ORIGIN_USER"/>
     </changeSet>
