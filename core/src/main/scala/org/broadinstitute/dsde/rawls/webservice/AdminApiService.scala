@@ -95,7 +95,7 @@ trait AdminApiService extends UserInfoDirectives {
                 case _ => throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
               }
           }
-         complete { resultFuture.map(_ => StatusCodes.OK) }
+         complete { resultFuture.map(StatusCodes.OK -> _) }
         }
       }
     } ~
