@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
-import spray.json.DefaultJsonProtocol.jsonFormat2
 
 /**
   * Created by rtitle on 5/24/17.

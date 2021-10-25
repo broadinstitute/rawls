@@ -4,11 +4,11 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.Workspace
 import org.mockserver.model.RegexBody
-import org.scalatest.exceptions.TestFailedException
 import org.scalatest.Suite
+import org.scalatest.exceptions.TestFailedException
+import org.scalatest.matchers.should.Matchers
 
 import scala.util.matching.Regex
-import org.scalatest.matchers.should.Matchers
 
 trait RawlsTestUtils extends Suite with TestDriverComponent with Matchers {
 

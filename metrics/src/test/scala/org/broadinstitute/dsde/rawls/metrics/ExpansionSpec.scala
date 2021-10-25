@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import java.util.UUID
-
 import akka.http.scaladsl.model._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import java.util.UUID
 
 /**
   * Created by rtitle on 7/16/17.

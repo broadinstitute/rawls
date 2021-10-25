@@ -1,10 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.client.RequestBuilding._
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import org.broadinstitute.dsde.rawls.model.SubsystemStatus
 
 import scala.concurrent.Future
-import akka.http.scaladsl.client.RequestBuilding._
 
 trait ServiceDAOWithStatus {
   this: DsdeHttpDAO =>

@@ -1,11 +1,11 @@
 
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
-
 import _root_.slick.dbio.DBIOAction
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
+
+import java.util.UUID
 
 /**
  * Created by dvoet on 2/12/16.

@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
@@ -7,11 +10,8 @@ import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProje
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceDetailsFormat}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 

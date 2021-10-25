@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
@@ -12,6 +10,7 @@ import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat, 
 import org.joda.time.DateTime
 import spray.json._
 
+import java.util.UUID
 import scala.util.{Failure, Success, Try}
 
 /**

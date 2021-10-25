@@ -2,12 +2,12 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
+import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.createKeyList
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNull, AttributeNumber, AttributeString, Entity, EntityQuery, EntityQueryResultMetadata, SortDirections}
-import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.createKeyList
+import org.scalatest.freespec.AnyFreeSpec
 
 import scala.collection.JavaConverters._
-import org.scalatest.freespec.AnyFreeSpec
 
 /* see also the unit tests in DataRepoEntityProviderSpec
  */

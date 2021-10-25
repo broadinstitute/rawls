@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.scalatest.concurrent.ScalaFutures
@@ -10,6 +8,7 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.meta.MTable
 
+import java.util.UUID
 import scala.concurrent.Future
 
 /**

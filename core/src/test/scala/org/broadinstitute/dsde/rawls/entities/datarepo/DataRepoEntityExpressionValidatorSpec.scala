@@ -9,8 +9,8 @@ import org.broadinstitute.dsde.rawls.expressions.DataRepoExpressionFixture
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{AgoraMethod, Attributable, AttributeString, MethodConfiguration}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.{Seconds, Span}
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.time.{Seconds, Span}
 
 class DataRepoEntityExpressionValidatorSpec extends AnyFlatSpec with TestDriverComponent with RawlsTestUtils with ScalaFutures with DataRepoEntityProviderSpecSupport with DataRepoExpressionFixture {
 

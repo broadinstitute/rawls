@@ -1,21 +1,20 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType
-
-import java.util.UUID
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.joda.time.DateTime
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import spray.json.{JsObject, JsString}
 
+import java.util.UUID
 import java.util.concurrent.Executors
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 /**

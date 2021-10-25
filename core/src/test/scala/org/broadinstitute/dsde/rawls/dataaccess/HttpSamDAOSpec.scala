@@ -9,12 +9,12 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchGroupName
 import org.scalatest.BeforeAndAfterAll
-
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
-import scala.concurrent.ExecutionContext.Implicits.global
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+
+import scala.concurrent.Await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
   with AnyFlatSpecLike with Matchers with BeforeAndAfterAll {

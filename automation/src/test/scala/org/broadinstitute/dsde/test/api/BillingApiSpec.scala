@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.test.api
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
-
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
@@ -10,15 +7,17 @@ import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig,
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.model.{UserInfo, WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
+import org.broadinstitute.dsde.workbench.service.SamModel._
 import org.broadinstitute.dsde.workbench.service.util.Retry.retry
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, Sam}
-import org.broadinstitute.dsde.workbench.service.SamModel._
-
-import scala.concurrent.duration.DurationLong
 import org.scalatest.concurrent.Eventually
-import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Minutes, Seconds, Span}
+
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
+import scala.concurrent.duration.DurationLong
 import scala.util.Try
 
 //noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol

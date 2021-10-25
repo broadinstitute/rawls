@@ -1,12 +1,11 @@
 package org.broadinstitute.dsde.rawls.model
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.joda.time.DateTime
 import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
 import spray.json._
 
+import java.util.UUID
 import scala.util.Try
 
 //Mix in one of these with your AttributeFormat so you can serialize lists

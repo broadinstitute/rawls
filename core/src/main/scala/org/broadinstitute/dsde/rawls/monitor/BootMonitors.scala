@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
@@ -50,7 +50,7 @@ object BootMonitors extends LazyLogging {
                    useWorkflowCollectionLabel: Boolean,
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
-                   methodConfigResolver: MethodConfigResolver)(implicit cs: ContextShift[IO]): Unit = {
+                   methodConfigResolver: MethodConfigResolver): Unit = {
     //Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
 
@@ -212,23 +212,23 @@ object BootMonitors extends LazyLogging {
     }
   }
 
-  private def startBucketDeletionMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
+  private def startBucketDeletionMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) = {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startWorkspaceBillingAccountMonitor(system: ActorSystem, workspaceBillingAccountMonitorConfig: WorkspaceBillingAccountMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
+  private def startWorkspaceBillingAccountMonitor(system: ActorSystem, workspaceBillingAccountMonitorConfig: WorkspaceBillingAccountMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) = {
     system.actorOf(WorkspaceBillingAccountMonitor.props(slickDataSource, gcsDAO, workspaceBillingAccountMonitorConfig.initialDelay, workspaceBillingAccountMonitorConfig.pollInterval))
   }
 
-  private def startCloneWorkspaceFileTransferMonitor(system: ActorSystem, cloneWorkspaceFileTransferMonitorConfig: CloneWorkspaceFileTransferMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
+  private def startCloneWorkspaceFileTransferMonitor(system: ActorSystem, cloneWorkspaceFileTransferMonitorConfig: CloneWorkspaceFileTransferMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) = {
     system.actorOf(CloneWorkspaceFileTransferMonitor.props(slickDataSource, gcsDAO, cloneWorkspaceFileTransferMonitorConfig.initialDelay, cloneWorkspaceFileTransferMonitorConfig.pollInterval))
   }
 
-  private def startEntityStatisticsCacheMonitor(system: ActorSystem, slickDataSource: SlickDataSource, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration, workspaceCooldown: FiniteDuration)(implicit cs: ContextShift[IO]) = {
+  private def startEntityStatisticsCacheMonitor(system: ActorSystem, slickDataSource: SlickDataSource, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration, workspaceCooldown: FiniteDuration) = {
     system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown))
   }
 
-  private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig, dataSource: SlickDataSource)(implicit cs: ContextShift[IO]) = {
+  private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig, dataSource: SlickDataSource) = {
     system.actorOf(
       AvroUpsertMonitorSupervisor.props(
         entityService,

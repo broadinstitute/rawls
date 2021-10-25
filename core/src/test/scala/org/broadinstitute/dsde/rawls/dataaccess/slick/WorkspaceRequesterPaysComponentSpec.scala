@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess.BondServiceAccountEmail
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUserEmail, Workspace, WorkspaceShardStates, WorkspaceVersions}
+
+import java.util.UUID
 
 class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   "WorkspaceRequesterPaysComponentSpec" should "crud" in withEmptyTestDatabase {

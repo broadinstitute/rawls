@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import akka.http.scaladsl.model.StatusCodes
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 
 trait ErrorReportable {
   def errorReportSource: ErrorReportSource

@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.model
 
-import spray.json.JsString
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import spray.json.JsString
 
 /**
  * Created by dvoet on 3/28/17.

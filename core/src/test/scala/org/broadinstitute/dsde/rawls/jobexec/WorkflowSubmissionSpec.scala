@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.util.UUID
-
 import akka.actor.{ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
@@ -22,16 +20,17 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.util.UUID
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
 /**
  * Created by dvoet on 5/17/16.

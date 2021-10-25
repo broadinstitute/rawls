@@ -1,17 +1,16 @@
 package org.broadinstitute.dsde.rawls.model
 
-import java.util.UUID
-
 import bio.terra.workspace.model.CloningInstructionsEnum.NOTHING
 import bio.terra.workspace.model.ReferenceTypeEnum.DATA_REPO_SNAPSHOT
-import bio.terra.workspace.model.{CloningInstructionsEnum, DataReferenceDescription, DataReferenceList, DataRepoSnapshot, DataRepoSnapshotAttributes, DataRepoSnapshotResource, ResourceAttributesUnion, ResourceDescription, ResourceList, ResourceMetadata, ResourceType, StewardshipType, UpdateDataReferenceRequestBody}
+import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import spray.json._
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import spray.json._
+
+import java.util.UUID
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
 

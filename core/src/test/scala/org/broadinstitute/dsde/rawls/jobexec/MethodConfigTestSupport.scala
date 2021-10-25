@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.model.{AgoraMethod, AttributeEntityReferenceList, AttributeName, AttributeNumber, AttributeString, AttributeValueList, AttributeValueRawJson, Entity, MethodConfiguration, WdlSource, Workspace}
 
+import java.util.UUID
 import scala.collection.immutable.Map
 
 trait MethodConfigTestSupport {

@@ -1,23 +1,19 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
-import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
-import org.scalatest.flatspec.AnyFlatSpec
-import TestExecutionContext.testExecutionContext
 import akka.actor.ActorSystem
 import com.google.cloud.storage.Storage.BlobWriteOption
 import com.google.cloud.storage.contrib.nio.testing.LocalStorageHelper
 import com.google.cloud.storage.{BlobInfo, Storage, StorageException}
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.deltalayer.v1
+import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 import org.broadinstitute.dsde.rawls.model.deltalayer.v1.{DeltaInsert, DeltaRow, InsertDestination, InsertSource}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, GoogleProjectId, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUserSubjectId}
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
-import org.joda.time.DateTime
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.when
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.concurrent.Eventually
+import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatestplus.mockito.MockitoSugar.mock

@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.ReferenceTypeEnum
 import org.broadinstitute.dsde.rawls.TestExecutionContext
@@ -9,10 +7,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.DataReferenceName
-
-import scala.util.Failure
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import java.util.UUID
+import scala.util.Failure
 
 class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
   override implicit val executionContext = TestExecutionContext.testExecutionContext

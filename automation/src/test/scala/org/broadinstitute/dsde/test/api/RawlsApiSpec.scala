@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.test.api
 
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
@@ -19,16 +17,17 @@ import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.freespec.AnyFreeSpecLike
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import org.scalatest.freespec.AnyFreeSpecLike
-import org.scalatest.matchers.should.Matchers
 
 //noinspection ScalaUnnecessaryParentheses,JavaAccessorEmptyParenCall,ScalaUnusedSymbol
 class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures

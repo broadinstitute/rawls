@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
@@ -18,7 +16,6 @@ import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
@@ -55,9 +52,10 @@ import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.language.postfixOps
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.{mapAsJavaMapConverter, mapAsScalaMapConverter}
+import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 

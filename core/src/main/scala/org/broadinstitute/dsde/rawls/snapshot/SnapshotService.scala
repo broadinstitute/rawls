@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.snapshot
 
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model._
-import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -21,14 +20,14 @@ import scala.util.{Failure, Success, Try}
 object SnapshotService {
 
   def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, deltaLayer: DeltaLayer, terraDataRepoUrl: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)(userInfo: UserInfo)
-                 (implicit executionContext: ExecutionContext, contextShift: ContextShift[IO]): SnapshotService = {
+                 (implicit executionContext: ExecutionContext): SnapshotService = {
     new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, deltaLayer, terraDataRepoUrl, clientEmail, deltaLayerStreamerEmail)
   }
 
 }
 
 class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, deltaLayer: DeltaLayer, terraDataRepoInstanceName: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
-                     (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO])
+                     (implicit protected val executionContext: ExecutionContext)
   extends FutureSupport with WorkspaceSupport with LazyLogging {
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: NamedDataRepoSnapshot): Future[DataRepoSnapshotResource] = {

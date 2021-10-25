@@ -1,6 +1,7 @@
 import sbt.Keys._
 import sbt.Setting
-import sys.process._
+
+import scala.sys.process._
 
 object Version {
   val baseModelVersion = "0.1"

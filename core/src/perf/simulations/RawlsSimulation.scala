@@ -1,7 +1,6 @@
 package default
 
-import io.gatling.core.Predef._
-import sys.process._
+import scala.sys.process._
 
 trait RawlsSimulation extends Simulation {
 

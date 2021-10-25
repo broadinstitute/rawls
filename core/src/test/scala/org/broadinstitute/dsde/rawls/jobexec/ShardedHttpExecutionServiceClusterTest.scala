@@ -1,24 +1,23 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.sql.Timestamp
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 import spray.json.JsonParser
 
+import java.sql.Timestamp
+import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
 //noinspection TypeAnnotation,RedundantBlock,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
 class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with AnyFlatSpecLike

@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import cromwell.client.model.ValueType.TypeNameEnum
-import cromwell.client.model.{ToolInputParameter, ToolOutputParameter, ValueType, ValueTypeObjectFieldTypes, WorkflowDescription}
+import cromwell.client.model._
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL}
 
+import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.collection.JavaConverters._
 import scala.util.Try
 
 class MockCromwellSwaggerClient extends CromwellSwaggerClient("fake/path") {

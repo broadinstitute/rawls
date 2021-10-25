@@ -1,37 +1,35 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.config.WDLParserConfig
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import slick.basic.DatabaseConfig
-import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.JdbcProfile
+import slick.jdbc.MySQLProfile.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.scalatest.Suite
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.config.WDLParserConfig
-import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
-import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
-import scala.language.{implicitConversions, postfixOps}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import java.sql.Timestamp
+import java.util.UUID
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
+import scala.language.{implicitConversions, postfixOps}
 
 // initialize database tables and connection pool only once
 object DbResource {

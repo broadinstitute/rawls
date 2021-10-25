@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
-import java.util.UUID
-
 import cats.implicits._
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -13,6 +10,9 @@ import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcProfile}
+
+import java.sql.Timestamp
+import java.util.UUID
 
 /**
  * Created by mbemis on 2/18/16.

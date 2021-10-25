@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.user
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.Applicative
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.http.HttpResponseException
@@ -24,6 +23,8 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, GoogleProject}
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 

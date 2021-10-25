@@ -1,18 +1,19 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecord
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.CheckAll
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 object BucketDeletionMonitor {
-  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
+  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
     Props(new BucketDeletionMonitor(datasource, gcsDAO, initialDelay, pollInterval))
   }
 
@@ -20,7 +21,7 @@ object BucketDeletionMonitor {
   case object CheckAll extends BucketDeletionsMessage
 }
 
-class BucketDeletionMonitor(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
+class BucketDeletionMonitor(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext) extends Actor with LazyLogging {
 
   context.system.scheduler.schedule(initialDelay, pollInterval, self, CheckAll)
 

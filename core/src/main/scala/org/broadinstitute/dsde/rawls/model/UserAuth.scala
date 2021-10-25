@@ -4,8 +4,8 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
-import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import spray.json._
 
 import scala.language.implicitConversions
@@ -148,8 +148,8 @@ case class BillingAccountScopes(requiredScopes: Seq[String])
 class UserAuthJsonSupport extends JsonSupport {
   import ExecutionJsonSupport._
   import UserModelJsonSupport._
-  import spray.json.DefaultJsonProtocol._
   import WorkspaceJsonSupport.WorkspaceNameFormat
+  import spray.json.DefaultJsonProtocol._
 
 
   // need "apply" here so it doesn't choose the companion class

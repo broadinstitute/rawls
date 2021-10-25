@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
 
 import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
-import scala.util.{Try, Success}
+import scala.util.{Success, Try}
 
 /**
  * Builder for the Terra default entity provider

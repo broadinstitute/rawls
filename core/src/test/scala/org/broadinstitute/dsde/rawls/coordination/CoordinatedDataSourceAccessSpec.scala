@@ -5,19 +5,19 @@ import akka.pattern.AskTimeoutException
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatestplus.mockito.MockitoSugar
-import org.scalatest.prop.TableDrivenPropertyChecks
-import org.scalatest.BeforeAndAfterAll
-import slick.jdbc.TransactionIsolation
 import org.mockito.Mockito.RETURNS_SMART_NULLS
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.prop.TableDrivenPropertyChecks
+import org.scalatestplus.mockito.MockitoSugar
+import slick.jdbc.TransactionIsolation
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success}
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
 class CoordinatedDataSourceAccessSpec
   extends TestKit(ActorSystem("CoordinatedDataSourceAccessSpec"))

@@ -1,15 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.WorkspaceVersions
-import org.scalatestplus.mockito.MockitoSugar
 import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.{Seconds, Span}
-
-import scala.concurrent.Future
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Seconds, Span}
+import org.scalatestplus.mockito.MockitoSugar
+
+import scala.concurrent.Future
 
 class RequesterPaysSetupServiceSpec extends AnyFlatSpec with Matchers with MockitoSugar with ScalaFutures with TestDriverComponent {
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Seconds)))

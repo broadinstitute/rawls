@@ -2,10 +2,10 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import spray.json._
 
 class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 

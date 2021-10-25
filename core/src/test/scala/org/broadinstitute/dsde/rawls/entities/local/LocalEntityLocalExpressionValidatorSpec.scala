@@ -9,8 +9,8 @@ import org.broadinstitute.dsde.rawls.expressions.LocalExpressionFixture
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.{AgoraMethod, Attributable, AttributeString, MethodConfiguration}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.{Seconds, Span}
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.time.{Seconds, Span}
 
 class LocalEntityLocalExpressionValidatorSpec extends AnyFlatSpec with TestDriverComponent with LocalExpressionFixture with RawlsTestUtils with ScalaFutures  {
 

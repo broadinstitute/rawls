@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls
 
-import java.util.concurrent._
-import java.util.concurrent.atomic.AtomicInteger
-
-import akka.dispatch.{ExecutorServiceFactory, ExecutorServiceConfigurator, DispatcherPrerequisites}
+import akka.dispatch.{DispatcherPrerequisites, ExecutorServiceConfigurator, ExecutorServiceFactory}
 import com.typesafe.config.Config
 
+import java.util.concurrent._
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.ExecutionContextExecutor
 
 /**

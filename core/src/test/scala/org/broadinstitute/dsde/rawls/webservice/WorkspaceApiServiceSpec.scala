@@ -1,34 +1,32 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
-
-import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.server.Directive1
-import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import akka.http.scaladsl.model.headers._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
+import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import spray.json.DefaultJsonProtocol._
 import spray.json.{JsObject, enrichAny}
 
+import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 

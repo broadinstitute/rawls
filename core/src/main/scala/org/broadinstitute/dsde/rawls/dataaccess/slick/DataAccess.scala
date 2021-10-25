@@ -1,13 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import javax.naming.NameNotFoundException
-import javax.naming.directory.DirContext
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
 import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates
 import slick.jdbc.JdbcProfile
-import slick.jdbc.meta.MTable
 
-import java.lang.Integer.toHexString
+import javax.naming.NameNotFoundException
+import javax.naming.directory.DirContext
 import scala.util.Try
 
 trait DataAccess

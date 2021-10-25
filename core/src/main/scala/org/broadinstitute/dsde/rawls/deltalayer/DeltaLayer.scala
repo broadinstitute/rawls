@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.Acl.Entity
 import com.google.cloud.bigquery.{Acl, BigQueryException, DatasetId}
 import com.typesafe.scalalogging.LazyLogging
@@ -49,7 +50,7 @@ object DeltaLayer {
 }
 
 class DeltaLayer(bqServiceFactory: GoogleBigQueryServiceFactory, deltaLayerWriter: DeltaLayerWriter, samDAO: SamDAO, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
-                (implicit protected val executionContext: ExecutionContext, implicit val contextShift: ContextShift[IO])
+                (implicit protected val executionContext: ExecutionContext)
                 extends LazyLogging {
 
   /**

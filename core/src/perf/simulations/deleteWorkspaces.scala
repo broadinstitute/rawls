@@ -2,9 +2,6 @@ package default
 
 import scala.concurrent.duration._
 
-import io.gatling.core.Predef._
-import io.gatling.http.Predef._
-
 class deleteWorkspaces extends RawlsSimulation {
 
   val workspaceListPath = "WORKSPACE_LIST.tsv" //list of workspaces to delete

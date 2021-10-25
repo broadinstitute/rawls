@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, PendingCloneWorkspaceFileTransfer}
+
+import java.util.UUID
 
 
 case class CloneWorkspaceFileTransferRecord(id: Long, destWorkspaceId: UUID, sourceWorkspaceId: UUID, copyFilesWithPrefix: String)

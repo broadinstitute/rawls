@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.util.concurrent.TimeoutException
-
 import akka.actor.{Actor, Props}
 import akka.pattern.{after, pipe}
 import cats._
@@ -13,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 
+import java.util.concurrent.TimeoutException
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps

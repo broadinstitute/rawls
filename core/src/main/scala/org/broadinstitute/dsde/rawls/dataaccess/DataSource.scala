@@ -1,17 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.sql.SQLTimeoutException
-
 import _root_.slick.basic.DatabaseConfig
 import _root_.slick.jdbc.{JdbcProfile, TransactionIsolation}
 import com.google.common.base.Throwables
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, DataAccessComponent, ReadWriteAction}
-import sun.security.provider.certpath.SunCertPathBuilderException
-import scala.concurrent.{ExecutionContext, Future}
-import liquibase.{Contexts, Liquibase}
 import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.{ClassLoaderResourceAccessor, ResourceAccessor}
+import liquibase.{Contexts, Liquibase}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, DataAccessComponent, ReadWriteAction}
+import sun.security.provider.certpath.SunCertPathBuilderException
+
+import java.sql.SQLTimeoutException
+import scala.concurrent.{ExecutionContext, Future}
 
 object DataSource {
   def apply(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext): SlickDataSource = {

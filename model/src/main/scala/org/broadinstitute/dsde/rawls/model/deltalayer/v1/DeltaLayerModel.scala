@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.model.deltalayer.v1
 
-import org.broadinstitute.dsde.rawls.model.{AttributeFormat, GoogleProjectId, JsonSupport, PlainArrayAttributeListSerializer, RawlsUserSubjectId}
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserSubjectIdFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.GoogleProjectIdFormat
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
 import spray.json.DefaultJsonProtocol._
 import spray.json._

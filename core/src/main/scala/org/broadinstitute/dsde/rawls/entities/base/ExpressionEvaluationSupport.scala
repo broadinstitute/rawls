@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.entities.base
 
 import cromwell.client.model.ToolInputParameter
 import cromwell.client.model.ValueType.TypeNameEnum
-import ExpressionEvaluationSupport.EntityName
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.EntityName
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model.{AttributeNull, AttributeValue, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import spray.json.JsArray

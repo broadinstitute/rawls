@@ -7,12 +7,12 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.mock.MockMarthaResolver
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
 class MarthaResolverSpec extends AnyFlatSpecLike with Matchers with BeforeAndAfterAll {
 

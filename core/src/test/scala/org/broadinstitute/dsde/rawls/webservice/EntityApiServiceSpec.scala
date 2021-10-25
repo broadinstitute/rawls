@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
@@ -22,6 +21,7 @@ import org.mockito.Mockito.{verify, when}
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsArray, JsBoolean, JsNumber, JsObject, JsString}
 
+import java.util.UUID
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps

@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
-import java.util.UUID
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
@@ -9,6 +8,7 @@ import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO {

@@ -5,8 +5,8 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SlickDataSource}
 import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
@@ -16,12 +16,12 @@ import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.broadinstitute.dsde.rawls.workspace.{AttributeNotFoundException, AttributeUpdateOperationException}
-import org.scalatest.concurrent.Eventually
 import org.scalatest.BeforeAndAfterAll
-
-import scala.concurrent.ExecutionContext
+import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import scala.concurrent.ExecutionContext
 
 class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll {
 
