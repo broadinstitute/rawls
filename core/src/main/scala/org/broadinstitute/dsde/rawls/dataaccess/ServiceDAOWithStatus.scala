@@ -15,7 +15,12 @@ trait ServiceDAOWithStatus {
     for {
       response <- http.singleRequest(Get(statusUrl))
       ok = response.status.isSuccess
-      message <- if (ok) Future.successful(None) else Unmarshal(response.entity).to[String].map(Option(_))
+      message <- if (ok) {
+        response.discardEntityBytes() // ensure the entity is subscribed!
+        Future.successful(None)
+      } else {
+        Unmarshal(response.entity).to[String].map(Option(_))
+      }
     } yield {
       SubsystemStatus(ok, message.map(List(_)))
     }
