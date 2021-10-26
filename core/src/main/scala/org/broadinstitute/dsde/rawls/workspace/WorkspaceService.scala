@@ -2043,7 +2043,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
     // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
     policyGroupsToRoles.toList.foldLeft(Future(true)){case (result, (email, roles)) => {
-      result.flatMap(_ => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles))
+      result.flatMap(_ => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles, retryIfGroupDoesNotExist = true))
     }}
   }
 
