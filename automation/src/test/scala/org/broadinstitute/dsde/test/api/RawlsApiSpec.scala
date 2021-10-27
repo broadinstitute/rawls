@@ -85,7 +85,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     }
   }
 
-  def parseWorkflowFieldFromMetadata(metadata: String, field: string): String = {
+  def parseWorkflowFieldFromMetadata(metadata: String, field: String): String = {
     val mapper = new ObjectMapper()
     mapper.registerModule(DefaultScalaModule)
     mapper.readTree(metadata).get(field).textValue()
