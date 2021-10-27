@@ -778,6 +778,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             |            --intervals '~{interval}' \
             |            --variant '~{basename(indexedVcf.vcf)}' | \
             |        tail -n 1 > count.txt
+            |
+            |        printf "Exception in thread "main" java.lang.OutOfMemoryError: testing\n\tat Test.main(Test.java:1)\n" >&2 && (exit 1)
             |    }
             |
             |    output {
@@ -900,7 +902,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               metadata
             }
 
-            parseWorkflowStatusFromMetadata(notRunningMetadata) should be("Succeeded")
+            withClue(notRunningMetadata) {
+              parseWorkflowStatusFromMetadata(notRunningMetadata) should be("Succeeded")
+            }
             parseWorkflowOutputFromMetadata(notRunningMetadata, "test_count_variants.count") should be("123997")
           }
         }
