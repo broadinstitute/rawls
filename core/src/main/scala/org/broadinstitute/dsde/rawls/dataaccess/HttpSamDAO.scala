@@ -61,12 +61,19 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
             // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
             // create our own error message.
             import WorkspaceJsonSupport.ErrorReportFormat
-            toFutureTry(Unmarshal(response.entity).to[ErrorReport]) map {
+            toFutureTry(Unmarshal(response.entity).to[ErrorReport]) flatMap {
               case Success(err) =>
                 logger.error(s"Sam call to ${request.method} ${request.uri.path} failed with error $err")
                 throw new RawlsExceptionWithErrorReport(err)
               case Failure(_) =>
-                throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error ${response.entity}"))
+                // attempt to extract something useful from the response entity, even though it's not an ErrorReport
+                toFutureTry(Unmarshal(response.entity).to[String]) map { maybeString =>
+                  val stringErrMsg = maybeString match {
+                    case Success(stringErr) => stringErr
+                    case Failure(_) => response.entity.toString
+                  }
+                  throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error '$stringErrMsg'"))
+                }
             }
         }
       }
