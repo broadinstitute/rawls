@@ -254,7 +254,7 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="create_shard_wrapper_procedure">
         <sql stripComments="true" endDelimiter="~">
-            -- procedure to set recently migrated workspaces to Sharded state,
+            -- wrapper procedure to move data to shard and set those workspaces to Sharded state,
             DROP PROCEDURE IF EXISTS populateShardAndMarkAsSharded ~
             CREATE PROCEDURE populateShardAndMarkAsSharded(IN shardIdentifier CHAR(5))
 
