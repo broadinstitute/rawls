@@ -781,8 +781,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             |            --intervals '~{interval}' \
             |            --variant '~{basename(indexedVcf.vcf)}' | \
             |        tail -n 1 > count.txt
-            |
-            |        printf "Exception in thread "main" java.lang.OutOfMemoryError: testing\n\tat Test.main(Test.java:1)\n" >&2 && (exit 1)
             |    }
             |
             |    output {
