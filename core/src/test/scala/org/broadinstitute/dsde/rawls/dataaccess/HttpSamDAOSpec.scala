@@ -8,7 +8,7 @@ import akka.testkit.TestKit
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsUserEmail, RawlsUserSubjectId, UserInfo, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchGroupName
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse.response
@@ -58,9 +58,12 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
     }
   }
 
-  it should "bubble up non-ErrorReport Sam errors to Rawls' response" in {
+  it should "bubble up ErrorReport errors to Rawls' response" in {
     // this tests the error handling in HttpSamDAO.doSuccessOrFailureRequest, which is used by
-    // multiple of HttpSamDAO's methods. We'll test two of them here.
+    // multiple of HttpSamDAO's methods. We'll test one of them here.
+
+    import spray.json._
+    import WorkspaceJsonSupport.ErrorReportFormat
 
     // inviteUser
     mockServer.mockServer.when(
@@ -68,16 +71,7 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
         .withMethod("POST")
         .withPath("/api/users/v1/invite/fake-email")
     ).respond(
-      response().withStatusCode(StatusCodes.InternalServerError.intValue).withBody("not an ErrorReport")
-    )
-
-    // deleteUserPetServiceAccount
-    mockServer.mockServer.when(
-      request()
-        .withMethod("DELETE")
-        .withPath("/api/google/v1/user/petServiceAccount/fake-project")
-    ).respond(
-      response().withStatusCode(StatusCodes.InternalServerError.intValue).withBody("also not an ErrorReport")
+      response().withStatusCode(StatusCodes.InternalServerError.intValue).withBody(ErrorReport("I am an ErrorReport!").toJson.prettyPrint)
     )
 
     val fakeUserInfo = UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
@@ -89,7 +83,26 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
     }
 
     inviteErr.errorReport.message should startWith ("Sam call to")
-    inviteErr.errorReport.message should endWith ("failed with error not an ErrorReport")
+    inviteErr.errorReport.message should include ("failed with error")
+    inviteErr.errorReport.message should include ("I am an ErrorReport!")
+  }
+
+  it should "bubble up non-ErrorReport Sam errors to Rawls' response" in {
+    // this tests the error handling in HttpSamDAO.doSuccessOrFailureRequest, which is used by
+    // multiple of HttpSamDAO's methods. We'll test one of them here.
+
+    // deleteUserPetServiceAccount
+    mockServer.mockServer.when(
+      request()
+        .withMethod("DELETE")
+        .withPath("/api/google/v1/user/petServiceAccount/fake-project")
+    ).respond(
+      response().withStatusCode(StatusCodes.InternalServerError.intValue).withBody("not an ErrorReport")
+    )
+
+    val fakeUserInfo = UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
+
+    val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
 
     val deletePetError = intercept[RawlsExceptionWithErrorReport] {
       Await.result(dao.deleteUserPetServiceAccount(GoogleProjectId("fake-project"), fakeUserInfo), Duration.Inf)
@@ -97,9 +110,6 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
 
     deletePetError.errorReport.message should startWith ("Sam call to")
     // note the "also" in the error string below
-    deletePetError.errorReport.message should endWith ("failed with error also not an ErrorReport")
-
-    mockServer.mockServer.clear(request().withMethod("POST").withPath("/api/users/v1/invite/fake-email"))
-    mockServer.mockServer.clear(request().withMethod("DELETE").withPath("/api/google/v1/user/petServiceAccount/fake-project"))
+    deletePetError.errorReport.message should endWith ("failed with error 'not an ErrorReport'")
   }
 }

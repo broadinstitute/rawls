@@ -72,7 +72,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
                     case Success(stringErr) => stringErr
                     case Failure(_) => response.entity.toString
                   }
-                  throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error $stringErrMsg"))
+                  throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error '$stringErrMsg'"))
                 }
             }
         }
