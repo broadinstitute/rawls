@@ -5,259 +5,259 @@
             individual shard, we can restart the liquibase migration at that point,
             and don't have to rollback any progress up to that changeset. -->
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_00_03">-->
-<!--        <sql>call copyRowsToAttributeShard('00_03');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('00_03');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_04_07">-->
-<!--        <sql>call copyRowsToAttributeShard('04_07');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('04_07');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_08_0b">-->
-<!--        <sql>call copyRowsToAttributeShard('08_0b');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('08_0b');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_0c_0f">-->
-<!--        <sql>call copyRowsToAttributeShard('0c_0f');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('0c_0f');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_10_13">-->
-<!--        <sql>call copyRowsToAttributeShard('10_13');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('10_13');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_14_17">-->
-<!--        <sql>call copyRowsToAttributeShard('14_17');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('14_17');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_18_1b">-->
-<!--        <sql>call copyRowsToAttributeShard('18_1b');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('18_1b');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_1c_1f">-->
-<!--        <sql>call copyRowsToAttributeShard('1c_1f');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('1c_1f');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_20_23">-->
-<!--        <sql>call copyRowsToAttributeShard('20_23');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('20_23');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_24_27">-->
-<!--        <sql>call copyRowsToAttributeShard('24_27');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('24_27');</sql>-->
 <!--    </changeSet>-->
 
     <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_28_2b">
-        <sql>call copyRowsToAttributeShard('28_2b');</sql>
+        <sql>call populateShardAndMarkAsSharded('28_2b');</sql>
     </changeSet>
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_2c_2f">-->
-<!--        <sql>call copyRowsToAttributeShard('2c_2f');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('2c_2f');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_30_33">-->
-<!--        <sql>call copyRowsToAttributeShard('30_33');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('30_33');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_34_37">-->
-<!--        <sql>call copyRowsToAttributeShard('34_37');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('34_37');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_38_3b">-->
-<!--        <sql>call copyRowsToAttributeShard('38_3b');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('38_3b');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_3c_3f">-->
-<!--        <sql>call copyRowsToAttributeShard('3c_3f');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('3c_3f');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_40_43">-->
-<!--        <sql>call copyRowsToAttributeShard('40_43');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('40_43');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_44_47">-->
-<!--        <sql>call copyRowsToAttributeShard('44_47');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('44_47');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_48_4b">-->
-<!--        <sql>call copyRowsToAttributeShard('48_4b');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('48_4b');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_4c_4f">-->
-<!--        <sql>call copyRowsToAttributeShard('4c_4f');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('4c_4f');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_50_53">-->
-<!--        <sql>call copyRowsToAttributeShard('50_53');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('50_53');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_54_57">-->
-<!--        <sql>call copyRowsToAttributeShard('54_57');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('54_57');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_58_5b">-->
-<!--        <sql>call copyRowsToAttributeShard('58_5b');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('58_5b');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_5c_5f">-->
-<!--        <sql>call copyRowsToAttributeShard('5c_5f');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('5c_5f');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_60_63">-->
-<!--        <sql>call copyRowsToAttributeShard('60_63');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('60_63');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_64_67">-->
-<!--        <sql>call copyRowsToAttributeShard('64_67');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('64_67');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_68_6b">-->
-<!--        <sql>call copyRowsToAttributeShard('68_6b');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('68_6b');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_6c_6f">-->
-<!--        <sql>call copyRowsToAttributeShard('6c_6f');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('6c_6f');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_70_73">-->
-<!--        <sql>call copyRowsToAttributeShard('70_73');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('70_73');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_74_77">-->
-<!--        <sql>call copyRowsToAttributeShard('74_77');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('74_77');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_78_7b">-->
-<!--        <sql>call copyRowsToAttributeShard('78_7b');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('78_7b');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_7c_7f">-->
-<!--        <sql>call copyRowsToAttributeShard('7c_7f');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('7c_7f');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_80_83">-->
-<!--        <sql>call copyRowsToAttributeShard('80_83');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('80_83');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_84_87">-->
-<!--        <sql>call copyRowsToAttributeShard('84_87');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('84_87');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_88_8b">-->
-<!--        <sql>call copyRowsToAttributeShard('88_8b');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('88_8b');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_8c_8f">-->
-<!--        <sql>call copyRowsToAttributeShard('8c_8f');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('8c_8f');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_90_93">-->
-<!--        <sql>call copyRowsToAttributeShard('90_93');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('90_93');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_94_97">-->
-<!--        <sql>call copyRowsToAttributeShard('94_97');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('94_97');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_98_9b">-->
-<!--        <sql>call copyRowsToAttributeShard('98_9b');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('98_9b');</sql>-->
 <!--    </changeSet>-->
 
     <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_9c_9f">
-        <sql>call copyRowsToAttributeShard('9c_9f');</sql>
+        <sql>call populateShardAndMarkAsSharded('9c_9f');</sql>
     </changeSet>
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_a0_a3">-->
-<!--        <sql>call copyRowsToAttributeShard('a0_a3');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('a0_a3');</sql>-->
 <!--    </changeSet>-->
 
     <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_a4_a7">
-        <sql>call copyRowsToAttributeShard('a4_a7');</sql>
+        <sql>call populateShardAndMarkAsSharded('a4_a7');</sql>
     </changeSet>
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_a8_ab">-->
-<!--        <sql>call copyRowsToAttributeShard('a8_ab');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('a8_ab');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_ac_af">-->
-<!--        <sql>call copyRowsToAttributeShard('ac_af');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('ac_af');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_b0_b3">-->
-<!--        <sql>call copyRowsToAttributeShard('b0_b3');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('b0_b3');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_b4_b7">-->
-<!--        <sql>call copyRowsToAttributeShard('b4_b7');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('b4_b7');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_b8_bb">-->
-<!--        <sql>call copyRowsToAttributeShard('b8_bb');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('b8_bb');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_bc_bf">-->
-<!--        <sql>call copyRowsToAttributeShard('bc_bf');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('bc_bf');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_c0_c3">-->
-<!--        <sql>call copyRowsToAttributeShard('c0_c3');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('c0_c3');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_c4_c7">-->
-<!--        <sql>call copyRowsToAttributeShard('c4_c7');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('c4_c7');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_c8_cb">-->
-<!--        <sql>call copyRowsToAttributeShard('c8_cb');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('c8_cb');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_cc_cf">-->
-<!--        <sql>call copyRowsToAttributeShard('cc_cf');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('cc_cf');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_d0_d3">-->
-<!--        <sql>call copyRowsToAttributeShard('d0_d3');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('d0_d3');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_d4_d7">-->
-<!--        <sql>call copyRowsToAttributeShard('d4_d7');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('d4_d7');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_d8_db">-->
-<!--        <sql>call copyRowsToAttributeShard('d8_db');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('d8_db');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_dc_df">-->
-<!--        <sql>call copyRowsToAttributeShard('dc_df');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('dc_df');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_e0_e3">-->
-<!--        <sql>call copyRowsToAttributeShard('e0_e3');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('e0_e3');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_e4_e7">-->
-<!--        <sql>call copyRowsToAttributeShard('e4_e7');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('e4_e7');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_e8_eb">-->
-<!--        <sql>call copyRowsToAttributeShard('e8_eb');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('e8_eb');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_ec_ef">-->
-<!--        <sql>call copyRowsToAttributeShard('ec_ef');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('ec_ef');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_f0_f3">-->
-<!--        <sql>call copyRowsToAttributeShard('f0_f3');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('f0_f3');</sql>-->
 <!--    </changeSet>-->
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_f4_f7">-->
-<!--        <sql>call copyRowsToAttributeShard('f4_f7');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('f4_f7');</sql>-->
 <!--    </changeSet>-->
 
     <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_f8_fb">
-        <sql>call copyRowsToAttributeShard('f8_fb');</sql>
+        <sql>call populateShardAndMarkAsSharded('f8_fb');</sql>
     </changeSet>
 
 <!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_fc_ff">-->
-<!--        <sql>call copyRowsToAttributeShard('fc_ff');</sql>-->
+<!--        <sql>call populateShardAndMarkAsSharded('fc_ff');</sql>-->
 <!--    </changeSet>-->
     <!-- END populate each shard in its own changeset. If we hit an error with an
             individual shard, we can restart the liquibase migration at that point,
