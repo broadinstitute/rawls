@@ -905,7 +905,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               metadata
             }
 
-            withClue(getWorkflowFieldFromMetadata(notRunningMetadata, "failures").asText()) {
+            withClue(getWorkflowFieldFromMetadata(notRunningMetadata, "failures")) {
               parseWorkflowStatusFromMetadata(notRunningMetadata) should be("Succeeded")
             }
             parseWorkflowOutputFromMetadata(notRunningMetadata, "test_count_variants.count") should be("123997")
