@@ -22,7 +22,7 @@ object Testing {
 
   val commonTestSettings: Seq[Setting[_]] = List(
 
-    testOptions in Test += Tests.Setup(() =>
+    Test / testOptions += Tests.Setup(() =>
       sys.props += "mockserver.logLevel" -> "WARN"
     ),
     // SLF4J initializes itself upon the first logging call.  Because sbt
@@ -43,21 +43,21 @@ object Testing {
     //   http://stackoverflow.com/a/12095245
     //   http://jira.qos.ch/browse/SLF4J-167
     //   http://jira.qos.ch/browse/SLF4J-97
-    testOptions in Test += Tests.Setup(classLoader =>
+    Test / testOptions += Tests.Setup(classLoader =>
       classLoader
         .loadClass("org.slf4j.LoggerFactory")
         .getMethod("getLogger", classLoader.loadClass("java.lang.String"))
         .invoke(null, "ROOT")
     ),
-    testOptions in Test ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
-    testOptions in IntegrationTest := Seq(Tests.Filter(s => isIntegrationTest(s))),
+    Test / testOptions ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
+    IntegrationTest / testOptions := Seq(Tests.Filter(s => isIntegrationTest(s))),
 
     validMySqlHostSetting,
 
-    (test in Test) := ((test in Test) dependsOn validMySqlHost).value,
-    (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).evaluated,
+    (Test / test) := ((Test / test) dependsOn validMySqlHost).value,
+    (Test / testOnly) := ((Test / testOnly) dependsOn validMySqlHost).evaluated,
 
-    parallelExecution in Test := false
+    Test / parallelExecution := false
   ) ++ (if (sys.props.getOrElse("secrets.skip", "false") != "true") MinnieKenny.testSettings else List())
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {
