@@ -85,11 +85,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     }
   }
 
-  def parseWorkflowStatusFromMetadata(metadata: String): String = {
+  def getWorkflowFieldFromMetadata(metadata: String, field: String): JsonNode = {
     val mapper = new ObjectMapper()
     mapper.registerModule(DefaultScalaModule)
+    mapper.readTree(metadata).get(field)
+  }
 
-    mapper.readTree(metadata).get("status").textValue()
+  def parseWorkflowStatusFromMetadata(metadata: String): String = {
+    getWorkflowFieldFromMetadata(metadata, "status").textValue()
   }
 
   def parseWorkflowOutputFromMetadata(metadata: String, outputField: String): String = {
@@ -899,8 +902,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               status should not be("Running")
               metadata
             }
-
-            parseWorkflowStatusFromMetadata(notRunningMetadata) should be("Succeeded")
+            withClue(Option(getWorkflowFieldFromMetadata(notRunningMetadata, "failures")).getOrElse("No failures in metadata")) {
+              parseWorkflowStatusFromMetadata(notRunningMetadata) should be("Succeeded")
+            }
             parseWorkflowOutputFromMetadata(notRunningMetadata, "test_count_variants.count") should be("123997")
           }
         }
