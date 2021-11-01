@@ -239,4 +239,38 @@
         </rollback>
     </changeSet>
 
+    <changeSet logicalFilePath="dummy" author="mbemis" id="create_set_workspace_sharded_procedure">
+        <sql stripComments="true" endDelimiter="~">
+            -- procedure to set recently migrated workspaces to Sharded state,
+            DROP PROCEDURE IF EXISTS setWorkspacesAsSharded ~
+            CREATE PROCEDURE setWorkspacesAsSharded(IN shardIdentifier CHAR(5))
+            BEGIN
+                SET @sql_text:=CONCAT('update WORKSPACE w set shard_state="Sharded" where shardIdentifier(hex(w.id)) = ''',shardIdentifier,''';');
+                PREPARE stmt from @sql_text;
+                EXECUTE stmt;
+            END ~
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="create_shard_wrapper_procedure">
+        <sql stripComments="true" endDelimiter="~">
+            -- wrapper procedure to move data to shard and set those workspaces to Sharded state,
+            DROP PROCEDURE IF EXISTS populateShardAndMarkAsSharded ~
+            CREATE PROCEDURE populateShardAndMarkAsSharded(IN shardIdentifier CHAR(5))
+
+            BEGIN
+                DECLARE exit handler FOR SQLEXCEPTION
+                BEGIN
+                    ROLLBACK;
+                    RESIGNAL;
+                END;
+
+                START TRANSACTION;
+                    call copyRowsToAttributeShard(shardIdentifier);
+                    call setWorkspacesAsSharded(shardIdentifier);
+                COMMIT;
+            END ~
+        </sql>
+    </changeSet>
+
 </databaseChangeLog>

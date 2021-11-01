@@ -4,325 +4,261 @@
     <!-- START populate each shard in its own changeset. If we hit an error with an
             individual shard, we can restart the liquibase migration at that point,
             and don't have to rollback any progress up to that changeset. -->
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_00_03">
-        <sql>call copyRowsToAttributeShard('00_03');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_00_03; call createEntityAttributeShard('00_03');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_00_03">-->
+<!--        <sql>call populateShardAndMarkAsSharded('00_03');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_04_07">
-        <sql>call copyRowsToAttributeShard('04_07');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_04_07; call createEntityAttributeShard('04_07');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_04_07">-->
+<!--        <sql>call populateShardAndMarkAsSharded('04_07');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_08_0b">
-        <sql>call copyRowsToAttributeShard('08_0b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_08_0b; call createEntityAttributeShard('08_0b');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_08_0b">-->
+<!--        <sql>call populateShardAndMarkAsSharded('08_0b');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_0c_0f">
-        <sql>call copyRowsToAttributeShard('0c_0f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_0c_0f; call createEntityAttributeShard('0c_0f');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_0c_0f">-->
+<!--        <sql>call populateShardAndMarkAsSharded('0c_0f');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_10_13">
-        <sql>call copyRowsToAttributeShard('10_13');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_10_13; call createEntityAttributeShard('10_13');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_10_13">-->
+<!--        <sql>call populateShardAndMarkAsSharded('10_13');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_14_17">
-        <sql>call copyRowsToAttributeShard('14_17');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_14_17; call createEntityAttributeShard('14_17');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_14_17">-->
+<!--        <sql>call populateShardAndMarkAsSharded('14_17');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_18_1b">
-        <sql>call copyRowsToAttributeShard('18_1b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_18_1b; call createEntityAttributeShard('18_1b');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_18_1b">-->
+<!--        <sql>call populateShardAndMarkAsSharded('18_1b');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_1c_1f">
-        <sql>call copyRowsToAttributeShard('1c_1f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_1c_1f; call createEntityAttributeShard('1c_1f');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_1c_1f">-->
+<!--        <sql>call populateShardAndMarkAsSharded('1c_1f');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_20_23">
-        <sql>call copyRowsToAttributeShard('20_23');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_20_23; call createEntityAttributeShard('20_23');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_20_23">-->
+<!--        <sql>call populateShardAndMarkAsSharded('20_23');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_24_27">
-        <sql>call copyRowsToAttributeShard('24_27');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_24_27; call createEntityAttributeShard('24_27');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_24_27">-->
+<!--        <sql>call populateShardAndMarkAsSharded('24_27');</sql>-->
+<!--    </changeSet>-->
 
     <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_28_2b">
-        <sql>call copyRowsToAttributeShard('28_2b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_28_2b; call createEntityAttributeShard('28_2b');</rollback>
+        <sql>call populateShardAndMarkAsSharded('28_2b');</sql>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_2c_2f">
-        <sql>call copyRowsToAttributeShard('2c_2f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_2c_2f; call createEntityAttributeShard('2c_2f');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_2c_2f">-->
+<!--        <sql>call populateShardAndMarkAsSharded('2c_2f');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_30_33">
-        <sql>call copyRowsToAttributeShard('30_33');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_30_33; call createEntityAttributeShard('30_33');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_30_33">-->
+<!--        <sql>call populateShardAndMarkAsSharded('30_33');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_34_37">
-        <sql>call copyRowsToAttributeShard('34_37');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_34_37; call createEntityAttributeShard('34_37');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_34_37">-->
+<!--        <sql>call populateShardAndMarkAsSharded('34_37');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_38_3b">
-        <sql>call copyRowsToAttributeShard('38_3b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_38_3b; call createEntityAttributeShard('38_3b');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_38_3b">-->
+<!--        <sql>call populateShardAndMarkAsSharded('38_3b');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_3c_3f">
-        <sql>call copyRowsToAttributeShard('3c_3f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_3c_3f; call createEntityAttributeShard('3c_3f');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_3c_3f">-->
+<!--        <sql>call populateShardAndMarkAsSharded('3c_3f');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_40_43">
-        <sql>call copyRowsToAttributeShard('40_43');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_40_43; call createEntityAttributeShard('40_43');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_40_43">-->
+<!--        <sql>call populateShardAndMarkAsSharded('40_43');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_44_47">
-        <sql>call copyRowsToAttributeShard('44_47');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_44_47; call createEntityAttributeShard('44_47');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_44_47">-->
+<!--        <sql>call populateShardAndMarkAsSharded('44_47');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_48_4b">
-        <sql>call copyRowsToAttributeShard('48_4b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_48_4b; call createEntityAttributeShard('48_4b');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_48_4b">-->
+<!--        <sql>call populateShardAndMarkAsSharded('48_4b');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_4c_4f">
-        <sql>call copyRowsToAttributeShard('4c_4f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_4c_4f; call createEntityAttributeShard('4c_4f');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_4c_4f">-->
+<!--        <sql>call populateShardAndMarkAsSharded('4c_4f');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_50_53">
-        <sql>call copyRowsToAttributeShard('50_53');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_50_53; call createEntityAttributeShard('50_53');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_50_53">-->
+<!--        <sql>call populateShardAndMarkAsSharded('50_53');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_54_57">
-        <sql>call copyRowsToAttributeShard('54_57');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_54_57; call createEntityAttributeShard('54_57');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_54_57">-->
+<!--        <sql>call populateShardAndMarkAsSharded('54_57');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_58_5b">
-        <sql>call copyRowsToAttributeShard('58_5b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_58_5b; call createEntityAttributeShard('58_5b');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_58_5b">-->
+<!--        <sql>call populateShardAndMarkAsSharded('58_5b');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_5c_5f">
-        <sql>call copyRowsToAttributeShard('5c_5f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_5c_5f; call createEntityAttributeShard('5c_5f');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_5c_5f">-->
+<!--        <sql>call populateShardAndMarkAsSharded('5c_5f');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_60_63">
-        <sql>call copyRowsToAttributeShard('60_63');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_60_63; call createEntityAttributeShard('60_63');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_60_63">-->
+<!--        <sql>call populateShardAndMarkAsSharded('60_63');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_64_67">
-        <sql>call copyRowsToAttributeShard('64_67');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_64_67; call createEntityAttributeShard('64_67');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_64_67">-->
+<!--        <sql>call populateShardAndMarkAsSharded('64_67');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_68_6b">
-        <sql>call copyRowsToAttributeShard('68_6b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_68_6b; call createEntityAttributeShard('68_6b');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_68_6b">-->
+<!--        <sql>call populateShardAndMarkAsSharded('68_6b');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_6c_6f">
-        <sql>call copyRowsToAttributeShard('6c_6f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_6c_6f; call createEntityAttributeShard('6c_6f');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_6c_6f">-->
+<!--        <sql>call populateShardAndMarkAsSharded('6c_6f');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_70_73">
-        <sql>call copyRowsToAttributeShard('70_73');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_70_73; call createEntityAttributeShard('70_73');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_70_73">-->
+<!--        <sql>call populateShardAndMarkAsSharded('70_73');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_74_77">
-        <sql>call copyRowsToAttributeShard('74_77');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_74_77; call createEntityAttributeShard('74_77');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_74_77">-->
+<!--        <sql>call populateShardAndMarkAsSharded('74_77');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_78_7b">
-        <sql>call copyRowsToAttributeShard('78_7b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_78_7b; call createEntityAttributeShard('78_7b');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_78_7b">-->
+<!--        <sql>call populateShardAndMarkAsSharded('78_7b');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_7c_7f">
-        <sql>call copyRowsToAttributeShard('7c_7f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_7c_7f; call createEntityAttributeShard('7c_7f');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_7c_7f">-->
+<!--        <sql>call populateShardAndMarkAsSharded('7c_7f');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_80_83">
-        <sql>call copyRowsToAttributeShard('80_83');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_80_83; call createEntityAttributeShard('80_83');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_80_83">-->
+<!--        <sql>call populateShardAndMarkAsSharded('80_83');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_84_87">
-        <sql>call copyRowsToAttributeShard('84_87');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_84_87; call createEntityAttributeShard('84_87');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_84_87">-->
+<!--        <sql>call populateShardAndMarkAsSharded('84_87');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_88_8b">
-        <sql>call copyRowsToAttributeShard('88_8b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_88_8b; call createEntityAttributeShard('88_8b');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_88_8b">-->
+<!--        <sql>call populateShardAndMarkAsSharded('88_8b');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_8c_8f">
-        <sql>call copyRowsToAttributeShard('8c_8f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_8c_8f; call createEntityAttributeShard('8c_8f');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_8c_8f">-->
+<!--        <sql>call populateShardAndMarkAsSharded('8c_8f');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_90_93">
-        <sql>call copyRowsToAttributeShard('90_93');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_90_93; call createEntityAttributeShard('90_93');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_90_93">-->
+<!--        <sql>call populateShardAndMarkAsSharded('90_93');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_94_97">
-        <sql>call copyRowsToAttributeShard('94_97');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_94_97; call createEntityAttributeShard('94_97');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_94_97">-->
+<!--        <sql>call populateShardAndMarkAsSharded('94_97');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_98_9b">
-        <sql>call copyRowsToAttributeShard('98_9b');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_98_9b; call createEntityAttributeShard('98_9b');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_98_9b">-->
+<!--        <sql>call populateShardAndMarkAsSharded('98_9b');</sql>-->
+<!--    </changeSet>-->
 
     <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_9c_9f">
-        <sql>call copyRowsToAttributeShard('9c_9f');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_9c_9f; call createEntityAttributeShard('9c_9f');</rollback>
+        <sql>call populateShardAndMarkAsSharded('9c_9f');</sql>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_a0_a3">
-        <sql>call copyRowsToAttributeShard('a0_a3');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a0_a3; call createEntityAttributeShard('a0_a3');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_a0_a3">-->
+<!--        <sql>call populateShardAndMarkAsSharded('a0_a3');</sql>-->
+<!--    </changeSet>-->
 
     <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_a4_a7">
-        <sql>call copyRowsToAttributeShard('a4_a7');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a4_a7; call createEntityAttributeShard('a4_a7');</rollback>
+        <sql>call populateShardAndMarkAsSharded('a4_a7');</sql>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_a8_ab">
-        <sql>call copyRowsToAttributeShard('a8_ab');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a8_ab; call createEntityAttributeShard('a8_ab');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_a8_ab">-->
+<!--        <sql>call populateShardAndMarkAsSharded('a8_ab');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_ac_af">
-        <sql>call copyRowsToAttributeShard('ac_af');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_ac_af; call createEntityAttributeShard('ac_af');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_ac_af">-->
+<!--        <sql>call populateShardAndMarkAsSharded('ac_af');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_b0_b3">
-        <sql>call copyRowsToAttributeShard('b0_b3');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b0_b3; call createEntityAttributeShard('b0_b3');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_b0_b3">-->
+<!--        <sql>call populateShardAndMarkAsSharded('b0_b3');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_b4_b7">
-        <sql>call copyRowsToAttributeShard('b4_b7');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b4_b7; call createEntityAttributeShard('b4_b7');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_b4_b7">-->
+<!--        <sql>call populateShardAndMarkAsSharded('b4_b7');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_b8_bb">
-        <sql>call copyRowsToAttributeShard('b8_bb');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b8_bb; call createEntityAttributeShard('b8_bb');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_b8_bb">-->
+<!--        <sql>call populateShardAndMarkAsSharded('b8_bb');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_bc_bf">
-        <sql>call copyRowsToAttributeShard('bc_bf');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_bc_bf; call createEntityAttributeShard('bc_bf');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_bc_bf">-->
+<!--        <sql>call populateShardAndMarkAsSharded('bc_bf');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_c0_c3">
-        <sql>call copyRowsToAttributeShard('c0_c3');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c0_c3; call createEntityAttributeShard('c0_c3');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_c0_c3">-->
+<!--        <sql>call populateShardAndMarkAsSharded('c0_c3');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_c4_c7">
-        <sql>call copyRowsToAttributeShard('c4_c7');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c4_c7; call createEntityAttributeShard('c4_c7');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_c4_c7">-->
+<!--        <sql>call populateShardAndMarkAsSharded('c4_c7');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_c8_cb">
-        <sql>call copyRowsToAttributeShard('c8_cb');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c8_cb; call createEntityAttributeShard('c8_cb');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_c8_cb">-->
+<!--        <sql>call populateShardAndMarkAsSharded('c8_cb');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_cc_cf">
-        <sql>call copyRowsToAttributeShard('cc_cf');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_cc_cf; call createEntityAttributeShard('cc_cf');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_cc_cf">-->
+<!--        <sql>call populateShardAndMarkAsSharded('cc_cf');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_d0_d3">
-        <sql>call copyRowsToAttributeShard('d0_d3');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d0_d3; call createEntityAttributeShard('d0_d3');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_d0_d3">-->
+<!--        <sql>call populateShardAndMarkAsSharded('d0_d3');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_d4_d7">
-        <sql>call copyRowsToAttributeShard('d4_d7');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d4_d7; call createEntityAttributeShard('d4_d7');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_d4_d7">-->
+<!--        <sql>call populateShardAndMarkAsSharded('d4_d7');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_d8_db">
-        <sql>call copyRowsToAttributeShard('d8_db');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d8_db; call createEntityAttributeShard('d8_db');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_d8_db">-->
+<!--        <sql>call populateShardAndMarkAsSharded('d8_db');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_dc_df">
-        <sql>call copyRowsToAttributeShard('dc_df');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_dc_df; call createEntityAttributeShard('dc_df');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_dc_df">-->
+<!--        <sql>call populateShardAndMarkAsSharded('dc_df');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_e0_e3">
-        <sql>call copyRowsToAttributeShard('e0_e3');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e0_e3; call createEntityAttributeShard('e0_e3');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_e0_e3">-->
+<!--        <sql>call populateShardAndMarkAsSharded('e0_e3');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_e4_e7">
-        <sql>call copyRowsToAttributeShard('e4_e7');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e4_e7; call createEntityAttributeShard('e4_e7');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_e4_e7">-->
+<!--        <sql>call populateShardAndMarkAsSharded('e4_e7');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_e8_eb">
-        <sql>call copyRowsToAttributeShard('e8_eb');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e8_eb; call createEntityAttributeShard('e8_eb');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_e8_eb">-->
+<!--        <sql>call populateShardAndMarkAsSharded('e8_eb');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_ec_ef">
-        <sql>call copyRowsToAttributeShard('ec_ef');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_ec_ef; call createEntityAttributeShard('ec_ef');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_ec_ef">-->
+<!--        <sql>call populateShardAndMarkAsSharded('ec_ef');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_f0_f3">
-        <sql>call copyRowsToAttributeShard('f0_f3');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f0_f3; call createEntityAttributeShard('f0_f3');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_f0_f3">-->
+<!--        <sql>call populateShardAndMarkAsSharded('f0_f3');</sql>-->
+<!--    </changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_f4_f7">
-        <sql>call copyRowsToAttributeShard('f4_f7');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f4_f7; call createEntityAttributeShard('f4_f7');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_f4_f7">-->
+<!--        <sql>call populateShardAndMarkAsSharded('f4_f7');</sql>-->
+<!--    </changeSet>-->
 
     <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_f8_fb">
-        <sql>call copyRowsToAttributeShard('f8_fb');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f8_fb; call createEntityAttributeShard('f8_fb');</rollback>
+        <sql>call populateShardAndMarkAsSharded('f8_fb');</sql>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_fc_ff">
-        <sql>call copyRowsToAttributeShard('fc_ff');</sql>
-        <rollback>DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_fc_ff; call createEntityAttributeShard('fc_ff');</rollback>
-    </changeSet>
+<!--    <changeSet logicalFilePath="dummy" author="davidan" id="populate_shard_fc_ff">-->
+<!--        <sql>call populateShardAndMarkAsSharded('fc_ff');</sql>-->
+<!--    </changeSet>-->
     <!-- END populate each shard in its own changeset. If we hit an error with an
             individual shard, we can restart the liquibase migration at that point,
             and don't have to rollback any progress up to that changeset. -->
