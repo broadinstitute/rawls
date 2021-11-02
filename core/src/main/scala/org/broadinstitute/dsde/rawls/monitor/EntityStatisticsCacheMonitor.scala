@@ -96,17 +96,12 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
       // if we see contention we could move to encoding the entire metadata object as json
       // and storing in a single column on WORKSPACE_ENTITY_CACHE
       for {
-        //update entity statistics
+        // calculate entity statistics
         entityTypesWithCounts <- dataAccess.entityQuery.getEntityTypesWithCounts(workspaceId)
-        _ <- dataAccess.entityTypeStatisticsQuery.deleteAllForWorkspace(workspaceId)
-        _ <- dataAccess.entityTypeStatisticsQuery.batchInsert(workspaceId, entityTypesWithCounts)
-        //update entity attribute statistics
+        // calculate entity attribute statistics
         workspaceShardState <- dataAccess.workspaceQuery.getWorkspaceShardState(workspaceId)
         entityTypesWithAttrNames <- dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceId, workspaceShardState)
-        _ <- dataAccess.entityAttributeStatisticsQuery.deleteAllForWorkspace(workspaceId)
-        _ <- dataAccess.entityAttributeStatisticsQuery.batchInsert(workspaceId, entityTypesWithAttrNames)
-        //update cache update date
-        _ <- dataAccess.entityCacheQuery.updateCacheLastUpdated(workspaceId, timestamp)
+        _ <- dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceId, entityTypesWithCounts, entityTypesWithAttrNames, timestamp)
       } yield ()
     }
 

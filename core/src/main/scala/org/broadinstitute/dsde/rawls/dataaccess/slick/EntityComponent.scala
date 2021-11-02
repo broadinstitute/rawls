@@ -83,6 +83,7 @@ trait EntityComponent {
     with WorkspaceComponent
     with AttributeComponent
     with EntityTypeStatisticsComponent
+    with EntityCacheComponent
     with EntityAttributeStatisticsComponent =>
 
   object entityQueryWithInlineAttributes extends TableQuery(new EntityTableWithInlineAttributes(_)) {
@@ -1013,5 +1014,29 @@ trait EntityComponent {
         entityRec.id -> unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
       }
     }
+  }
+
+  object entityCacheManagementQuery {
+
+    // given a workspace and entity metadata, persist that metadata to the cache tables
+    def saveEntityCache(workspaceId: UUID,
+                        entityTypesWithCounts: Map[String, Int],
+                        entityTypesWithAttrNames: Map[String, Seq[AttributeName]],
+                        timestamp: Timestamp) = {
+      // TODO: beware contention on the approach of delete-all and batch-insert all below
+      // if we see contention we could move to encoding the entire metadata object as json
+      // and storing in a single column on WORKSPACE_ENTITY_CACHE
+      for {
+        //update entity statistics
+        _ <- entityTypeStatisticsQuery.deleteAllForWorkspace(workspaceId)
+        _ <- entityTypeStatisticsQuery.batchInsert(workspaceId, entityTypesWithCounts)
+        //update entity attribute statistics
+        _ <- entityAttributeStatisticsQuery.deleteAllForWorkspace(workspaceId)
+        _ <- entityAttributeStatisticsQuery.batchInsert(workspaceId, entityTypesWithAttrNames)
+        //update cache update date
+        numCachesUpdated <- entityCacheQuery.updateCacheLastUpdated(workspaceId, timestamp)
+      } yield numCachesUpdated
+    }
+
   }
 }
