@@ -44,6 +44,10 @@ class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val tim
   override def receive = {
     case Sweep => sweep() pipeTo self
     case ScheduleDelayedSweep => context.system.scheduler.scheduleOnce(standardPollInterval, self, Sweep)
+    case akka.actor.ReceiveTimeout =>
+      val pauseLength = standardPollInterval*2
+      logger.warn(s"EntityStatisticsCacheMonitor attempt timed out. Pausing for ${pauseLength}.")
+      context.system.scheduler.scheduleOnce(pauseLength, self, Sweep)
   }
 
 }
@@ -61,9 +65,13 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
         // calculate now - workspaceCooldown as the upper bound for workspace last_modified
         val maxModifiedTime = nowMinus(workspaceCooldown)
 
-        dataAccess.entityCacheQuery.findMostOutdatedEntityCacheAfter(MIN_CACHE_TIME, maxModifiedTime).flatMap {
-          case Some((workspaceId, lastModified, cacheLastUpdated)) =>
+        dataAccess.entityCacheQuery.findMostOutdatedEntityCachesAfter(MIN_CACHE_TIME, maxModifiedTime) flatMap { candidates =>
+          if (candidates.nonEmpty) {
+            // pick one of the candidates at random. This randomness ensures that we don't get stuck constantly trying
+            // and failing to update the same workspace - until all we have left as candidates are un-updatable workspaces
+            val (workspaceId, lastModified, cacheLastUpdated) = candidates.toArray.apply(scala.util.Random.nextInt(candidates.size))
             rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId.toString))
+            logger.info(s"EntityStatisticsCacheMonitor starting update attempt for workspace $workspaceId.")
             traceDBIOWithParent("updateStatisticsCache", rootSpan) { _ =>
               DBIO.from(updateStatisticsCache(workspaceId, lastModified).map { _ =>
                 val outDated = lastModified.getTime - cacheLastUpdated.getOrElse(MIN_CACHE_TIME).getTime
@@ -71,11 +79,12 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
                 Sweep
               })
             }
-          case None =>
+          } else {
             traceDBIOWithParent("nothing-to-update", rootSpan) { _ =>
               logger.info(s"All workspace entity caches are up to date. Sleeping for $standardPollInterval")
               DBIO.successful(ScheduleDelayedSweep)
             }
+          }
         }
       }
     }

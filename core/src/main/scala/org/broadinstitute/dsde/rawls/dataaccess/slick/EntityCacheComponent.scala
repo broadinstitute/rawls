@@ -27,21 +27,19 @@ trait EntityCacheComponent {
 
     val driver: JdbcProfile = EntityCacheComponent.this.driver
 
-    def findMostOutdatedEntityCacheAfter(minCacheTime: Timestamp, maxModifiedTime: Timestamp): ReadAction[Option[(UUID, Timestamp, Option[Timestamp])]] = {
+    def findMostOutdatedEntityCachesAfter(minCacheTime: Timestamp, maxModifiedTime: Timestamp, numResults: Int = 10): ReadAction[Seq[(UUID, Timestamp, Option[Timestamp])]] = {
       // Find the workspace that has the entity cache that is the most out of date:
       // A. Workspace has a cacheLastUpdated date that is not current ("current" means equal to lastModified)
       // B. cacheLastUpdated is after @param minCacheTime
       // C. lastModified is before @param maxModifiedTime, meaning the workspace isn't likely actively being updated
       // D. Ordered by lastModified from oldest to newest. Meaning, return the workspace that was modified the longest ago
-      val baseQuery = sql"""SELECT w.id, w.last_modified, c.entity_cache_last_updated
+      sql"""SELECT w.id, w.last_modified, c.entity_cache_last_updated
                                 |FROM WORKSPACE w LEFT OUTER JOIN WORKSPACE_ENTITY_CACHE c
                                 |    on w.id = c.workspace_id
                                 |where (c.entity_cache_last_updated > $minCacheTime or c.entity_cache_last_updated is null)
                                 |  and w.last_modified < $maxModifiedTime
                                 |  and (c.entity_cache_last_updated < w.last_modified or c.entity_cache_last_updated is null)
-                                |order by w.last_modified asc limit 1""".stripMargin.as[(UUID, Timestamp, Option[Timestamp])]
-
-      uniqueResult[(UUID, Timestamp, Option[Timestamp])](baseQuery)
+                                |order by w.last_modified asc limit $numResults""".stripMargin.as[(UUID, Timestamp, Option[Timestamp])]
     }
 
     // insert if not exist
