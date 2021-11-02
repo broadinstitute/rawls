@@ -2,6 +2,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import _root_.slick.dbio.DBIOAction
+import com.mysql.jdbc.exceptions.MySQLTimeoutException
+import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
 
@@ -367,6 +369,27 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
       //...and handle that the values are all correct here.
       assertSameElements(testTypesAndAttrNames(eType).map(AttributeName.toDelimitedName), attrNames)
+    }
+  }
+
+  it should "time out when listing all entity types with their attribute names, if a timeout is specified" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      // insert a whole lot of entities with a lot of unique attribute names
+      val numEntities = 1000
+      val numAttrsPerEntity = 100
+      (1 to numEntities) foreach { entityIdx =>
+        val attrs = (1 to numAttrsPerEntity) map { _ =>
+          val attrName = RandomStringUtils.randomAlphanumeric(12)
+          AttributeName.withDefaultNS(attrName) -> AttributeString(attrName)
+        }
+        val entity = Entity(s"entity$entityIdx", "unitTestType", attrs.toMap)
+        runAndWait(entityQuery.save(testData.workspace, entity))
+      }
+
+      // now attempt to calculate attr names and types, with a timeout of 1 second
+      intercept[MySQLTimeoutException] {
+        runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded, 1))
+      }
     }
   }
 

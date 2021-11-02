@@ -58,6 +58,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
   val dataSource: SlickDataSource
   val standardPollInterval: FiniteDuration
   val workspaceCooldown: FiniteDuration
+  val timeoutPerWorkspace: Duration
 
   def sweep(): Future[EntityStatisticsCacheMessage] = {
     trace("EntityStatisticsCacheMonitor.sweep") { rootSpan =>
@@ -91,6 +92,9 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
   }
 
   def updateStatisticsCache(workspaceId: UUID, timestamp: Timestamp): Future[Unit] = {
+    // allow 80% of the per-workspace timeout to be spent calculating the attribute names
+    val attrNamesTimeout = (timeoutPerWorkspace * .8).toSeconds.toInt
+
     val updateFuture = dataSource.inTransaction { dataAccess =>
       // TODO: beware contention on the approach of delete-all and batch-insert all below
       // if we see contention we could move to encoding the entire metadata object as json
@@ -102,7 +106,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
         _ <- dataAccess.entityTypeStatisticsQuery.batchInsert(workspaceId, entityTypesWithCounts)
         //update entity attribute statistics
         workspaceShardState <- dataAccess.workspaceQuery.getWorkspaceShardState(workspaceId)
-        entityTypesWithAttrNames <- dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceId, workspaceShardState)
+        entityTypesWithAttrNames <- dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceId, workspaceShardState, attrNamesTimeout)
         _ <- dataAccess.entityAttributeStatisticsQuery.deleteAllForWorkspace(workspaceId)
         _ <- dataAccess.entityAttributeStatisticsQuery.batchInsert(workspaceId, entityTypesWithAttrNames)
         //update cache update date
