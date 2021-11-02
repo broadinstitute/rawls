@@ -66,19 +66,16 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
               logger.info(s"entity statistics cache: miss ($missReason) [${workspaceContext.workspaceIdAsUUID}]")
 
               traceDBIOWithParent("retrieve-uncached-results", outerSpan) { _ =>
-                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext) map { metadata =>
-                  if (!isEntityCacheCurrent) {
+                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext) flatMap { metadata =>
+                  val saveCacheAction = if (cacheEnabled && !isEntityCacheCurrent) {
                     // if the entity cache is not current, AND we have the metadata result, save it to the cache!
                     // the user has done us the favor of waiting for the result, let's take advantage of that result.
                     // if saving the cache here fails, ignore the failure and still get the metadata to the user
-                    opportunisticSaveEntityCache(metadata, dataAccess).asTry.map {
-                      case Success(_) => //
-                      case Failure(ex) =>
-                        logger.warn(s"failed to opportunistically update the entity statistics cache: ${ex.getMessage}. " +
-                          s"The user's request was not impacted.")
-                    }
+                    opportunisticSaveEntityCache(metadata, dataAccess)
+                  } else {
+                    DBIO.successful(())
                   }
-                  metadata
+                  saveCacheAction.map(_ => metadata)
                 }
               }
             }
@@ -98,7 +95,12 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     val timestamp: Timestamp = new Timestamp(workspaceContext.lastModified.getMillis)
 
     dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceContext.workspaceIdAsUUID,
-      entityTypesWithCounts, entityTypesWithAttrNames, timestamp)
+      entityTypesWithCounts, entityTypesWithAttrNames, timestamp).asTry.map {
+      case Success(_) => // noop
+      case Failure(ex) =>
+        logger.warn(s"failed to opportunistically update the entity statistics cache: ${ex.getMessage}. " +
+          s"The user's request was not impacted.")
+    }
   }
 
   override def createEntity(entity: Entity): Future[Entity] = {
