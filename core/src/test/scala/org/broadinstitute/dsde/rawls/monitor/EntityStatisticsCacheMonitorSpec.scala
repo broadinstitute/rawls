@@ -150,6 +150,11 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
     //Load the current entityMetadata (which should not use the cache)
     val originalResult = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
 
+    //Note that the call to entityTypeMetadata updated the cache as a side effect, since the cache was out of date.
+    //Therefore, once again update the entityCacheLastUpdated field to be older than lastModified, so
+    //the monitor will update it using its internal code path
+    runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 2)))
+
     //Make sure that the timestamps do not match
     val lastModifiedOriginal = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.lastModified
     val entityCacheLastUpdatedOriginal = runAndWait(entityCacheQuery.filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated

@@ -13,10 +13,11 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, D
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
 
+import java.sql.Timestamp
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -65,12 +66,40 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
               logger.info(s"entity statistics cache: miss ($missReason) [${workspaceContext.workspaceIdAsUUID}]")
 
               traceDBIOWithParent("retrieve-uncached-results", outerSpan) { _ =>
-                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext) flatMap { metadata =>
+                  val saveCacheAction = if (cacheEnabled && !isEntityCacheCurrent) {
+                    // if the entity cache is not current, AND we have the metadata result, save it to the cache!
+                    // the user has done us the favor of waiting for the result, let's take advantage of that result.
+                    // if saving the cache here fails, ignore the failure and still get the metadata to the user
+                    opportunisticSaveEntityCache(metadata, dataAccess)
+                  } else {
+                    DBIO.successful(())
+                  }
+                  saveCacheAction.map(_ => metadata)
+                }
               }
             }
           }
         }
       }
+    }
+  }
+
+  private def opportunisticSaveEntityCache(metadata: Map[String, EntityTypeMetadata], dataAccess: DataAccess) = {
+    val entityTypesWithCounts: Map[String, Int] = metadata.map {
+      case (typeName, typeMetadata) => typeName -> typeMetadata.count
+    }
+    val entityTypesWithAttrNames: Map[String, Seq[AttributeName]] = metadata.map {
+      case (typeName, typeMetadata) => typeName -> typeMetadata.attributeNames.map(AttributeName.fromDelimitedName)
+    }
+    val timestamp: Timestamp = new Timestamp(workspaceContext.lastModified.getMillis)
+
+    dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceContext.workspaceIdAsUUID,
+      entityTypesWithCounts, entityTypesWithAttrNames, timestamp).asTry.map {
+      case Success(_) => // noop
+      case Failure(ex) =>
+        logger.warn(s"failed to opportunistically update the entity statistics cache: ${ex.getMessage}. " +
+          s"The user's request was not impacted.")
     }
   }
 

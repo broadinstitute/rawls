@@ -416,6 +416,33 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       secondMessage shouldBe empty
     }
 
+    "opportunistically update cache if user requests metadata while cache is out of date" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val wsid = workspaceContext.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+
+      withClue("cache record should not exist before requesting metadata") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      val isCurrentBefore = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be not-current before requesting metadata") {
+        assert(!isCurrentBefore)
+      }
+
+      // requesting metadata should update the cache as a side effect
+      localEntityProvider.entityTypeMetadata(true).futureValue
+
+      withClue("cache record should exist after requesting metadata") {
+        assert(runAndWait(workspaceFilter.exists.result))
+      }
+
+      val isCurrentAfter = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be current after requesting metadata") {
+        assert(isCurrentAfter)
+      }
+    }
 
     "return helpful error message when upserting case-divergent entity names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
