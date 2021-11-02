@@ -44,6 +44,10 @@ class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val tim
   override def receive = {
     case Sweep => sweep() pipeTo self
     case ScheduleDelayedSweep => context.system.scheduler.scheduleOnce(standardPollInterval, self, Sweep)
+    case akka.actor.ReceiveTimeout =>
+      val pauseLength = standardPollInterval*2
+      logger.warn(s"EntityStatisticsCacheMonitor attempt timed out. Pausing for ${pauseLength}.")
+      context.system.scheduler.scheduleOnce(pauseLength, self, Sweep)
   }
 
 }
