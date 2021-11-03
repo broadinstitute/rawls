@@ -375,8 +375,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "time out when listing all entity types with their attribute names, if a timeout is specified" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       // insert a whole lot of entities with a lot of unique attribute names
-      val numEntities = 1000
-      val numAttrsPerEntity = 100
+      val numEntities = 10000
+      val numAttrsPerEntity = 1000
       (1 to numEntities) foreach { entityIdx =>
         val attrs = (1 to numAttrsPerEntity) map { _ =>
           val attrName = RandomStringUtils.randomAlphanumeric(12)
