@@ -6,6 +6,7 @@ import com.mysql.jdbc.exceptions.MySQLTimeoutException
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
+import slick.jdbc.TransactionIsolation
 
 import java.util.UUID
 
@@ -375,8 +376,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "time out when listing all entity types with their attribute names, if a timeout is specified" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       // insert a whole lot of entities with a lot of unique attribute names
-      val numEntities = 10000
-      val numAttrsPerEntity = 1000
+      val numEntities = 1000
+      val numAttrsPerEntity = 400
       (1 to numEntities) foreach { entityIdx =>
         val attrs = (1 to numAttrsPerEntity) map { _ =>
           val attrName = RandomStringUtils.randomAlphanumeric(12)
@@ -385,6 +386,23 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         val entity = Entity(s"entity$entityIdx", "unitTestType", attrs.toMap)
         runAndWait(entityQuery.save(testData.workspace, entity))
       }
+
+//      // we don't need entityCacheQuery; we just need its UUID->SQL implicit
+//      import entityCacheQuery.SetUUIDParameter
+//
+//      val shardSuffix = determineShard(testData.workspace.workspaceIdAsUUID, WorkspaceShardStates.Sharded)
+//
+//      // fire-and-forget a Future SQL query that 1) locks the entity attribute table, and 2) sleeps for 4 seconds
+//      val sleepAction = sql"""update ENTITY_ATTRIBUTE_#$shardSuffix ea join (select sleep(4)) as sleeper on 1=1 set ea.value_string = 'foo';"""
+//      slickDataSource.database.run(sleepAction.as[Int].withTransactionIsolation(TransactionIsolation.Serializable))
+
+//      // now attempt to calculate attr names and types, with a timeout of 1 second.
+//      // Since the previous query locked, this should time out.
+//      val serializedAttrQuery = entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID,
+//        WorkspaceShardStates.Sharded, 1).withTransactionIsolation(TransactionIsolation.Serializable)
+//      intercept[MySQLTimeoutException] {
+//        runAndWait(serializedAttrQuery)
+//      }
 
       // now attempt to calculate attr names and types, with a timeout of 1 second
       intercept[MySQLTimeoutException] {
