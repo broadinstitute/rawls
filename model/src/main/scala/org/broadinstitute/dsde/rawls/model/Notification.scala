@@ -1,10 +1,11 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsUserEmailFormat, RawlsUserSubjectIdFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceNameFormat
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+
 import scala.reflect.runtime.universe._
-import UserModelJsonSupport.{RawlsUserEmailFormat, RawlsUserSubjectIdFormat}
-import WorkspaceJsonSupport.WorkspaceNameFormat
 
 /**
  * All notifications emitted by rawls are described here. To add a new notification type:

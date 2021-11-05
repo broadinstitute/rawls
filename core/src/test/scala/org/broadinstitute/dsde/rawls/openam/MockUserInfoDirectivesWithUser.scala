@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.openam
 
-import org.broadinstitute.dsde.rawls.model.{RawlsUser, UserInfo}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
+import org.broadinstitute.dsde.rawls.model.{RawlsUser, UserInfo}
 
 /**
   * Created by ursas on 5/3/17.

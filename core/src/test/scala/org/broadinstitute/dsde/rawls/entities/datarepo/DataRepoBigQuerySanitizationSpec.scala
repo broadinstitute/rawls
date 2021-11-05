@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import java.nio.charset.Charset
-
 import com.google.common.io.Resources
 import org.broadinstitute.dsde.rawls.entities.exceptions.IllegalIdentifierException
 import org.scalatest.BeforeAndAfterAll
-import spray.json._
 import org.scalatest.freespec.AnyFreeSpec
+import spray.json._
+
+import java.nio.charset.Charset
 
 class DataRepoBigQuerySanitizationSpec extends AnyFreeSpec with DataRepoBigQuerySupport with BeforeAndAfterAll {
 

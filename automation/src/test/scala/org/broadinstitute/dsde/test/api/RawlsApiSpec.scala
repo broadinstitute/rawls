@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.test.api
 
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
@@ -19,16 +17,17 @@ import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.freespec.AnyFreeSpecLike
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import org.scalatest.freespec.AnyFreeSpecLike
-import org.scalatest.matchers.should.Matchers
 
 //noinspection ScalaUnnecessaryParentheses,JavaAccessorEmptyParenCall,ScalaUnusedSymbol
 class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
@@ -86,11 +85,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
     }
   }
 
-  def parseWorkflowStatusFromMetadata(metadata: String): String = {
+  def getWorkflowFieldFromMetadata(metadata: String, field: String): JsonNode = {
     val mapper = new ObjectMapper()
     mapper.registerModule(DefaultScalaModule)
+    mapper.readTree(metadata).get(field)
+  }
 
-    mapper.readTree(metadata).get("status").textValue()
+  def parseWorkflowStatusFromMetadata(metadata: String): String = {
+    getWorkflowFieldFromMetadata(metadata, "status").textValue()
   }
 
   def parseWorkflowOutputFromMetadata(metadata: String, outputField: String): String = {
@@ -283,7 +285,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             // may need to wait for Cromwell to start processing workflows
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(20, Minutes)), interval = scaled(Span(30, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(30, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             // Get workflow ID from submission details
@@ -397,7 +399,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             // may need to wait for Cromwell to start processing workflows
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(20, Minutes)), interval = scaled(Span(30, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(30, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             // Get workflow ID from submission details
@@ -900,8 +902,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               status should not be("Running")
               metadata
             }
-
-            parseWorkflowStatusFromMetadata(notRunningMetadata) should be("Succeeded")
+            withClue(Option(getWorkflowFieldFromMetadata(notRunningMetadata, "failures")).getOrElse("No failures in metadata")) {
+              parseWorkflowStatusFromMetadata(notRunningMetadata) should be("Succeeded")
+            }
             parseWorkflowOutputFromMetadata(notRunningMetadata, "test_count_variants.count") should be("123997")
           }
         }

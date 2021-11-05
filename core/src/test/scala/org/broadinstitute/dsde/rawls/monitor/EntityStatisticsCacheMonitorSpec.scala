@@ -2,13 +2,11 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.{ContextShift, IO}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
-import org.broadinstitute.dsde.rawls.model.{Entity, EntityTypeMetadata}
+import org.broadinstitute.dsde.rawls.model.Entity
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{ScheduleDelayedSweep, Sweep}
 import org.broadinstitute.dsde.rawls.util
 import org.scalatest.BeforeAndAfterAll
@@ -20,7 +18,6 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.sql.Timestamp
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
-import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.language.postfixOps
@@ -147,6 +144,11 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
 
     //Load the current entityMetadata (which should not use the cache)
     val originalResult = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)
+
+    //Note that the call to entityTypeMetadata updated the cache as a side effect, since the cache was out of date.
+    //Therefore, once again update the entityCacheLastUpdated field to be older than lastModified, so
+    //the monitor will update it using its internal code path
+    runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 2)))
 
     //Make sure that the timestamps do not match
     val lastModifiedOriginal = runAndWait(workspaceQuery.findByIdQuery(workspaceContext.workspaceIdAsUUID).result).head.lastModified

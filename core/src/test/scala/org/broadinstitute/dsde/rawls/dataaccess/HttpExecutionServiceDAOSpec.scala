@@ -9,16 +9,16 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.{MetadataParams, RawlsUserEmail, RawlsUserSubjectId, Subsystems, UserInfo, WdlSource}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.time.{Seconds, Span}
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Seconds, Span}
 import spray.json.JsObject
 
 import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
+import scala.concurrent.duration._
 
 /**
   * Created by rtitle on 8/17/17.

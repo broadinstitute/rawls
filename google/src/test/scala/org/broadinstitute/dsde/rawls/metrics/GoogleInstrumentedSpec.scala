@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import java.io.IOException
-
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException}
 import com.google.api.client.json.jackson2.JacksonFactory
@@ -9,11 +7,12 @@ import com.google.api.client.testing.http.{HttpTesting, MockHttpTransport}
 import com.google.api.services.storage.Storage
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
-
-import scala.concurrent.duration._
-import scala.language.postfixOps
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+
+import java.io.IOException
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
   * Created by rtitle on 8/14/17.

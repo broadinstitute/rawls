@@ -5,15 +5,9 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.stream.scaladsl.Flow
 import akka.util.ByteString
-import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
-import io.circe.yaml.syntax._
-import io.circe.{yaml, _}
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
 import org.webjars.WebJarAssetLocator
-
-import scala.util.{Failure, Success, Try}
 
 /**
   * Created by dvoet on 7/18/17.

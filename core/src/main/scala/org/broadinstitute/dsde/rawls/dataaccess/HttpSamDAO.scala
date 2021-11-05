@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
@@ -16,9 +13,9 @@ import akka.stream.Materializer
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.SamModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.model.SamModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchEmailFormat
@@ -26,6 +23,8 @@ import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupNa
 import spray.json.DefaultJsonProtocol._
 import spray.json.{DefaultJsonProtocol, JsValue, RootJsonReader}
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -62,12 +61,19 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
             // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
             // create our own error message.
             import WorkspaceJsonSupport.ErrorReportFormat
-            toFutureTry(Unmarshal(response.entity).to[ErrorReport]) map {
+            toFutureTry(Unmarshal(response.entity).to[ErrorReport]) flatMap {
               case Success(err) =>
                 logger.error(s"Sam call to ${request.method} ${request.uri.path} failed with error $err")
                 throw new RawlsExceptionWithErrorReport(err)
               case Failure(_) =>
-                throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error ${response.entity}"))
+                // attempt to extract something useful from the response entity, even though it's not an ErrorReport
+                toFutureTry(Unmarshal(response.entity).to[String]) map { maybeString =>
+                  val stringErrMsg = maybeString match {
+                    case Success(stringErr) => stringErr
+                    case Failure(_) => response.entity.toString
+                  }
+                  throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error '$stringErrMsg'"))
+                }
             }
         }
       }

@@ -3,21 +3,21 @@ package org.broadinstitute.dsde.rawls.entities.local
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.trace
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 
+import java.sql.Timestamp
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -66,12 +66,40 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
               logger.info(s"entity statistics cache: miss ($missReason) [${workspaceContext.workspaceIdAsUUID}]")
 
               traceDBIOWithParent("retrieve-uncached-results", outerSpan) { _ =>
-                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext) flatMap { metadata =>
+                  val saveCacheAction = if (cacheEnabled && !isEntityCacheCurrent) {
+                    // if the entity cache is not current, AND we have the metadata result, save it to the cache!
+                    // the user has done us the favor of waiting for the result, let's take advantage of that result.
+                    // if saving the cache here fails, ignore the failure and still get the metadata to the user
+                    opportunisticSaveEntityCache(metadata, dataAccess)
+                  } else {
+                    DBIO.successful(())
+                  }
+                  saveCacheAction.map(_ => metadata)
+                }
               }
             }
           }
         }
       }
+    }
+  }
+
+  private def opportunisticSaveEntityCache(metadata: Map[String, EntityTypeMetadata], dataAccess: DataAccess) = {
+    val entityTypesWithCounts: Map[String, Int] = metadata.map {
+      case (typeName, typeMetadata) => typeName -> typeMetadata.count
+    }
+    val entityTypesWithAttrNames: Map[String, Seq[AttributeName]] = metadata.map {
+      case (typeName, typeMetadata) => typeName -> typeMetadata.attributeNames.map(AttributeName.fromDelimitedName)
+    }
+    val timestamp: Timestamp = new Timestamp(workspaceContext.lastModified.getMillis)
+
+    dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceContext.workspaceIdAsUUID,
+      entityTypesWithCounts, entityTypesWithAttrNames, timestamp).asTry.map {
+      case Success(_) => // noop
+      case Failure(ex) =>
+        logger.warn(s"failed to opportunistically update the entity statistics cache: ${ex.getMessage}. " +
+          s"The user's request was not impacted.")
     }
   }
 
@@ -88,13 +116,17 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
-      withAllEntityRefs(workspaceContext, dataAccess, entRefs) { _ =>
-        dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
-          if (referringEntities != entRefs.toSet)
-            throw new DeleteEntitiesConflictException(referringEntities)
-          else {
-            dataAccess.entityQuery.hide(workspaceContext, entRefs)
-          }
+      traceDBIO("LocalEntityProvider.deleteEntities") { rootSpan =>
+        rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+        rootSpan.putAttribute("numEntities", OpenCensusAttributeValue.longAttributeValue(entRefs.length))
+        withAllEntityRefs(workspaceContext, dataAccess, entRefs, rootSpan) { _ =>
+          traceDBIOWithParent("entityQuery.getAllReferringEntities", rootSpan)(innerSpan => dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
+            if (referringEntities != entRefs.toSet)
+              throw new DeleteEntitiesConflictException(referringEntities)
+            else {
+              traceDBIOWithParent("entityQuery.hide", innerSpan)(_ => dataAccess.entityQuery.hide(workspaceContext, entRefs))
+            }
+          })
         }
       }
     }
@@ -128,7 +160,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
         //Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
         val resultsByInput = inputs.toSeq.map { input =>
-          evaluator.evalFinalAttribute(workspaceContext, input.expression).asTry.map { tryAttribsByEntity =>
+          evaluator.evalFinalAttribute(workspaceContext, input.expression, Option(input)).asTry.map { tryAttribsByEntity =>
             val validationValuesByEntity: Seq[(EntityName, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>
                 //The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
@@ -156,9 +188,17 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  override def queryEntities(entityType: String, query: EntityQuery): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String, query: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query) map { case (unfilteredCount, filteredCount, entities) =>
+      traceDBIOWithParent("loadEntityPage", parentSpan) { s1 =>
+        s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
+        s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
+        s1.putAttribute("filterTerms", OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse("")))
+        s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
+        s1.putAttribute("sortDirection", OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString))
+
+        dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query, s1)
+      } map { case (unfilteredCount, filteredCount, entities) =>
         createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq)
       }
     }
@@ -179,38 +219,60 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       operation <- update.operations
     } yield operation.name
 
-    withAttributeNamespaceCheck(namesToCheck) {
-      dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity)){ dataAccess =>
-        val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
-          val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
-          entityUpdates.map { entityUpdate =>
-            entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
-              case Some(e) =>
-                Try(applyOperationsToEntity(e, entityUpdate.operations))
-              case None =>
-                if (upsert) {
-                  Try(applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations))
-                } else {
-                  Failure(new RuntimeException("Entity does not exist"))
-                }
-            })
+    trace("LocalEntityProvider.batchUpdateEntitiesImpl") { rootSpan =>
+      rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+      rootSpan.putAttribute("isUpsert", OpenCensusAttributeValue.booleanAttributeValue(upsert))
+      rootSpan.putAttribute("entityUpdatesCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.length))
+      rootSpan.putAttribute("entityOperationsCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.map(_.operations.length).sum))
+
+      withAttributeNamespaceCheck(namesToCheck) {
+        dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
+          val updateTrialsAction = traceDBIOWithParent("getActiveEntities", rootSpan)(_ => dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name)))) map { entities =>
+            val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
+            entityUpdates.map { entityUpdate =>
+              entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
+                case Some(e) =>
+                  Try(applyOperationsToEntity(e, entityUpdate.operations))
+                case None =>
+                  if (upsert) {
+                    Try(applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations))
+                  } else {
+                    Failure(new RuntimeException("Entity does not exist"))
+                  }
+              })
+            }
           }
+
+          val saveAction = updateTrialsAction flatMap { updateTrials =>
+            val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
+              ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
+            }
+            if (errorReports.nonEmpty) {
+              DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
+            } else {
+              val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
+
+              dataAccess.entityQuery.save(workspaceContext, t)
+            }
+          }
+
+          traceDBIOWithParent("saveAction", rootSpan)(_ => saveAction)
+        } recover {
+          case icve:com.mysql.jdbc.exceptions.jdbc4.MySQLIntegrityConstraintViolationException =>
+            val userMessage =
+              s"Database error occurred. Check if you are uploading entity names or entity types that differ only in case " +
+                s"from pre-existing entities."
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, icve))
+          case bue:java.sql.BatchUpdateException =>
+            val maybeCaseIssue = bue.getMessage.startsWith("Duplicate entry")
+            val userMessage = if (maybeCaseIssue) {
+              s"Database error occurred. Check if you are uploading entity names or entity types that differ only in case " +
+                s"from pre-existing entities."
+            } else {
+              s"Database error occurred. Underlying error message: ${bue.getMessage}"
+            }
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, bue))
         }
-
-        val saveAction = updateTrialsAction flatMap { updateTrials =>
-          val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
-            ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
-          }
-          if (errorReports.nonEmpty) {
-            DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
-          } else {
-            val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
-
-            dataAccess.entityQuery.save(workspaceContext, t)
-          }
-        }
-
-        saveAction
       }
     }
   }

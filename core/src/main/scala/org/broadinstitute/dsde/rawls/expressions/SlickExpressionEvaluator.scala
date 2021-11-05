@@ -1,15 +1,14 @@
 package org.broadinstitute.dsde.rawls.expressions
 
-import java.util.UUID
-
 import _root_.slick.dbio
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, _}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionContext
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.AntlrTerraExpressionParser.toAttributeName
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{AttributeNameContext, EntityLookupContext, RelationContext, WorkspaceAttributeLookupContext, WorkspaceEntityLookupContext}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser._
 import org.broadinstitute.dsde.rawls.model._
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 

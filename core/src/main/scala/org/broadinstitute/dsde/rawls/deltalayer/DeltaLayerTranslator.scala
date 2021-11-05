@@ -2,10 +2,10 @@ package org.broadinstitute.dsde.rawls.deltalayer
 
 import akka.http.scaladsl.model.StatusCodes.{BadRequest, InternalServerError}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeFormat, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, JsonSupport, PlainArrayAttributeListSerializer}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.deltalayer.v1.DeltaRow
+import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeFormat, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, JsonSupport, PlainArrayAttributeListSerializer}
 
 import java.util.UUID
 import scala.util.{Failure, Success, Try}

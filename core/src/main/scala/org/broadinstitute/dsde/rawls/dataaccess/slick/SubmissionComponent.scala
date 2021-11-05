@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
-import java.util.UUID
-
 import cats.implicits._
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -13,6 +10,9 @@ import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcProfile}
+
+import java.sql.Timestamp
+import java.util.UUID
 
 /**
  * Created by mbemis on 2/18/16.
@@ -461,9 +461,10 @@ trait SubmissionComponent {
       implicit val getWorkflowMessagesListResult = GetResult { r =>
         val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val rootEntityTypeOption: Option[String] = r.<<
-        val entityRec = workflowRec.workflowEntityId.map(EntityRecord(_, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val messageOption: Option[String] = r.<<
+
+        val entityRec = workflowRec.workflowEntityId.map(EntityRecord(_, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val externalEntityOption = for {
           rootEntityType <- rootEntityTypeOption
@@ -476,8 +477,8 @@ trait SubmissionComponent {
       def action(submissionId: UUID) = {
         sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, w.EXTERNAL_ENTITY_ID,
         s.ROOT_ENTITY_TYPE,
-        e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
-        m.MESSAGE
+        m.MESSAGE,
+        e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date
         from WORKFLOW w
         join SUBMISSION s on w.submission_id = s.id
         left outer join ENTITY e on w.ENTITY_ID = e.id

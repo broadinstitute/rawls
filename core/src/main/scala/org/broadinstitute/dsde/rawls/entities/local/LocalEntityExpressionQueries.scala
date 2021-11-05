@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
-import java.sql.Timestamp
-
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeString, Workspace}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
+
+import java.sql.Timestamp
 
 case class LocalEntityExpressionContext(workspaceContext: Workspace, rootEntities: Option[Seq[EntityRecord]], transactionId: String) {
   def rootEntityNames(): Seq[String] = rootEntities match {
@@ -70,7 +70,7 @@ trait LocalEntityExpressionQueries {
     def entityNameAttributeRelationQuery(attrName: AttributeName)(context: LocalEntityExpressionContext, queryPipeline: PipelineStepQuery): PipelineStepQuery = {
       (for {
         (rootEntityName, entity) <- queryPipeline
-        attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
+        attribute <- entityAttributeShardQuery(context.workspaceContext) if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
         nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
       } yield (rootEntityName, nextEntity)).sortBy({ case (nm, ent) => ent.name })
     }
@@ -82,7 +82,7 @@ trait LocalEntityExpressionQueries {
       // and in the case of a list there will be more than one attribute record for an entity
       val attributeQuery = for {
         (rootEntityName, entity) <- queryPipeline.get
-        attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
+        attribute <- entityAttributeShardQuery(context.workspaceContext) if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
       } yield (rootEntityName, entity.name, attribute)
 
       val attributeForNameQuery =
@@ -125,7 +125,7 @@ trait LocalEntityExpressionQueries {
           val (refAttrRecs, valueAttrRecs) = attrs.partition { case (root, attrEnt, attrRec) => isEntityRefRecord(attrRec) }
 
           //Unmarshal the good ones. This is what the user actually meant.
-          val attributesByEntityId: Map[String, AttributeMap] = entityAttributeQuery.unmarshalAttributes(valueAttrRecs.map { case (root, attrEnt, attrRec) => ((attrEnt, attrRec), None) })
+          val attributesByEntityId: Map[String, AttributeMap] = entityAttributeShardQuery(context.workspaceContext).unmarshalAttributes(valueAttrRecs.map { case (root, attrEnt, attrRec) => ((attrEnt, attrRec), None) })
 
           // These are the bad ones. We gather together the dangling references and make dummy EntityRef or RefList attributes for them.
           val refAttributesByEntityId: Map[String, AttributeMap] = refAttrRecs.groupBy { case (root, attrEnt, attrRec) => attrEnt } map { case (attrEnt, groupSeq: Seq[(String, String, EntityAttributeRecord)]) =>

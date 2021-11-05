@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.dataaccess.{HttpExecutionServiceDAO, MockShardedExecutionServiceCluster}
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ExecutionServiceVersion}
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ApplicationVersionFormat
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceVersionFormat
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.rawls.dataaccess.{HttpExecutionServiceDAO, MockShardedExecutionServiceCluster}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceVersionFormat
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ApplicationVersionFormat
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ExecutionServiceVersion}
 
 /**
  * Created by dvoet on 1/26/16.

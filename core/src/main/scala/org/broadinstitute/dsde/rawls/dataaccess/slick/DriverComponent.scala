@@ -1,15 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.nio.ByteOrder
-import java.sql.Timestamp
-import java.util.UUID
-
 import akka.util.ByteString
 import org.apache.commons.codec.binary.Base64
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
 import slick.jdbc._
 
+import java.nio.ByteOrder
+import java.sql.Timestamp
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 trait DriverComponent extends StringValidationUtils {

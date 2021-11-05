@@ -1,36 +1,35 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, AttributeString, DataReferenceName, Entity, GoogleProjectId, ImportStatuses, TypedAttributeListSerializer, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
-import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
+import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{times, verify, when}
-import org.scalatest.concurrent.Eventually
-import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.BeforeAndAfterAll
-import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
-
-import scala.concurrent.ExecutionContext.global
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration._
-import scala.language.postfixOps
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
+
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.language.postfixOps
 
 class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually {
 
@@ -57,7 +56,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     }
   }
 
-  implicit val cs = IO.contextShift(global)
   def this() = this(ActorSystem("AvroUpsertMonitorSpec"))
 
   override def beforeAll(): Unit = {
@@ -412,8 +410,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     // failure creates an entity that refers to a non-existent entity
     val ref = AttributeEntityReference("test-type", "this-entity-does-not-exist")
     val op: AttributeUpdateOperation = AddUpdateAttribute(AttributeName.withDefaultNS("intentionallyBadReference"), ref)
-    import spray.json._
     import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperationFormat
+    import spray.json._
     implicit val attributeFormat: AttributeFormat = new AttributeFormat with TypedAttributeListSerializer
     val opJsonString = op.toJson.compactPrint
     val failureBatch = s"""{"name": "avro-entity-failure", "entityType": "failme", "operations": [$opJsonString]}"""

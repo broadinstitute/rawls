@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.model.AttributeName
+
+import java.util.UUID
 
 case class EntityAttributeStatisticsRecord(workspaceId: UUID, entityType: String, attributeNamespace: String, attributeName: String)
 

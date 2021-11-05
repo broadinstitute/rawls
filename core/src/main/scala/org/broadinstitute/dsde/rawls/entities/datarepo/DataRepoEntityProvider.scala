@@ -3,12 +3,14 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
 import bio.terra.workspace.model.DataRepoSnapshotResource
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, QueryParameterValue, TableResult}
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, DeltaLayerException, DeltaLayerTranslator, DeltaLayerWriter}
@@ -42,7 +44,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
                             (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with DataRepoBigQuerySupport with LazyLogging with ExpressionEvaluationSupport {
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
   override val entityStoreId: Option[String] = Option(snapshotModel.getId)
 
   private[datarepo] lazy val googleProject: GoogleProjectId = {
@@ -107,7 +108,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     resultIO.unsafeToFuture()
   }
 
-  override def queryEntities(entityType: String, incomingQuery: EntityQuery): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
     // throw immediate error if user supplied filterTerms
     if (incomingQuery.filterTerms.nonEmpty) {
       throw new UnsupportedEntityOperationException("term filtering not supported by this provider.")
@@ -171,7 +172,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
   def pkFromSnapshotTable(tableModel: TableModel): String = {
     // If data repo returns one and only one primary key, use it.
     // If data repo returns null or a compound PK, use the built-in rowid for pk instead.
-    scala.Option(tableModel.getPrimaryKey) match {
+    Option(tableModel.getPrimaryKey) match {
       case Some(pk) if pk.size() == 1 => pk.asScala.head
       case _ => datarepoRowIdColumn // default data repo value
     }
@@ -307,7 +308,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
 
       val expressionResultsByEntityName = InputExpressionReassembler.constructFinalInputValues(groupedResults.filter {
         case (expression, _) => lookupExpressions.contains(expression)
-      }, parsedTree, Option(rootEntities))
+      }, parsedTree, Option(rootEntities), Option(input))
 
       convertToSubmissionValidationValues(expressionResultsByEntityName, input)
     }

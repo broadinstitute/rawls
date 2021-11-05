@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.deltalayer
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition, RemoveAttribute}
 import org.broadinstitute.dsde.rawls.model.deltalayer.v1.DeltaRow
+import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsString, JsValue}

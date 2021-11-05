@@ -1,10 +1,8 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import java.util.UUID
-
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, SnapshotModel, TableModel}
-import bio.terra.workspace.model.{CloningInstructionsEnum, CloudPlatform, DataRepoSnapshotAttributes, DataRepoSnapshotResource, ResourceMetadata, ResourceType}
+import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
@@ -14,6 +12,7 @@ import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWork
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, GoogleProjectId, RawlsUserEmail, UserInfo, Workspace}
 import org.joda.time.DateTime
 
+import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 

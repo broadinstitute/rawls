@@ -1,24 +1,23 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
-
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import akka.http.scaladsl.model.StatusCodes
-import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
-
-import scala.concurrent.{ExecutionContext, Future}
-import org.mockito.Mockito._
 import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
+import spray.json.DefaultJsonProtocol._
+
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
+import scala.concurrent.{ExecutionContext, Future}
 
 class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._

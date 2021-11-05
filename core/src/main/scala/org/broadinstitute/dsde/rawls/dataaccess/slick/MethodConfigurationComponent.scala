@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
-import java.util.{Date, UUID}
-
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.joda.time.DateTime
 import slick.jdbc.JdbcProfile
+
+import java.sql.Timestamp
+import java.util.{Date, UUID}
 
 case class MethodConfigurationRecord(id: Long,
                                      namespace: String,

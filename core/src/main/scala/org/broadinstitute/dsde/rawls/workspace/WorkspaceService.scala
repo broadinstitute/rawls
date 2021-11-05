@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
@@ -18,7 +16,6 @@ import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
@@ -55,9 +52,10 @@ import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.language.postfixOps
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.{mapAsJavaMapConverter, mapAsScalaMapConverter}
+import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -395,7 +393,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         // Delete components of the workspace
         _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
         _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
-        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext)
 
         // Schedule bucket for deletion
         _ <- dataAccess.pendingBucketDeletionQuery.save(PendingBucketDeletionRecord(workspaceContext.bucketName))
@@ -2045,7 +2043,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
     // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
     policyGroupsToRoles.toList.foldLeft(Future(true)){case (result, (email, roles)) => {
-      result.flatMap(_ => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles))
+      result.flatMap(_ => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles, retryIfGroupDoesNotExist = true))
     }}
   }
 
@@ -2229,7 +2227,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
       googleProjectNumber = googleProjectNumber,
       currentBillingAccountOnWorkspace,
       billingAccountErrorMessage = None,
-      completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer
+      completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
+      shardState = WorkspaceShardStates.Sharded
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)

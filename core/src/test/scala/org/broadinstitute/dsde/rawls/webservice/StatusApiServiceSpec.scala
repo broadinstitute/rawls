@@ -1,5 +1,9 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.model.HttpMethods._
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.storage.model.Bucket
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -11,10 +15,6 @@ import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Seconds, Span}
-import akka.http.scaladsl.model.HttpMethods._
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import com.google.api.services.admin.directory.model.Group
 
 import scala.concurrent.{ExecutionContext, Future}
 

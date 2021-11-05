@@ -1,10 +1,10 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.model.{Notifications, WorkspaceName}
-import org.broadinstitute.dsde.rawls.model.Notifications.{NotificationType, WorkspaceNotificationType}
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import org.broadinstitute.dsde.rawls.model.Notifications.{NotificationType, WorkspaceNotificationType}
+import org.broadinstitute.dsde.rawls.model.{Notifications, WorkspaceName}
 import spray.json.DefaultJsonProtocol._
 
 /**

@@ -1,15 +1,14 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets.UTF_8
-
+import akka.http.scaladsl.server
+import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import akka.http.scaladsl.server
-import akka.http.scaladsl.server.Directives._
 
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.ExecutionContext
 
 /**

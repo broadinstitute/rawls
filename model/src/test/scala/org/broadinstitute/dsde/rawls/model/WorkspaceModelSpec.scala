@@ -2,10 +2,10 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import spray.json._
 
 class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
@@ -406,7 +406,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     "should introspect WorkspaceDetails correctly" in {
       val expected = List("namespace", "name", "workspaceId", "bucketName", "workflowCollectionName", "createdDate",
         "lastModified", "createdBy", "attributes", "isLocked", "authorizationDomain", "googleProject",
-        "googleProjectNumber", "workspaceVersion", "billingAccount", "billingAccountErrorMessage", "completedCloneWorkspaceFileTransfer")
+        "googleProjectNumber", "workspaceVersion", "billingAccount", "billingAccountErrorMessage", "completedCloneWorkspaceFileTransfer", "shardState")
       WorkspaceFieldNames.workspaceDetailClassNames should contain theSameElementsAs expected
     }
     "should collate WorkspaceResponse and WorkspaceDetails correctly" in {
@@ -415,7 +415,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         "workspace.bucketName", "workspace.workflowCollectionName", "workspace.createdDate", "workspace.lastModified",
         "workspace.createdBy", "workspace.attributes", "workspace.isLocked", "workspace.authorizationDomain",
         "workspace.googleProject", "workspace.googleProjectNumber", "workspace.workspaceVersion",
-        "workspace.billingAccount", "workspace.billingAccountErrorMessage", "workspace.completedCloneWorkspaceFileTransfer"
+        "workspace.billingAccount", "workspace.billingAccountErrorMessage", "workspace.completedCloneWorkspaceFileTransfer", "workspace.shardState"
       )
       WorkspaceFieldNames.workspaceResponseFieldNames should contain theSameElementsAs(expected)
     }

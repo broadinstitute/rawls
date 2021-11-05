@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.{Actor, Props}
 import akka.http.scaladsl.model.StatusCodes
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.google.api.services.storage.model.StorageObject
@@ -17,7 +18,7 @@ import scala.language.postfixOps
 
 
 object CloneWorkspaceFileTransferMonitor {
-  def props(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
+  def props(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
     Props(new CloneWorkspaceFileTransferMonitorActor(dataSource, gcsDAO, initialDelay, pollInterval))
   }
 
@@ -25,7 +26,7 @@ object CloneWorkspaceFileTransferMonitor {
   case object CheckAll extends CloneWorkspaceFileTransferMonitorMessage
 }
 
-class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val initialDelay: FiniteDuration, val pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
+class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val initialDelay: FiniteDuration, val pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext) extends Actor with LazyLogging {
 
   context.system.scheduler.scheduleWithFixedDelay(initialDelay, pollInterval, self, CheckAll)
 
@@ -39,7 +40,16 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, va
         dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers()
       }
       _ <- pendingTransfers.toList.traverse { pendingTransfer =>
-        IO.fromFuture(IO(copyBucketFiles(pendingTransfer)))
+        IO.fromFuture(IO(copyBucketFiles(pendingTransfer))).attempt.map {
+          case Left(e) => {
+            // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
+            // want to continue traversing the list to transfer the rest of the buckets even if one of the
+            // copy operations fails.
+            logger.warn(s"Failed to copy files from ${pendingTransfer.sourceWorkspaceBucketName} to ${pendingTransfer.destWorkspaceBucketName}", e)
+            List.empty
+          }
+          case Right(res) => res
+        }
       }.unsafeToFuture()
     } yield()
   }

@@ -8,8 +8,8 @@ import cromwell.client.model.WorkflowDescription
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL, WdlSource, WdlUrl}
 import org.broadinstitute.dsde.rawls.util.Retry
 
-import scala.util.Try
 import scala.concurrent.duration._
+import scala.util.Try
 
 class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
 

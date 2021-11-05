@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import spray.json._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import spray.json._
 
 /**
   * Created by rtitle on 5/7/17.

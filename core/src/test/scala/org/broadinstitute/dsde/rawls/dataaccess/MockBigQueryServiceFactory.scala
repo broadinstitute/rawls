@@ -1,17 +1,16 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.util.UUID
 import cats.effect._
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.Acl.Entity
-import com.google.cloud.bigquery.Dataset.Builder
-import com.google.cloud.bigquery.{Acl, BigQuery, Dataset, DatasetId, DatasetInfo, Field, FieldValue, FieldValueList, JobId, LegacySQLTypeName, QueryJobConfiguration, Schema, Table, TableInfo, TableResult}
+import com.google.cloud.bigquery.{Option => _, _}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 
+import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 
@@ -87,16 +86,15 @@ object MockBigQueryServiceFactory {
   }
 
   def ioFactory(queryResponse: Either[Throwable, TableResult] = Right(tableResult)): MockBigQueryServiceFactory = {
-    lazy val blocker = Blocker.liftExecutionContext(TestExecutionContext.testExecutionContext)
     implicit val ec = TestExecutionContext.testExecutionContext
 
-    new MockBigQueryServiceFactory("dummy-credential-path", blocker, queryResponse)
+    new MockBigQueryServiceFactory("dummy-credential-path", queryResponse)
   }
 
 }
 
-class MockBigQueryServiceFactory(credentialPath: String, blocker: Blocker, queryResponse: Either[Throwable, TableResult])(implicit val executionContext: ExecutionContext)
-  extends GoogleBigQueryServiceFactory(credentialPath: String, blocker: Blocker)(executionContext: ExecutionContext) {
+class MockBigQueryServiceFactory(credentialPath: String, queryResponse: Either[Throwable, TableResult])(implicit val executionContext: ExecutionContext)
+  extends GoogleBigQueryServiceFactory(credentialPath: String)(executionContext: ExecutionContext) {
 
   override def getServiceForPet(petKey: String, projectId: GoogleProject): Resource[IO, GoogleBigQueryService[IO]] = {
     Resource.pure[IO, GoogleBigQueryService[IO]](new MockGoogleBigQueryService(queryResponse))

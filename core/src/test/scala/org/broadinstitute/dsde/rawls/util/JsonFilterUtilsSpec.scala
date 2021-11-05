@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.util
 
-import spray.json._
 import org.scalatest.freespec.AnyFreeSpec
+import spray.json._
 
 class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
 

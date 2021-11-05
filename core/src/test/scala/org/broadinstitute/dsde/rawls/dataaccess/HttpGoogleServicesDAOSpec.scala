@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 
 class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers {
 

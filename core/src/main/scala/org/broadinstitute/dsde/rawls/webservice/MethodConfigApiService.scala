@@ -1,14 +1,14 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import WorkspaceJsonSupport._
-import akka.http.scaladsl.model.StatusCodes
-import CustomDirectives._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 
 import scala.concurrent.ExecutionContext
 

@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.user
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
-
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import cats.Applicative
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.http.HttpResponseException
@@ -24,6 +23,8 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, GoogleProject}
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -305,15 +306,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] =
     requireProjectAction[PerRequestMessage](projectName, SamBillingProjectActions.deleteBillingProject) {
       for {
-        _ <- validateNoWorkspaces(projectName)
+        _ <- failUnlessHasNoWorkspaces(projectName)
         _ <- deleteGoogleProjectIfChild(projectName, userInfo)
         _ <- unregisterBillingProjectWithUserInfo(projectName, userInfo)
       } yield RequestComplete(StatusCodes.NoContent)
     }
-  }
 
   def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, spendReportConfiguration: BillingProjectSpendConfiguration): Future[Int] = {
 
@@ -377,33 +377,39 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def validateNoWorkspaces(projectName: RawlsBillingProjectName): Future[Unit] = {
-    for {
-      workspaceCount <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.countByNamespace(projectName)
-      }
-      _ <- if (workspaceCount > 0) {
-        Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Project cannot be deleted because it contains workspaces.")))
-      } else {
-        Future.successful(())
-      }
-    } yield ()
-  }
+  private def failUnlessHasNoWorkspaces(projectName: RawlsBillingProjectName): Future[Unit] =
+    dataSource.inTransaction(_.workspaceQuery.countByNamespace(projectName)) map { count =>
+      if (count == 0) () else throw new RawlsExceptionWithErrorReport(ErrorReport(
+        StatusCodes.BadRequest,
+        "Project cannot be deleted because it contains workspaces."
+      ))
+    }
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   private def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName, userInfoForSam: UserInfo, deleteGoogleProjectWithGoogle: Boolean = true) = {
-    samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, userInfoForSam).flatMap { projectChildren =>
-      if (projectChildren.contains(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))) {
+    def googleProjectExists(projectId: GoogleProjectId) =
+      gcsDAO.getGoogleProject(projectId) transform {
+        case Success(_) => Success(true)
+        case Failure(e: HttpResponseException) if e.getStatusCode == 404 => Success(false)
+        case Failure(t) => Failure(t)
+      }
+
+    def F = Applicative[Future]
+
+    def deleteResourcesInGoogle(projectId: GoogleProjectId) =
+      for {
+        _ <- deletePetsInProject(projectId, userInfoForSam)
+        _ <- F.whenA(deleteGoogleProjectWithGoogle)(gcsDAO.deleteV1Project(projectId))
+      } yield ()
+
+    val projectId = GoogleProjectId(projectName.value)
+    samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, userInfoForSam) flatMap { resourceChildren =>
+      F.whenA(resourceChildren contains SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))(
         for {
-          _ <- deletePetsInProject(GoogleProjectId(projectName.value), userInfoForSam)
-          _ <- if (deleteGoogleProjectWithGoogle) {
-            gcsDAO.deleteV1Project(GoogleProjectId(projectName.value))
-          } else Future.successful(())
+          _ <- googleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit)
           _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, userInfoForSam)
         } yield ()
-      } else {
-        Future.successful(())
-      }
+      )
     }
   }
 

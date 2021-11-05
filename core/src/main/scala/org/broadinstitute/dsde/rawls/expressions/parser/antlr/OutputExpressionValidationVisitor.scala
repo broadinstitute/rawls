@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
-import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser._
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, UnboundOutputExpression, WorkspaceTarget}
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{ArrContext, LiteralContext, ObjContext, RelationContext, WorkspaceAttributeLookupContext}
 import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeNull, ErrorReportSource}
+import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
 
 import scala.util.{Failure, Success, Try}
 

@@ -1,12 +1,10 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.util.UUID
 import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.Counter
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -19,7 +17,9 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, addJitter}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 
+import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -385,9 +385,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     } else {
       for {
         // load all the starting data
-        entitiesById <-         listWorkflowEntitiesById(workflowsWithOutputs, dataAccess)
-        outputExpressionMap <-  listMethodConfigOutputsForSubmission(dataAccess)
         workspace <-            getWorkspace(dataAccess).map(_.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found")))
+        entitiesById <-         listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess)
+        outputExpressionMap <-  listMethodConfigOutputsForSubmission(dataAccess)
 
         // figure out the updates that need to occur to entities and workspaces
         updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressionMap)
@@ -420,7 +420,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     dataAccess.submissionQuery.getMethodConfigOutputExpressions(submissionId)
   }
 
-  def listWorkflowEntitiesById(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)
+  def listWorkflowEntitiesById(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)
                               (implicit executionContext: ExecutionContext): ReadAction[scala.collection.Map[Long, Entity]] = {
     //Note that we can't look up entities for workflows that didn't run on entities (obviously), so they get dropped here.
     //Those are handled in handle/attachOutputs.
@@ -428,7 +428,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     //yank out of Seq[(Long, Option[Entity])] and into Seq[(Long, Entity)]
     val entityIds = workflowsWithEntities.flatMap{ case (workflowRec, outputs) => workflowRec.workflowEntityId }
-    dataAccess.entityQuery.getEntities(entityIds).map(_.toMap)
+
+    dataAccess.entityQuery.getEntities(workspace.workspaceIdAsUUID, workspace.shardState, entityIds).map(_.toMap)
   }
 
   def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {

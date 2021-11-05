@@ -1,11 +1,6 @@
 package default
 
 import scala.concurrent.duration._
-import java.io._
-
-import io.gatling.core.Predef._
-import io.gatling.http.Predef._
-import io.gatling.jdbc.Predef._
 
 class importMethod extends RawlsSimulation {
 

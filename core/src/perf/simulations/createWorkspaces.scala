@@ -1,10 +1,7 @@
 package default
 
-import scala.concurrent.duration._
 import java.io._
-
-import io.gatling.core.Predef._
-import io.gatling.http.Predef._
+import scala.concurrent.duration._
 
 class createWorkspaces extends RawlsSimulation {
 

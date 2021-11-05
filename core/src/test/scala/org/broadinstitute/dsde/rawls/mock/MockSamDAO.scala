@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.mock
 
-import java.util.concurrent.ConcurrentLinkedDeque
-
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
+import java.util.concurrent.ConcurrentLinkedDeque
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 

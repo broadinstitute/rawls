@@ -1,15 +1,17 @@
 package org.broadinstitute.dsde.rawls.util
 
 import akka.http.scaladsl.model.StatusCodes
+import io.opencensus.trace.Span
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, Workspace}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 trait EntitySupport {
   implicit protected val executionContext: ExecutionContext
@@ -31,9 +33,9 @@ trait EntitySupport {
     }
   }
 
-  def withAllEntityRefs[T](workspaceContext: Workspace, dataAccess: DataAccess, entities: Seq[AttributeEntityReference])(op: (Seq[AttributeEntityReference]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def withAllEntityRefs[T](workspaceContext: Workspace, dataAccess: DataAccess, entities: Seq[AttributeEntityReference], span: Span)(op: (Seq[AttributeEntityReference]) => ReadWriteAction[T]): ReadWriteAction[T] = {
     // query the db to see which of the specified entity refs exist in the workspace and are active
-    dataAccess.entityQuery.getActiveRefs(workspaceContext.workspaceIdAsUUID, entities.toSet) flatMap { found =>
+    traceDBIOWithParent("withAllEntityRefs.getActiveRefs", span)(_ => dataAccess.entityQuery.getActiveRefs(workspaceContext.workspaceIdAsUUID, entities.toSet)) flatMap { found =>
       // were any of the user's entities not found in our query?
       val notFound = entities diff found
       if (notFound.nonEmpty) {

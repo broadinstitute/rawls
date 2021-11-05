@@ -1,27 +1,26 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.Notifications._
-import org.broadinstitute.dsde.rawls.model._
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
-
-import scala.concurrent.duration._
-import spray.json.DefaultJsonProtocol._
-import WorkspaceACLJsonSupport._
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.mock.CustomizableMockSamDAO
 import org.broadinstitute.dsde.rawls.model
+import org.broadinstitute.dsde.rawls.model.Notifications._
+import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
+import spray.json.DefaultJsonProtocol._
 
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
-import org.mockito.Mockito._
-import org.mockito.ArgumentMatchers._
 
 
 /**

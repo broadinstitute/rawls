@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
-import java.util.UUID
-
 import cats.instances.int._
 import cats.instances.list._
 import cats.instances.map._
@@ -16,6 +13,9 @@ import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import slick.dbio.Effect.Write
 import slick.jdbc.JdbcProfile
+
+import java.sql.Timestamp
+import java.util.UUID
 
 /**
  * Created by mbemis on 2/18/16.

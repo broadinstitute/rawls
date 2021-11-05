@@ -1,11 +1,11 @@
 
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
-
 import _root_.slick.dbio.DBIOAction
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
+
+import java.util.UUID
 
 /**
  * Created by dvoet on 2/12/16.
@@ -113,9 +113,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(activeEntityCount2 + 1)(activeEntityCount3)
     assertResult(activeAttributeCount2)(activeAttributeCount3)
 
-    assertResult(entityCount3) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)) }
+    assertResult(entityCount3) { runAndWait(entityQuery.deleteFromDb(workspaceContext)) }
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "delete-me")) }
-    assertResult(0) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)) }
+    assertResult(0) { runAndWait(entityQuery.deleteFromDb(workspaceContext)) }
 
     val (entityCount4, attributeCount4) = countEntitiesAttrs(workspace)
     val (activeEntityCount4, activeAttributeCount4) = countActiveEntitiesAttrs(workspace)
@@ -319,7 +319,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
-      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID))
+      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded))
       assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
       desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
@@ -361,7 +361,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
     //so we test the existence of all keys correctly here...
-    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID))
+    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, WorkspaceShardStates.Sharded))
     assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
     desiredTypesAndAttrNames foreach { case (eType, attrNames) =>

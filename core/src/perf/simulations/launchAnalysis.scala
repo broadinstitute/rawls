@@ -3,11 +3,7 @@ package default
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
-
 import scala.concurrent.duration._
-
-import io.gatling.core.Predef._
-import io.gatling.http.Predef._
 
 class launchAnalysis extends RawlsSimulation {
 

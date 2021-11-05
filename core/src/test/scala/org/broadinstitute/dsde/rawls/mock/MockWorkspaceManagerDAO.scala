@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.mock
 
-import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
@@ -10,6 +8,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport}
 
+import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 

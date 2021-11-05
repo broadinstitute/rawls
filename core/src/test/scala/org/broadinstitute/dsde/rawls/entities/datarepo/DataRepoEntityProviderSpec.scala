@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, RelationshipTermModel, TableModel}
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery._
+import com.google.cloud.bigquery.{Option => _, _}
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
@@ -23,13 +23,13 @@ import org.mockserver.integration.ClientAndServer.startClientAndServer
 import org.mockserver.model.Header
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse.response
+import org.scalatest.flatspec.AsyncFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import scala.util.{Random, Success}
-import org.scalatest.flatspec.AsyncFlatSpec
-import org.scalatest.matchers.should.Matchers
 
 class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
 
@@ -44,8 +44,8 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val args = EntityRequestArguments(
       workspace = workspace,
       userInfo = userInfo,
-      dataReference = scala.Option(DataReferenceName("referenceName")),
-      billingProject = scala.Option(gProject))
+      dataReference = Option(DataReferenceName("referenceName")),
+      billingProject = Option(gProject))
     val provider = createTestProvider(entityRequestArguments = args)
     provider.googleProject should be (gProject)
   }
@@ -58,7 +58,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val args = EntityRequestArguments(
       workspace = testWorkspace,
       userInfo = userInfo,
-      dataReference = scala.Option(DataReferenceName("referenceName")),
+      dataReference = Option(DataReferenceName("referenceName")),
       billingProject = None)
     val provider = createTestProvider(entityRequestArguments = args)
     provider.googleProject should be (gProject)
@@ -350,7 +350,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
+        Option(EntityJoin(
           EntityColumn(rootEntityTable, joinColumnName, false),
           EntityColumn(dependentEntityTable, joinColumnName, false),
           Seq(relationshipName),
@@ -395,7 +395,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(rootEntityTable, None, Seq(EntityColumn(rootEntityTable, datarepoRowIdColumn, false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
+        Option(EntityJoin(
           EntityColumn(rootEntityTable, joinColumnName, false),
           EntityColumn(dependentEntityTable, joinColumnName, false),
           Seq(relationshipName),
@@ -445,7 +445,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(dependentEntityTable, None, dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false))),
       SelectAndFrom(dependentEntityTable,
-        scala.Option(EntityJoin(
+        Option(EntityJoin(
           EntityColumn(dependentEntityTable, joinColumnName, false),
           EntityColumn(rootEntityTable, joinColumnName, false),
           List(relationshipName),
@@ -505,7 +505,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     result should contain theSameElementsInOrderAs List(
       SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
+        Option(EntityJoin(
           EntityColumn(rootEntityTable, donorIdColumn, false),
           EntityColumn(middleEntityTable, donorIdColumn, false),
           Seq(relationshipName1),
@@ -514,7 +514,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         )),
         Seq.empty),
       SelectAndFrom(middleEntityTable,
-        scala.Option(EntityJoin(
+        Option(EntityJoin(
           EntityColumn(middleEntityTable, sampleIdColumn, false),
           EntityColumn(finalEntityTable, sampleIdColumn, false),
           Seq(relationshipName1, relationshipName2),
@@ -570,7 +570,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(rootEntityTable, None, Seq(EntityColumn(rootEntityTable, "string-field", false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
+        Option(EntityJoin(
           EntityColumn(rootEntityTable, barIdColumn, false),
           EntityColumn(dependent2EntityTable, barIdColumn, false),
           Seq(relationshipName2),
@@ -579,7 +579,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
         )),
         Seq(EntityColumn(dependent2EntityTable, datarepoRowIdColumn, false), EntityColumn(dependent2EntityTable, "table_2_col", false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
+        Option(EntityJoin(
           EntityColumn(rootEntityTable, fooIdColumn, false),
           EntityColumn(dependent1EntityTable, fooIdColumn, false),
           Seq(relationshipName1),
@@ -674,7 +674,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
+        Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
         Seq(EntityColumn(depTable, "zoe", false), EntityColumn(depTable, "bob", false)))
     )
 
@@ -697,7 +697,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
+        Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
         Seq(EntityColumn(depTable, "zoe", false), EntityColumn(depTable, "bob", false)))
     )
 
@@ -721,7 +721,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
+        Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
         Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", true), EntityColumn(depTable, datarepoRowIdColumn, false), EntityColumn(depTable, "another", false)))
     )
 
@@ -747,7 +747,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
+        Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
         Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", true), EntityColumn(depTable, datarepoRowIdColumn, false), EntityColumn(depTable, "another", false)))
     )
 
@@ -775,10 +775,10 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
       SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
+        Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
         Seq.empty),
       SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(depTable, "fk2", false), EntityColumn(depTable2, "fk2", false), Seq.empty, "bar", false)),
+        Option(EntityJoin(EntityColumn(depTable, "fk2", false), EntityColumn(depTable2, "fk2", false), Seq.empty, "bar", false)),
         Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", false)))
     )
 

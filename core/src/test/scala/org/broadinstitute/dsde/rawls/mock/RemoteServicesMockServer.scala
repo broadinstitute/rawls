@@ -1,20 +1,20 @@
 package org.broadinstitute.dsde.rawls.mock
 
-import java.util.UUID
-import java.util.concurrent.TimeUnit
-
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse, WdlSource}
-import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
+import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse, WdlSource}
 import org.mockserver.integration.ClientAndServer._
-import org.mockserver.model._
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse._
-import akka.http.scaladsl.model.StatusCodes
+import org.mockserver.model._
+import spray.json.DefaultJsonProtocol._
 import spray.json._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
-import DefaultJsonProtocol._
+
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 /**
  * Mock server interface for the methods repo and execution service.

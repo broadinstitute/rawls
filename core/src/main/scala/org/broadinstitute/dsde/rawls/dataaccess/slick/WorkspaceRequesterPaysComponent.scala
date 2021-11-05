@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.BondServiceAccountEmail
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, WorkspaceName, WorkspaceVersions}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
+
+import java.util.UUID
 
 case class WorkspaceRequesterPaysRecord(id: Long, workspaceId: UUID, userEmail: String, serviceAccountEmail: String)
 
