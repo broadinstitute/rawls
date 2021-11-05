@@ -241,7 +241,7 @@ trait EntityComponent {
 
       // almost the same as "activeActionForType" except 1) adds a sort by e.id; 2) returns a stream
       def activeStreamForType(workspaceContext: Workspace, entityType: String): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] = {
-        sql"""#$baseEntityAndAttributeSql
+        sql"""#${baseEntityAndAttributeSql(workspaceContext)}
               where e.deleted = false
               and e.entity_type = ${entityType}
               and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
@@ -1012,11 +1012,11 @@ trait EntityComponent {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 
-    private def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], shardState: WorkspaceShardState): Seq[Entity] = {
+    def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesResult], shardState: WorkspaceShardState): Seq[Entity] = {
       unmarshalEntitiesWithIds(entityAttributeRecords, shardState).map { case (_, entity) => entity }
     }
 
-    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], shardState: WorkspaceShardState): Seq[(Long, Entity)] = {
+    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesResult], shardState: WorkspaceShardState): Seq[(Long, Entity)] = {
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
 
       // note that not all entities have attributes, thus the collect below

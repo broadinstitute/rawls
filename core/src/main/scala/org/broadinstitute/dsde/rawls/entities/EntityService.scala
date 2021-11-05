@@ -174,7 +174,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   // TODO: add tracing
-  def listEntities(workspaceName: WorkspaceName, entityType: String) = {
+  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null) = {
 
     import dataSource.dataAccess.entityQuery.EntityAndAttributesResult
 
@@ -197,7 +197,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       def gatherOrOutput(previous: AttributeStreamElement, current: AttributeStreamElement): AttrAccum = {
         // utility function called when an entity is finished or when the stream is finished
         def entityFinished(prevAttrs: Seq[EntityAndAttributesResult], nextAttrs: Seq[EntityAndAttributesResult]) = {
-          val unmarshalled = dataSource.dataAccess.entityQuery.unmarshalEntities(prevAttrs)
+          val unmarshalled = dataSource.dataAccess.entityQuery.unmarshalEntities(prevAttrs, workspaceContext.shardState)
           // safety check - did the attributes we gathered all marshal into a single entity?
           if (unmarshalled.size != 1)
             throw new DataEntityException(s"gatherOrOutput expected only one entity, found ${unmarshalled.size}")
