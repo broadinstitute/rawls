@@ -66,7 +66,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
             }
           } ~
           delete {
-            complete { workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
+            traceRequest { span =>
+              complete { workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName), span) }
+            }
           }
       } ~
       path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>

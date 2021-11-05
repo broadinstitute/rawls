@@ -359,10 +359,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
     samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, userInfo).map(_.memberEmails)
   }
 
-  def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =  {
-     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { ctx =>
-       deleteWorkspace(workspaceName, ctx)
-    }
+  def deleteWorkspace(workspaceName: WorkspaceName, parentSpan: Span = null): Future[PerRequestMessage] =  {
+    traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(_ => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { ctx =>
+       traceWithParent("deleteWorkspaceInternal", parentSpan)(s1 => deleteWorkspaceInternal(workspaceName, ctx, s1))
+    })
   }
 
   private def gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName: WorkspaceName, workspaceContext: Workspace) = {
@@ -404,79 +404,100 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  private def deleteWorkspace(workspaceName: WorkspaceName, workspaceContext: Workspace): Future[PerRequestMessage] = {
+  private def deleteWorkspaceInternal(workspaceName: WorkspaceName, workspaceContext: Workspace, parentSpan: Span = null): Future[PerRequestMessage] = {
     for {
-      _ <- requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith {
-        case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceName}`", t)
-          Future.failed(t)
+      _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentSpan)(_ =>
+        requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith {
+          case t:Throwable => {
+            logger.warn(s"Unexpected failure deleting workspace (while revoking 'requester pays' users) for workspace `${workspaceName}`", t)
+            Future.failed(t)
+          }
         }
-      }
+      )
 
-      workflowsToAbort <- gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName, workspaceContext) recoverWith {
-        case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while gathering workflows that need to be aborted) for workspace `${workspaceName}`", t)
-          Future.failed(t)
+      workflowsToAbort <- traceWithParent("gatherWorkflowsToAbortAndSetStatusToAborted", parentSpan)(_ =>
+        gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName, workspaceContext) recoverWith {
+          case t:Throwable => {
+            logger.warn(s"Unexpected failure deleting workspace (while gathering workflows that need to be aborted) for workspace `${workspaceName}`", t)
+            Future.failed(t)
+          }
         }
-      }
+      )
 
       //Attempt to abort any running workflows so they don't write any more to the bucket.
       //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
       //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
       //ExecutionContext run the futures whenever
-      aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) } recoverWith {
-        case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while aborting workflows) for workspace `${workspaceName}`", t)
-          Future.failed(t)
+      aborts = traceWithParent("abortRunningWorkflows", parentSpan)(_ =>
+        Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) } recoverWith {
+          case t:Throwable => {
+            logger.warn(s"Unexpected failure deleting workspace (while aborting workflows) for workspace `${workspaceName}`", t)
+            Future.failed(t)
+          }
         }
-      }
+      )
 
       // Delete Google Project
-      _ <- maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo) recoverWith {
-        case t:Throwable => {
-          logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
-          Future.failed(t)
+      _ <- traceWithParent("maybeDeleteGoogleProject", parentSpan)(_ =>
+        maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo) recoverWith {
+          case t:Throwable => {
+            logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
+            Future.failed(t)
+          }
         }
-      }
+      )
 
       // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
-      _ <- deleteWorkspaceTransaction(workspaceName, workspaceContext) recoverWith {
-        case t:Throwable => {
-          logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Rawls DB) for workspace `${workspaceName}`", t)
-          Future.failed(t)
+      _ <- traceWithParent("deleteWorkspaceTranaction", parentSpan)(_ =>
+        deleteWorkspaceTransaction(workspaceName, workspaceContext) recoverWith {
+          case t:Throwable => {
+            logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Rawls DB) for workspace `${workspaceName}`", t)
+            Future.failed(t)
+          }
         }
-      }
+      )
 
       // Delete workflowCollection resource in sam outside of DB transaction
-      _ <- workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
-        case t:Throwable => {
-          logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
-          Future.failed(t)
-        }
-      }
-      // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
-      _ <- Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recoverWith {
-        //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
-        case e: ApiException => {
-          if(e.getCode != StatusCodes.NotFound.intValue) {
-            logger.warn(s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceName}. Received ${e.getCode}: [${e.getResponseBody}]")
+      _ <- traceWithParent("deleteWorkflowCollectionSamResource", parentSpan)(_ =>
+        workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
+          case t:Throwable => {
+            logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
+            Future.failed(t)
           }
-          Future.successful()
         }
-      }
+      )
+
+      // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
+      _ <- traceWithParent("deleteWorkspaceInWSM", parentSpan)(_ =>
+        Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)).recoverWith {
+          //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
+          case e: ApiException => {
+            if(e.getCode != StatusCodes.NotFound.intValue) {
+              logger.warn(s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceName}. Received ${e.getCode}: [${e.getResponseBody}]")
+            }
+            Future.successful()
+          }
+        }
+      )
+
       // Delete the Delta Layer companion dataset, if it exists
-      _ <- deltaLayer.deleteDataset(workspaceContext) recoverWith {
-        case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while deleting Delta Layer) for workspace `${workspaceName}`", t)
-          Future.failed(t)
+      _ <- traceWithParent("deleteDeltaLayerDataset", parentSpan)(_ =>
+        deltaLayer.deleteDataset(workspaceContext) recoverWith {
+          case t:Throwable => {
+            logger.warn(s"Unexpected failure deleting workspace (while deleting Delta Layer) for workspace `${workspaceName}`", t)
+            Future.failed(t)
+          }
         }
-      }
-      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
-        case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`", t)
-          Future.failed(t)
+      )
+
+      _ <- traceWithParent("deleteWorkspaceSamResource", parentSpan)(_ =>
+        samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
+          case t:Throwable => {
+            logger.warn(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`", t)
+            Future.failed(t)
+          }
         }
-      }
+      )
     } yield {
       aborts.onComplete {
         case Failure(t) => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
