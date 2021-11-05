@@ -373,6 +373,11 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  // WARNING: I have fears that this unit test will be flaky, because it depends on timing.
+  // if this test runs on a too-powerful computer, the SQL query that should time out
+  // may run too fast, not time out, and the test will fail. If it turns out to be flaky,
+  // let's just delete this test since it is 90% testing Slick's timeout feature, and 10%
+  // testing that Rawls code is set up properly to pass a timeout argument to Slick.
   it should "time out when listing all entity types with their attribute names, if a timeout is specified" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       // insert a whole lot of entities with a lot of unique attribute names
@@ -387,26 +392,11 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         runAndWait(entityQuery.save(testData.workspace, entity))
       }
 
-//      // we don't need entityCacheQuery; we just need its UUID->SQL implicit
-//      import entityCacheQuery.SetUUIDParameter
-//
-//      val shardSuffix = determineShard(testData.workspace.workspaceIdAsUUID, WorkspaceShardStates.Sharded)
-//
-//      // fire-and-forget a Future SQL query that 1) locks the entity attribute table, and 2) sleeps for 4 seconds
-//      val sleepAction = sql"""update ENTITY_ATTRIBUTE_#$shardSuffix ea join (select sleep(4)) as sleeper on 1=1 set ea.value_string = 'foo';"""
-//      slickDataSource.database.run(sleepAction.as[Int].withTransactionIsolation(TransactionIsolation.Serializable))
-
-//      // now attempt to calculate attr names and types, with a timeout of 1 second.
-//      // Since the previous query locked, this should time out.
-//      val serializedAttrQuery = entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID,
-//        WorkspaceShardStates.Sharded, 1).withTransactionIsolation(TransactionIsolation.Serializable)
-//      intercept[MySQLTimeoutException] {
-//        runAndWait(serializedAttrQuery)
-//      }
-
       // now attempt to calculate attr names and types, with a timeout of 1 second
-      intercept[MySQLTimeoutException] {
-        runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded, 1))
+      withClue("This test is potentially flaky, failures should be reviewed: ") {
+        intercept[MySQLTimeoutException] {
+          runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded, 1))
+        }
       }
     }
   }
