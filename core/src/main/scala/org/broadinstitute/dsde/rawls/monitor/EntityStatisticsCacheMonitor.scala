@@ -23,8 +23,10 @@ object EntityStatisticsCacheMonitor {
   }
 
   sealed trait EntityStatisticsCacheMessage
+  case object Start extends EntityStatisticsCacheMessage
   case object Sweep extends EntityStatisticsCacheMessage
   case object ScheduleDelayedSweep extends EntityStatisticsCacheMessage
+  case object DieAndRestart extends EntityStatisticsCacheMessage
 
   //Note: Ignored workspaces have a cacheLastUpdated timestamp of 1000ms after epoch
   val MIN_CACHE_TIME = new Timestamp(1000)
@@ -38,16 +40,28 @@ class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val tim
 
   override def preStart(): Unit = {
     super.preStart()
-    self ! Sweep
+    self ! Start
   }
 
   override def receive = {
+    case Start => sender ! Sweep
     case Sweep => sweep() pipeTo self
     case ScheduleDelayedSweep => context.system.scheduler.scheduleOnce(standardPollInterval, self, Sweep)
+    case DieAndRestart =>
+      // Kill this actor, and start a new one. This will drain this actor's mailbox to dead letters.
+      // The new actor will take over processing caches.
+      logger.warn(s"EntityStatisticsCacheMonitor restarting with a new Actor instance.")
+      val newActor = context.system.actorOf(EntityStatisticsCacheMonitor.props(dataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown))
+      if (sender != self) sender ! newActor // used by unit tests only
+      context.stop(self)
     case akka.actor.ReceiveTimeout =>
-      val pauseLength = standardPollInterval*2
+      // This actor timed out. We can't be certain if this actor's sweep exited abnormally, or if it is hung,
+      // or if it is benignly just taking a while. Because we can't be sure of its state, kill this actor
+      // and start up a new one using the same configuration. Pause before starting the new one
+      // in case this one is actually still processing.
+      val pauseLength = FiniteDuration(timeoutPerWorkspace.toSeconds, "seconds")*2
       logger.warn(s"EntityStatisticsCacheMonitor attempt timed out. Pausing for ${pauseLength}.")
-      context.system.scheduler.scheduleOnce(pauseLength, self, Sweep)
+      context.system.scheduler.scheduleOnce(pauseLength, self, DieAndRestart)
   }
 
 }
