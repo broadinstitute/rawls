@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.{ActorRef, ActorSystem, ReceiveTimeout}
 import akka.pattern.ask
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.Timeout
@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.language.postfixOps
-import scala.reflect.classTag
 
 class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     extends TestKit(_system)
@@ -189,7 +188,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     lastModified shouldBe entityCacheLastUpdated
   }
 
-  it should "die and restart properly upon request" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
+  it should "die and restart properly upon explicit DieAndRestart request" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
     // timings for the monitor(s)
     val timeoutPerWorkspace: FiniteDuration = FiniteDuration(3, TimeUnit.SECONDS)
     val standardPollInterval: FiniteDuration = FiniteDuration(1, TimeUnit.SECONDS)
@@ -216,6 +215,52 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     val monitor2 = monitor2Any.asInstanceOf[ActorRef]
     monitor2 ! Start
     expectMsg(Sweep)
+  }
+
+  it should "resume cache processing after restarting upon ReceiveTimeout" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
+    // workspace for this test
+    val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+
+    // timings for the monitor(s)
+    val timeoutPerWorkspace: FiniteDuration = FiniteDuration(3, TimeUnit.SECONDS)
+    val standardPollInterval: FiniteDuration = FiniteDuration(1, TimeUnit.SECONDS)
+    val workspaceCooldown: FiniteDuration = Duration(1, TimeUnit.SECONDS)
+
+    // timing for TestKit, waiting for actor responses
+    implicit val testKitTimeout: Timeout = Timeout(scaled(Span(90, Seconds)))
+
+    // start a monitor actor, and return its ActorRef.
+    val monitor1 = system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown))
+
+    // this first monitor should, eventually, update the workspace's cache
+    eventually(timeout = timeout(timeoutPerWorkspace*3)) {
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID))
+      isCurrent shouldBe true
+    }
+
+    // set up a TestKit probe for DeathWatch on the monitor
+    val probe1 = TestProbe()
+    probe1.watch(monitor1)
+
+    // send ReceiveTimeout to the monitor.
+    monitor1 ! ReceiveTimeout
+
+    // assert that the monitor shut itself down
+    probe1.expectTerminated(monitor1, timeoutPerWorkspace * 3) // EntityStatisticsCacheMonitor waits timeoutPerWorkspace * 2 before terminating
+
+    // at this point the first monitor is killed, but the second monitor should have been created.
+    // remove the cache record for our test workspace, and wait for the the monitor to sweep and update its cache.
+    val killCacheFuture = for {
+      _ <- entityCacheQuery.filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
+      isCurrent <- entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID)
+    } yield isCurrent
+
+    runAndWait(killCacheFuture) shouldBe false
+
+    eventually(timeout = timeout(timeoutPerWorkspace*3)) {
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID))
+      isCurrent shouldBe true
+    }
   }
 
   List(0, 1, 10, 180) foreach { mins =>
