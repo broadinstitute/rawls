@@ -7,11 +7,11 @@ object Dependencies {
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.12.3"
 
-  val workbenchLibsHash = "ae11b9f"
-  val serviceTestV = s"0.20-${workbenchLibsHash}"
+  val workbenchLibsHash = "5ba81aa"
+  val serviceTestV = s"0.21-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.22-${workbenchLibsHash}"
-  val workbenchModelV  = s"0.14-${workbenchLibsHash}"
+  val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchMetricsV  = s"0.5-${workbenchLibsHash}"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model" % workbenchModelV
