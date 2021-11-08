@@ -92,7 +92,8 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
   }
 
   def updateStatisticsCache(workspaceId: UUID, timestamp: Timestamp): Future[Unit] = {
-    // allow 80% of the per-workspace timeout to be spent calculating the attribute names
+    // allow 80% of the per-workspace timeout to be spent calculating the attribute names.
+    // note that other statements do not have timeouts and are unbounded.
     val attrNamesTimeout = (timeoutPerWorkspace * .8).toSeconds.toInt
 
     val updateFuture = dataSource.inTransaction { dataAccess =>
