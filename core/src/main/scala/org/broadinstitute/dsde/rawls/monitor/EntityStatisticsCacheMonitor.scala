@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParen
 import slick.dbio.DBIO
 
 import java.sql.Timestamp
+import java.util.concurrent.TimeUnit
 import java.util.{Calendar, UUID}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -44,7 +45,10 @@ class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val tim
   }
 
   override def receive = {
-    case Start => sender ! Sweep
+    case Start =>
+      // this Start case assists with unit testing, by providing a case where tests can send this Actor a message
+      // and expect a consistent response
+      sender ! Sweep
     case Sweep => sweep() pipeTo self
     case ScheduleDelayedSweep => context.system.scheduler.scheduleOnce(standardPollInterval, self, Sweep)
     case DieAndRestart =>
@@ -59,7 +63,7 @@ class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val tim
       // or if it is benignly just taking a while. Because we can't be sure of its state, kill this actor
       // and start up a new one using the same configuration. Pause before starting the new one
       // in case this one is actually still processing.
-      val pauseLength = FiniteDuration(timeoutPerWorkspace.toSeconds, "seconds")*2
+      val pauseLength = FiniteDuration(timeoutPerWorkspace.toSeconds, TimeUnit.SECONDS)*2
       logger.warn(s"EntityStatisticsCacheMonitor attempt timed out. Pausing for ${pauseLength}.")
       context.system.scheduler.scheduleOnce(pauseLength, self, DieAndRestart)
   }
