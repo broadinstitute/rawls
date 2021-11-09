@@ -1,18 +1,21 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.ActorSystem
-import akka.testkit.TestKit
+import akka.actor.{ActorRef, ActorSystem, ReceiveTimeout}
+import akka.pattern.ask
+import akka.testkit.{ImplicitSender, TestKit, TestProbe}
+import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.model.Entity
-import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{ScheduleDelayedSweep, Sweep}
+import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{DieAndRestart, ScheduleDelayedSweep, Start, Sweep}
 import org.broadinstitute.dsde.rawls.util
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Seconds, Span}
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.sql.Timestamp
@@ -22,7 +25,17 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.language.postfixOps
 
-class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with ScalaFutures {
+class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
+    extends TestKit(_system)
+    with ImplicitSender
+    with MockitoSugar
+    with AnyFlatSpecLike
+    with Matchers
+    with TestDriverComponent
+    with BeforeAndAfterAll
+    with Eventually
+    with ScalaFutures {
+
   import driver.api._
 
   val defaultExecutionContext: ExecutionContext = executionContext
@@ -173,6 +186,81 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem) extends TestKit(_sy
     val entityCacheLastUpdated = runAndWait(entityCacheQuery.filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).result).head.entityCacheLastUpdated
 
     lastModified shouldBe entityCacheLastUpdated
+  }
+
+  it should "die and restart properly upon explicit DieAndRestart request" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
+    // timings for the monitor(s)
+    val timeoutPerWorkspace: FiniteDuration = FiniteDuration(3, TimeUnit.SECONDS)
+    val standardPollInterval: FiniteDuration = FiniteDuration(1, TimeUnit.SECONDS)
+    val workspaceCooldown: FiniteDuration = Duration(5, TimeUnit.MINUTES)
+
+    // timing for TestKit, waiting for actor responses
+    implicit val testKitTimeout: Timeout = Timeout(scaled(Span(90, Seconds)))
+
+    // start a monitor actor, and return its ActorRef.
+    val monitor1 = system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown))
+
+    // set up a TestKit probe for DeathWatch on the monitor
+    val probe1 = TestProbe()
+    probe1.watch(monitor1)
+
+    // send DieAndRestart to the monitor. It should return an ActorRef to a newly-created monitor, then terminate.
+    val monitor2Any = (monitor1 ? DieAndRestart).futureValue
+    monitor2Any shouldBe a [ActorRef]
+
+    // assert that the monitor shut itself down
+    probe1.expectTerminated(monitor1, timeoutPerWorkspace * 3) // EntityStatisticsCacheMonitor waits timeoutPerWorkspace * 2 before terminating
+
+    // we want to know if the newly-created monitor is responsive
+    val monitor2 = monitor2Any.asInstanceOf[ActorRef]
+    monitor2 ! Start
+    expectMsg(Sweep)
+  }
+
+  it should "resume cache processing after restarting upon ReceiveTimeout" in withLocalEntityProviderTestDatabase { slickDataSource: SlickDataSource =>
+    // workspace for this test
+    val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+
+    // timings for the monitor(s)
+    val timeoutPerWorkspace: FiniteDuration = FiniteDuration(3, TimeUnit.SECONDS)
+    val standardPollInterval: FiniteDuration = FiniteDuration(1, TimeUnit.SECONDS)
+    val workspaceCooldown: FiniteDuration = Duration(1, TimeUnit.SECONDS)
+
+    // timing for TestKit, waiting for actor responses
+    implicit val testKitTimeout: Timeout = Timeout(scaled(Span(90, Seconds)))
+
+    // start a monitor actor, and return its ActorRef.
+    val monitor1 = system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown))
+
+    // this first monitor should, eventually, update the workspace's cache
+    eventually(timeout = timeout(timeoutPerWorkspace*3)) {
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID))
+      isCurrent shouldBe true
+    }
+
+    // set up a TestKit probe for DeathWatch on the monitor
+    val probe1 = TestProbe()
+    probe1.watch(monitor1)
+
+    // send ReceiveTimeout to the monitor.
+    monitor1 ! ReceiveTimeout
+
+    // assert that the monitor shut itself down
+    probe1.expectTerminated(monitor1, timeoutPerWorkspace * 3) // EntityStatisticsCacheMonitor waits timeoutPerWorkspace * 2 before terminating
+
+    // at this point the first monitor is killed, but the second monitor should have been created.
+    // remove the cache record for our test workspace, and wait for the the monitor to sweep and update its cache.
+    val killCacheFuture = for {
+      _ <- entityCacheQuery.filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
+      isCurrent <- entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID)
+    } yield isCurrent
+
+    runAndWait(killCacheFuture) shouldBe false
+
+    eventually(timeout = timeout(timeoutPerWorkspace*3)) {
+      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID))
+      isCurrent shouldBe true
+    }
   }
 
   List(0, 1, 10, 180) foreach { mins =>
