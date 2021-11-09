@@ -565,7 +565,15 @@ trait EntityComponent {
       }
     }
 
-    def getAttrNamesAndEntityTypes(workspaceId: UUID, shardState: WorkspaceShardState): ReadAction[Map[String, Seq[AttributeName]]] = {
+    /**
+      * Find the distinct attribute names associated with each entity type in the workspace.
+      * @param workspaceId the workspace to query
+      * @param shardState the workspace's sharding status
+      * @param queryTimeout the current query timeout limit in seconds; zero means there is
+      *                     no limit
+      * @return result set containing entity types -> seq of attribute names
+      */
+    def getAttrNamesAndEntityTypes(workspaceId: UUID, shardState: WorkspaceShardState, queryTimeout: Int = 0): ReadAction[Map[String, Seq[AttributeName]]] = {
       val typesAndAttrNames = for {
         entityRec <- findActiveEntityByWorkspace(workspaceId)
         attrib <- findActiveAttributesByEntityId(workspaceId, shardState, entityRec.id)
@@ -573,7 +581,7 @@ trait EntityComponent {
         (entityRec.entityType, (attrib.namespace, attrib.name))
       }
 
-      typesAndAttrNames.distinct.result map { result =>
+      typesAndAttrNames.distinct.result.withStatementParameters(statementInit = _.setQueryTimeout(queryTimeout)) map { result =>
         CollectionUtils.groupByTuples (result.map {
           case (entityType:String, (ns:String, n:String)) => (entityType, AttributeName(ns, n))
         })
