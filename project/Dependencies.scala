@@ -91,7 +91,7 @@ object Dependencies {
 
   val workbenchModelV  = s"0.14-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.22-${workbenchLibsHash}"
+  val workbenchGoogle2V = "0.23-7ddf186"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogle: ModuleID =       "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
