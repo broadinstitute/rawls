@@ -26,7 +26,7 @@ trait BillingApiService extends UserInfoDirectives {
     pathPrefix("billing" / Segment) { projectId =>
       path("members") {
         get {
-          complete { userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId)).map(StatusCodes.OK -> _) }
+          complete { userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId)) }
         }
       } ~
         // these routes are for adding/removing users from projects

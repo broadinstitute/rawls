@@ -33,7 +33,7 @@ trait SnapshotApiService extends UserInfoDirectives {
         // that method provides a 400 Bad Request response and nice error message
         parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) { (offset, limit, referencedSnapshotId) =>
           complete {
-            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit, referencedSnapshotId).map(StatusCodes.OK -> _)
+            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit, referencedSnapshotId)
           }
         }
       }
@@ -41,7 +41,7 @@ trait SnapshotApiService extends UserInfoDirectives {
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
       get {
         complete {
-          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
+          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
         }
       } ~
       patch {
@@ -59,7 +59,7 @@ trait SnapshotApiService extends UserInfoDirectives {
     } ~
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / "name" / Segment) { (workspaceNamespace, workspaceName, referenceName) =>
       complete {
-        snapshotServiceConstructor(userInfo).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName), referenceName).map(StatusCodes.OK -> _)
+        snapshotServiceConstructor(userInfo).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName), referenceName)
       }
     } ~
     // ---- SNAPSHOT V1 ----
@@ -78,7 +78,6 @@ trait SnapshotApiService extends UserInfoDirectives {
           complete {
             snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit)
               .map(snapshotListResponseToDataReferenceList)
-              .map(StatusCodes.OK -> _)
           }
         }
       }
@@ -86,7 +85,7 @@ trait SnapshotApiService extends UserInfoDirectives {
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
       get {
         complete {
-          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
+          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
         }
       } ~
       patch {
@@ -118,7 +117,6 @@ trait SnapshotApiService extends UserInfoDirectives {
           complete {
             snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit)
               .map(snapshotListResponseToDataReferenceList)
-              .map(StatusCodes.OK -> _)
           }
         }
       }
@@ -128,7 +126,6 @@ trait SnapshotApiService extends UserInfoDirectives {
         complete {
           snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
             .map(dataRepoSnapshotResourceToDataReferenceDescription)
-            .map(StatusCodes.OK -> _)
         }
       } ~
       patch {

@@ -39,7 +39,7 @@ trait UserApiService extends UserInfoDirectives {
       path("user" / "refreshTokenDate") {
         get {
           complete {
-            userServiceConstructor(userInfo).getRefreshTokenDate().map(StatusCodes.OK -> _)
+            userServiceConstructor(userInfo).getRefreshTokenDate()
           }
         }
       } ~
@@ -47,7 +47,7 @@ trait UserApiService extends UserInfoDirectives {
         pathEnd {
           get {
             complete {
-              userServiceConstructor(userInfo).listBillingProjects().map(StatusCodes.OK -> _)
+              userServiceConstructor(userInfo).listBillingProjects()
             }
           }
         } ~
@@ -92,7 +92,7 @@ trait UserApiService extends UserInfoDirectives {
       } ~
       path("user" / "billingAccounts") {
         get {
-          complete { userServiceConstructor(userInfo).listBillingAccounts().map(StatusCodes.OK -> _) }
+          complete { userServiceConstructor(userInfo).listBillingAccounts() }
         }
       }
   }

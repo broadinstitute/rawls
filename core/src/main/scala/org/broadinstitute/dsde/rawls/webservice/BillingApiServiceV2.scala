@@ -86,7 +86,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
           pathEnd {
             get {
               complete {
-                userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId)).map(StatusCodes.OK -> _)
+                userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId))
               }
             }
           } ~
@@ -107,7 +107,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
       } ~
       pathEnd {
         get {
-          complete { userServiceConstructor(userInfo).listBillingProjectsV2().map(StatusCodes.OK -> _) }
+          complete { userServiceConstructor(userInfo).listBillingProjectsV2() }
         } ~
         post {
           entity(as[CreateRawlsV2BillingProjectFullRequest]) { createProjectRequest =>

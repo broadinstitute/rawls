@@ -52,7 +52,7 @@ trait EntityApiService extends UserInfoDirectives {
                     filterTerms,
                     WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"))
                   complete {
-                    entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject, span).map(StatusCodes.OK -> _)
+                    entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject, span)
                   }
                 } else {
                   complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
@@ -68,7 +68,7 @@ trait EntityApiService extends UserInfoDirectives {
             parameters('useCache.?) { (useCache) =>
               val useCacheBool = Try(useCache.getOrElse("true").toBoolean).getOrElse(true)
               complete {
-                entityServiceConstructor(userInfo).entityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, None, useCacheBool).map(StatusCodes.OK -> _)
+                entityServiceConstructor(userInfo).entityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, None, useCacheBool)
               }
             }
           }
@@ -86,13 +86,13 @@ trait EntityApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           get {
-            complete { entityServiceConstructor(userInfo).getEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, dataReference, billingProject).map(StatusCodes.OK -> _) }
+            complete { entityServiceConstructor(userInfo).getEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, dataReference, billingProject) }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           patch {
             entity(as[Array[AttributeUpdateOperation]]) { operations =>
-              complete { entityServiceConstructor(userInfo).updateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations).map(StatusCodes.OK -> _) }
+              complete { entityServiceConstructor(userInfo).updateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations) }
             }
           }
         } ~
@@ -138,7 +138,7 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
           post {
             entity(as[String]) { expression =>
-              complete { entityServiceConstructor(userInfo).evaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression).map(StatusCodes.OK -> _) }
+              complete { entityServiceConstructor(userInfo).evaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression) }
             }
           }
         } ~
@@ -146,7 +146,7 @@ trait EntityApiService extends UserInfoDirectives {
           get {
             traceRequest { span =>
               complete {
-                entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, span).map(StatusCodes.OK -> _)
+                entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, span)
               }
             }
           } ~

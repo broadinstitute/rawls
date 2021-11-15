@@ -55,7 +55,7 @@ trait AdminApiService extends UserInfoDirectives {
     } ~
     path("admin" / "submissions") {
       get {
-        complete { workspaceServiceConstructor(userInfo).adminListAllActiveSubmissions().map(StatusCodes.OK -> _) }
+        complete { workspaceServiceConstructor(userInfo).adminListAllActiveSubmissions() }
       }
     } ~
     path("admin" / "submissions" / Segment / Segment / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
@@ -70,7 +70,7 @@ trait AdminApiService extends UserInfoDirectives {
     } ~
     path("admin" / "submissions" / "queueStatusByUser") {
       get {
-        complete { workspaceServiceConstructor(userInfo).adminWorkflowQueueStatusByUser.map(StatusCodes.OK -> _) }
+        complete { workspaceServiceConstructor(userInfo).adminWorkflowQueueStatusByUser }
       }
     } ~
     path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
@@ -95,7 +95,7 @@ trait AdminApiService extends UserInfoDirectives {
                 case _ => throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
               }
           }
-         complete { resultFuture.map(StatusCodes.OK -> _) }
+         complete { resultFuture }
         }
       }
     } ~

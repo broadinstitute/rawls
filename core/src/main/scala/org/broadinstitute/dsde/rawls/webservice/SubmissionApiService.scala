@@ -28,12 +28,12 @@ trait SubmissionApiService extends UserInfoDirectives {
   val submissionRoutes: server.Route = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
       get {
-        complete { workspaceServiceConstructor(userInfo).listSubmissions(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _) }
+        complete { workspaceServiceConstructor(userInfo).listSubmissions(WorkspaceName(workspaceNamespace, workspaceName)) }
       }
     } ~
       path("workspaces" / Segment / Segment / "submissionsCount") { (workspaceNamespace, workspaceName) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).countSubmissions(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _) }
+          complete { workspaceServiceConstructor(userInfo).countSubmissions(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
@@ -46,13 +46,13 @@ trait SubmissionApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
         post {
           entity(as[SubmissionRequest]) { submission =>
-            complete { workspaceServiceConstructor(userInfo).validateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission).map(StatusCodes.OK -> _) }
+            complete { workspaceServiceConstructor(userInfo).validateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission) }
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId).map(StatusCodes.OK -> _) }
+          complete { workspaceServiceConstructor(userInfo).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
@@ -81,18 +81,18 @@ trait SubmissionApiService extends UserInfoDirectives {
         get {
           parameters("includeKey".as[String].*, "excludeKey".as[String].*, "expandSubWorkflows".as[Boolean] ? false) { (includes, excludes, expandSubWorkflows) =>
             complete { workspaceServiceConstructor(userInfo).workflowMetadata(WorkspaceName(workspaceNamespace, workspaceName),
-              submissionId, workflowId, MetadataParams(includes.toSet, excludes.toSet, expandSubWorkflows)).map(StatusCodes.OK -> _) }
+              submissionId, workflowId, MetadataParams(includes.toSet, excludes.toSet, expandSubWorkflows)) }
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment / "outputs") { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).workflowOutputs(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId).map(StatusCodes.OK -> _) }
+          complete { workspaceServiceConstructor(userInfo).workflowOutputs(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId) }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment / "cost") { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).workflowCost(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId).map(StatusCodes.OK -> _) }
+          complete { workspaceServiceConstructor(userInfo).workflowCost(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId) }
         }
       } ~
       path("workflows" / Segment / "genomics" / Segments) { (workflowId, operationId) =>
@@ -109,7 +109,7 @@ trait SubmissionApiService extends UserInfoDirectives {
       } ~
       path("submissions" / "queueStatus") {
         get {
-          complete { workspaceServiceConstructor(userInfo).workflowQueueStatus.map(StatusCodes.OK -> _) }
+          complete { workspaceServiceConstructor(userInfo).workflowQueueStatus }
         }
       }
   }

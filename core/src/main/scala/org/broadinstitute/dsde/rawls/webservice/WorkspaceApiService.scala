@@ -42,7 +42,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           parameterSeq { allParams =>
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span).map(StatusCodes.OK -> _)
+                workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
               }
             }
           }
@@ -52,7 +52,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
             complete {
-              workspaceServiceConstructor(userInfo).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations).map(StatusCodes.OK -> _)
+              workspaceServiceConstructor(userInfo).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations)
             }
           }
         } ~
@@ -61,7 +61,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
             traceRequest { span =>
               complete {
                 workspaceServiceConstructor(userInfo).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
-                  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span).map(StatusCodes.OK -> _)
+                  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
               }
             }
           }
@@ -77,14 +77,14 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
         get {
           complete {
-            workspaceServiceConstructor(userInfo).getAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+            workspaceServiceConstructor(userInfo).getAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName))
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "bucketOptions") { (workspaceNamespace, workspaceName) =>
         get {
           complete {
-            workspaceServiceConstructor(userInfo).getBucketOptions(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+            workspaceServiceConstructor(userInfo).getBucketOptions(WorkspaceName(workspaceNamespace, workspaceName))
           }
         }
       } ~
@@ -109,7 +109,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
             parameter('inviteUsersNotFound.?) { inviteUsersNotFound =>
               entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
                 complete {
-                  workspaceServiceConstructor(userInfo).updateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean).map(StatusCodes.OK -> _)
+                  workspaceServiceConstructor(userInfo).updateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean)
                 }
               }
             }
@@ -119,7 +119,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
             complete {
-              workspaceServiceConstructor(userInfo).updateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations).map(StatusCodes.OK -> _)
+              workspaceServiceConstructor(userInfo).updateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations)
             }
           }
         }
@@ -127,13 +127,13 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "catalog") { (workspaceNamespace, workspaceName) =>
         get {
           complete {
-            workspaceServiceConstructor(userInfo).getCatalog(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+            workspaceServiceConstructor(userInfo).getCatalog(WorkspaceName(workspaceNamespace, workspaceName))
           }
         } ~
         patch {
           entity(as[Array[WorkspaceCatalog]]) { catalogUpdate =>
             complete {
-              workspaceServiceConstructor(userInfo).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate).map(StatusCodes.OK -> _)
+              workspaceServiceConstructor(userInfo).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate)
             }
           }
         }
@@ -172,7 +172,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "bucketUsage") { (workspaceNamespace, workspaceName) =>
         get {
           complete {
-            workspaceServiceConstructor(userInfo).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)).map(StatusCodes.OK -> _)
+            workspaceServiceConstructor(userInfo).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName))
           }
         }
       } ~
@@ -180,7 +180,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
         parameter('q.?) { queryString =>
           get {
             complete {
-              workspaceServiceConstructor(userInfo).getTags(queryString).map(StatusCodes.OK -> _)
+              workspaceServiceConstructor(userInfo).getTags(queryString)
             }
           }
         }
@@ -188,7 +188,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
         post {
           complete {
-            workspaceServiceConstructor(userInfo).sendChangeNotifications(WorkspaceName(namespace, name)).map(StatusCodes.OK -> _)
+            workspaceServiceConstructor(userInfo).sendChangeNotifications(WorkspaceName(namespace, name))
           }
         }
       } ~
