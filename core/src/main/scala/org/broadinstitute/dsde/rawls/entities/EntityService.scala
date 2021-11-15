@@ -183,7 +183,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       // TODO: play with fetchSize, possibly move to config
       val allAttrsStream = dataSource.dataAccess.entityQuery.streamActiveEntityAttributesOfType(workspaceContext, entityType)
         .transactionally.withTransactionIsolation(TransactionIsolation.RepeatableRead)
-        .withStatementParameters(fetchSize = 1000)
+        .withStatementParameters(fetchSize = 5000)
 
       // database source stream
       val dbSource = Source.fromPublisher(dataSource.database.stream(allAttrsStream)) // this REQUIRES an order by ENTITY.id
