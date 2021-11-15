@@ -23,7 +23,7 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import slick.jdbc.TransactionIsolation
+import slick.jdbc.{ResultSetConcurrency, ResultSetType, TransactionIsolation}
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -180,10 +180,13 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) map { workspaceContext =>
       // TODO: reassess transaction isolation level
-      // TODO: play with fetchSize, possibly move to config
+      // TODO: play with fetchSize
       val allAttrsStream = dataSource.dataAccess.entityQuery.streamActiveEntityAttributesOfType(workspaceContext, entityType)
-        .transactionally.withTransactionIsolation(TransactionIsolation.RepeatableRead)
-        .withStatementParameters(fetchSize = 5000)
+        .transactionally.withTransactionIsolation(TransactionIsolation.ReadCommitted)
+        .withStatementParameters(
+          rsType = ResultSetType.ForwardOnly,
+          rsConcurrency = ResultSetConcurrency.ReadOnly,
+          fetchSize = dataSource.dataAccess.fetchSize)
 
       // database source stream
       val dbSource = Source.fromPublisher(dataSource.database.stream(allAttrsStream)) // this REQUIRES an order by ENTITY.id
