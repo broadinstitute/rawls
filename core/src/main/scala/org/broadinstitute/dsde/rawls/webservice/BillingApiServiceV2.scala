@@ -71,13 +71,19 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             put {
               entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
                 complete{
-                  userServiceConstructor(userInfo).updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest).map(_ => StatusCodes.OK)
+                  userServiceConstructor(userInfo).updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest).map {
+                    case Some(billingProject) => StatusCodes.OK -> Option(billingProject)
+                    case None => StatusCodes.NoContent -> None
+                  }
                 }
               }
             } ~
               delete {
                 complete {
-                  userServiceConstructor(userInfo).deleteBillingAccount(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.OK)
+                  userServiceConstructor(userInfo).deleteBillingAccount(RawlsBillingProjectName(projectId)).map {
+                    case Some(billingProject) => StatusCodes.OK -> Option(billingProject)
+                    case None => StatusCodes.NoContent -> None
+                  }
                 }
               }
           }
