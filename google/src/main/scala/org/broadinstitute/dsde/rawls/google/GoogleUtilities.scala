@@ -29,14 +29,14 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     }
   }
 
-  // Sadly when500orGoogleError retries on 404s which is not always the behaviour we want. 404s
-  // mean different things in different contexts. Sometimes they mean the resource does not
+  // Sadly when500orGoogleError retries on 403s and 404s which is not always the behaviour we want.
+  // These mean different things in different contexts. Sometimes they mean the resource does not
   // exist/you can't access it; sometimes it means it does not exist *yet* and sometimes something
   // else. As such, it should have been handled explicitly depending on the context and not rolled
   // into a default retrying handler. This ship has sailed - it's used everywhere and changing it
   // might cause a bunch of failures.
-  def when500orNon404GoogleError(throwable: Throwable): Boolean = throwable match {
-    case e: HttpResponseException if e.getStatusCode == 404 => false
+  def when500orNon403or404GoogleError(throwable: Throwable): Boolean = throwable match {
+    case e: HttpResponseException if 403 to 404 contains e.getStatusCode => false
     case t => when500orGoogleError(t)
   }
 

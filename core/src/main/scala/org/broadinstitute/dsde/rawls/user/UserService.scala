@@ -371,7 +371,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     def googleProjectExists(projectId: GoogleProjectId) =
       gcsDAO.getGoogleProject(projectId) transform {
         case Success(_) => Success(true)
-        case Failure(e: HttpResponseException) if e.getStatusCode == 404 => Success(false)
+        case Failure(e: HttpResponseException) if 403 to 404 contains e.getStatusCode => Success(false)
         case Failure(t) => Failure(t)
       }
 

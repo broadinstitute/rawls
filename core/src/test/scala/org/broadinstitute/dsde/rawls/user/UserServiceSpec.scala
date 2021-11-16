@@ -223,35 +223,37 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   }
 
   it should "Successfully to delete a billing project when the google project does not exist on GCP" in {
-    withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val project = defaultBillingProject
-      val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
-      val petSAJson = "petJson"
-      runAndWait(rawlsBillingProjectQuery.create(project))
+    val project = defaultBillingProject
+    val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
 
-      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
-      when(mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(userIdInfo)))
-      when(mockSamDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))))
-      when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful())
-      when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)).thenReturn(Future.successful())
+    for (statusCode <- 403 to 404) {
+      withEmptyTestDatabase { dataSource: SlickDataSource =>
 
-      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.failed(
-        new HttpResponseException.Builder(404, "project not found", new HttpHeaders())
-          .build()
-      ))
+        runAndWait(rawlsBillingProjectQuery.create(project))
 
-      val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
-      val actual = userService.deleteBillingProject(defaultBillingProjectName).futureValue
+        val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+        when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
+        when(mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(userIdInfo)))
+        when(mockSamDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))))
+        when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful())
+        when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)).thenReturn(Future.successful())
 
-      verify(mockSamDAO, never()).deleteUserPetServiceAccount(project.googleProjectId, userInfo)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)
-      verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
+        val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+        when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.failed(
+          new HttpResponseException.Builder(statusCode, "project not found", new HttpHeaders())
+            .build()
+        ))
 
-      runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
-      actual shouldEqual ()
+        val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
+        userService.deleteBillingProject(defaultBillingProjectName).futureValue shouldEqual ()
+
+        verify(mockSamDAO, never()).deleteUserPetServiceAccount(project.googleProjectId, userInfo)
+        verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
+        verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)
+        verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
+
+        runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
+      }
     }
   }
 

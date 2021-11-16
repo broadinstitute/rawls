@@ -88,11 +88,12 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
   }
 
   "when500orNon404GoogleError" should "return true for 500 or Google errors except 404s" in {
-    when500orNon404GoogleError(buildGoogleJsonResponseException(400)) shouldBe true
-    when500orNon404GoogleError(buildGoogleJsonResponseException(404)) shouldBe false
-    when500orNon404GoogleError(buildGoogleJsonResponseException(500)) shouldBe true
-    when500orNon404GoogleError(buildHttpResponseException(500)) shouldBe true
-    when500orNon404GoogleError(new IOException("boom")) shouldBe true
+    when500orNon403or404GoogleError(buildGoogleJsonResponseException(400)) shouldBe true
+    when500orNon403or404GoogleError(buildGoogleJsonResponseException(403)) shouldBe false
+    when500orNon403or404GoogleError(buildGoogleJsonResponseException(404)) shouldBe false
+    when500orNon403or404GoogleError(buildGoogleJsonResponseException(500)) shouldBe true
+    when500orNon403or404GoogleError(buildHttpResponseException(500)) shouldBe true
+    when500orNon403or404GoogleError(new IOException("boom")) shouldBe true
   }
 
   "retryWhen500orGoogleError" should "retry once per backoff interval and then fail" in {
