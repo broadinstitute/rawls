@@ -248,6 +248,7 @@ trait EntityComponent {
               order by e.id""".as[EntityAndAttributesResult]
       }
 
+      // currently only used by tests
       def activeActionForType(workspaceContext: Workspace, entityType: String): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#${baseEntityAndAttributeSql(workspaceContext)} where e.deleted = false and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
@@ -560,6 +561,7 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.activeStreamForType(workspaceContext, entityType)
     }
 
+    // currently only used by tests
     def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] = {
       EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map(query => unmarshalEntities(query, workspaceContext.shardState))
     }

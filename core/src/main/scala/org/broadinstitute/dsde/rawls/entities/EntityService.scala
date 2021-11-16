@@ -177,8 +177,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     import dataSource.dataAccess.entityQuery.EntityAndAttributesResult
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) map { workspaceContext =>
-      // TODO: reassess transaction isolation level
-      // TODO: play with fetchSize
+      // note ReadCommitted transaction isolation level
       val allAttrsStream = dataSource.dataAccess.entityQuery.streamActiveEntityAttributesOfType(workspaceContext, entityType)
         .transactionally.withTransactionIsolation(TransactionIsolation.ReadCommitted)
         .withStatementParameters(
