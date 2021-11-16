@@ -4,10 +4,15 @@ package org.broadinstitute.dsde.rawls.webservice
  * Created by tsharpe on 9/25/15.
  */
 
+import akka.http.scaladsl.marshalling.ToResponseMarshallable
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -18,7 +23,6 @@ import scala.concurrent.ExecutionContext
 trait AdminApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
-  import PerRequest.requestCompleteMarshaller
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
@@ -30,7 +34,7 @@ trait AdminApiService extends UserInfoDirectives {
       delete {
         entity(as[Map[String, String]]) { ownerInfo =>
           complete {
-            userServiceConstructor(userInfo).adminDeleteBillingProject(RawlsBillingProjectName(projectId), ownerInfo)
+            userServiceConstructor(userInfo).adminDeleteBillingProject(RawlsBillingProjectName(projectId), ownerInfo).map(_ => StatusCodes.NoContent)
           }
         }
       }
@@ -38,14 +42,14 @@ trait AdminApiService extends UserInfoDirectives {
     path("admin" / "project" / "registration") {
       post {
         entity(as[RawlsBillingProjectTransfer]) { xfer =>
-          complete { userServiceConstructor(userInfo).adminRegisterBillingProject(xfer) }
+          complete { userServiceConstructor(userInfo).adminRegisterBillingProject(xfer).map(_ => StatusCodes.Created) }
         }
       }
     } ~
     path("admin" / "project" / "registration" / Segment) { (projectName) =>
       delete {
         entity(as[Map[String, String]]) { ownerInfo =>
-          complete { userServiceConstructor(userInfo).adminUnregisterBillingProjectWithOwnerInfo(RawlsBillingProjectName(projectName), ownerInfo) }
+          complete { userServiceConstructor(userInfo).adminUnregisterBillingProjectWithOwnerInfo(RawlsBillingProjectName(projectName), ownerInfo).map(_ => StatusCodes.NoContent) }
         }
       }
     } ~
@@ -56,7 +60,12 @@ trait AdminApiService extends UserInfoDirectives {
     } ~
     path("admin" / "submissions" / Segment / Segment / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
       delete {
-        complete { workspaceServiceConstructor(userInfo).adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
+        complete {
+          workspaceServiceConstructor(userInfo).adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId).map { count =>
+            if(count == 1) StatusCodes.NoContent -> None
+            else StatusCodes.NotFound -> Option(ErrorReport(StatusCodes.NotFound, s"Unable to abort submission. Submission ${submissionId} could not be found."))
+          }
+        }
       }
     } ~
     path("admin" / "submissions" / "queueStatusByUser") {
@@ -66,10 +75,10 @@ trait AdminApiService extends UserInfoDirectives {
     } ~
     path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
       put {
-        complete { userServiceConstructor(userInfo).adminAddLibraryCurator(RawlsUserEmail(userEmail)) }
+        complete { userServiceConstructor(userInfo).adminAddLibraryCurator(RawlsUserEmail(userEmail)).map(_ => StatusCodes.OK) }
       } ~
       delete {
-        complete { userServiceConstructor(userInfo).adminRemoveLibraryCurator(RawlsUserEmail(userEmail)) }
+        complete { userServiceConstructor(userInfo).adminRemoveLibraryCurator(RawlsUserEmail(userEmail)).map(_ => StatusCodes.OK) }
       }
     } ~
     path("admin" / "workspaces") {
@@ -92,7 +101,7 @@ trait AdminApiService extends UserInfoDirectives {
     } ~
     path("admin" / "refreshToken" / Segment ) { userSubjectId =>
       delete {
-        complete { userServiceConstructor(userInfo).adminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))) }
+        complete { userServiceConstructor(userInfo).adminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))).map(_ => StatusCodes.OK) }
       }
     }
   }

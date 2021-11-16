@@ -1566,6 +1566,56 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 204 for a user with read access on an unlocked workspace" in withTestDataApiServicesAndUser("reader-access") { services =>
+    Get(s"${testData.workspace.path}/checkIamActionWithLock/read") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+  }
+
+  it should "return 403 for a reader testing the write action on an unlocked workspace" in withTestDataApiServicesAndUser("reader-access") { services =>
+    Get(s"${testData.workspace.path}/checkIamActionWithLock/write") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  it should "return 204 for a reader testing the read action on a locked workspace" in withTestDataApiServicesAndUser("reader-access") { services =>
+    Get(s"${testData.workspaceLocked.path}/checkIamActionWithLock/read") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+  }
+
+  it should "return 204 for a writer testing the write action on an unlocked workspace" in withTestDataApiServicesAndUser("writer-access") { services =>
+    Get(s"${testData.workspace.path}/checkIamActionWithLock/write") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+  }
+
+  it should "return 403 for a writer testing the write action on a locked workspace" in withTestDataApiServicesAndUser("writer-access") { services =>
+    Get(s"${testData.workspaceLocked.path}/checkIamActionWithLock/write") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
   // End ACL-restriction Tests
 
   // Workspace Locking
