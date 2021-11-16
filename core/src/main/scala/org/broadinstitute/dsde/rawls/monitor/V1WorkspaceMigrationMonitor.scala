@@ -1,13 +1,12 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.TypedActor.dispatcher
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, WriteAction}
 import org.broadinstitute.dsde.rawls.model.Workspace
-import org.broadinstitute.dsde.rawls.monitor.V1WorkspaceMigrationActor.Schedule
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 object V1WorkspaceMigrationMonitor {
 
@@ -16,26 +15,24 @@ object V1WorkspaceMigrationMonitor {
   private val v1WorkspaceMigrationHistory: String = "V1_WORKSPACE_MIGRATION_HISTORY"
 
   final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
-    sqlu"""SELECT COUNT(*) FROM ${v1WorkspaceMigrationHistory} h
-           WHERE h.WORKSPACE_ID = '${workspace.workspaceId}'
-             AND h.STARTED IS NOT NULL
-             AND h.FINISHED IS NULL""".map(_ > 0)
+    sql"""SELECT COUNT(*) FROM #${v1WorkspaceMigrationHistory} h
+          WHERE h.WORKSPACE_ID = ${workspace.workspaceId}
+            AND h.STARTED IS NOT NULL
+            AND h.FINISHED IS NULL""".as[Int]
+      .headOption
+      .map(_.getOrElse(0) > 0)
 
   final def schedule(workspace: Workspace): WriteAction[Unit] =
-    sqlu"""INSERT INTO ${v1WorkspaceMigrationHistory} (workspaceId)
+    sqlu"""INSERT INTO #${v1WorkspaceMigrationHistory} (WORKSPACE_ID)
            VALUES (${workspace.workspaceId})""".map(_ => ())
 }
 
 object V1WorkspaceMigrationActor {
   final case class Schedule(workspace: Workspace)
-}
 
-final class V1WorkspaceMigrationActor(dataSource: SlickDataSource) extends LazyLogging {
-
-  def apply(): Behavior[Schedule] = Behaviors.receive { (_, message) =>
+  def apply(dataSource: SlickDataSource): Behavior[Schedule] = Behaviors.receive { (_, message) =>
     dataSource.inTransaction(_ => V1WorkspaceMigrationMonitor.schedule(message.workspace))
     Behaviors.same
   }
 
 }
-

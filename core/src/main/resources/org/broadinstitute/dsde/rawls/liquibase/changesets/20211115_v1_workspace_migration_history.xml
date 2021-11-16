@@ -10,12 +10,13 @@
                 <constraints primaryKey="true"/>
             </column>
             <column name="WORKSPACE_ID"
-                    type="BINARY(16)"
+                    type="UUID"
                     remarks="ID of the WORKSPACE being migrated.">
                 <constraints nullable="false"/>
             </column>
             <column name="CREATED"
                     type="DATETIME"
+                    defaultValueComputed="CURRENT_TIMESTAMP"
                     remarks="When the system scheduled migrating the WORKSPACE.">
                 <constraints nullable="false"/>
             </column>
@@ -56,7 +57,7 @@
             FOR EACH ROW
             BEGIN
                 IF (SELECT COUNT(*) FROM V1_WORKSPACE_MIGRATION_HISTORY h
-                    WHERE h.WORKSPACE_ID = NEW.WORKSPACE_ID AND h.FINISHED IS NOT NULL)
+                    WHERE h.WORKSPACE_ID = NEW.WORKSPACE_ID AND h.FINISHED IS NULL)
                 THEN
                     SET @error_message = CONCAT_WS(' ', 'Workspace', NEW.WORKSPACE_ID, 'is being migrated.');
                     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @error_message;
