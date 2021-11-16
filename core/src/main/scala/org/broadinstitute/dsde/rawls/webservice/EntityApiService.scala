@@ -147,9 +147,9 @@ trait EntityApiService extends UserInfoDirectives {
           get {
             // if any other APIs adopt streaming, move this implicit val higher up in the EntityApiService trait
             implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json()
-            traceRequest { span =>
+            traceRequest { _ =>
               complete {
-                entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, span)
+                entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType)
               }
             }
           } ~

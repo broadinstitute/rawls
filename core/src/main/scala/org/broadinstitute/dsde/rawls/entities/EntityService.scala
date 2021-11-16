@@ -171,8 +171,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       metadataFuture.recover(bigQueryRecover)
     }
 
-  // TODO: add tracing
-  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null) = {
+  def listEntities(workspaceName: WorkspaceName, entityType: String) = {
 
     import dataSource.dataAccess.entityQuery.EntityAndAttributesResult
 
