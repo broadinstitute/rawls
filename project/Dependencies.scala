@@ -20,6 +20,7 @@ object Dependencies {
 
   val excludeBouncyCastle =     ExclusionRule(organization = "org.bouncycastle", name = s"bcprov-jdk15on")
   val excludeProtobufJavalite = ExclusionRule(organization = "com.google.protobuf", name = "protobuf-javalite")
+  val excludeScalaCache =       ExclusionRule(organization = "com.github.cb372")
 
   val akkaActor: ModuleID =         "com.typesafe.akka"   %%  "akka-actor"           % akkaV
   val akkaStream: ModuleID =        "com.typesafe.akka"   %%  "akka-stream"          % akkaV
@@ -87,17 +88,17 @@ object Dependencies {
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
-  val workbenchLibsHash = "ae11b9f"
+  val workbenchLibsHash = "7ddf186"
 
-  val workbenchModelV  = s"0.14-${workbenchLibsHash}"
+  val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.22-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.23-${workbenchLibsHash}"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogle: ModuleID =       "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
   val workbenchGoogleMocks: ModuleID =  "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests"
-  val workbenchGoogle2: ModuleID =      "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
-  val workbenchGoogle2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests"
+  val workbenchGoogle2: ModuleID =      "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V excludeAll(excludeScalaCache)
+  val workbenchGoogle2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests" excludeAll(excludeScalaCache)
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.122.11" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"

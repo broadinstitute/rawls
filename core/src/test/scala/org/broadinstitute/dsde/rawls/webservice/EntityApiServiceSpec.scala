@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
 import spray.json.DefaultJsonProtocol._
@@ -40,7 +39,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val service = mock[EntityService]
     override val entityServiceConstructor = UserInfo => service
     when(service.entityTypeMetadata(any[WorkspaceName], any[Option[DataReferenceName]], any[Option[GoogleProjectId]], any[Boolean]))
-      .thenReturn(Future.successful(new RequestComplete[Map[String, EntityTypeMetadata]](Map("Test" -> EntityTypeMetadata(5000, "for-test", List("Attribute1", "Attribute2"))))))
+      .thenReturn(Future.successful(Map("Test" -> EntityTypeMetadata(5000, "for-test", List("Attribute1", "Attribute2")))))
 
   }
 

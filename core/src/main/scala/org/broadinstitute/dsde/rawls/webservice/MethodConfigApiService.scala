@@ -4,11 +4,13 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
@@ -17,7 +19,6 @@ import scala.concurrent.ExecutionContext
   */
 
 trait MethodConfigApiService extends UserInfoDirectives {
-  import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
@@ -51,7 +52,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
             entity(as[MethodConfiguration]) { newMethodConfiguration =>
               addLocationHeader(newMethodConfiguration.path(WorkspaceName(workspaceNamespace, workspaceName))) {
                 complete {
-                  workspaceServiceConstructor(userInfo).overwriteMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName, newMethodConfiguration).map(StatusCodes.OK -> _)
+                  workspaceServiceConstructor(userInfo).overwriteMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName, newMethodConfiguration)
                 }
               }
             }
@@ -62,7 +63,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
             }
           } ~
           delete {
-            complete { workspaceServiceConstructor(userInfo).deleteMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName) }
+            complete { workspaceServiceConstructor(userInfo).deleteMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName).map(_ => StatusCodes.NoContent) }
           }
       } ~
       path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment / "validate") { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
@@ -73,7 +74,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) =>
         post {
           entity(as[MethodConfigurationName]) { newName =>
-            complete { workspaceServiceConstructor(userInfo).renameMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigurationName, newName) }
+            complete { workspaceServiceConstructor(userInfo).renameMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigurationName, newName).map(_ => StatusCodes.NoContent) }
           }
         }
       } ~
