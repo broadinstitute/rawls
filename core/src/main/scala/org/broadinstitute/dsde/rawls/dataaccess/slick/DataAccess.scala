@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
 import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates
+import org.broadinstitute.dsde.rawls.monitor.V1WorkspaceMigrationComponent
 import slick.jdbc.JdbcProfile
 
 import javax.naming.NameNotFoundException
@@ -23,7 +24,8 @@ trait DataAccess
   with EntityAttributeStatisticsComponent
   with EntityCacheComponent
   with LocalEntityExpressionQueries
-  with CloneWorkspaceFileTransferComponent {
+  with CloneWorkspaceFileTransferComponent
+  with V1WorkspaceMigrationComponent {
 
 
   this: DriverComponent =>
@@ -77,7 +79,8 @@ trait DataAccess
       TableQuery[PendingBucketDeletionTable].delete andThen
       TableQuery[EntityAttributeTempTable].delete andThen
       TableQuery[WorkspaceAttributeTempTable].delete andThen
-      TableQuery[ExprEvalScratch].delete
+      TableQuery[ExprEvalScratch].delete andThen
+      TableQuery[V1WorkspaceMigrationHistory].delete
   }
 
   def sqlDBStatus() = {
