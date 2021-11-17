@@ -5,8 +5,10 @@
         <dropTable tableName="ENTITY_ATTRIBUTE_SCRATCH" />
     </changeSet>
 
+    <!-- the createTempTables procedure exists in some live envs, but liquibase history has been modified to
+        not create it. Thus, we need the "if exists" clause and cannot use the standard <dropProcedure /> tag -->
     <changeSet id="drop_createTempTables" author="davidan" logicalFilePath="dummy">
-        <dropProcedure procedureName="createTempTables" />
+        <sql>drop procedure if exists createTempTables;</sql>
     </changeSet>
 
 </databaseChangeLog>
