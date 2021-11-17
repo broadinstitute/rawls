@@ -222,7 +222,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     }
   }
 
-  it should "Successfully to delete a billing project when the google project does not exist on GCP" in {
+  it should "successfully delete a billing project from Rawls when getGoogleProject from GCP returns 403 or 404" in {
     val project = defaultBillingProject
     val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
 
