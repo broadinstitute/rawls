@@ -87,7 +87,7 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
     when500orGoogleError(new IOException("boom")) shouldBe true
   }
 
-  "when500orNon404GoogleError" should "return true for 500 or Google errors except 404s" in {
+  "when500Non403orNon404GoogleError" should "return true for 500 or Google errors except 403s or 404s" in {
     when500orNon403or404GoogleError(buildGoogleJsonResponseException(400)) shouldBe true
     when500orNon403or404GoogleError(buildGoogleJsonResponseException(403)) shouldBe false
     when500orNon403or404GoogleError(buildGoogleJsonResponseException(404)) shouldBe false
