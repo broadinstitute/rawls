@@ -69,7 +69,7 @@ trait V1WorkspaceMigrationComponent {
 
   import slick.jdbc.H2Profile.api._
 
-  private val v1WorkspaceMigrationHistory: String = "V1_WORKSPACE_MIGRATION_HISTORY"
+  protected val v1WorkspaceMigrationHistory: String = "V1_WORKSPACE_MIGRATION_HISTORY"
 
   final class V1WorkspaceMigrationHistory(tag: Tag)
     extends Table[V1WorkspaceMigrationAttempt](tag, v1WorkspaceMigrationHistory) {
@@ -104,10 +104,9 @@ object V1WorkspaceMigrationMonitor
       .map(_ > 0)
   }
 
-  final def schedule(workspace: Workspace): WriteAction[Unit] = {
-    Console.println((migrations.map(c => c.workspaceId) += UUID.fromString(workspace.workspaceId)).statements)
-    DBIO.seq(migrations.map(c => c.workspaceId) += UUID.fromString(workspace.workspaceId))
-  }
+  final def schedule(workspace: Workspace): WriteAction[Unit] =
+    sqlu"INSERT INTO #$v1WorkspaceMigrationHistory (WORKSPACE_ID) VALUES (${workspace.workspaceId})"
+      .map(_ => ())
 }
 
 object V1WorkspaceMigrationActor {

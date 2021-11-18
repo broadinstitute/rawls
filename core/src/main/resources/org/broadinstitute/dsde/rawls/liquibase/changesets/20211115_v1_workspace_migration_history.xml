@@ -59,7 +59,7 @@
                 IF (SELECT COUNT(*) FROM V1_WORKSPACE_MIGRATION_HISTORY h
                     WHERE h.WORKSPACE_ID = NEW.WORKSPACE_ID AND h.FINISHED IS NULL)
                 THEN
-                    SET @error_message = CONCAT_WS(' ', 'Workspace', NEW.WORKSPACE_ID, 'is being migrated.');
+                    SET @error_message = CONCAT_WS(' ', 'Workspace', NEW.WORKSPACE_ID, 'is already being migrated.');
                     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @error_message;
                 END IF;
             END ~
