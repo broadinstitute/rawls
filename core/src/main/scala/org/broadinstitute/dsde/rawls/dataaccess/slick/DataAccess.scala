@@ -71,7 +71,8 @@ trait DataAccess
       TableQuery[EntityTypeStatisticsTable].delete andThen        // FK to workspace
       TableQuery[EntityAttributeStatisticsTable].delete andThen   // FK to workspace
       TableQuery[EntityCacheTable].delete andThen                 // FK to workspace
-      TableQuery[CloneWorkspaceFileTransferTable].delete andThen   // FK to workspace
+      TableQuery[CloneWorkspaceFileTransferTable].delete andThen  // FK to workspace
+      TableQuery[V1WorkspaceMigrationHistory].delete andThen      // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
@@ -79,8 +80,7 @@ trait DataAccess
       TableQuery[PendingBucketDeletionTable].delete andThen
       TableQuery[EntityAttributeTempTable].delete andThen
       TableQuery[WorkspaceAttributeTempTable].delete andThen
-      TableQuery[ExprEvalScratch].delete andThen
-      TableQuery[V1WorkspaceMigrationHistory].delete
+      TableQuery[ExprEvalScratch].delete
   }
 
   def sqlDBStatus() = {

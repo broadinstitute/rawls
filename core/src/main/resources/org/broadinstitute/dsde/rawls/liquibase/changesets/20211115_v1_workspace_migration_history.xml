@@ -10,7 +10,7 @@
                 <constraints primaryKey="true"/>
             </column>
             <column name="WORKSPACE_ID"
-                    type="UUID"
+                    type="BINARY(16)"
                     remarks="ID of the WORKSPACE being migrated.">
                 <constraints nullable="false"/>
             </column>
@@ -41,6 +41,17 @@
                 <constraints nullable="true"/>
             </column>
         </createTable>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="ehigham" id="create_V1_WORKSPACE_MIGRATION_HISTORY_FK">
+        <addForeignKeyConstraint baseColumnNames="WORKSPACE_ID"
+                                 baseTableName="V1_WORKSPACE_MIGRATION_HISTORY"
+                                 constraintName="FK_V1_WORKSPACE_MIGRATION_HISTORY_WORKSPACE"
+                                 deferrable="false"
+                                 initiallyDeferred="false"
+                                 onDelete="CASCADE"
+                                 onUpdate="NO ACTION"
+                                 referencedColumnNames="id"
+                                 referencedTableName="WORKSPACE"/>
     </changeSet>
     <changeSet logicalFilePath="dummy" author="ehigham"
                id="create_V1_WORKSPACE_MIGRATION_HISTORY_insertion_trigger">

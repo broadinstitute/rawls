@@ -3,11 +3,11 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
+import org.apache.commons.lang3.SerializationException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, WriteAction}
 import org.broadinstitute.dsde.rawls.model.Workspace
 import org.broadinstitute.dsde.rawls.monitor.MigrationOutcome.{Failure, Success}
-import org.conscrypt.ct.SerializationException
 
 import java.time.LocalDateTime
 import java.util.UUID
@@ -67,15 +67,15 @@ object V1WorkspaceMigrationAttempt {
 
 trait V1WorkspaceMigrationComponent {
 
-  import slick.jdbc.H2Profile.api._
+  import slick.jdbc.MySQLProfile.api._
 
-  protected val v1WorkspaceMigrationHistory: String = "V1_WORKSPACE_MIGRATION_HISTORY"
+  private val v1WorkspaceMigrationHistory: String = "V1_WORKSPACE_MIGRATION_HISTORY"
 
   final class V1WorkspaceMigrationHistory(tag: Tag)
     extends Table[V1WorkspaceMigrationAttempt](tag, v1WorkspaceMigrationHistory) {
 
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-    def workspaceId = column[UUID]("WORKSPACE_ID")
+    def workspaceId = column[UUID]("WORKSPACE_ID", O.SqlType("BINARY(16)"))
     def created = column[LocalDateTime]("CREATED")
     def started = column[Option[LocalDateTime]]("STARTED")
     def finished = column[Option[LocalDateTime]]("FINISHED")
@@ -93,20 +93,18 @@ trait V1WorkspaceMigrationComponent {
 object V1WorkspaceMigrationMonitor
   extends V1WorkspaceMigrationComponent {
 
-  import slick.jdbc.H2Profile.api._
+  import slick.jdbc.MySQLProfile.api._
 
-  final def isMigrating(workspace: Workspace): ReadAction[Boolean] = {
-    val workspaceUuid = UUID.fromString(workspace.workspaceId)
+  final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
     migrations
-      .filter { m => m.workspaceId === workspaceUuid && m.started.isDefined && m.finished.isEmpty }
+      .filter { m => m.workspaceId === workspace.workspaceIdAsUUID && m.started.isDefined && m.finished.isEmpty }
       .length
       .result
       .map(_ > 0)
-  }
 
   final def schedule(workspace: Workspace): WriteAction[Unit] =
-    sqlu"INSERT INTO #$v1WorkspaceMigrationHistory (WORKSPACE_ID) VALUES (${workspace.workspaceId})"
-      .map(_ => ())
+    DBIO.seq(migrations.map(_.workspaceId) += workspace.workspaceIdAsUUID)
+
 }
 
 object V1WorkspaceMigrationActor {
