@@ -26,16 +26,16 @@ class V1WorkspaceMigrationMonitorSpec
   override def afterAll(): Unit = testKit.shutdownTestKit()
 
   "isMigrating" should "return false when a workspace is not being migrated" in {
-    withDefaultTestDatabase {
-      runAndWait(V1WorkspaceMigrationMonitor.isMigrating(testData.v1Workspace)) shouldBe false
+    withMinimalTestDatabase { _ =>
+      runAndWait(V1WorkspaceMigrationMonitor.isMigrating(minimalTestData.v1Workspace)) shouldBe false
     }
   }
 
   "schedule" should "error when a workspace is scheduled concurrently" in {
-    withDefaultTestDatabase {
-      runAndWait(V1WorkspaceMigrationMonitor.schedule(testData.v1Workspace)) shouldBe()
+    withMinimalTestDatabase { _ =>
+      runAndWait(V1WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace)) shouldBe ()
       assertThrows[SQLException] {
-        runAndWait(V1WorkspaceMigrationMonitor.schedule(testData.v1Workspace))
+        runAndWait(V1WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace))
       }
     }
   }
