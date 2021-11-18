@@ -95,14 +95,14 @@ object V1WorkspaceMigrationMonitor
 
   import slick.jdbc.H2Profile.api._
 
-  final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
+  final def isMigrating(workspace: Workspace): ReadAction[Boolean] = {
+    val workspaceUuid = UUID.fromString(workspace.workspaceId)
     migrations
-      .filter { m =>
-        m.workspaceId === UUID.fromString(workspace.workspaceId) && m.started.isDefined && m.finished.isEmpty
-      }
+      .filter { m => m.workspaceId === workspaceUuid && m.started.isDefined && m.finished.isEmpty }
       .length
       .result
       .map(_ > 0)
+  }
 
   final def schedule(workspace: Workspace): WriteAction[Unit] = {
     Console.println((migrations.map(c => c.workspaceId) += UUID.fromString(workspace.workspaceId)).statements)
