@@ -22,14 +22,16 @@ object Dependencies {
   val excludeProtobufJavalite = ExclusionRule(organization = "com.google.protobuf", name = "protobuf-javalite")
   val excludeScalaCache =       ExclusionRule(organization = "com.github.cb372")
 
-  val akkaActor: ModuleID =         "com.typesafe.akka"   %%  "akka-actor"           % akkaV
-  val akkaStream: ModuleID =        "com.typesafe.akka"   %%  "akka-stream"          % akkaV
-  val akkaContrib: ModuleID =       "com.typesafe.akka"   %%  "akka-contrib"         % akkaV
-  val akkaSlf4j: ModuleID =         "com.typesafe.akka"   %%  "akka-slf4j"           % akkaV
-  val akkaHttp: ModuleID =          "com.typesafe.akka"   %%  "akka-http"            % akkaHttpV           excludeAll(excludeAkkaActor, excludeAkkaStream)
-  val akkaHttpSprayJson: ModuleID = "com.typesafe.akka"   %%  "akka-http-spray-json" % akkaHttpV
-  val akkaTestKit: ModuleID =       "com.typesafe.akka"   %%  "akka-testkit"         % akkaV     % "test"
-  val akkaHttpTestKit: ModuleID =   "com.typesafe.akka"   %%  "akka-http-testkit"    % akkaHttpV % "test"
+  val akkaActor: ModuleID =             "com.typesafe.akka" %% "akka-actor"               % akkaV
+  val akkaActorTyped: ModuleID =        "com.typesafe.akka" %% "akka-actor-typed"         % akkaV
+  val akkaStream: ModuleID =            "com.typesafe.akka" %% "akka-stream"              % akkaV
+  val akkaContrib: ModuleID =           "com.typesafe.akka" %% "akka-contrib"             % akkaV
+  val akkaSlf4j: ModuleID =             "com.typesafe.akka" %% "akka-slf4j"               % akkaV
+  val akkaHttp: ModuleID =              "com.typesafe.akka" %% "akka-http"                % akkaHttpV           excludeAll(excludeAkkaActor, excludeAkkaStream)
+  val akkaHttpSprayJson: ModuleID =     "com.typesafe.akka" %% "akka-http-spray-json"     % akkaHttpV
+  val akkaActorTestKitTyped: ModuleID = "com.typesafe.akka" %% "akka-actor-testkit-typed" % akkaV     % "test"
+  val akkaTestKit: ModuleID =           "com.typesafe.akka" %% "akka-testkit"             % akkaV     % "test"
+  val akkaHttpTestKit: ModuleID =       "com.typesafe.akka" %% "akka-http-testkit"        % akkaHttpV % "test"
 
   val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" %% "cromwell-client" % "0.1-8b413b45f-SNAP"
 
@@ -218,6 +220,8 @@ object Dependencies {
     mysqlConnector,
     liquibaseCore,
     logbackClassic,
+    akkaActorTyped,
+    akkaActorTestKitTyped,
     akkaTestKit,
     akkaHttpTestKit,
     mockserverNetty,
