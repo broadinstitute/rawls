@@ -2,17 +2,20 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
+import cats.effect.IO
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.storage.model.Bucket
+import com.google.cloud.storage.Storage.BucketGetOption
 import org.apache.commons.lang3.SerializationException
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, WriteAction}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.MigrationOutcome.{Failure, Success}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+
 import java.time.LocalDateTime
 import java.util.UUID
-
 import scala.concurrent.ExecutionContext.Implicits.global
 
 
@@ -107,9 +110,11 @@ object V1WorkspaceMigrationMonitor
   final def schedule(workspace: Workspace): WriteAction[Unit] =
     DBIO.seq(migrations.map(_.workspaceId) += workspace.workspaceIdAsUUID)
 
-  final def createBucketInSameRegion(destGoogleProjectId: GoogleProjectId, sourceBucketName: GcsBucketName, bucketName: GcsBucketName, gcsDAO: GoogleServicesDAO) = {
+  final def createBucketInSameRegion(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName, bucketName: GcsBucketName, googleStorageService: GoogleStorageService[IO]) = {
     for {
-      sourceBucket <- gcsDAO.getBucket(sourceBucketName.value, Option(destGoogleProjectId)) // todo: figure out who pays for this
+      sourceBucket <- googleStorageService.getBucket(sourceGoogleProject, sourceBucketName, List(BucketGetOption.userProject(destGoogleProject.value))) // todo: figure out who pays for this
+      // todo: figure out what the labels on bucket are, and whether we need to keep them when we create new buckets
+      newBucket <-
     } yield()
   }
 
