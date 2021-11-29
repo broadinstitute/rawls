@@ -3,11 +3,13 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
+import com.google.api.services.storage.model.Bucket
 import org.apache.commons.lang3.SerializationException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, WriteAction}
 import org.broadinstitute.dsde.rawls.model.Workspace
 import org.broadinstitute.dsde.rawls.monitor.MigrationOutcome.{Failure, Success}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
 import java.time.LocalDateTime
 import java.util.UUID
@@ -104,6 +106,10 @@ object V1WorkspaceMigrationMonitor
 
   final def schedule(workspace: Workspace): WriteAction[Unit] =
     DBIO.seq(migrations.map(_.workspaceId) += workspace.workspaceIdAsUUID)
+
+  final def createBucket(project: GoogleProject, sourceBucketName: GcsBucketName, bucketName: GcsBucketName) = {
+    gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
+  }
 
 }
 
