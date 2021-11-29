@@ -113,15 +113,19 @@ object V1WorkspaceMigrationMonitor
   final def schedule(workspace: Workspace): WriteAction[Unit] =
     DBIO.seq(migrations.map(_.workspaceId) += workspace.workspaceIdAsUUID)
 
-  final def createBucketInSameRegion(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName, bucketName: GcsBucketName, googleStorageService: GoogleStorageService[IO]) = {
+  final def createBucketInSameRegion(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName, bucketName: GcsBucketName, googleStorageService: GoogleStorageService[IO], gcsDAO: GoogleServicesDAO) = {
     for {
       sourceBucketOpt <- googleStorageService.getBucket(sourceGoogleProject, sourceBucketName, List(BucketGetOption.userProject(destGoogleProject.value))) // todo: figure out who pays for this
       Some(sourceBucket) = sourceBucketOpt
-      // todo: figure out what the labels on bucket are, and whether we need to keep them when we create new buckets
-      newBucket <- googleStorageService.insertBucket(destGoogleProject, bucketName, sourceBucket.getAcl().toList match {
-        case Nil => None
-        case x:: xs => NonEmptyList(x, xs).some
-      }).compile.drain
+      newBucket <- googleStorageService.insertBucket(
+        googleProject = destGoogleProject,
+        bucketName = bucketName,
+        acl = None,
+        labels = sourceBucket.getLabels.toMap,
+        bucketPolicyOnlyEnabled = true,
+        logBucket = Option(GcsBucketName(gcsDAO.getStorageLogsBucketName(GoogleProjectId(destGoogleProject.value)))),
+        location = Option(sourceBucket.getLocation)
+      ).compile.drain
     } yield()
   }
 
