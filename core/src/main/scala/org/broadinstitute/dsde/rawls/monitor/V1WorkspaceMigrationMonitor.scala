@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
+import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.storage.model.Bucket
@@ -16,7 +17,9 @@ import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProj
 
 import java.time.LocalDateTime
 import java.util.UUID
+import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 
 sealed trait MigrationOutcome
@@ -112,9 +115,13 @@ object V1WorkspaceMigrationMonitor
 
   final def createBucketInSameRegion(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName, bucketName: GcsBucketName, googleStorageService: GoogleStorageService[IO]) = {
     for {
-      sourceBucket <- googleStorageService.getBucket(sourceGoogleProject, sourceBucketName, List(BucketGetOption.userProject(destGoogleProject.value))) // todo: figure out who pays for this
+      sourceBucketOpt <- googleStorageService.getBucket(sourceGoogleProject, sourceBucketName, List(BucketGetOption.userProject(destGoogleProject.value))) // todo: figure out who pays for this
+      Some(sourceBucket) = sourceBucketOpt
       // todo: figure out what the labels on bucket are, and whether we need to keep them when we create new buckets
-      newBucket <-
+      newBucket <- googleStorageService.insertBucket(destGoogleProject, bucketName, sourceBucket.getAcl().toList match {
+        case Nil => None
+        case x:: xs => NonEmptyList(x, xs).some
+      }).compile.drain
     } yield()
   }
 
