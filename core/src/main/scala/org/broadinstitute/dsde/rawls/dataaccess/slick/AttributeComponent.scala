@@ -567,10 +567,16 @@ trait AttributeComponent {
       if(!attributes.isEmpty) {
         val headAttribute = attributes.head
         if (!attributes.forall(_.getClass == headAttribute.getClass)) {
-          // generate a helpful error message
+          // determine the different attribute types
           val typeNames = attributes.map(_.getClass.getSimpleName).distinct
+          // generate example values for those types
+          val exampleValues = typeNames.flatMap { typeName =>
+            attributes.find(x => x.getClass.getSimpleName == typeName).map(_.toString)
+          }
+          // generate a helpful error message
           val errMsg = s"inconsistent attributes for list: attribute lists must consist of a single data type. For attribute " +
-            s"'${toDelimitedName(attributeName)}', found types: [${typeNames.mkString(", ")}]"
+            s"'${toDelimitedName(attributeName)}', found types: [${typeNames.mkString(", ")}]. " +
+            s"Sample values for these types: [${exampleValues.mkString(", ")}]"
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, errMsg))
         }
       }
