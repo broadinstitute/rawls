@@ -132,7 +132,7 @@ object V1WorkspaceMigrationMonitor
   }
 
   final def createTempBucket(workspace: Workspace, destGoogleProject: GoogleProject, googleStorageService: GoogleStorageService[IO]): IO[(GcsBucketName, ReadWriteAction[Unit])] = {
-    val bucketName = GcsBucketName(("workspace_migration_" + UUID.randomUUID.toString).replace("-", "").substring(0, 63))
+    val bucketName = GcsBucketName(("workspace_migration_" + UUID.randomUUID.toString).replace("-", "").take(63))
     for {
       _ <- createBucketInSameRegion(destGoogleProject, GoogleProject(workspace.googleProjectId.value), GcsBucketName(workspace.bucketName), bucketName, googleStorageService)
     } yield (bucketName, DBIO.seq(
