@@ -2,24 +2,21 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
-import com.google.api.services.storage.model.Bucket
 import com.google.cloud.storage.Storage.BucketGetOption
 import org.apache.commons.lang3.SerializationException
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, WriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.MigrationOutcome.{Failure, Success}
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
 import java.time.LocalDateTime
-import java.util.UUID
+import java.util.{Collections, UUID}
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 
 
 sealed trait MigrationOutcome
@@ -123,7 +120,7 @@ object V1WorkspaceMigrationMonitor
         googleProject = destGoogleProject,
         bucketName = destBucketName,
         acl = None,
-        labels = sourceBucket.getLabels.toMap,
+        labels = Option(sourceBucket.getLabels).getOrElse(Collections.emptyMap()).toMap,
         bucketPolicyOnlyEnabled = true,
         logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(GoogleProjectId(destGoogleProject.value)))), // todo: do we need to transfer the storage logs for this workspace? the logs are prefixed with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket and the storage_byte_hours in it that is kept for 180 days
         location = Option(sourceBucket.getLocation)

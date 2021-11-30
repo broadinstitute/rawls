@@ -51,7 +51,7 @@ class V1WorkspaceMigrationMonitorSpec
     val config = ConfigFactory.load()
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(sourceAndDestProject)
-    val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
+    val pathToCredentialJson = "config/rawls-account.json"
     val v1WorkspaceCopy = minimalTestData.v1Workspace.copy(namespace = sourceAndDestProject, googleProjectId = GoogleProjectId(sourceAndDestProject), bucketName = "rawls-test-v1-workspace-migration-monitor-source-bucket")
 
     withMinimalTestDatabase { _ =>
@@ -61,7 +61,8 @@ class V1WorkspaceMigrationMonitorSpec
           res <- V1WorkspaceMigrationMonitor.createTempBucket(v1WorkspaceCopy, GoogleProject(sourceAndDestProject), googleStorageService)
           (bucketName, _) = res
           loadedBucket <- googleStorageService.getBucket(GoogleProject(sourceAndDestProject), bucketName)
-        } yield loadedBucket.isDefined shouldBe true
+          _ <- googleStorageService.deleteBucket(GoogleProject(sourceAndDestProject), bucketName).compile.drain
+        } yield loadedBucket shouldBe defined
       }.unsafeRunSync
     }
   }
