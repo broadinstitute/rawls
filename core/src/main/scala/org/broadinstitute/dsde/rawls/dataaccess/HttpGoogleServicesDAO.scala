@@ -242,7 +242,7 @@ class HttpGoogleServicesDAO(
                |""".stripMargin.getBytes))
           // use an object name that will always be superseded by a real storage log
           val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
-          val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(googleProject), storageObject, stream)
+          val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(GoogleServicesDAO.getStorageLogsBucketName(googleProject), storageObject, stream)
           executeGoogleRequest(objectInserter)
         }
       }
@@ -259,7 +259,7 @@ class HttpGoogleServicesDAO(
         labels = labels,
         traceId = Option(traceId),
         bucketPolicyOnlyEnabled = true,
-        logBucket = Option(GcsBucketName(getStorageLogsBucketName(googleProject))),
+        logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(googleProject))),
         location = bucketLocation
       ).compile.drain.unsafeToFuture().recoverWith{
         case e: StorageException if e.getCode == 400 =>
@@ -388,7 +388,7 @@ class HttpGoogleServicesDAO(
       // Fetch objects with a prefix of "${bucketName}_storage_", (ignoring "_usage_" logs)
       val fetcher = getStorage(getBucketServiceAccountCredential).
         objects().
-        list(getStorageLogsBucketName(googleProject)).
+        list(GoogleServicesDAO.getStorageLogsBucketName(googleProject)).
         setPrefix(s"${bucketName}_storage_")
       maxResults.foreach(fetcher.setMaxResults(_))
       pageToken.foreach(fetcher.setPageToken)
