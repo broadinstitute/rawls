@@ -116,8 +116,8 @@ object V1WorkspaceMigrationMonitor
   final def createBucketInSameRegion(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName, destBucketName: GcsBucketName, googleStorageService: GoogleStorageService[IO], gcsDAO: GoogleServicesDAO): IO[Unit] = {
     for {
       sourceBucketOpt <- googleStorageService.getBucket(sourceGoogleProject, sourceBucketName, List(BucketGetOption.userProject(destGoogleProject.value))) // todo: figure out who pays for this
-      Some(sourceBucket) = sourceBucketOpt
-      newBucket <- googleStorageService.insertBucket(
+      sourceBucket = sourceBucketOpt.getOrElse(throw new IllegalStateException(s"Source bucket ${sourceBucketName} could not be found"))
+      _ <- googleStorageService.insertBucket(
         googleProject = destGoogleProject,
         bucketName = destBucketName,
         acl = None,
