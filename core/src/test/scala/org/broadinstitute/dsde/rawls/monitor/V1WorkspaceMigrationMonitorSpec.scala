@@ -16,6 +16,7 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import java.sql.SQLException
 
 import slick.dbio.DBIO
+import slick.jdbc.MySQLProfile.api._
 
 import scala.language.postfixOps
 
@@ -63,9 +64,10 @@ class V1WorkspaceMigrationMonitorSpec
           V1WorkspaceMigrationMonitor.schedule(v1WorkspaceCopy)
         )
       }
+      val attempt = runAndWait(migrations.filter(_.workspaceId === v1WorkspaceCopy.workspaceIdAsUUID).result).head
       val writeAction = GoogleStorageService.resource[IO](pathToCredentialJson, None, Option(serviceProject)).use { googleStorageService =>
         for {
-          res <- V1WorkspaceMigrationMonitor.createTempBucket(v1WorkspaceCopy, GoogleProject(sourceAndDestProject), googleStorageService)
+          res <- V1WorkspaceMigrationMonitor.createTempBucket(attempt, v1WorkspaceCopy, GoogleProject(sourceAndDestProject), googleStorageService)
           (bucketName, writeAction) = res
           loadedBucket <- googleStorageService.getBucket(GoogleProject(sourceAndDestProject), bucketName)
           _ <- googleStorageService.deleteBucket(GoogleProject(sourceAndDestProject), bucketName).compile.drain

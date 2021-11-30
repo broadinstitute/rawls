@@ -12,9 +12,10 @@ import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.MigrationOutcome.{Failure, Success}
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-
+import java.sql.Timestamp
 import java.time.LocalDateTime
 import java.util.{Collections, UUID}
+
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -29,13 +30,13 @@ object MigrationOutcome {
 
 final case class V1WorkspaceMigrationAttempt(id: Long,
                                              workspaceId: UUID,
-                                             created: LocalDateTime,
-                                             started: Option[LocalDateTime],
-                                             finished: Option[LocalDateTime],
+                                             created: Timestamp,
+                                             started: Option[Timestamp],
+                                             finished: Option[Timestamp],
                                              outcome: Option[MigrationOutcome])
 
 object V1WorkspaceMigrationAttempt {
-  type RecordType = (Long, UUID, LocalDateTime, Option[LocalDateTime], Option[LocalDateTime], Option[String], Option[String])
+  type RecordType = (Long, UUID, Timestamp, Option[Timestamp], Option[Timestamp], Option[String], Option[String])
 
   def fromRecord(record: RecordType): Either[String, V1WorkspaceMigrationAttempt] = {
     type EitherStringT[T] = Either[String, T]
@@ -81,13 +82,13 @@ trait V1WorkspaceMigrationComponent {
 
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def workspaceId = column[UUID]("WORKSPACE_ID", O.SqlType("BINARY(16)"))
-    def created = column[LocalDateTime]("CREATED")
-    def started = column[Option[LocalDateTime]]("STARTED")
-    def finished = column[Option[LocalDateTime]]("FINISHED")
+    def created = column[Timestamp]("CREATED")
+    def started = column[Option[Timestamp]]("STARTED")
+    def finished = column[Option[Timestamp]]("FINISHED")
     def outcome = column[Option[String]]("OUTCOME")
     def message = column[Option[String]]("MESSAGE")
     def tmpBucket = column[Option[String]]("TMP_BUCKET")
-    def tmpBucketCreated = column[Option[LocalDateTime]]("TMP_BUCKET_CREATED")
+    def tmpBucketCreated = column[Option[Timestamp]]("TMP_BUCKET_CREATED")
 
     override def * =
       (id, workspaceId, created, started, finished, outcome, message) <>
@@ -128,15 +129,15 @@ object V1WorkspaceMigrationMonitor
     } yield ()
   }
 
-  final def createTempBucket(workspace: Workspace, destGoogleProject: GoogleProject, googleStorageService: GoogleStorageService[IO]): IO[(GcsBucketName, ReadWriteAction[Unit])] = {
+  final def createTempBucket(migrationAttempt: V1WorkspaceMigrationAttempt, workspace: Workspace, destGoogleProject: GoogleProject, googleStorageService: GoogleStorageService[IO]): IO[(GcsBucketName, ReadWriteAction[Unit])] = {
     val bucketName = GcsBucketName(("workspace_migration_" + UUID.randomUUID.toString).replace("-", "").take(63))
     for {
       _ <- createBucketInSameRegion(destGoogleProject, GoogleProject(workspace.googleProjectId.value), GcsBucketName(workspace.bucketName), bucketName, googleStorageService)
     } yield (bucketName, DBIO.seq(
       migrations
-        .filter(r => r.workspaceId === workspace.workspaceIdAsUUID && r.finished.isEmpty)
+        .filter(_.id === migrationAttempt.id)
         .map(r => (r.tmpBucket, r.tmpBucketCreated))
-        .update((bucketName.value.some, LocalDateTime.now.some))
+        .update((bucketName.value.some, Timestamp.valueOf(LocalDateTime.now).some))
     ))
   }
 }
