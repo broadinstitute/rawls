@@ -9,7 +9,7 @@ import com.google.api.services.storage.model.Bucket
 import com.google.cloud.storage.Storage.BucketGetOption
 import org.apache.commons.lang3.SerializationException
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, WriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.MigrationOutcome.{Failure, Success}
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
@@ -89,6 +89,8 @@ trait V1WorkspaceMigrationComponent {
     def finished = column[Option[LocalDateTime]]("FINISHED")
     def outcome = column[Option[String]]("OUTCOME")
     def message = column[Option[String]]("MESSAGE")
+    def tmpBucket = column[Option[String]]("TMP_BUCKET")
+    def tmpBucketCreated = column[Option[LocalDateTime]]("TMP_BUCKET_CREATED")
 
     override def * =
       (id, workspaceId, created, started, finished, outcome, message) <>
@@ -113,7 +115,7 @@ object V1WorkspaceMigrationMonitor
   final def schedule(workspace: Workspace): WriteAction[Unit] =
     DBIO.seq(migrations.map(_.workspaceId) += workspace.workspaceIdAsUUID)
 
-  final def createBucketInSameRegion(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName, destBucketName: GcsBucketName, googleStorageService: GoogleStorageService[IO], gcsDAO: GoogleServicesDAO): IO[Unit] = {
+  final def createBucketInSameRegion(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName, destBucketName: GcsBucketName, googleStorageService: GoogleStorageService[IO]): IO[Unit] = {
     for {
       sourceBucketOpt <- googleStorageService.getBucket(sourceGoogleProject, sourceBucketName, List(BucketGetOption.userProject(destGoogleProject.value))) // todo: figure out who pays for this
       sourceBucket = sourceBucketOpt.getOrElse(throw new IllegalStateException(s"Source bucket ${sourceBucketName} could not be found"))
@@ -129,11 +131,15 @@ object V1WorkspaceMigrationMonitor
     } yield()
   }
 
-  final def createTempBucket(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName) = {
+  final def createTempBucket(workspace: Workspace, destGoogleProject: GoogleProject, googleStorageService: GoogleStorageService[IO]): IO[ReadWriteAction[Unit]] = {
+    val bucketName = GcsBucketName(("workspace_migration_" + UUID.randomUUID.toString).replace("-", "").substring(0, 63))
     for {
-       _ <- createBucketInSameRegion(destGoogleProject)
-    }
-  }
+    _ <- createBucketInSameRegion(destGoogleProject, GoogleProject(workspace.googleProjectId.value), GcsBucketName(workspace.bucketName), bucketName, googleStorageService)
+    } yield DBIO.seq(
+      migrations
+        .filter(r => r.workspaceId === workspace.workspaceIdAsUUID && r.finished.isEmpty)
+        .map(r => (r.tmpBucket, r.tmpBucketCreated)) += (bucketName.some, LocalDateTime.now.some)
+    )
 }
 
 object V1WorkspaceMigrationActor {
