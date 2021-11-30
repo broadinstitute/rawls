@@ -1,8 +1,11 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.testkit.typed.scaladsl.ActorTestKit
+import cats.effect.IO
+import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.{CreationStatuses, GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, Workspace, WorkspaceShardStates, WorkspaceVersions}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.joda.time.DateTime
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -39,4 +42,13 @@ class V1WorkspaceMigrationMonitorSpec
       }
     }
   }
+
+  // use an existing test project (broad-dsde-dev)
+  "createBucketInSameRegion" should "create a new bucket in the same region" in {
+    val gcsServiceDao = HttpGoogleServicesDAO
+
+    val googleStorageService = GoogleStorageService
+    googleStorageService.insertBucket()
+  }
+
 }
