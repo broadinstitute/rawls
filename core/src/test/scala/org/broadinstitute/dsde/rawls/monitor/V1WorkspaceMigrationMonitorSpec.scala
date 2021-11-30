@@ -13,8 +13,10 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
-
 import java.sql.SQLException
+
+import slick.dbio.DBIO
+
 import scala.language.postfixOps
 
 class V1WorkspaceMigrationMonitorSpec
@@ -55,15 +57,24 @@ class V1WorkspaceMigrationMonitorSpec
     val v1WorkspaceCopy = minimalTestData.v1Workspace.copy(namespace = sourceAndDestProject, googleProjectId = GoogleProjectId(sourceAndDestProject), bucketName = "rawls-test-v1-workspace-migration-monitor-source-bucket")
 
     withMinimalTestDatabase { _ =>
-      runAndWait(workspaceQuery.createOrUpdate(v1WorkspaceCopy))
-      GoogleStorageService.resource[IO](pathToCredentialJson, None, Option(serviceProject)).use { googleStorageService =>
+      runAndWait {
+        DBIO.seq(
+          workspaceQuery.createOrUpdate(v1WorkspaceCopy),
+          V1WorkspaceMigrationMonitor.schedule(v1WorkspaceCopy)
+        )
+      }
+      val writeAction = GoogleStorageService.resource[IO](pathToCredentialJson, None, Option(serviceProject)).use { googleStorageService =>
         for {
           res <- V1WorkspaceMigrationMonitor.createTempBucket(v1WorkspaceCopy, GoogleProject(sourceAndDestProject), googleStorageService)
-          (bucketName, _) = res
+          (bucketName, writeAction) = res
           loadedBucket <- googleStorageService.getBucket(GoogleProject(sourceAndDestProject), bucketName)
           _ <- googleStorageService.deleteBucket(GoogleProject(sourceAndDestProject), bucketName).compile.drain
-        } yield loadedBucket shouldBe defined
+        } yield {
+          loadedBucket shouldBe defined
+          writeAction
+        }
       }.unsafeRunSync
+      runAndWait(writeAction)
     }
   }
 
