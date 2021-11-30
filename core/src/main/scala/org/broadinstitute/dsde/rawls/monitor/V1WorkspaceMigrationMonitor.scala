@@ -113,22 +113,27 @@ object V1WorkspaceMigrationMonitor
   final def schedule(workspace: Workspace): WriteAction[Unit] =
     DBIO.seq(migrations.map(_.workspaceId) += workspace.workspaceIdAsUUID)
 
-  final def createBucketInSameRegion(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName, bucketName: GcsBucketName, googleStorageService: GoogleStorageService[IO], gcsDAO: GoogleServicesDAO) = {
+  final def createBucketInSameRegion(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName, destBucketName: GcsBucketName, googleStorageService: GoogleStorageService[IO], gcsDAO: GoogleServicesDAO): IO[Unit] = {
     for {
       sourceBucketOpt <- googleStorageService.getBucket(sourceGoogleProject, sourceBucketName, List(BucketGetOption.userProject(destGoogleProject.value))) // todo: figure out who pays for this
       Some(sourceBucket) = sourceBucketOpt
       newBucket <- googleStorageService.insertBucket(
         googleProject = destGoogleProject,
-        bucketName = bucketName,
+        bucketName = destBucketName,
         acl = None,
         labels = sourceBucket.getLabels.toMap,
         bucketPolicyOnlyEnabled = true,
-        logBucket = Option(GcsBucketName(gcsDAO.getStorageLogsBucketName(GoogleProjectId(destGoogleProject.value)))),
+        logBucket = Option(GcsBucketName(gcsDAO.getStorageLogsBucketName(GoogleProjectId(destGoogleProject.value)))), // todo: do we need to transfer the storage logs for this workspace? the logs are prefixed with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket and the storage_byte_hours in it that is kept for 180 days
         location = Option(sourceBucket.getLocation)
       ).compile.drain
     } yield()
   }
 
+  final def createTempBucket(destGoogleProject: GoogleProject, sourceGoogleProject: GoogleProject, sourceBucketName: GcsBucketName) = {
+    for {
+       _ <- createBucketInSameRegion(destGoogleProject)
+    }
+  }
 }
 
 object V1WorkspaceMigrationActor {
