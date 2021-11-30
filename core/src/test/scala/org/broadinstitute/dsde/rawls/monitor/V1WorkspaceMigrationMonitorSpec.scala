@@ -11,9 +11,13 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
-
 import java.sql.SQLException
 import java.util.UUID
+
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
+
 import scala.language.postfixOps
 
 class V1WorkspaceMigrationMonitorSpec
@@ -25,6 +29,7 @@ class V1WorkspaceMigrationMonitorSpec
     with OptionValues {
 
   val testKit: ActorTestKit = ActorTestKit()
+  implicit val logger = new ConsoleLogger("unit_test", LogLevel(false, false, true, true))
 
   override def afterAll(): Unit = testKit.shutdownTestKit()
 
@@ -44,11 +49,21 @@ class V1WorkspaceMigrationMonitorSpec
   }
 
   // use an existing test project (broad-dsde-dev)
-  "createBucketInSameRegion" should "create a new bucket in the same region" in {
-    val gcsServiceDao = HttpGoogleServicesDAO
+  "createTempBucket" should "create a new bucket in the same region" in {
+    val config = ConfigFactory.load()
+    val gcsConfig = config.getConfig("gcs")
+    val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
+    val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
 
-    val googleStorageService = GoogleStorageService
-    googleStorageService.insertBucket()
+    withMinimalTestDatabase { _ =>
+      GoogleStorageService.resource[IO](pathToCredentialJson, None, Option(serviceProject)).use { googleStorageService =>
+        for {
+          res <- V1WorkspaceMigrationMonitor.createTempBucket(minimalTestData.v1Workspace, GoogleProject("broad-dsde-dev"), googleStorageService)
+          (bucketName, _) = res
+          loadedBucket <- googleStorageService.getBucket(GoogleProject("broad-dsde-dev"), bucketName)
+        } yield loadedBucket.isDefined shouldBe true
+      }
+    }
   }
 
 }

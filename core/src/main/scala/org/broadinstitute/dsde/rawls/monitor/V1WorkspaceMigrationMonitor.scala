@@ -128,18 +128,20 @@ object V1WorkspaceMigrationMonitor
         logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(GoogleProjectId(destGoogleProject.value)))), // todo: do we need to transfer the storage logs for this workspace? the logs are prefixed with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket and the storage_byte_hours in it that is kept for 180 days
         location = Option(sourceBucket.getLocation)
       ).compile.drain
-    } yield()
+    } yield ()
   }
 
-  final def createTempBucket(workspace: Workspace, destGoogleProject: GoogleProject, googleStorageService: GoogleStorageService[IO]): IO[ReadWriteAction[Unit]] = {
+  final def createTempBucket(workspace: Workspace, destGoogleProject: GoogleProject, googleStorageService: GoogleStorageService[IO]): IO[(GcsBucketName, ReadWriteAction[Unit])] = {
     val bucketName = GcsBucketName(("workspace_migration_" + UUID.randomUUID.toString).replace("-", "").substring(0, 63))
     for {
-    _ <- createBucketInSameRegion(destGoogleProject, GoogleProject(workspace.googleProjectId.value), GcsBucketName(workspace.bucketName), bucketName, googleStorageService)
-    } yield DBIO.seq(
+      _ <- createBucketInSameRegion(destGoogleProject, GoogleProject(workspace.googleProjectId.value), GcsBucketName(workspace.bucketName), bucketName, googleStorageService)
+    } yield (bucketName, DBIO.seq(
       migrations
         .filter(r => r.workspaceId === workspace.workspaceIdAsUUID && r.finished.isEmpty)
-        .map(r => (r.tmpBucket, r.tmpBucketCreated)) += (bucketName.some, LocalDateTime.now.some)
-    )
+        .map(r => (r.tmpBucket, r.tmpBucketCreated))
+        .update((bucketName.value.some, LocalDateTime.now.some))
+    ))
+  }
 }
 
 object V1WorkspaceMigrationActor {
