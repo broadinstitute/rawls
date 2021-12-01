@@ -50,12 +50,14 @@ class V1WorkspaceMigrationMonitorSpec
 
   // use an existing test project (broad-dsde-dev)
   "createTempBucket" should "create a new bucket in the same region" in {
-    val sourceAndDestProject = "broad-dsde-dev"
+    val sourceProject = "general-dev-billing-account"
+    val sourceBucket = "az-leotest"
+    val destProject = "terra-dev-7af423b8"
     val config = ConfigFactory.load()
     val gcsConfig = config.getConfig("gcs")
-    val serviceProject = GoogleProject(sourceAndDestProject)
+    val serviceProject = GoogleProject(sourceProject)
     val pathToCredentialJson = "config/rawls-account.json"
-    val v1WorkspaceCopy = minimalTestData.v1Workspace.copy(namespace = sourceAndDestProject, googleProjectId = GoogleProjectId(sourceAndDestProject), bucketName = "rawls-test-v1-workspace-migration-monitor-source-bucket")
+    val v1WorkspaceCopy = minimalTestData.v1Workspace.copy(namespace = sourceProject, googleProjectId = GoogleProjectId(sourceProject), bucketName = sourceBucket)
 
     withMinimalTestDatabase { _ =>
       runAndWait {
@@ -67,10 +69,10 @@ class V1WorkspaceMigrationMonitorSpec
       val attempt = runAndWait(migrations.filter(_.workspaceId === v1WorkspaceCopy.workspaceIdAsUUID).result).head
       val writeAction = GoogleStorageService.resource[IO](pathToCredentialJson, None, Option(serviceProject)).use { googleStorageService =>
         for {
-          res <- V1WorkspaceMigrationMonitor.createTempBucket(attempt, v1WorkspaceCopy, GoogleProject(sourceAndDestProject), googleStorageService)
+          res <- V1WorkspaceMigrationMonitor.createTempBucket(attempt, v1WorkspaceCopy, GoogleProject(destProject), googleStorageService)
           (bucketName, writeAction) = res
-          loadedBucket <- googleStorageService.getBucket(GoogleProject(sourceAndDestProject), bucketName)
-          _ <- googleStorageService.deleteBucket(GoogleProject(sourceAndDestProject), bucketName).compile.drain
+          loadedBucket <- googleStorageService.getBucket(GoogleProject(destProject), bucketName)
+          _ <- googleStorageService.deleteBucket(GoogleProject(destProject), bucketName).compile.drain
         } yield {
           loadedBucket shouldBe defined
           writeAction
