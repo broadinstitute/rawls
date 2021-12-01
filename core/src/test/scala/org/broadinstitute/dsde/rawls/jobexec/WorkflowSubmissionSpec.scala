@@ -94,6 +94,14 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), dataSource)
   }
 
+  class TestWorkflowSubmissionWithExecutionServiceFailure(
+                                                   dataSource: SlickDataSource,
+                                                   batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
+                                                   processInterval: FiniteDuration = 25 milliseconds,
+                                                   pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, processInterval, pollInterval) {
+    override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(failSubmission = true), dataSource)
+  }
+
   class TestWorkflowSubmissionWithLabels(dataSource: SlickDataSource,
                                          useWorkflowCollectionField: Boolean,
                                          useWorkflowCollectionLabel: Boolean) extends TestWorkflowSubmission(dataSource, 3, 25 milliseconds, 1 second, useWorkflowCollectionField = useWorkflowCollectionField, useWorkflowCollectionLabel = useWorkflowCollectionLabel)
@@ -561,6 +569,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         }.toMap
       }
     }
+  }
+
+  it should "test our update failure db call" in withDefaultTestDatabase {
+    val workflowSubmission = new TestWorkflowSubmissionWithExecutionServiceFailure(slickDataSource)
+    val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submission1, testData.workspace)
+    Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+    assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status ==  WorkflowStatuses.Failed.toString))
   }
 
   it should "fail workflows that timeout when submitting to Cromwell" in withDefaultTestDatabase {
