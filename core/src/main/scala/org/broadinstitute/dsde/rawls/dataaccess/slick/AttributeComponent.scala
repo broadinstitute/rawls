@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.{Sharded, Unsharded, WorkspaceShardState}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -265,7 +266,7 @@ trait AttributeComponent {
           refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(ownerId, attributeName, Option(index), ref, entityIdsByRef, Option(refs.length))}
 
         case AttributeValueList(values) =>
-          assertConsistentValueListMembers(values)
+          assertConsistentValueListMembers(values, attributeName)
           values.zipWithIndex.map { case (value, index) => marshalAttributeValue(ownerId, attributeName, value, Option(index), Option(values.length))}
         case value: AttributeValue => Seq(marshalAttributeValue(ownerId, attributeName, value, None, None))
         case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(ownerId, attributeName, None, ref, entityIdsByRef, None))
@@ -562,11 +563,21 @@ trait AttributeComponent {
       }
     }
 
-    private def assertConsistentValueListMembers(attributes: Seq[AttributeValue]): Unit = {
+    private def assertConsistentValueListMembers(attributes: Seq[AttributeValue], attributeName: AttributeName): Unit = {
       if(!attributes.isEmpty) {
         val headAttribute = attributes.head
         if (!attributes.forall(_.getClass == headAttribute.getClass)) {
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"inconsistent attributes for list: $attributes"))
+          // determine the different attribute types
+          val typeNames = attributes.map(_.getClass.getSimpleName).distinct
+          // generate example values for those types
+          val exampleValues = typeNames.flatMap { typeName =>
+            attributes.find(x => x.getClass.getSimpleName == typeName).map(_.toString)
+          }
+          // generate a helpful error message
+          val errMsg = s"inconsistent attributes for list: attribute lists must consist of a single data type. For attribute " +
+            s"'${toDelimitedName(attributeName)}', found types: [${typeNames.mkString(", ")}]. " +
+            s"Sample values for these types: [${exampleValues.map(_.take(100)).mkString(", ")}]"
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, errMsg))
         }
       }
     }
