@@ -3,7 +3,9 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.testkit.typed.scaladsl.ActorTestKit
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import cats.implicits.catsSyntaxOptionId
 import com.google.cloud.storage.{Bucket, Storage}
+import com.google.common.collect.ImmutableMap
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
@@ -22,6 +24,8 @@ import slick.dbio.DBIO
 import slick.jdbc.MySQLProfile.api._
 
 import java.sql.SQLException
+import scala.collection.convert.ImplicitConversions.`map AsScala`
+import scala.concurrent.Future
 import scala.language.postfixOps
 
 class V1WorkspaceMigrationMonitorSpec
@@ -90,34 +94,54 @@ class V1WorkspaceMigrationMonitorSpec
     val sourceProject = "something"
     val sourceBucketName = "something_bucket"
     val destProject = "something_else"
-    val v1WorkspaceCopy = minimalTestData.v1Workspace.copy(namespace = sourceProject, googleProjectId = GoogleProjectId(sourceProject), bucketName = sourceBucketName)
+    val v1Workspace = minimalTestData.v1Workspace.copy(
+      namespace = sourceProject,
+      googleProjectId = GoogleProjectId(sourceProject),
+      bucketName = sourceBucketName
+    )
 
     val googleStorageService = mock[GoogleStorageService[IO]](RETURNS_SMART_NULLS)
-    when(googleStorageService.getBucket(any[GoogleProject], ArgumentMatchers.eq(GcsBucketName(sourceBucketName)), any[List[Storage.BucketGetOption]]))
-      .thenReturn(IO.pure(Option(new Bucket.Builder().setName(sourceBucketName).build())))
+    val sourceBucket = mock[Bucket](RETURNS_SMART_NULLS)
 
-    withMinimalTestDatabase { _ =>
+    when(sourceBucket.getLabels).thenReturn(null) // Thanks Google
+    when(sourceBucket.getLocation).thenReturn("somewhere over there")
+
+    when(
+      googleStorageService.getBucket(
+        any[GoogleProject],
+        ArgumentMatchers.eq(GcsBucketName(sourceBucketName))
+      )
+    ).thenReturn(IO.pure(sourceBucket.some))
+
+    when(
+      googleStorageService.insertBucket(
+        googleProject = ArgumentMatchers.eq(GoogleProject(destProject)),
+        bucketName = any[GcsBucketName]
+      )
+    ).thenReturn(fs2.Stream.empty)
+
+    withMinimalTestDatabase { dataSource =>
       runAndWait {
         DBIO.seq(
-          workspaceQuery.createOrUpdate(v1WorkspaceCopy),
-          V1WorkspaceMigrationMonitor.schedule(v1WorkspaceCopy)
+          workspaceQuery.createOrUpdate(v1Workspace),
+          V1WorkspaceMigrationMonitor.schedule(v1Workspace)
         )
       }
-      val attempt = runAndWait(migrations.filter(_.workspaceId === v1WorkspaceCopy.workspaceIdAsUUID).result).head
 
-      val writeAction = (for {
-        res <- V1WorkspaceMigrationMonitor.createTempBucket(attempt, v1WorkspaceCopy, GoogleProject(destProject), googleStorageService)
-        (bucketName, writeAction) = res
-        loadedBucket <- googleStorageService.getBucket(GoogleProject(destProject), bucketName)
-        _ <- googleStorageService.deleteBucket(GoogleProject(destProject), bucketName).compile.drain
+      val attempt = runAndWait(migrations.filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result).head
+      def futureToIO[T] = IO.fromFuture[T] _ compose IO.pure[Future[T]]
+
+      (for {
+        res <- V1WorkspaceMigrationMonitor
+          .createTempBucket(attempt, v1Workspace, GoogleProject(destProject), googleStorageService)
+        (_, writeAction) = res
+        _ <- futureToIO(dataSource.database.run(writeAction))
+        query = migrations.filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result.map(_.head)
+        record <- futureToIO(dataSource.database.run(query))
       } yield {
-        loadedBucket shouldBe defined
-        writeAction
+          record.tmpBucketName.value.value should startWith("terra-workspace-migration-")
+          record.tmpBucketCreated shouldBe defined
       }).unsafeRunSync
-      runAndWait(writeAction)
-      val migrationRow = runAndWait(migrations.filter(_.workspaceId === v1WorkspaceCopy.workspaceIdAsUUID).result).head
-      migrationRow.tmpBucketName.value.value should startWith("workspace_migration_")
-      migrationRow.tmpBucketCreated shouldBe defined
     }
   }
 
