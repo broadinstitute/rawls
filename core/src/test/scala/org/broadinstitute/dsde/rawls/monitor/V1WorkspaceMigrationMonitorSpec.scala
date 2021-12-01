@@ -49,7 +49,7 @@ class V1WorkspaceMigrationMonitorSpec
   }
 
   // use an existing test project (broad-dsde-dev)
-  "createTempBucket" should "create a new bucket in the same region" in {
+  "createTempBucket" should "create a new bucket in the same region" ignore {
     val sourceProject = "general-dev-billing-account"
     val sourceBucket = "az-leotest"
     val destProject = "terra-dev-7af423b8"
