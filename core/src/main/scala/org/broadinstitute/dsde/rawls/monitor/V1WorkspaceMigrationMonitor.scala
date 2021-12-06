@@ -111,6 +111,8 @@ trait V1WorkspaceMigrationComponent {
     def message = column[Option[String]]("MESSAGE")
     def tmpBucket = column[Option[String]]("TMP_BUCKET")
     def tmpBucketCreated = column[Option[Timestamp]]("TMP_BUCKET_CREATED")
+    def newGoogleProjectId = column[Option[String]]("NEW_GOOGLE_PROJECT_ID")
+    def newGoogleProjectSetup = column[Option[Timestamp]]("NEW_GOOGLE_PROJECT_SETUP")
 
     override def * =
       (id, workspaceId, created, started, finished, outcome, message, tmpBucket, tmpBucketCreated) <>
