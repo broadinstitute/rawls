@@ -6,10 +6,12 @@ import cats.effect.IO
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.cloud.storage.Storage.BucketGetOption
 import org.apache.commons.lang3.SerializationException
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProject, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.MigrationOutcome.{Failure, Success}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
@@ -18,6 +20,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 
 sealed trait MigrationOutcome
@@ -180,7 +183,7 @@ object V1WorkspaceMigrationMonitor
                              workspace: Workspace,
                              destGoogleProject: GoogleProject,
                              googleStorageService: GoogleStorageService[IO]
-                            ): IO[(GcsBucketName, ReadWriteAction[Unit])] = {
+                            ): IO[(GcsBucketName, WriteAction[Unit])] = {
     val tmpBucketName = GcsBucketName(
       "terra-workspace-migration-" + UUID.randomUUID.toString.replace("-", "")
     )
@@ -197,6 +200,25 @@ object V1WorkspaceMigrationMonitor
         .filter(_.id === migrationAttempt.id)
         .map(r => (r.tmpBucket, r.tmpBucketCreated))
         .update((tmpBucketName.value.some, Timestamp.valueOf(LocalDateTime.now).some))
+    ))
+  }
+
+  final def setupGoogleProject(migrationAttempt: V1WorkspaceMigrationAttempt,
+                               workspaceService: WorkspaceService,
+                               workspace: Workspace,
+                               billingProject: RawlsBillingProject
+                              ): Future[(GoogleProjectId, WriteAction[Unit])] = {
+    for {
+      (googleProjectId, _) <- workspaceService.setupGoogleProject(
+        billingProject,
+        workspace.currentBillingAccountOnGoogleProject.getOrElse(throw new RawlsException(s"""No billing account for workspace '${workspace.workspaceId}'""")),
+        workspace.workspaceId,
+        workspace.toWorkspaceName
+      )
+    } yield (googleProjectId, DBIO.seq(
+      migrations.filter(_.id === migrationAttempt.id)
+        .map(r => (r.newGoogleProjectId, r.newGoogleProjectSetup))
+        .update((googleProjectId.value.some, Timestamp.valueOf(LocalDateTime.now).some))
     ))
   }
 }

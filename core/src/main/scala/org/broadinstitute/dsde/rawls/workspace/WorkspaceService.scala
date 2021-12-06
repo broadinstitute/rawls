@@ -1971,16 +1971,14 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * @param billingProject
     * @param billingAccount
     * @param workspaceId
-    * @param policyEmailsByName Map[SamResourcePolicyName, WorkbenchEmail]
-    * @param billingProjectOwnerPolicyEmail
     * @param span
     * @return Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
     */
-  private def setupGoogleProject(billingProject: RawlsBillingProject,
-                                 billingAccount: RawlsBillingAccountName,
-                                 workspaceId: String,
-                                 workspaceName: WorkspaceName,
-                                 span: Span = null) = {
+  def setupGoogleProject(billingProject: RawlsBillingProject,
+                         billingAccount: RawlsBillingAccountName,
+                         workspaceId: String,
+                         workspaceName: WorkspaceName,
+                         span: Span = null) = {
     val projectPoolType = billingProject.servicePerimeter match {
       case Some(_) => ProjectPoolType.ExfiltrationControlled
       case _ => ProjectPoolType.Regular
@@ -2026,7 +2024,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Boolean] = {
+  private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] = {
     // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
       // billing project owner
     // organizations/$ORG_ID/roles/terra-workspace-can-compute
@@ -2042,9 +2040,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
     // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
     // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
-    policyGroupsToRoles.toList.foldLeft(Future.unit){case (result, (email, roles)) => {
-      result.flatMap(_ => googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles, retryIfGroupDoesNotExist = true))
-    }}
+    policyGroupsToRoles.toList.traverse_{ case (email, roles) =>
+      googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles, retryIfGroupDoesNotExist = true)
+    }
   }
 
   /**
@@ -2285,9 +2283,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
                   _ <- createWorkflowCollectionFuture
                   _ <- syncPoliciesFuture
                 } yield()})
-              (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
-                setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, parentSpan)))
-              _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)
+              (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(span => DBIO.from(
+                for {
+                  (googleProjectId, googleProjectNumber) <- setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, span)
+                  _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)
+                } yield (googleProjectId, googleProjectNumber)
+              ))
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                 createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
 
