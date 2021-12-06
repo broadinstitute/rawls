@@ -95,6 +95,13 @@ object V1WorkspaceMigrationMonitor
 
   import slick.jdbc.MySQLProfile.api._
 
+  final def isInQueueToMigrate(workspace: Workspace): ReadAction[Boolean] =
+    migrations
+      .filter { m => m.workspaceId === workspace.workspaceIdAsUUID && !m.started.isDefined }
+      .length
+      .result
+      .map(_ > 0)
+
   final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
     migrations
       .filter { m => m.workspaceId === workspace.workspaceIdAsUUID && m.started.isDefined && m.finished.isEmpty }
