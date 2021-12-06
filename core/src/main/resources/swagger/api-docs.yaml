@@ -3344,42 +3344,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/migrate:
-    put:
-      tags:
-        - workspaces
-      summary: Schedules a v1 workspace for migration to v2
-      description: Schedules a v1 workspace for migration to v2.
-      operationId: migrateWorkspace
-      parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-      responses:
-        204:
-          description: Successful Request
-          content: {}
-        404:
-          description: Workspace not found
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/catalog:
     get:
       tags:
