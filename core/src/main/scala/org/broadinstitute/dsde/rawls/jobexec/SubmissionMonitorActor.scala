@@ -296,7 +296,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
 
     //all workflow records in this status response list
-    val workflowsWithStatuses = response.statusResponse.collect {
+    val allWorkflows = response.statusResponse.collect {
       case Success(Some((aWorkflow, _))) => aWorkflow
     }
 
@@ -304,6 +304,16 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     val workflowsWithOutputs = response.statusResponse.collect {
       case Success(Some((workflowRec, Some(outputs)))) =>
         (workflowRec, outputs)
+    }
+
+    def markWorkflowsFailed(workflows: Seq[WorkflowRecord], fatal: RawlsFatalExceptionWithErrorReport) = {
+      logger.error(s"Marking ${workflows.length} workflows as failed handling outputs in $submissionId with user-visible reason ${fatal.toString})")
+      datasource.inTransaction { dataAccess =>
+        DBIO.sequence(workflows map { workflowRecord =>
+          dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
+            dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
+        })
+      }
     }
 
     // Attach the outputs in a txn of their own.
@@ -315,23 +325,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     datasource.inTransactionWithAttrTempTable { dataAccess =>
       handleOutputs(workflowsWithOutputs, dataAccess)
     } recoverWith {
-      // If there is something fatally wrong handling outputs, mark the workflows as failed
+      // If there is something fatally wrong handling outputs for any workflow, mark all the workflows as failed
       case fatal: RawlsFatalExceptionWithErrorReport =>
-        datasource.inTransaction { dataAccess =>
-          DBIO.sequence(workflowsWithStatuses map { workflowRecord =>
-            dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
-              dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
-          })
-        }
+        markWorkflowsFailed(allWorkflows, fatal)
     } flatMap { _ =>
       // NEW TXN! Update statuses for workflows and submission.
       datasource.inTransaction { dataAccess =>
 
         // Refetch workflows as some may have been marked as Failed by handleOutputs.
-        dataAccess.workflowQuery.findWorkflowByIds(workflowsWithStatuses.map(_.id)).result flatMap { updatedRecs =>
+        dataAccess.workflowQuery.findWorkflowByIds(allWorkflows.map(_.id)).result flatMap { updatedRecs =>
 
           //New statuses according to the execution service.
-          val workflowIdToNewStatus = workflowsWithStatuses.map({ workflowRec => workflowRec.id -> workflowRec.status }).toMap
+          val workflowIdToNewStatus = allWorkflows.map({ workflowRec => workflowRec.id -> workflowRec.status }).toMap
 
           // No need to update statuses for any workflows that are in terminal statuses.
           // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
