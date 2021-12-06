@@ -1978,7 +1978,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                          billingAccount: RawlsBillingAccountName,
                          workspaceId: String,
                          workspaceName: WorkspaceName,
-                         span: Span = null) = {
+                         span: Span = null) : Future[(GoogleProjectId, GoogleProjectNumber)] = {
     val projectPoolType = billingProject.servicePerimeter match {
       case Some(_) => ProjectPoolType.ExfiltrationControlled
       case _ => ProjectPoolType.Regular
