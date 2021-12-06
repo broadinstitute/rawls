@@ -8,7 +8,10 @@
             <column name="NEW_GOOGLE_PROJECT_ID" type="VARCHAR(254)">
                 <constraints nullable="true"/>
             </column>
-            <column name="NEW_GOOGLE_PROJECT_SETUP" type="DATETIME">
+            <column name="NEW_GOOGLE_PROJECT_NUMBER" type="VARCHAR(254)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="NEW_GOOGLE_PROJECT_CONFIGURED" type="DATETIME">
                 <constraints nullable="true"/>
             </column>
         </addColumn>
