@@ -2096,7 +2096,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = {
-    logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}'")
+    logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")
     for {
       workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
       _ <- dataSource.inTransaction { dataAccess =>
