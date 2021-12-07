@@ -74,6 +74,13 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
       } ~
+      path("workspaces" / Segment / Segment / "migrate") { (workspaceNamespace, workspaceName) =>
+        put {
+          complete {
+            workspaceServiceConstructor(userInfo).migrateWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+          }
+        }
+      } ~
       path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
         get {
           complete {

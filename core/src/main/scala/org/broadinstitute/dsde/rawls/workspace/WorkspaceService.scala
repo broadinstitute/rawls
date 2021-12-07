@@ -33,6 +33,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.V1WorkspaceMigrationMonitor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -2092,6 +2093,16 @@ class WorkspaceService(protected val userInfo: UserInfo,
       hasAccess <- traceWithParent("checkBillingAccountIAM", parentSpan)(_ => gcsDAO.testDMBillingAccountAccess(billingAccountName))
       _ <- maybeUpdateInvalidBillingAccountField(billingProject, !hasAccess, parentSpan)
     } yield hasAccess
+  }
+
+  def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = {
+    logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")
+    for {
+      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
+      _ <- dataSource.inTransaction { dataAccess =>
+        V1WorkspaceMigrationMonitor.schedule(workspace)
+      }
+    } yield()
   }
 
   private def maybeUpdateInvalidBillingAccountField(billingProject: RawlsBillingProject, invalidBillingAccount: Boolean, span: Span = null): Future[Seq[Int]] = {
