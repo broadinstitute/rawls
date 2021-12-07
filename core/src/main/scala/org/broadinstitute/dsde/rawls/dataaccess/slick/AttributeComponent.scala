@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.{Sharded, Unsharded, WorkspaceShardState}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport}
 import slick.ast.{BaseTypedType, TypedType}
 import slick.dbio.Effect.Write
 import slick.jdbc.JdbcProfile
@@ -577,7 +577,7 @@ trait AttributeComponent {
           val errMsg = s"inconsistent attributes for list: attribute lists must consist of a single data type. For attribute " +
             s"'${toDelimitedName(attributeName)}', found types: [${typeNames.mkString(", ")}]. " +
             s"Sample values for these types: [${exampleValues.map(_.take(100)).mkString(", ")}]"
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, errMsg))
+          throw new RawlsFatalExceptionWithErrorReport(ErrorReport(errMsg))
         }
       }
     }
