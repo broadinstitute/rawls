@@ -126,10 +126,10 @@ trait V1WorkspaceMigrationComponent {
     def tmpBucketCreated = column[Option[Timestamp]]("TMP_BUCKET_CREATED")
     def newGoogleProjectId = column[Option[String]]("NEW_GOOGLE_PROJECT_ID")
     def newGoogleProjectNumber = column[Option[String]]("NEW_GOOGLE_PROJECT_NUMBER")
-    def newGoogleProjectSetup = column[Option[Timestamp]]("NEW_GOOGLE_PROJECT_SETUP")
+    def newGoogleProjectConfigured = column[Option[Timestamp]]("NEW_GOOGLE_PROJECT_CONFIGURED")
 
     override def * =
-      (id, workspaceId, created, started, finished, outcome, message, tmpBucket, tmpBucketCreated, newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectSetup) <>
+      (id, workspaceId, created, started, finished, outcome, message, tmpBucket, tmpBucketCreated, newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectConfigured) <>
         (V1WorkspaceMigrationAttempt.unsafeFromRecord, V1WorkspaceMigrationAttempt.toRecord(_: V1WorkspaceMigrationAttempt).some)
   }
 
@@ -228,7 +228,7 @@ object V1WorkspaceMigrationMonitor
       )
     } yield (googleProjectId, googleProjectNumber, DBIO.seq(
       migrations.filter(_.id === migrationAttempt.id)
-        .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectSetup))
+        .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
         .update((googleProjectId.value.some, googleProjectNumber.value.some, Timestamp.valueOf(LocalDateTime.now).some))
     ))
 }
