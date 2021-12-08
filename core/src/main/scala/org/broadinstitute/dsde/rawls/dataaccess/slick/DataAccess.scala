@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
 import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates
+import org.broadinstitute.dsde.rawls.monitor.V1WorkspaceMigrationComponent
 import slick.jdbc.JdbcProfile
 
 import javax.naming.NameNotFoundException
@@ -23,7 +24,8 @@ trait DataAccess
   with EntityAttributeStatisticsComponent
   with EntityCacheComponent
   with LocalEntityExpressionQueries
-  with CloneWorkspaceFileTransferComponent {
+  with CloneWorkspaceFileTransferComponent
+  with V1WorkspaceMigrationComponent {
 
 
   this: DriverComponent =>
@@ -69,7 +71,8 @@ trait DataAccess
       TableQuery[EntityTypeStatisticsTable].delete andThen        // FK to workspace
       TableQuery[EntityAttributeStatisticsTable].delete andThen   // FK to workspace
       TableQuery[EntityCacheTable].delete andThen                 // FK to workspace
-      TableQuery[CloneWorkspaceFileTransferTable].delete andThen   // FK to workspace
+      TableQuery[CloneWorkspaceFileTransferTable].delete andThen  // FK to workspace
+      TableQuery[V1WorkspaceMigrationHistory].delete andThen      // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
