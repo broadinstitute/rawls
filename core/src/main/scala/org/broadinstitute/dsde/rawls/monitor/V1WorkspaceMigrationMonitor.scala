@@ -6,10 +6,12 @@ import cats.effect.IO
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.cloud.storage.Storage.BucketGetOption
 import org.apache.commons.lang3.SerializationException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, WriteAction}
+import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, WriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingProject, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.MigrationOutcome.{Failure, Success}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
@@ -35,22 +37,26 @@ final case class V1WorkspaceMigrationAttempt(id: Long,
                                              finished: Option[Timestamp],
                                              outcome: Option[MigrationOutcome],
                                              tmpBucketName: Option[GcsBucketName],
-                                             tmpBucketCreated: Option[Timestamp]
+                                             tmpBucketCreated: Option[Timestamp],
+                                             newGoogleProjectId: Option[GoogleProjectId],
+                                             newGoogleProjectNumber: Option[GoogleProjectNumber],
+                                             newGoogleProjectConfigured: Option[Timestamp]
                                             )
 
 object V1WorkspaceMigrationAttempt {
-  type RecordType = (Long, UUID, Timestamp, Option[Timestamp], Option[Timestamp], Option[String], Option[String], Option[String], Option[Timestamp])
+  type RecordType = (Long, UUID, Timestamp, Option[Timestamp], Option[Timestamp], Option[String], Option[String], Option[String], Option[Timestamp], Option[String], Option[String], Option[Timestamp])
 
   def fromRecord(record: RecordType): Either[String, V1WorkspaceMigrationAttempt] = {
     type EitherStringT[T] = Either[String, T]
     record match {
-      case (id, workspaceId, created, started, finished, outcome, message, tmpBucketName, tmpBucketCreated) =>
+      case (id, workspaceId, created, started, finished, outcome, message, tmpBucketName, tmpBucketCreated, newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectConfigured) =>
         outcome
           .traverse[EitherStringT, MigrationOutcome] {
             case "Success" => Right(Success)
             case "Failure" => Right(Failure(message.getOrElse("")))
-            case other => Left(s"""Failed to read V1WorkspaceMigrationAttempt from record.
-                                   | Unknown migration outcome -- "$other"""".stripMargin)
+            case other => Left(
+              s"""Failed to read V1WorkspaceMigrationAttempt from record.
+                 | Unknown migration outcome -- "$other"""".stripMargin)
           }
           .map { outcome =>
             V1WorkspaceMigrationAttempt(
@@ -61,7 +67,10 @@ object V1WorkspaceMigrationAttempt {
               finished,
               outcome,
               tmpBucketName.map(GcsBucketName),
-              tmpBucketCreated
+              tmpBucketCreated,
+              newGoogleProjectId.map(GoogleProjectId),
+              newGoogleProjectNumber.map(GoogleProjectNumber),
+              newGoogleProjectConfigured
             )
           }
     }
@@ -88,7 +97,10 @@ object V1WorkspaceMigrationAttempt {
       outcome,
       message,
       attempt.tmpBucketName.map(_.value),
-      attempt.tmpBucketCreated
+      attempt.tmpBucketCreated,
+      attempt.newGoogleProjectId.map(_.value),
+      attempt.newGoogleProjectNumber.map(_.value),
+      attempt.newGoogleProjectConfigured
     )
   }
 }
@@ -111,9 +123,12 @@ trait V1WorkspaceMigrationComponent {
     def message = column[Option[String]]("MESSAGE")
     def tmpBucket = column[Option[String]]("TMP_BUCKET")
     def tmpBucketCreated = column[Option[Timestamp]]("TMP_BUCKET_CREATED")
+    def newGoogleProjectId = column[Option[String]]("NEW_GOOGLE_PROJECT_ID")
+    def newGoogleProjectNumber = column[Option[String]]("NEW_GOOGLE_PROJECT_NUMBER")
+    def newGoogleProjectConfigured = column[Option[Timestamp]]("NEW_GOOGLE_PROJECT_CONFIGURED")
 
     override def * =
-      (id, workspaceId, created, started, finished, outcome, message, tmpBucket, tmpBucketCreated) <>
+      (id, workspaceId, created, started, finished, outcome, message, tmpBucket, tmpBucketCreated, newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectConfigured) <>
         (V1WorkspaceMigrationAttempt.unsafeFromRecord, V1WorkspaceMigrationAttempt.toRecord(_: V1WorkspaceMigrationAttempt).some)
   }
 
@@ -178,7 +193,7 @@ object V1WorkspaceMigrationMonitor
                              workspace: Workspace,
                              destGoogleProject: GoogleProject,
                              googleStorageService: GoogleStorageService[IO]
-                            ): IO[(GcsBucketName, ReadWriteAction[Unit])] = {
+                            ): IO[(GcsBucketName, WriteAction[Unit])] = {
     val tmpBucketName = GcsBucketName(
       "terra-workspace-migration-" + UUID.randomUUID.toString.replace("-", "")
     )
@@ -196,6 +211,31 @@ object V1WorkspaceMigrationMonitor
         .map(r => (r.tmpBucket, r.tmpBucketCreated))
         .update((tmpBucketName.value.some, Timestamp.valueOf(LocalDateTime.now).some))
     ))
+  }
+
+  final def claimAndConfigureNewGoogleProject(migrationAttempt: V1WorkspaceMigrationAttempt,
+                                              workspaceService: WorkspaceService,
+                                              workspace: Workspace,
+                                              billingProject: RawlsBillingProject
+                                             ): IO[(GoogleProjectId, GoogleProjectNumber, WriteAction[Unit])] = {
+    IO.fromFuture {
+      IO {
+        for {
+          (googleProjectId, googleProjectNumber) <- workspaceService.setupGoogleProject(
+            billingProject,
+            workspace.currentBillingAccountOnGoogleProject.getOrElse(
+              throw new RawlsException(s"""No billing account for workspace '${workspace.workspaceId}'""")
+            ),
+            workspace.workspaceId,
+            workspace.toWorkspaceName
+          )
+        } yield (googleProjectId, googleProjectNumber, DBIO.seq(
+          migrations.filter(_.id === migrationAttempt.id)
+            .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
+            .update((googleProjectId.value.some, googleProjectNumber.value.some, Timestamp.valueOf(LocalDateTime.now).some))
+        ))
+      }
+    }
   }
 }
 

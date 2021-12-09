@@ -86,6 +86,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
     lazy val userService: UserService = userServiceConstructor(userInfo1)
+    val slickDataSource: SlickDataSource = dataSource
 
 
     def actorRefFactory = system

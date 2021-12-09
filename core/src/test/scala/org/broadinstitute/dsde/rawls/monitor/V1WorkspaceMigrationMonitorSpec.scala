@@ -1,13 +1,12 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.sql.SQLException
-
 import akka.actor.testkit.typed.scaladsl.ActorTestKit
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
@@ -18,6 +17,7 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import slick.dbio.DBIO
 import slick.jdbc.MySQLProfile.api._
 
+import java.sql.SQLException
 import scala.language.postfixOps
 
 class V1WorkspaceMigrationMonitorSpec
@@ -41,7 +41,7 @@ class V1WorkspaceMigrationMonitorSpec
 
   "schedule" should "error when a workspace is scheduled concurrently" in {
     withMinimalTestDatabase { _ =>
-      runAndWait(V1WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace)) shouldBe ()
+      runAndWait(V1WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace)) shouldBe()
       assertThrows[SQLException] {
         runAndWait(V1WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace))
       }
@@ -78,8 +78,58 @@ class V1WorkspaceMigrationMonitorSpec
           writeAction
         }
       }.unsafeRunSync
-      runAndWait(writeAction)
+
+      runAndWait(writeAction) shouldBe ()
     }
   }
 
+  "claimAndConfigureGoogleProject" should "return a valid database operation" in {
+    val spec = new WorkspaceServiceSpec()
+    spec.withTestDataServices { services =>
+      spec.runAndWait {
+        DBIO.seq(
+          spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace),
+          V1WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
+        )
+      }
+
+      val (_, _, dbOp) = IO.fromFuture(IO {
+        services.slickDataSource.database
+          .run {
+            V1WorkspaceMigrationMonitor.migrations
+              .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+              .result
+          }
+      })
+        .map(_.head)
+        .flatMap { attempt =>
+          V1WorkspaceMigrationMonitor.claimAndConfigureNewGoogleProject(
+            attempt,
+            services.workspaceService,
+            spec.testData.v1Workspace,
+            spec.testData.billingProject
+          )
+        }
+        .unsafeRunSync
+
+      spec.runAndWait(dbOp) shouldBe ()
+
+      val (projectId, projectNumber, projectConfigured) = IO.fromFuture(IO {
+      services.slickDataSource.database
+        .run {
+          V1WorkspaceMigrationMonitor.migrations
+            .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+            .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
+            .result
+        }
+    })
+      .map(_.head)
+      .unsafeRunSync
+
+      projectId shouldBe defined
+      projectNumber shouldBe defined
+      projectConfigured shouldBe defined
+    }
+  }
 }
+
