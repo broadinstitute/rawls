@@ -1985,19 +1985,40 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
 
     for {
-      googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span)(_ => resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId))
+      googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span) { _ =>
+        resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId)
+      }
+
       _ = logger.info(s"Moving google project ${googleProjectId} to folder.")
-      _ <- traceWithParent("maybeMoveGoogleProjectToFolder", span)(_ => maybeMoveGoogleProjectToFolder(billingProject.servicePerimeter, googleProjectId))
+      _ <- traceWithParent("maybeMoveGoogleProjectToFolder", span) { _ =>
+        maybeMoveGoogleProjectToFolder(billingProject.servicePerimeter, googleProjectId)
+      }
+
       _ = logger.info(s"Setting up billing account for ${googleProjectId}.")
-      _ <- traceWithParent("updateGoogleProjectBillingAccount", span)(_ => gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount)))
+      _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { _ =>
+        gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount))
+      }
+
       _ = logger.info(s"Creating labels for ${googleProjectId}.")
-      googleProjectLabels = gcsDAO.labelSafeMap(Map("workspaceNamespace" -> workspaceName.namespace, "workspaceName" -> workspaceName.name, "workspaceId" -> workspaceId), "")
-      googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
+      googleProjectLabels = gcsDAO.labelSafeMap(Map(
+        "workspaceNamespace" -> workspaceName.namespace,
+        "workspaceName" -> workspaceName.name,
+        "workspaceId" -> workspaceId
+      ),
+        ""
+      )
+
       _ = logger.info(s"Setting up project in ${googleProjectId} cloud resource manager.")
-      googleProject <- traceWithParent("setUpProjectInCloudResourceManager", span)(_ => setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName))
+      googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
+      googleProject <- traceWithParent("setUpProjectInCloudResourceManager", span) { _ =>
+        setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName)
+      }
+
       _ = logger.info(s"Remove RBS SA from owner policy ${googleProjectId}.")
       googleProjectNumber = gcsDAO.getGoogleProjectNumber(googleProject)
-      _ <- traceWithParent("remove RBS SA from owner policy", span)(_ => gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail))))
+      _ <- traceWithParent("remove RBS SA from owner policy", span) { _ =>
+        gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail)))
+      }
     } yield (googleProjectId, googleProjectNumber)
   }
 
@@ -2010,6 +2031,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail)
     }
   }
+
 
   /**
     * If there is a service perimeter, move the google project to the folder for the perimeter
@@ -2283,12 +2305,14 @@ class WorkspaceService(protected val userInfo: UserInfo,
                   _ <- createWorkflowCollectionFuture
                   _ <- syncPoliciesFuture
                 } yield()})
-              (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(span => DBIO.from(
-                for {
-                  (googleProjectId, googleProjectNumber) <- setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, span)
-                  _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)
-                } yield (googleProjectId, googleProjectNumber)
-              ))
+              (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan) { span =>
+                DBIO.from(
+                  for {
+                    (googleProjectId, googleProjectNumber) <- setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, span)
+                    _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)
+                  } yield (googleProjectId, googleProjectNumber)
+                )
+              }
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
                 createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
 

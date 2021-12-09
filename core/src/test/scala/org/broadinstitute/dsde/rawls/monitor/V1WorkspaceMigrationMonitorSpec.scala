@@ -126,9 +126,9 @@ class V1WorkspaceMigrationMonitorSpec
       .map(_.head)
       .unsafeRunSync
 
-      projectId should be ('defined)
-      projectNumber should be ('defined)
-      projectConfigured should be ('defined)
+      projectId shouldBe defined
+      projectNumber shouldBe defined
+      projectConfigured shouldBe defined
     }
   }
 }
