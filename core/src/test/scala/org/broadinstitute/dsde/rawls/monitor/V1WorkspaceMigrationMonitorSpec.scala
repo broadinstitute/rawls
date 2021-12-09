@@ -13,13 +13,11 @@ import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import slick.dbio.DBIO
 import slick.jdbc.MySQLProfile.api._
 
 import java.sql.SQLException
-import scala.concurrent.Await
 import scala.language.postfixOps
 
 class V1WorkspaceMigrationMonitorSpec
@@ -80,7 +78,8 @@ class V1WorkspaceMigrationMonitorSpec
           writeAction
         }
       }.unsafeRunSync
-      runAndWait(writeAction)
+
+      runAndWait(writeAction) shouldBe ()
     }
   }
 
@@ -94,24 +93,24 @@ class V1WorkspaceMigrationMonitorSpec
         )
       }
 
-      val (_, _, dbOp) = Await.result(
+      val (_, _, dbOp) = IO.fromFuture(IO {
         services.slickDataSource.database
           .run {
             V1WorkspaceMigrationMonitor.migrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .result
           }
-          .map(_.head)
-          .flatMap { attempt =>
-            V1WorkspaceMigrationMonitor.claimAndConfigureNewGoogleProject(
-              attempt,
-              services.workspaceService,
-              spec.testData.v1Workspace,
-              spec.testData.billingProject
-            )
-          },
-        5.seconds // really should be instant if we've mocked correctly?
-      )
+      })
+        .map(_.head)
+        .flatMap { attempt =>
+          V1WorkspaceMigrationMonitor.claimAndConfigureNewGoogleProject(
+            attempt,
+            services.workspaceService,
+            spec.testData.v1Workspace,
+            spec.testData.billingProject
+          )
+        }
+        .unsafeRunSync
 
       spec.runAndWait(dbOp) shouldBe ()
     }

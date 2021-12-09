@@ -20,7 +20,6 @@ import java.time.LocalDateTime
 import java.util.UUID
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 
 
 sealed trait MigrationOutcome
@@ -218,19 +217,26 @@ object V1WorkspaceMigrationMonitor
                                               workspaceService: WorkspaceService,
                                               workspace: Workspace,
                                               billingProject: RawlsBillingProject
-                                             ): Future[(GoogleProjectId, GoogleProjectNumber, WriteAction[Unit])] =
-    for {
-      (googleProjectId, googleProjectNumber) <- workspaceService.setupGoogleProject(
-        billingProject,
-        workspace.currentBillingAccountOnGoogleProject.getOrElse(throw new RawlsException(s"""No billing account for workspace '${workspace.workspaceId}'""")),
-        workspace.workspaceId,
-        workspace.toWorkspaceName
-      )
-    } yield (googleProjectId, googleProjectNumber, DBIO.seq(
-      migrations.filter(_.id === migrationAttempt.id)
-        .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
-        .update((googleProjectId.value.some, googleProjectNumber.value.some, Timestamp.valueOf(LocalDateTime.now).some))
-    ))
+                                             ): IO[(GoogleProjectId, GoogleProjectNumber, WriteAction[Unit])] = {
+    IO.fromFuture {
+      IO {
+        for {
+          (googleProjectId, googleProjectNumber) <- workspaceService.setupGoogleProject(
+            billingProject,
+            workspace.currentBillingAccountOnGoogleProject.getOrElse(
+              throw new RawlsException(s"""No billing account for workspace '${workspace.workspaceId}'""")
+            ),
+            workspace.workspaceId,
+            workspace.toWorkspaceName
+          )
+        } yield (googleProjectId, googleProjectNumber, DBIO.seq(
+          migrations.filter(_.id === migrationAttempt.id)
+            .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
+            .update((googleProjectId.value.some, googleProjectNumber.value.some, Timestamp.valueOf(LocalDateTime.now).some))
+        ))
+      }
+    }
+  }
 }
 
 object V1WorkspaceMigrationActor {
