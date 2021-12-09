@@ -113,6 +113,22 @@ class V1WorkspaceMigrationMonitorSpec
         .unsafeRunSync
 
       spec.runAndWait(dbOp) shouldBe ()
+
+      val (projectId, projectNumber, projectConfigured) = IO.fromFuture(IO {
+      services.slickDataSource.database
+        .run {
+          V1WorkspaceMigrationMonitor.migrations
+            .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+            .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
+            .result
+        }
+    })
+      .map(_.head)
+      .unsafeRunSync
+
+      projectId should be ('defined)
+      projectNumber should be ('defined)
+      projectConfigured should be ('defined)
     }
   }
 }
