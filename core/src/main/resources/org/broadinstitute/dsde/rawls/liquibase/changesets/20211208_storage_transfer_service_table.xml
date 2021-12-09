@@ -52,7 +52,7 @@
         </createTable>
         <addForeignKeyConstraint baseColumnNames="MIGRATION_ID"
                                  baseTableName="PPW_STORAGE_TRANSFER_SERVICE_JOB"
-                                 constraintName="FK_V1_WORKSPACE_MIGRATION_HISTORY_WORKSPACE_STORAGE_TRANSFER_SERVICE_JOB"
+                                 constraintName="FK_V1_WORKSPACE_MIGRATION_STS_JOB"
                                  deferrable="false"
                                  initiallyDeferred="false"
                                  onDelete="CASCADE"
