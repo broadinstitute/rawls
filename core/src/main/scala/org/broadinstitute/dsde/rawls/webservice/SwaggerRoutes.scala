@@ -42,6 +42,7 @@ trait SwaggerRoutes extends LazyLogging {
   }
 
   private def serveIndex(): server.Route = {
+    logger.info("Willy!!! You got a log message in swaggerRoutes.serveIndex")
     val swaggerOptions =
       """
         |        validatorUrl: null,

@@ -1,6 +1,6 @@
 openapi: 3.0.1
 info:
-  title: Rawls
+  title: Rawls (Willy's local version)
   description: Rawls API
   termsOfService: http://www.github.com/broadinstitute/rawls
   license:
@@ -25,6 +25,7 @@ tags:
   - name: version
   - name: workflows
   - name: workspaces
+  - name: willy-test
 
 paths:
   /version:
@@ -5824,6 +5825,7 @@ components:
     WorkspaceDetails:
       required:
         - bucketName
+        - bucketLocation
         - createdBy
         - createdDate
         - isLocked
@@ -5848,6 +5850,9 @@ components:
         bucketName:
           type: string
           description: The name of the bucket associated with the workspace
+        bucketLocation:
+          type: string
+          description: The location of the bucket associated with the workspace
         createdBy:
           type: string
           description: The user who created the workspace

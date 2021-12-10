@@ -3,12 +3,13 @@ package org.broadinstitute.dsde.rawls.openam
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives.{headerValueByName, onSuccess}
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-trait StandardUserInfoDirectives extends UserInfoDirectives {
+trait StandardUserInfoDirectives extends UserInfoDirectives with LazyLogging {
   implicit val executionContext: ExecutionContext
   val samDAO: SamDAO
 
@@ -25,6 +26,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
       headerValueByName("OIDC_CLAIM_email")
     ) tflatMap {
     case (token, userId, expiresIn, email) => {
+      logger.info("Willy!!! You got a log message in requireUserInfo")
       val userInfo = UserInfo(RawlsUserEmail(email), OAuth2BearerToken(token), expiresIn.toLong, RawlsUserSubjectId(userId))
       onSuccess(getWorkbenchUserEmailId(userInfo).map {
         case Some(petOwnerUser) => UserInfo(petOwnerUser.userEmail, OAuth2BearerToken(token), expiresIn.toLong, petOwnerUser.userSubjectId)

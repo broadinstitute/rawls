@@ -587,6 +587,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
 
   def listWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span): Future[JsValue] = {
+    logger.info("Willy!!! You got a log message in listWorkspaces")
 
     val s = startSpanWithParent("optionHandling", parentSpan)
 

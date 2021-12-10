@@ -37,13 +37,16 @@ object RawlsApiService extends LazyLogging {
 
     ExceptionHandler {
       case withErrorReport: RawlsExceptionWithErrorReport =>
+        logger.error("WILLY!!!! in exceptionHandler withErrorReport")
         complete(withErrorReport.errorReport.statusCode.getOrElse(StatusCodes.InternalServerError) -> withErrorReport.errorReport)
       case rollback:MySQLTransactionRollbackException =>
         logger.error(s"ROLLBACK EXCEPTION, PROBABLE DEADLOCK: ${rollback.getMessage} [${rollback.getErrorCode} ${rollback.getSQLState}] ${rollback.getNextException}", rollback)
         complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
       case wsmApiException: ApiException =>
+        logger.error("WILLY!!!! in exceptionHandler ApiException")
         complete(wsmApiException.getCode -> ErrorReport(wsmApiException).copy(stackTrace = Seq()))
       case e: Throwable =>
+        logger.error("WILLY!!!! in exceptionHandler Throwable")
         // so we don't log the error twice when debug is enabled
         if (logger.underlying.isDebugEnabled) {
           logger.debug(e.getMessage, e)
@@ -57,8 +60,11 @@ object RawlsApiService extends LazyLogging {
   def rejectionHandler = {
     import spray.json._
     import DefaultJsonProtocol._
+    logger.error("Willy! in rejectionHandler")
     RejectionHandler.default.mapRejectionResponse {
       case res @ HttpResponse(status, _, ent: HttpEntity.Strict, _) =>
+        logger.error("Willy! in rejectionHandler")
+        logger.error(ent.data.utf8String)
         res.withEntity(entity = HttpEntity(ContentTypes.`application/json`, Map(status.toString -> ent.data.utf8String).toJson.prettyPrint))
     }
   }
@@ -114,8 +120,8 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
         case Complete(resp) =>
           val logLevel: LogLevel = resp.status.intValue / 100 match {
             case 5 => Logging.ErrorLevel
-            case 4 => Logging.InfoLevel
-            case _ => Logging.DebugLevel
+            case 4 => Logging.ErrorLevel
+            case _ => Logging.ErrorLevel
           }
           entityAsString(resp.entity).map(data => LogEntry(s"${req.method} ${req.uri}: ${resp.status} entity: $data", logLevel))
         case other =>
@@ -123,7 +129,8 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
       }
       entry.map(_.logTo(logger))
     }
-
+    println("Willy! Called println in logrequestresult")
+    logger.error("Willy! Got logger in logrequestResult")
     DebuggingDirectives.logRequestResult(LoggingMagnet(log => myLoggingFunction(log)))
   }
 }
