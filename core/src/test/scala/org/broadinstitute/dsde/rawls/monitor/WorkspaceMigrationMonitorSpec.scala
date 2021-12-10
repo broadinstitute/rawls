@@ -7,6 +7,7 @@ import cats.implicits.catsSyntaxOptionId
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
+import org.broadinstitute.dsde.rawls.monitor.migration.{WorkspaceMigrationMonitor, WorkspaceMigrationHistory}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
@@ -22,7 +23,7 @@ import java.sql.SQLException
 import java.util.UUID
 import scala.language.postfixOps
 
-class V1WorkspaceMigrationMonitorSpec
+class WorkspaceMigrationMonitorSpec
   extends AnyFlatSpecLike
     with BeforeAndAfterAll
     with Matchers
@@ -37,15 +38,15 @@ class V1WorkspaceMigrationMonitorSpec
 
   "isMigrating" should "return false when a workspace is not being migrated" in {
     withMinimalTestDatabase { _ =>
-      runAndWait(V1WorkspaceMigrationMonitor.isMigrating(minimalTestData.v1Workspace)) shouldBe false
+      runAndWait(WorkspaceMigrationMonitor.isMigrating(minimalTestData.v1Workspace)) shouldBe false
     }
   }
 
   "schedule" should "error when a workspace is scheduled concurrently" in {
     withMinimalTestDatabase { _ =>
-      runAndWait(V1WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace)) shouldBe()
+      runAndWait(WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace)) shouldBe()
       assertThrows[SQLException] {
-        runAndWait(V1WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace))
+        runAndWait(WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace))
       }
     }
   }
@@ -56,21 +57,21 @@ class V1WorkspaceMigrationMonitorSpec
       spec.runAndWait {
         DBIO.seq(
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace),
-          V1WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
+          WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
         )
       }
 
       val (_, _, dbOp) = IO.fromFuture(IO {
         services.slickDataSource.database
           .run {
-            V1WorkspaceMigrationMonitor.migrations
+            WorkspaceMigrationHistory.workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .result
           }
       })
         .map(_.head)
         .flatMap { attempt =>
-          V1WorkspaceMigrationMonitor.claimAndConfigureNewGoogleProject(
+          WorkspaceMigrationMonitor.claimAndConfigureNewGoogleProject(
             attempt,
             services.workspaceService,
             spec.testData.v1Workspace,
@@ -84,7 +85,7 @@ class V1WorkspaceMigrationMonitorSpec
       val (projectId, projectNumber, projectConfigured) = IO.fromFuture(IO {
         services.slickDataSource.database
           .run {
-            V1WorkspaceMigrationMonitor.migrations
+            WorkspaceMigrationHistory.workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
               .result
@@ -114,18 +115,21 @@ class V1WorkspaceMigrationMonitorSpec
       runAndWait {
         DBIO.seq(
           workspaceQuery.createOrUpdate(v1WorkspaceCopy),
-          V1WorkspaceMigrationMonitor.schedule(v1WorkspaceCopy)
+          WorkspaceMigrationMonitor.schedule(v1WorkspaceCopy)
         )
       }
 
       // Creating the temp bucket requires that the new google project has been created
-      val attempt = runAndWait(migrations.filter(_.workspaceId === v1WorkspaceCopy.workspaceIdAsUUID).result)
+      val attempt = runAndWait(
+        WorkspaceMigrationHistory.workspaceMigrations
+          .filter(_.workspaceId === v1WorkspaceCopy.workspaceIdAsUUID).result
+      )
         .head
         .copy(newGoogleProjectId = GoogleProjectId(destProject).some)
 
       val writeAction = GoogleStorageService.resource[IO](pathToCredentialJson, None, Option(serviceProject)).use { googleStorageService =>
         for {
-          res <- V1WorkspaceMigrationMonitor.createTempBucket(attempt, v1WorkspaceCopy, googleStorageService)
+          res <- WorkspaceMigrationMonitor.createTempBucket(attempt, v1WorkspaceCopy, googleStorageService)
           (bucketName, writeAction) = res
           loadedBucket <- googleStorageService.getBucket(GoogleProject(destProject), bucketName)
           _ <- googleStorageService.deleteBucket(GoogleProject(destProject), bucketName).compile.drain
@@ -135,7 +139,7 @@ class V1WorkspaceMigrationMonitorSpec
         }
       }.unsafeRunSync
 
-      runAndWait(writeAction) shouldBe ()
+      runAndWait(writeAction) shouldBe()
     }
   }
 
@@ -157,12 +161,15 @@ class V1WorkspaceMigrationMonitorSpec
       runAndWait {
         DBIO.seq(
           workspaceQuery.createOrUpdate(v1Workspace),
-          V1WorkspaceMigrationMonitor.schedule(v1Workspace)
+          WorkspaceMigrationMonitor.schedule(v1Workspace)
         )
       }
 
       // Creating the bucket requires that the new google project and tmp bucket have been created
-      val attempt = runAndWait(migrations.filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result)
+      val attempt = runAndWait(
+        WorkspaceMigrationHistory.workspaceMigrations
+          .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
+      )
         .head
         .copy(
           newGoogleProjectId = GoogleProjectId(destProject).some,
@@ -171,7 +178,7 @@ class V1WorkspaceMigrationMonitorSpec
 
       val writeAction = GoogleStorageService.resource[IO](pathToCredentialJson, None, Option(serviceProject)).use { googleStorageService =>
         for {
-          res <- V1WorkspaceMigrationMonitor.createFinalBucket(attempt, v1Workspace, googleStorageService)
+          res <- WorkspaceMigrationMonitor.createFinalBucket(attempt, v1Workspace, googleStorageService)
           (bucketName, writeAction) = res
           loadedBucket <- googleStorageService.getBucket(GoogleProject(destProject), bucketName)
           _ <- googleStorageService.deleteBucket(GoogleProject(destProject), bucketName).compile.drain
@@ -182,12 +189,12 @@ class V1WorkspaceMigrationMonitorSpec
         }
       }.unsafeRunSync
 
-      runAndWait(writeAction) shouldBe ()
+      runAndWait(writeAction) shouldBe()
 
       val finalBucketCreated = IO.fromFuture(IO {
         dataSource.database
           .run {
-            V1WorkspaceMigrationMonitor.migrations
+            WorkspaceMigrationHistory.workspaceMigrations
               .filter(_.id === attempt.id)
               .map(_.finalBucketCreated)
               .result

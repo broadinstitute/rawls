@@ -32,7 +32,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.V1WorkspaceMigrationMonitor
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMonitor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -2113,7 +2113,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     for {
       workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
       _ <- dataSource.inTransaction { dataAccess =>
-        V1WorkspaceMigrationMonitor.schedule(workspace)
+        WorkspaceMigrationMonitor.schedule(workspace)
       }
     } yield()
   }
