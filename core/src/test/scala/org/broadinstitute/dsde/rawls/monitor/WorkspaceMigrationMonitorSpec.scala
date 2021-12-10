@@ -4,14 +4,20 @@ import akka.actor.testkit.typed.scaladsl.ActorTestKit
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits.catsSyntaxOptionId
+import com.google.longrunning.Operation
+import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
-import org.broadinstitute.dsde.rawls.monitor.migration.{WorkspaceMigrationMonitor, WorkspaceMigrationHistory}
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMonitor
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, OperationName}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, ServiceAccount}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
+import org.mockito.Answers.RETURNS_SMART_NULLS
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -64,7 +70,7 @@ class WorkspaceMigrationMonitorSpec
       val (_, _, dbOp) = IO.fromFuture(IO {
         services.slickDataSource.database
           .run {
-            WorkspaceMigrationHistory.workspaceMigrations
+            WorkspaceMigrationMonitor.workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .result
           }
@@ -85,7 +91,7 @@ class WorkspaceMigrationMonitorSpec
       val (projectId, projectNumber, projectConfigured) = IO.fromFuture(IO {
         services.slickDataSource.database
           .run {
-            WorkspaceMigrationHistory.workspaceMigrations
+            WorkspaceMigrationMonitor.workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
               .result
@@ -121,7 +127,7 @@ class WorkspaceMigrationMonitorSpec
 
       // Creating the temp bucket requires that the new google project has been created
       val attempt = runAndWait(
-        WorkspaceMigrationHistory.workspaceMigrations
+        WorkspaceMigrationMonitor.workspaceMigrations
           .filter(_.workspaceId === v1WorkspaceCopy.workspaceIdAsUUID).result
       )
         .head
@@ -140,6 +146,85 @@ class WorkspaceMigrationMonitorSpec
       }.unsafeRunSync
 
       runAndWait(writeAction) shouldBe()
+    }
+  }
+
+  val stsMock = new GoogleStorageTransferService[IO] {
+    override def getStsServiceAccount(project: GoogleProject): IO[ServiceAccount] =
+      IO.raiseError(new NotImplementedError("getStsServiceAccount is stubbed"))
+
+    override def createTransferJob(jobName: JobName, jobDescription: String,
+                                   projectToBill: GoogleProject, originBucket: GcsBucketName,
+                                   destinationBucket: GcsBucketName, schedule: JobTransferSchedule): IO[TransferJob] =
+      IO.pure {
+        TransferJob.newBuilder()
+          .setName(s"${jobName}")
+          .setDescription(jobDescription)
+          .setProjectId(s"${projectToBill}")
+          .build
+      }
+
+    override def getTransferJob(jobName: JobName, project: GoogleProject): IO[TransferJob] =
+      IO.raiseError(new NotImplementedError("getTransferJob is stubbed"))
+
+    override def listTransferOperations(jobName: JobName, project: GoogleProject): IO[Seq[Operation]] =
+      IO.raiseError(new NotImplementedError("listTransferOperations is stubbed"))
+
+    override def getTransferOperation(operationName: OperationName): IO[Operation] =
+      IO.raiseError(new NotImplementedError("listTransferOperations is stubbed"))
+  }
+
+  "startBucketStorageTransferJob" should "create and start a storage transfer job between teh source and destination bucket" in {
+    val sourceProject = "general-dev-billing-account"
+    val sourceBucket = "az-leotest"
+    val destProject = "terra-dev-7af423b8"
+    val destBucket = "v1-migration-test-" + UUID.randomUUID.toString.replace("-", "")
+
+    val v1Workspace = minimalTestData.v1Workspace.copy(
+      namespace = sourceProject,
+      googleProjectId = GoogleProjectId(sourceProject),
+      bucketName = destBucket
+    )
+
+    withMinimalTestDatabase { _ =>
+      runAndWait {
+        DBIO.seq(
+          workspaceQuery.createOrUpdate(v1Workspace),
+          WorkspaceMigrationMonitor.schedule(v1Workspace)
+        )
+      }
+
+      // Creating the bucket requires that the new google project and tmp bucket have been created
+      val migration = runAndWait(
+        WorkspaceMigrationMonitor.workspaceMigrations
+          .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
+      )
+        .head
+        .copy(
+          newGoogleProjectId = GoogleProjectId(destProject).some,
+          tmpBucketName = GcsBucketName(sourceBucket).some
+        )
+
+      val (job, writeAction) = WorkspaceMigrationMonitor.startBucketStorageTransferJob(
+            migration,
+            GcsBucketName(v1Workspace.bucketName),
+            migration.tmpBucketName.get,
+            GoogleProject("to-be-determined"),
+            stsMock
+          ).unsafeRunSync
+
+      runAndWait(writeAction) shouldBe ()
+
+      val transferJobs = runAndWait(
+        WorkspaceMigrationMonitor.storageTransferJobs
+          .filter(_.migrationId === migration.id)
+          .result
+      )
+
+      transferJobs.length shouldBe 1
+      transferJobs.head.jobName.value shouldBe job.getName
+      transferJobs.head.originBucket.value shouldBe v1Workspace.bucketName
+      transferJobs.head.destBucket shouldBe migration.tmpBucketName.get
     }
   }
 
@@ -166,8 +251,8 @@ class WorkspaceMigrationMonitorSpec
       }
 
       // Creating the bucket requires that the new google project and tmp bucket have been created
-      val attempt = runAndWait(
-        WorkspaceMigrationHistory.workspaceMigrations
+      val migration = runAndWait(
+        WorkspaceMigrationMonitor.workspaceMigrations
           .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
       )
         .head
@@ -178,7 +263,7 @@ class WorkspaceMigrationMonitorSpec
 
       val writeAction = GoogleStorageService.resource[IO](pathToCredentialJson, None, Option(serviceProject)).use { googleStorageService =>
         for {
-          res <- WorkspaceMigrationMonitor.createFinalBucket(attempt, v1Workspace, googleStorageService)
+          res <- WorkspaceMigrationMonitor.createFinalBucket(migration, v1Workspace, googleStorageService)
           (bucketName, writeAction) = res
           loadedBucket <- googleStorageService.getBucket(GoogleProject(destProject), bucketName)
           _ <- googleStorageService.deleteBucket(GoogleProject(destProject), bucketName).compile.drain
@@ -191,17 +276,13 @@ class WorkspaceMigrationMonitorSpec
 
       runAndWait(writeAction) shouldBe()
 
-      val finalBucketCreated = IO.fromFuture(IO {
-        dataSource.database
-          .run {
-            WorkspaceMigrationHistory.workspaceMigrations
-              .filter(_.id === attempt.id)
+      val finalBucketCreated = runAndWait(
+            WorkspaceMigrationMonitor.workspaceMigrations
+              .filter(_.id === migration.id)
               .map(_.finalBucketCreated)
               .result
-          }
-      })
-        .map(_.head)
-        .unsafeRunSync
+              .map(_.head)
+      )
 
       finalBucketCreated shouldBe defined
     }

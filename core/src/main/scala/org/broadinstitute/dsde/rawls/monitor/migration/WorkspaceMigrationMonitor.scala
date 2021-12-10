@@ -182,12 +182,12 @@ object WorkspaceMigrationMonitor {
     IO.raiseError(new IllegalStateException(s"""Temporary storage bucket was not created for migration "${attempt.id}.""""))
 
 
-  final def transferDataFromOriginBucketToDestBucket(attempt: WorkspaceMigration,
-                                                     originBucket: GcsBucketName,
-                                                     destBucket: GcsBucketName,
-                                                     projectToBill: GoogleProject,
-                                                     sts: GoogleStorageTransferService[IO]
-                                                    ): IO[(TransferJob, WriteAction[Unit])] =
+  final def startBucketStorageTransferJob(migration: WorkspaceMigration,
+                                          originBucket: GcsBucketName,
+                                          destBucket: GcsBucketName,
+                                          projectToBill: GoogleProject,
+                                          sts: GoogleStorageTransferService[IO]
+                                          ): IO[(TransferJob, WriteAction[Unit])] =
     for {
       transferJob <- sts.createTransferJob(
         jobName = GoogleStorageTransferService.JobName(
@@ -201,7 +201,7 @@ object WorkspaceMigrationMonitor {
       )
     } yield (transferJob, DBIO.seq(
       storageTransferJobs.map(job => (job.jobName, job.migrationId, job.destBucket, job.originBucket)) +=
-        (transferJob.getName, attempt.id, destBucket.value, originBucket.value)
+        (transferJob.getName, migration.id, destBucket.value, originBucket.value)
       )
     )
 }
