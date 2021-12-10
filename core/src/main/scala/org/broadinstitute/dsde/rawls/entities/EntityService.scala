@@ -8,7 +8,6 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerException
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -231,10 +230,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
                           }
       } yield {
         entities
-      }) recover {
-        case dle: DeltaLayerException =>
-          throw new RawlsExceptionWithErrorReport(ErrorReport(dle.code, dle.getMessage, dle))
-      }
+      })
     }
 
   def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[PerRequestMessage] =

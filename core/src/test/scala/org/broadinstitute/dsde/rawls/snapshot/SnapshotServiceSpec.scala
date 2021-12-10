@@ -8,7 +8,6 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, spy, times, verify, when}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, GoogleProjectId, NamedDataRepoSnapshot, SamPolicy, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -49,16 +48,12 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         .thenReturn(new DataRepoSnapshotResource().metadata(new ResourceMetadata().resourceId(UUID.randomUUID()).workspaceId(UUID.randomUUID()).name("foo").description("").cloningInstructions(CloningInstructionsEnum.NOTHING)).attributes(new DataRepoSnapshotAttributes()))
 
       val workspace = minimalTestData.workspace
-      val deltaLayer = new DeltaLayer(mockBigQueryServiceFactory, new MockDeltaLayerWriter, mockSamDAO, fakeRawlsClientEmail, fakeDeltaLayerStreamerEmail)
 
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
         mockSamDAO,
         mockWorkspaceManagerDAO,
-        deltaLayer,
-        "fake-terra-data-repo-dev",
-        fakeRawlsClientEmail,
-        fakeDeltaLayerStreamerEmail
+        "fake-terra-data-repo-dev"
       )(userInfo)
 
       Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), UUID.randomUUID())), Duration.Inf)
@@ -85,16 +80,12 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       when(mockWorkspaceManagerDAO.createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken])).thenThrow(new RuntimeException("oh no!"))
 
       val workspace = minimalTestData.workspace
-      val deltaLayer = new DeltaLayer(mockBigQueryServiceFactory, new MockDeltaLayerWriter, mockSamDAO, fakeRawlsClientEmail, fakeDeltaLayerStreamerEmail)
 
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
         mockSamDAO,
         mockWorkspaceManagerDAO,
-        deltaLayer,
-        "fake-terra-data-repo-dev",
-        fakeRawlsClientEmail,
-        fakeDeltaLayerStreamerEmail
+        "fake-terra-data-repo-dev"
       )(userInfo)
 
       val createException = intercept[RuntimeException] {
@@ -126,16 +117,12 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         .thenReturn(new DataRepoSnapshotResource().metadata(new ResourceMetadata().resourceId(UUID.randomUUID()).workspaceId(UUID.randomUUID()).name("foo").description("").cloningInstructions(CloningInstructionsEnum.NOTHING)).attributes(new DataRepoSnapshotAttributes()))
 
       val workspace = minimalTestData.workspace
-      val deltaLayer = new DeltaLayer(mockBigQueryServiceFactory, new MockDeltaLayerWriter, mockSamDAO, fakeRawlsClientEmail, fakeDeltaLayerStreamerEmail)
 
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
         mockSamDAO,
         mockWorkspaceManagerDAO,
-        deltaLayer,
-        "fake-terra-data-repo-dev",
-        fakeRawlsClientEmail,
-        fakeDeltaLayerStreamerEmail
+        "fake-terra-data-repo-dev"
       )(userInfo)
 
       val createException = intercept[RawlsExceptionWithErrorReport] {
@@ -169,19 +156,13 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         .thenReturn(new GcpBigQueryDatasetResource().metadata(new ResourceMetadata().resourceId(UUID.randomUUID())).attributes(new GcpBigQueryDatasetAttributes()))
 
       val workspace = minimalTestData.workspace
-      val deltaLayer = new DeltaLayer(mockBigQueryServiceFactory, new MockDeltaLayerWriter, mockSamDAO, fakeRawlsClientEmail, fakeDeltaLayerStreamerEmail)
 
       val snapshotService = SnapshotService.constructor(
         slickDataSource,
         mockSamDAO,
         mockWorkspaceManagerDAO,
-        deltaLayer,
-        "fake-terra-data-repo-dev",
-        fakeRawlsClientEmail,
-        fakeDeltaLayerStreamerEmail
+        "fake-terra-data-repo-dev"
       )(userInfo)
-
-      val deltaLayerDatasetName = DeltaLayer.generateDatasetNameForWorkspace(workspace)
 
       val snapshotUUID = UUID.randomUUID()
 
@@ -190,7 +171,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO, times(1)).getDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID),any[OAuth2BearerToken])
       verify(mockWorkspaceManagerDAO, times(1)).deleteDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID), any[OAuth2BearerToken])
       // assert we do NOT attempt to delete the companion dataset or its WSM reference
-      verify(mockWorkspaceManagerDAO, times(0)).getBigQueryDatasetReferenceByName(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(deltaLayerDatasetName), any[OAuth2BearerToken])
       verify(mockWorkspaceManagerDAO, times(0)).deleteBigQueryDatasetReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), any[UUID], any[OAuth2BearerToken])
       verify(mockBigQueryServiceFactory, times(0)).getServiceForProject(any[GoogleProjectId])
 
@@ -447,16 +427,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         resList
       }
 
-    val deltaLayer = new DeltaLayer(mockBigQueryServiceFactory, new MockDeltaLayerWriter, mockSamDAO, fakeRawlsClientEmail, fakeDeltaLayerStreamerEmail)
-
     SnapshotService.constructor(
       slickDataSource,
       mockSamDAO,
       mockWorkspaceManagerDAO,
-      deltaLayer,
-      "fake-terra-data-repo-dev",
-      fakeRawlsClientEmail,
-      fakeDeltaLayerStreamerEmail
+      "fake-terra-data-repo-dev"
     )(userInfo)
 
   }

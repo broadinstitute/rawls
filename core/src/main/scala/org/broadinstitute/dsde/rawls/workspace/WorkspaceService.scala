@@ -21,7 +21,6 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
@@ -68,7 +67,7 @@ import scala.util.{Failure, Success, Try}
 object WorkspaceService {
   def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO,
                   executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, workspaceManagerDAO: WorkspaceManagerDAO,
-                  deltaLayer: DeltaLayer, methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
+                  methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
                   notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
@@ -80,7 +79,7 @@ object WorkspaceService {
                  (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
     new WorkspaceService(userInfo, dataSource, entityManager, methodRepoDAO, cromiamDAO,
-      executionServiceCluster, execServiceBatchSize, workspaceManagerDAO, deltaLayer,
+      executionServiceCluster, execServiceBatchSize, workspaceManagerDAO,
       methodConfigResolver, gcsDAO, samDAO,
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
@@ -132,7 +131,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        executionServiceCluster: ExecutionServiceCluster,
                        execServiceBatchSize: Int,
                        val workspaceManagerDAO: WorkspaceManagerDAO,
-                       val deltaLayer: DeltaLayer,
                        val methodConfigResolver: MethodConfigResolver,
                        protected val gcsDAO: GoogleServicesDAO,
                        val samDAO: SamDAO, notificationDAO: NotificationDAO,
@@ -464,13 +462,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
             logger.warn(s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceName}. Received ${e.getCode}: [${e.getResponseBody}]")
           }
           Future.successful()
-        }
-      }
-      // Delete the Delta Layer companion dataset, if it exists
-      _ <- deltaLayer.deleteDataset(workspaceContext) recoverWith {
-        case t:Throwable => {
-          logger.warn(s"Unexpected failure deleting workspace (while deleting Delta Layer) for workspace `${workspaceName}`", t)
-          Future.failed(t)
         }
       }
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {

@@ -12,7 +12,6 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
-import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, DeltaLayerException, DeltaLayerTranslator, DeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base._
@@ -35,10 +34,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRepoSnapshotResource,
+class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                              requestArguments: EntityRequestArguments,
                              samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory,
-                             deltaLayerWriter: DeltaLayerWriter,
                              config: DataRepoEntityProviderConfig)
                             (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with DataRepoBigQuerySupport with LazyLogging with ExpressionEvaluationSupport {
@@ -417,33 +415,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
-    // translate to delta layer row objects. This method includes validation.
-    val inserts = DeltaLayerTranslator.translateEntityUpdates(entityUpdates)
-
-    // determine destination BQ dataset, based on snapshot reference.
-    val bqDataset = DeltaLayer.generateDatasetNameForWorkspace(requestArguments.workspace)
-
-    // create DeltaInsert object
-    val insertId = UUID.randomUUID()
-    val source = InsertSource(dataReference.getMetadata.getResourceId, requestArguments.userInfo.userSubjectId)
-    val destination = InsertDestination(requestArguments.workspace.workspaceIdAsUUID, bqDataset,
-      requestArguments.workspace.googleProjectId, requestArguments.billingProject)
-    val deltaInsert = DeltaInsert(insertId, Instant.now(), source, destination, inserts)
-
-    // consider making this async, so we respond to the user quicker. For now, leave as synchronous
-    // so we return any errors
-    deltaLayerWriter.writeFile(deltaInsert) map { _ =>
-      Seq.empty[Entity]
-    } recover {
-      case se: StorageException =>
-        val throwCode = StatusCodes.getForKey(se.getCode).getOrElse(StatusCodes.InternalServerError)
-        throw new DeltaLayerException(s"StorageException in Delta Layer: ${se.getMessage}", se, throwCode)
-      case t: Throwable =>
-        throw new DeltaLayerException(s"Error in Delta Layer: ${t.getClass.getName}: ${t.getMessage}", t)
-    }
-    // This method signature claims to return Traversable[Entity] - and we leave it that way for compatibility -
-    // but note that in practice we don't return any entities. That's good - we don't have access to the
-    // updated entities yet because they will be updated asynchronously by the code that reads the file
-    // we just wrote.
+    Future.successful(Seq())
   }
 }
