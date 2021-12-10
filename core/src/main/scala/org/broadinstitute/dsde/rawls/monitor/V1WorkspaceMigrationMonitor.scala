@@ -13,6 +13,9 @@ import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber
 import org.broadinstitute.dsde.rawls.monitor.MigrationOutcome.{Failure, Success}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
+import org.broadinstitute.dsde.rawls.monitor.StorageTransferServiceOutcome.{FailureStorageTransfer, SuccessStorageTransfer}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.JobTransferSchedule
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
 import java.sql.Timestamp
@@ -20,6 +23,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 
 sealed trait MigrationOutcome
@@ -150,8 +154,107 @@ trait V1WorkspaceMigrationComponent {
   val migrations = TableQuery[V1WorkspaceMigrationHistory]
 }
 
+sealed trait StorageTransferServiceOutcome
+
+object StorageTransferServiceOutcome {
+  case object SuccessStorageTransfer extends StorageTransferServiceOutcome
+
+  final case class FailureStorageTransfer(message: String) extends StorageTransferServiceOutcome
+}
+
+final case class PpwStorageTransferJobAttempt(id: Long,
+                                              jobName: GoogleStorageTransferService.JobName,
+                                              migrationId: Long,
+                                              created: Timestamp,
+                                              destBucket: GcsBucketName,
+                                              originBucket: GcsBucketName,
+                                              finished: Option[Timestamp],
+                                              outcome: Option[StorageTransferServiceOutcome],
+                                            )
+
+object PpwStorageTransferJobAttempt {
+  type RecordType = (Long, String, Long, Timestamp, String, String, Option[Timestamp], Option[String], Option[String])
+
+  def fromRecord(record: RecordType): Either[String, PpwStorageTransferJobAttempt] = {
+    type EitherStringT[T] = Either[String, T]
+    record match {
+      case (id, jobName, migrationId, created, destBucket, originBucket, finished, outcome, message) =>
+        outcome
+          .traverse[EitherStringT, StorageTransferServiceOutcome] {
+            case "Success" => Right(SuccessStorageTransfer)
+            case "Failure" => Right(FailureStorageTransfer(message.getOrElse("")))
+            case other => Left(s"""Failed to read PpwStorageTransferJobRecord from record.
+                                  | Unknown outcome -- "$other"""".stripMargin)
+          }
+          .map { outcome =>
+            PpwStorageTransferJobAttempt(
+              id,
+              GoogleStorageTransferService.JobName(jobName),
+              migrationId,
+              created,
+              GcsBucketName(destBucket),
+              GcsBucketName(originBucket),
+              finished,
+              outcome
+            )
+          }
+    }
+  }
+
+  def unsafeFromRecord(record: RecordType): PpwStorageTransferJobAttempt =
+    fromRecord(record) match {
+      case Right(r) => r
+      case Left(msg) => throw new SerializationException(msg)
+    }
+
+  def toRecord(attempt: PpwStorageTransferJobAttempt): RecordType = {
+    val (outcome: Option[String], message: Option[String]) = attempt.outcome match {
+      case Some(SuccessStorageTransfer) => ("Success".some, None)
+      case Some(FailureStorageTransfer(message)) => ("Failure".some, message.some)
+      case None => (None, None)
+    }
+    (
+      attempt.id,
+      attempt.jobName.value,
+      attempt.migrationId,
+      attempt.created,
+      attempt.destBucket.value,
+      attempt.originBucket.value,
+      attempt.finished,
+      outcome,
+      message
+    )
+  }
+}
+
+trait PpwStorageTransferServiceComponent {
+  import slick.jdbc.MySQLProfile.api._
+
+  private val ppwStorageTransferServiceJob: String = "PPW_STORAGE_TRANSFER_SERVICE_JOB"
+
+  final class PpwStorageTransferServiceJob(tag: Tag)
+    extends Table[PpwStorageTransferJobAttempt](tag, ppwStorageTransferServiceJob) {
+
+    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
+    def jobName = column[String]("JOB_NAME")
+    def migrationId = column[Long]("MIGRATION_ID")
+    def created = column[Timestamp]("CREATED")
+    def destBucket = column[String]("DEST_BUCKET")
+    def originBucket = column[String]("ORIGIN_BUCKET")
+    def finished = column[Option[Timestamp]]("FINISHED")
+    def outcome = column[Option[String]]("OUTCOME")
+    def message = column[Option[String]]("MESSAGE")
+
+    override def * =
+      (id, jobName, migrationId, created, destBucket, originBucket, finished, outcome, message) <>
+        (PpwStorageTransferJobAttempt.unsafeFromRecord, PpwStorageTransferJobAttempt.toRecord(_: PpwStorageTransferJobAttempt).some)
+  }
+
+  val storageTransferJobs = TableQuery[PpwStorageTransferServiceJob]
+}
+
 object V1WorkspaceMigrationMonitor
-  extends V1WorkspaceMigrationComponent {
+  extends V1WorkspaceMigrationComponent with PpwStorageTransferServiceComponent {
 
   import slick.jdbc.MySQLProfile.api._
 
@@ -305,6 +408,27 @@ object V1WorkspaceMigrationMonitor
   final def failNoTmpBucket[A](attempt: V1WorkspaceMigrationAttempt): IO[A] =
     IO.raiseError(new IllegalStateException(s"""Temporary storage bucket was not created for migration "${attempt.id}.""""))
 
+
+  final def transferDataFromOriginBucketToDestBucket(originBucket: GcsBucketName, destBucket: GcsBucketName, workspace: Workspace, projectToBill: GoogleProject, dataSource: SlickDataSource, migrationAttempt: V1WorkspaceMigrationAttempt, googleStorageTransferService: GoogleStorageTransferService[Future]) = {
+
+    val storageTransferServiceJobName = GoogleStorageTransferService.JobName(
+      "terra-workspace-migration-" + UUID.randomUUID.toString.replace("-", "")
+    )
+    for {
+      transferJob <- googleStorageTransferService.createTransferJob(
+        jobName = storageTransferServiceJobName,
+        jobDescription = s"""A transfer of data from ${originBucket} to ${destBucket}""",
+        projectToBill = projectToBill,
+        originBucket,
+        destBucket,
+        JobTransferSchedule.Immediately
+      )
+    } yield(transferJob, DBIO.seq(
+      storageTransferJobs.map(
+        job => (job.jobName, job.migrationId, job.destBucket, job.originBucket)) += (transferJob.getName, migrationAttempt.id, destBucket.value, originBucket.value)
+      )
+    )
+  }
 }
 
 
@@ -315,5 +439,4 @@ object V1WorkspaceMigrationActor {
     dataSource.inTransaction(_ => V1WorkspaceMigrationMonitor.schedule(message.workspace))
     Behaviors.same
   }
-
 }

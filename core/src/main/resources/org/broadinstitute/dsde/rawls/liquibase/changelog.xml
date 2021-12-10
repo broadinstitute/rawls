@@ -101,4 +101,5 @@
     <include file="changesets/20211206_v1_migration_google_project.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20211209_v1_migration_final_bucket.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220107_update_shard_procedures.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20211208_storage_transfer_service_table.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
