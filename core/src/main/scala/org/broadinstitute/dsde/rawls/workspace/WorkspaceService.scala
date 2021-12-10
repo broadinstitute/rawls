@@ -2205,6 +2205,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                          workspaceId: String,
                                          workspaceRequest: WorkspaceRequest,
                                          bucketName: String,
+                                         bucketLocation: String,
                                          billingProjectOwnerPolicyEmail: WorkbenchEmail,
                                          googleProjectId: GoogleProjectId,
                                          googleProjectNumber: Option[GoogleProjectNumber],
@@ -2222,6 +2223,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       name = workspaceRequest.name,
       workspaceId = workspaceId,
       bucketName = bucketName,
+      bucketLocation = bucketLocation,
       workflowCollectionName = Some(workspaceId),
       createdDate = currentDate,
       lastModified = currentDate,
@@ -2283,8 +2285,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
                 } yield()})
               (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan)(_ => DBIO.from(
                 setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)))
+              workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentSpan)(_ => DBIO.from(
+                determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, sourceBucketName, googleProjectId)))
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
-                createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
+                createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, workspaceBucketLocation, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
 
               _ <- traceDBIOWithParent("updateServicePerimeter", parentSpan)(_ =>
                 maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess))
@@ -2306,9 +2310,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
                   WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
                 }
               }.flatten.toMap)
-
-              workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentSpan)(_ => DBIO.from(
-                determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, sourceBucketName, googleProjectId)))
               _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentSpan)(span => DBIO.from(
                   gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceBucketLocation)))
               _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))

@@ -155,6 +155,7 @@ case class Workspace(
                       name: String,
                       workspaceId: String,
                       bucketName: String,
+                      bucketLocation: String,
                       workflowCollectionName: Option[String],
                       createdDate: DateTime,
                       lastModified: DateTime,
@@ -185,6 +186,7 @@ object Workspace {
             name: String,
             workspaceId: String,
             bucketName: String,
+            bucketLocation: String,
             workflowCollectionName: Option[String],
             createdDate: DateTime,
             lastModified: DateTime,
@@ -194,7 +196,7 @@ object Workspace {
     val randomString = java.util.UUID.randomUUID().toString
     val googleProjectId = GoogleProjectId(randomString)
     val googleProjectNumber = GoogleProjectNumber(randomString)
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate), shardState = WorkspaceShardStates.Sharded)
+    new Workspace(namespace, name, workspaceId, bucketName, bucketLocation, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate), shardState = WorkspaceShardStates.Sharded)
   }
 }
 
@@ -591,6 +593,7 @@ case class WorkspaceDetails(namespace: String,
                             name: String,
                             workspaceId: String,
                             bucketName: String,
+                            bucketLocation: String,
                             workflowCollectionName: Option[String],
                             createdDate: DateTime,
                             lastModified: DateTime,
@@ -605,7 +608,7 @@ case class WorkspaceDetails(namespace: String,
                             billingAccountErrorMessage: Option[String] = None,
                             completedCloneWorkspaceFileTransfer: Option[DateTime],
                             shardState: Option[WorkspaceShardState]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, shardState.getOrElse(WorkspaceShardStates.Unknown))
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, bucketLocation, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, shardState.getOrElse(WorkspaceShardStates.Unknown))
 }
 
 
@@ -666,6 +669,7 @@ object WorkspaceDetails {
                           name: String,
                           workspaceId: String,
                           bucketName: String,
+                          bucketLocation: String,
                           workflowCollectionName: Option[String],
                           createdDate: DateTime,
                           lastModified: DateTime,
@@ -680,7 +684,7 @@ object WorkspaceDetails {
                           billingAccountErrorMessage: Option[String] = None,
                           completedCloneWorkspaceFileTransfer: Option[DateTime],
                           shardState: Option[WorkspaceShardState] = None) = {
-    WorkspaceDetails(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, authorizationDomain, workspaceVersion, googleProject,googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, None)
+    WorkspaceDetails(namespace, name, workspaceId, bucketName, bucketLocation, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, authorizationDomain, workspaceVersion, googleProject,googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, None)
   }
 
   def fromWorkspaceAndOptions(workspace: Workspace, optAuthorizationDomain: Option[Set[ManagedGroupRef]], useAttributes: Boolean): WorkspaceDetails = {
@@ -689,6 +693,7 @@ object WorkspaceDetails {
       workspace.name,
       workspace.workspaceId,
       workspace.bucketName,
+      workspace.bucketLocation,
       workspace.workflowCollectionName,
       workspace.createdDate,
       workspace.lastModified,
