@@ -115,7 +115,11 @@ class WorkspaceMigrationMonitorSpec
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(sourceProject)
     val pathToCredentialJson = "config/rawls-account.json"
-    val v1WorkspaceCopy = minimalTestData.v1Workspace.copy(namespace = sourceProject, googleProjectId = GoogleProjectId(sourceProject), bucketName = sourceBucket)
+    val v1WorkspaceCopy = minimalTestData.v1Workspace.copy(
+      namespace = sourceProject,
+      googleProjectId = GoogleProjectId(sourceProject),
+      bucketName = sourceBucket
+    )
 
     withMinimalTestDatabase { _ =>
       runAndWait {
@@ -194,7 +198,7 @@ class WorkspaceMigrationMonitorSpec
         )
       }
 
-      // Creating the bucket requires that the new google project and tmp bucket have been created
+      // We need a temp bucket to transfer the workspace bucket contents into
       val migration = runAndWait(
         WorkspaceMigrationMonitor.workspaceMigrations
           .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
@@ -242,7 +246,7 @@ class WorkspaceMigrationMonitorSpec
       bucketName = destBucket
     )
 
-    withMinimalTestDatabase { dataSource =>
+    withMinimalTestDatabase { _ =>
       runAndWait {
         DBIO.seq(
           workspaceQuery.createOrUpdate(v1Workspace),
@@ -253,7 +257,8 @@ class WorkspaceMigrationMonitorSpec
       // Creating the bucket requires that the new google project and tmp bucket have been created
       val migration = runAndWait(
         WorkspaceMigrationMonitor.workspaceMigrations
-          .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
+          .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID)
+          .result
       )
         .head
         .copy(
