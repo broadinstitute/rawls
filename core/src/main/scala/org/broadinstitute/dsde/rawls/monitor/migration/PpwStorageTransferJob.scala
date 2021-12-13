@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor.migration
 
 import cats.implicits.catsSyntaxOptionId
-import org.broadinstitute.dsde.rawls.monitor.migration.Shared.Outcome
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
@@ -74,7 +74,7 @@ object PpwStorageTransferJobs {
 
     override def * =
       (id, jobName, migrationId, created, destBucket, originBucket, finished, outcome, message) <>
-        (Shared.unsafeFromEither(PpwStorageTransferJob.fromRecord, _),
+        (MigrationUtils.unsafeFromEither(PpwStorageTransferJob.fromRecord, _),
           PpwStorageTransferJob.toRecord(_: PpwStorageTransferJob).some)
   }
 
