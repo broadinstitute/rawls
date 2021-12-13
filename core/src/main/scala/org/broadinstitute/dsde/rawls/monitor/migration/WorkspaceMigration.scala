@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber}
-import org.broadinstitute.dsde.rawls.monitor.migration.Shared.Outcome
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import java.sql.Timestamp
@@ -106,7 +106,7 @@ object WorkspaceMigrationHistory {
         tmpBucket, tmpBucketCreated,
         finalBucketCreated
       ) <>
-        (Shared.unsafeFromEither(WorkspaceMigration.fromRecord, _),
+        (MigrationUtils.unsafeFromEither(WorkspaceMigration.fromRecord, _),
           WorkspaceMigration.toRecord(_: WorkspaceMigration).some)
   }
 

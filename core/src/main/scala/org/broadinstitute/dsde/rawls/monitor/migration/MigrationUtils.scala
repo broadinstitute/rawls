@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import org.broadinstitute.dsde.rawls.RawlsException
 
-object Shared {
+object MigrationUtils {
   sealed trait Outcome
 
   object Outcome {
