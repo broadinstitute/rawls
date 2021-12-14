@@ -1757,12 +1757,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def userWorkflowCapacity(): Future[UserWorkflowCapacity] = {
+  def userWorkflowStats(): Future[UserWorkflowStats] = {
     dataSource.inTransaction { dataAccess =>
       for {
         running <- dataAccess.workflowQuery.countWorkflowsByStatusesForUser(userInfo, WorkflowStatuses.runningStatuses)
         queued <- dataAccess.workflowQuery.countWorkflowsByStatusesForUser(userInfo, WorkflowStatuses.queuedStatuses)
-      } yield UserWorkflowCapacity(running, queued, maxActiveWorkflowsPerUser)
+      } yield UserWorkflowStats(running, queued, maxActiveWorkflowsPerUser)
     }
   }
 

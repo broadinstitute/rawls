@@ -1581,20 +1581,20 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-  /api/submissions/userWorkflowCapacity:
+  /api/submissions/userWorkflowStats:
     get:
       tags:
         - submissions
-      summary: workflow capacity status
+      summary: Workflow stats for user
       description: Per-user workflow stats - active, queued, and max capacity
-      operationId: userWorkflowCapacity
+      operationId: userWorkflowStats
       responses:
         200:
           description: Successful Request
           content:
             'application/json':
               schema:
-                $ref: '#/components/schemas/UserWorfklowCapacityResponse'
+                $ref: '#/components/schemas/UserWorfklowStatsResponse'
         500:
           description: Rawls Internal Error
           content:
@@ -5287,7 +5287,7 @@ components:
           properties: {}
           description: Map[String,Int]
       description: Information about the status of workflows and the workflow queue
-    UserWorfklowCapacityResponse:
+    UserWorfklowStatsResponse:
       required:
         - runningWorkflows
         - queuedWorkflows
@@ -5296,7 +5296,7 @@ components:
       properties:
         runningWorkflows:
           type: integer
-          description: Number of workflows in active states for user account
+          description: Number of workflows in active states for user account. Rawls keeps this  value ≤ maxWorkflows.
         queuedWorkflows:
           type: integer
           description: Number of workflows in waiting states for user account
