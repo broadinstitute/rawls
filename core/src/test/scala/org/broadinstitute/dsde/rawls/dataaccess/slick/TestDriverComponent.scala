@@ -79,7 +79,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   // TODO: can we be any more targeted about inTransaction vs. inTransactionWithAttrTempTable here?
   // this is used by many tests to set up fixture data, which includes saving entities, therefore it needs
   // the temp table.
-  protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
+  def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
     Await.result(DbResource.dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace))
     { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
   }
