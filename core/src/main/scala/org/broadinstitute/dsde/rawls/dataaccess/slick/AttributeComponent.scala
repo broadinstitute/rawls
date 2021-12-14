@@ -577,7 +577,7 @@ trait AttributeComponent {
           val errMsg = s"inconsistent attributes for list: attribute lists must consist of a single data type. For attribute " +
             s"'${toDelimitedName(attributeName)}', found types: [${typeNames.mkString(", ")}]. " +
             s"Sample values for these types: [${exampleValues.map(_.take(100)).mkString(", ")}]"
-          throw new RawlsFatalExceptionWithErrorReport(ErrorReport(errMsg))
+          throw new RawlsExceptionWithErrorReport(ErrorReport(errMsg))
         }
       }
     }
