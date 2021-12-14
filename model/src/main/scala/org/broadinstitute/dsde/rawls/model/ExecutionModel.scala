@@ -269,6 +269,13 @@ case class WorkflowQueueStatusResponse
   workflowCountsByStatus: StatusCounts
 )
 
+case class UserWorkflowCapacity
+(
+  runningWorkflows: Int,
+  queuedWorkflows: Int,
+  maxWorkflows: Int
+)
+
 case class WorkflowQueueStatusByUserResponse
 (
   statuses: StatusCounts,
@@ -432,6 +439,8 @@ trait ExecutionJsonSupport extends JsonSupport {
   implicit val ActiveSubmissionFormat = jsonFormat3(ActiveSubmission)
 
   implicit val WorkflowQueueStatusResponseFormat = jsonFormat3(WorkflowQueueStatusResponse)
+
+  implicit val UserWorkflowCapacityResponseFormat = jsonFormat3(UserWorkflowCapacity)
 
   implicit val UserCommentUpdateOperationFormat = jsonFormat1(UserCommentUpdateOperation)
 

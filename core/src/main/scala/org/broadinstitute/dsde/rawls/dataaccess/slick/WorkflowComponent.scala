@@ -364,6 +364,15 @@ trait WorkflowComponent {
       groupedSeq.map(_.toMap)
     }
 
+    def countWorkflowsByStatusesForUser(userInfo: UserInfo, workflowStatuses: Seq[WorkflowStatus]): ReadAction[Int] = {
+      val userWorkflows: WorkflowQueryType = for {
+        submission <- submissionQuery.filter(_.submitterId === userInfo.userEmail.value)
+        workflows <- filter(_.submissionId === submission.id)
+      } yield workflows
+
+      userWorkflows.filter(rec => rec.status inSetBind workflowStatuses.map(_.toString)).length.result
+    }
+
     def countWorkflowsByQueueStatusByUser: ReadAction[Map[String, Map[String, Int]]] = {
       // Run query for workflow counts, grouping by submitter and workflow status.
       // The query returns a Seq[(userEmail, workflowStatus, count)].

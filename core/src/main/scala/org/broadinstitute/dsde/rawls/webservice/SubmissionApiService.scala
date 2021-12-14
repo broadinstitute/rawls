@@ -111,6 +111,11 @@ trait SubmissionApiService extends UserInfoDirectives {
         get {
           complete { workspaceServiceConstructor(userInfo).workflowQueueStatus }
         }
+      } ~
+      path("submissions" / "userWorkflowCapacity") {
+        get {
+          complete { workspaceServiceConstructor(userInfo).userWorkflowCapacity }
+        }
       }
   }
 }
