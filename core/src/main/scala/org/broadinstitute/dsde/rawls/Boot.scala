@@ -22,6 +22,7 @@ import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.ParallelShardingMigration
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -82,6 +83,26 @@ object Boot extends IOApp with LazyLogging {
     if(initWithLiquibase) {
       slickDataSource.initWithLiquibase(liquibaseChangeLog, changelogParams)
     }
+
+    // ==========================================================================================
+    // ==========================================================================================
+    /* To execute the manual sharding migration:
+        1. Check out this branch locally
+        2. Render configs for the environment you want to migrate (prod, alpha, dev, etc)
+        3. back up the db in that env
+        4. uncomment the "parallelShardingMigration.migrate()" line below
+        5. run this branch locally, connecting to the db. It's ok to run locally; this codebase simply issues
+          small SQL statements ('call storedProc()') and all the actual data processing happens in the db
+        6. manually verify that all shards migrated properly
+        7. drop and re-create the ENTITY_ATTRIBUTE_archived table; this is equivalent to deleting all its rows.
+          This step is necessary, else the liquibase migration will fail because the table is not found.
+        8. shut down your local Rawls, and re-comment the "parallelShardingMigration.migrate()" line for safety
+        TODO: validate the SQL in ParallelShardingMigration.migrateShardImpl
+     */
+    val parallelShardingMigration = new ParallelShardingMigration(slickDataSource)
+    // parallelShardingMigration.migrate()
+    // ==========================================================================================
+    // ==========================================================================================
 
     val metricsConf = conf.getConfig("metrics")
     val metricsPrefix = {
