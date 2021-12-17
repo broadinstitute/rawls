@@ -1,17 +1,14 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
-import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
 import cats.effect.{ContextShift, IO}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, spy, times, verify, when}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, GoogleProjectId, NamedDataRepoSnapshot, SamPolicy, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.scalatest.matchers.should.Matchers
@@ -37,11 +34,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     "create a new snapshot reference to a TDR snapshot" in withMinimalTestDatabase { _ =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
-      when(mockSamDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])).thenReturn(Future.successful(Set(SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner, SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set.empty), WorkbenchEmail("")))))
       when(mockSamDAO.getPetServiceAccountToken(any[GoogleProjectId], any[Set[String]], any[UserInfo])).thenReturn(Future.successful("fake-token"))
-
-      val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
-      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
       when(mockWorkspaceManagerDAO.createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken]))
@@ -58,93 +51,12 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), UUID.randomUUID())), Duration.Inf)
 
-      verify(mockSamDAO, times(1)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
-      verify(mockBigQueryServiceFactory, times(1)).getServiceForProject(workspace.googleProjectId)
       verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken])
-    }
-
-    "not leave an orphaned bq dataset if creating a snapshot reference fails" in withMinimalTestDatabase { _ =>
-      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-
-      when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
-
-      when(mockSamDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])).thenReturn(Future.successful(Set(SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner, SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set.empty), WorkbenchEmail("")))))
-
-      when(mockSamDAO.getPetServiceAccountToken(any[GoogleProjectId], any[Set[String]], any[UserInfo])).thenReturn(Future.successful("fake-token"))
-
-      val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
-      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
-
-      val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-
-      when(mockWorkspaceManagerDAO.createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken])).thenThrow(new RuntimeException("oh no!"))
-
-      val workspace = minimalTestData.workspace
-
-      val snapshotService = SnapshotService.constructor(
-        slickDataSource,
-        mockSamDAO,
-        mockWorkspaceManagerDAO,
-        "fake-terra-data-repo-dev"
-      )(userInfo)
-
-      val createException = intercept[RuntimeException] {
-        Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), UUID.randomUUID())), Duration.Inf)
-      }
-      createException.getMessage shouldBe "oh no!"
-
-      verify(mockSamDAO, times(0)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
-      verify(mockBigQueryServiceFactory, times(0)).getServiceForProject(workspace.googleProjectId)
-      verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken])
-      verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDatasetReference(any[UUID], any[ReferenceResourceCommonFields], any[GcpBigQueryDatasetAttributes], any[OAuth2BearerToken])
-    }
-
-    "not leave an orphaned snapshot data reference if creating a BQ dataset in Google fails" in withMinimalTestDatabase { _ =>
-      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-
-      when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
-
-      when(mockSamDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])).thenReturn(Future.successful(Set(SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner, SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set.empty), WorkbenchEmail("")))))
-
-      when(mockSamDAO.getPetServiceAccountToken(any[GoogleProjectId], any[Set[String]], any[UserInfo])).thenReturn(Future.successful("fake-token"))
-
-      val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
-      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenThrow(new RuntimeException)
-
-      val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-
-      when(mockWorkspaceManagerDAO.createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken]))
-        .thenReturn(new DataRepoSnapshotResource().metadata(new ResourceMetadata().resourceId(UUID.randomUUID()).workspaceId(UUID.randomUUID()).name("foo").description("").cloningInstructions(CloningInstructionsEnum.NOTHING)).attributes(new DataRepoSnapshotAttributes()))
-
-      val workspace = minimalTestData.workspace
-
-      val snapshotService = SnapshotService.constructor(
-        slickDataSource,
-        mockSamDAO,
-        mockWorkspaceManagerDAO,
-        "fake-terra-data-repo-dev"
-      )(userInfo)
-
-      val createException = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), UUID.randomUUID())), Duration.Inf)
-      }
-      createException.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
-      assert(createException.errorReport.message.contains("Unable to create snapshot reference in workspace"))
-
-      verify(mockSamDAO, times(1)).listPoliciesForResource(any[SamResourceTypeName], any[String], any[UserInfo])
-      verify(mockBigQueryServiceFactory, times(1)).getServiceForProject(workspace.googleProjectId)
-      verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken])
-      verify(mockWorkspaceManagerDAO, times(1)).deleteDataRepoSnapshotReference(any[UUID], any[UUID], any[OAuth2BearerToken])
-      verify(mockWorkspaceManagerDAO, times(0)).createBigQueryDatasetReference(any[UUID], any[ReferenceResourceCommonFields], any[GcpBigQueryDatasetAttributes], any[OAuth2BearerToken])
     }
 
     "remove all resources when a snapshot reference is deleted" in withMinimalTestDatabase { _ =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
-      when(mockSamDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])).thenReturn(Future.successful(Set(SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner, SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set.empty), WorkbenchEmail("")))))
-
-      val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
-      when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
@@ -172,8 +84,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       verify(mockWorkspaceManagerDAO, times(1)).deleteDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID), any[OAuth2BearerToken])
       // assert we do NOT attempt to delete the companion dataset or its WSM reference
       verify(mockWorkspaceManagerDAO, times(0)).deleteBigQueryDatasetReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), any[UUID], any[OAuth2BearerToken])
-      verify(mockBigQueryServiceFactory, times(0)).getServiceForProject(any[GoogleProjectId])
-
     }
 
     "find one matching snapshot reference by referenced snapshotId if one page of references" in withMinimalTestDatabase { _ =>
@@ -412,9 +322,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     // mock sam that always says we have permission
     val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
-    // mock GoogleBigQueryServiceFactory
-    val mockBigQueryServiceFactory = mock[GoogleBigQueryServiceFactory](RETURNS_SMART_NULLS)
-    when(mockBigQueryServiceFactory.getServiceForProject(any[GoogleProjectId])).thenReturn(MockBigQueryServiceFactory.ioFactory().getServiceForPet("foo", GoogleProject("foo")))
     // mock WorkspaceManagerDAO, don't set up any method responses yet
     val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
