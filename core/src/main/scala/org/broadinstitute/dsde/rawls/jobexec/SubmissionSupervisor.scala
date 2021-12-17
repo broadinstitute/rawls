@@ -194,7 +194,8 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     this.globalWorkflowStatusCounts = workflowStatus
   }
 
-  // restart the actor on failure (e.g. a DB deadlock or failed transaction) up to a maximum of 10 times
+  // restart the actor on failure (e.g. a DB deadlock or failed transaction)
+  // if this actor has failed more than 3 times, log each new failure
   override val supervisorStrategy = {
     val alwaysRestart: SupervisorStrategy.Decider = {
       case _ => Restart
@@ -209,7 +210,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
         logger.error(s"error monitoring submission after $count times", throwable)
     }
 
-    new ThresholdOneForOneStrategy(thresholdLimit = 0, maxNrOfRetries = Option(10))(alwaysRestart)(thresholdFunc)
+    new ThresholdOneForOneStrategy(thresholdLimit = 3)(alwaysRestart)(thresholdFunc)
   }
 
   private def registerGlobalJobExecGauges(): Unit = {
