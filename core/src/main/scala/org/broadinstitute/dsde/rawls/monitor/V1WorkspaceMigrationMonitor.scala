@@ -36,20 +36,29 @@ final case class V1WorkspaceMigrationAttempt(id: Long,
                                              started: Option[Timestamp],
                                              finished: Option[Timestamp],
                                              outcome: Option[MigrationOutcome],
-                                             tmpBucketName: Option[GcsBucketName],
-                                             tmpBucketCreated: Option[Timestamp],
                                              newGoogleProjectId: Option[GoogleProjectId],
                                              newGoogleProjectNumber: Option[GoogleProjectNumber],
-                                             newGoogleProjectConfigured: Option[Timestamp]
+                                             newGoogleProjectConfigured: Option[Timestamp],
+                                             tmpBucketName: Option[GcsBucketName],
+                                             tmpBucketCreated: Option[Timestamp],
+                                             finalBucketCreated: Option[Timestamp]
                                             )
 
 object V1WorkspaceMigrationAttempt {
-  type RecordType = (Long, UUID, Timestamp, Option[Timestamp], Option[Timestamp], Option[String], Option[String], Option[String], Option[Timestamp], Option[String], Option[String], Option[Timestamp])
+  type RecordType = (
+      Long, UUID, Timestamp, Option[Timestamp], Option[Timestamp], Option[String], Option[String],
+        Option[String], Option[String], Option[Timestamp],
+        Option[String], Option[Timestamp],
+        Option[Timestamp]
+      )
 
   def fromRecord(record: RecordType): Either[String, V1WorkspaceMigrationAttempt] = {
     type EitherStringT[T] = Either[String, T]
     record match {
-      case (id, workspaceId, created, started, finished, outcome, message, tmpBucketName, tmpBucketCreated, newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectConfigured) =>
+      case (id, workspaceId, created, started, finished, outcome, message,
+      newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectConfigured,
+      tmpBucketName, tmpBucketCreated,
+      finalBucketCreated) =>
         outcome
           .traverse[EitherStringT, MigrationOutcome] {
             case "Success" => Right(Success)
@@ -66,11 +75,12 @@ object V1WorkspaceMigrationAttempt {
               started,
               finished,
               outcome,
-              tmpBucketName.map(GcsBucketName),
-              tmpBucketCreated,
               newGoogleProjectId.map(GoogleProjectId),
               newGoogleProjectNumber.map(GoogleProjectNumber),
-              newGoogleProjectConfigured
+              newGoogleProjectConfigured,
+              tmpBucketName.map(GcsBucketName),
+              tmpBucketCreated,
+              finalBucketCreated
             )
           }
     }
@@ -96,11 +106,12 @@ object V1WorkspaceMigrationAttempt {
       attempt.finished,
       outcome,
       message,
-      attempt.tmpBucketName.map(_.value),
-      attempt.tmpBucketCreated,
       attempt.newGoogleProjectId.map(_.value),
       attempt.newGoogleProjectNumber.map(_.value),
-      attempt.newGoogleProjectConfigured
+      attempt.newGoogleProjectConfigured,
+      attempt.tmpBucketName.map(_.value),
+      attempt.tmpBucketCreated,
+      attempt.finalBucketCreated
     )
   }
 }
@@ -121,15 +132,19 @@ trait V1WorkspaceMigrationComponent {
     def finished = column[Option[Timestamp]]("FINISHED")
     def outcome = column[Option[String]]("OUTCOME")
     def message = column[Option[String]]("MESSAGE")
-    def tmpBucket = column[Option[String]]("TMP_BUCKET")
-    def tmpBucketCreated = column[Option[Timestamp]]("TMP_BUCKET_CREATED")
     def newGoogleProjectId = column[Option[String]]("NEW_GOOGLE_PROJECT_ID")
     def newGoogleProjectNumber = column[Option[String]]("NEW_GOOGLE_PROJECT_NUMBER")
     def newGoogleProjectConfigured = column[Option[Timestamp]]("NEW_GOOGLE_PROJECT_CONFIGURED")
+    def tmpBucket = column[Option[String]]("TMP_BUCKET")
+    def tmpBucketCreated = column[Option[Timestamp]]("TMP_BUCKET_CREATED")
+    def finalBucketCreated = column[Option[Timestamp]]("FINAL_BUCKET_CREATED")
 
     override def * =
-      (id, workspaceId, created, started, finished, outcome, message, tmpBucket, tmpBucketCreated, newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectConfigured) <>
-        (V1WorkspaceMigrationAttempt.unsafeFromRecord, V1WorkspaceMigrationAttempt.toRecord(_: V1WorkspaceMigrationAttempt).some)
+      (id, workspaceId, created, started, finished, outcome, message,
+        newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectConfigured,
+        tmpBucket, tmpBucketCreated,
+        finalBucketCreated
+      ) <> (V1WorkspaceMigrationAttempt.unsafeFromRecord, V1WorkspaceMigrationAttempt.toRecord(_: V1WorkspaceMigrationAttempt).some)
   }
 
   val migrations = TableQuery[V1WorkspaceMigrationHistory]
@@ -140,12 +155,14 @@ object V1WorkspaceMigrationMonitor
 
   import slick.jdbc.MySQLProfile.api._
 
+
   final def isInQueueToMigrate(workspace: Workspace): ReadAction[Boolean] =
     migrations
       .filter { m => m.workspaceId === workspace.workspaceIdAsUUID && !m.started.isDefined }
       .length
       .result
       .map(_ > 0)
+
 
   final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
     migrations
@@ -154,70 +171,16 @@ object V1WorkspaceMigrationMonitor
       .result
       .map(_ > 0)
 
+
   final def schedule(workspace: Workspace): WriteAction[Unit] =
     DBIO.seq(migrations.map(_.workspaceId) += workspace.workspaceIdAsUUID)
 
-  final def createBucketInSameRegion(sourceBucketName: GcsBucketName,
-                                     destGoogleProject: GoogleProject,
-                                     destBucketName: GcsBucketName,
-                                     googleStorageService: GoogleStorageService[IO]
-                                    ): IO[Unit] = {
-    for {
-      // todo: figure out who pays for this
-      sourceBucketOpt <- googleStorageService.getBucket(
-        GoogleProject(null),
-        sourceBucketName,
-        List(BucketGetOption.userProject(destGoogleProject.value))
-      )
-
-      sourceBucket = sourceBucketOpt.getOrElse(
-        throw new IllegalStateException(s"Source bucket ${sourceBucketName} could not be found")
-      )
-
-      // todo: CA-1637 do we need to transfer the storage logs for this workspace? the logs are prefixed
-      // with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket
-      // and the storage_byte_hours in it that is kept for 180 days
-      _ <- googleStorageService.insertBucket(
-        googleProject = destGoogleProject,
-        bucketName = destBucketName,
-        labels = Option(sourceBucket.getLabels).map(_.toMap).getOrElse(Map.empty),
-        bucketPolicyOnlyEnabled = true,
-        logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(GoogleProjectId(destGoogleProject.value)))),
-        location = Option(sourceBucket.getLocation)
-      ).compile.drain
-
-    } yield ()
-  }
-
-  final def createTempBucket(migrationAttempt: V1WorkspaceMigrationAttempt,
-                             workspace: Workspace,
-                             destGoogleProject: GoogleProject,
-                             googleStorageService: GoogleStorageService[IO]
-                            ): IO[(GcsBucketName, WriteAction[Unit])] = {
-    val tmpBucketName = GcsBucketName(
-      "terra-workspace-migration-" + UUID.randomUUID.toString.replace("-", "")
-    )
-
-    for {
-      _ <- createBucketInSameRegion(
-        GcsBucketName(workspace.bucketName),
-        destGoogleProject,
-        tmpBucketName,
-        googleStorageService
-      )
-    } yield (tmpBucketName, DBIO.seq(
-      migrations
-        .filter(_.id === migrationAttempt.id)
-        .map(r => (r.tmpBucket, r.tmpBucketCreated))
-        .update((tmpBucketName.value.some, Timestamp.valueOf(LocalDateTime.now).some))
-    ))
-  }
 
   final def claimAndConfigureNewGoogleProject(migrationAttempt: V1WorkspaceMigrationAttempt,
                                               workspaceService: WorkspaceService,
                                               workspace: Workspace,
                                               billingProject: RawlsBillingProject
-                                             ): IO[(GoogleProjectId, GoogleProjectNumber, WriteAction[Unit])] = {
+                                             ): IO[(GoogleProjectId, GoogleProjectNumber, WriteAction[Unit])] =
     IO.fromFuture {
       IO {
         for {
@@ -236,8 +199,114 @@ object V1WorkspaceMigrationMonitor
         ))
       }
     }
+
+
+  final def createTempBucket(attempt: V1WorkspaceMigrationAttempt,
+                             workspace: Workspace,
+                             googleStorageService: GoogleStorageService[IO]
+                            ): IO[(GcsBucketName, WriteAction[Unit])] = {
+    val tmpBucketName = GcsBucketName(
+      "terra-workspace-migration-" + UUID.randomUUID.toString.replace("-", "")
+    )
+
+    for {
+      googleProject <- attempt.newGoogleProjectId match {
+        case Some(projectId) => IO.pure(GoogleProject(projectId.value))
+        case None            => failNoGoogleProject(attempt)
+      }
+
+      _ <- createBucketInSameRegion(
+        GcsBucketName(workspace.bucketName),
+        googleProject,
+        tmpBucketName,
+        googleStorageService
+      )
+
+    } yield (tmpBucketName, DBIO.seq(
+      migrations
+        .filter(_.id === attempt.id)
+        .map(r => (r.tmpBucket, r.tmpBucketCreated))
+        .update((tmpBucketName.value.some, Timestamp.valueOf(LocalDateTime.now).some))
+    ))
   }
+
+
+  final def createFinalBucket(attempt: V1WorkspaceMigrationAttempt,
+                              workspace: Workspace,
+                              googleStorageService: GoogleStorageService[IO]
+                            ): IO[(GcsBucketName, WriteAction[Unit])] =
+    for {
+      googleProject <- attempt.newGoogleProjectId match {
+        case Some(projectId) => IO.pure(GoogleProject(projectId.value))
+        case None            => failNoGoogleProject(attempt)
+      }
+
+      tmpBucket <- attempt.tmpBucketName match {
+        case Some(bucketName) => IO.pure(bucketName)
+        case None             => failNoTmpBucket(attempt)
+      }
+
+      _ <- createBucketInSameRegion(
+        tmpBucket,
+        googleProject,
+        GcsBucketName(workspace.bucketName),
+        googleStorageService
+      )
+
+    } yield (GcsBucketName(workspace.bucketName), DBIO.seq(
+      migrations
+        .filter(_.id === attempt.id)
+        .map(_.finalBucketCreated)
+        .update(Timestamp.valueOf(LocalDateTime.now).some)
+    ))
+
+
+  final def createBucketInSameRegion(sourceBucketName: GcsBucketName,
+                                     destGoogleProject: GoogleProject,
+                                     destBucketName: GcsBucketName,
+                                     googleStorageService: GoogleStorageService[IO]
+                                    ): IO[Unit] =
+    for {
+      // todo: figure out who pays for this
+      sourceBucketOpt <- googleStorageService.getBucket(
+        GoogleProject(null),
+        sourceBucketName,
+        List(BucketGetOption.userProject(destGoogleProject.value))
+      )
+
+      sourceBucket <- sourceBucketOpt match {
+        case Some(bucket) => IO.pure(bucket)
+        case None         => failNoWorkspaceBucket(sourceBucketName)
+      }
+
+      // todo: CA-1637 do we need to transfer the storage logs for this workspace? the logs are prefixed
+      // with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket
+      // and the storage_byte_hours in it that is kept for 180 days
+      _ <- googleStorageService.insertBucket(
+        googleProject = destGoogleProject,
+        bucketName = destBucketName,
+        labels = Option(sourceBucket.getLabels).map(_.toMap).getOrElse(Map.empty),
+        bucketPolicyOnlyEnabled = true,
+        logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(GoogleProjectId(destGoogleProject.value)))),
+        location = Option(sourceBucket.getLocation)
+      ).compile.drain
+
+    } yield ()
+
+
+  final def failNoWorkspaceBucket[A](name: GcsBucketName): IO[A] =
+    IO.raiseError(new IllegalStateException(s"""Failed to retrieve workspace bucket "${name}"."""))
+
+
+  final def failNoGoogleProject[A](attempt: V1WorkspaceMigrationAttempt): IO[A] =
+    IO.raiseError(new IllegalStateException(s"""Google Project was not created for migration "${attempt.id}.""""))
+
+
+  final def failNoTmpBucket[A](attempt: V1WorkspaceMigrationAttempt): IO[A] =
+    IO.raiseError(new IllegalStateException(s"""Temporary storage bucket was not created for migration "${attempt.id}.""""))
+
 }
+
 
 object V1WorkspaceMigrationActor {
   final case class Schedule(workspace: Workspace)
