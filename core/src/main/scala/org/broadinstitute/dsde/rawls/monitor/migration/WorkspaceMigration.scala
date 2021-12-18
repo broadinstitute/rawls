@@ -21,6 +21,7 @@ final case class WorkspaceMigration(id: Long,
                                     newGoogleProjectConfigured: Option[Timestamp],
                                     tmpBucketName: Option[GcsBucketName],
                                     tmpBucketCreated: Option[Timestamp],
+                                    workspaceBucketDeleted: Option[Timestamp],
                                     finalBucketCreated: Option[Timestamp]
                                    )
 
@@ -31,6 +32,7 @@ object WorkspaceMigration {
     Long, UUID, Timestamp, Option[Timestamp], Option[Timestamp], Option[String], Option[String],
       Option[String], Option[String], Option[Timestamp],
       Option[String], Option[Timestamp],
+      Option[Timestamp],
       Option[Timestamp]
     )
 
@@ -39,6 +41,7 @@ object WorkspaceMigration {
     case (id, workspaceId, created, started, finished, outcome, message,
     newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectConfigured,
     tmpBucketName, tmpBucketCreated,
+    workspaceBucketDeleted,
     finalBucketCreated) => Outcome.fromFields(outcome, message).map { outcome =>
       WorkspaceMigration(
         id,
@@ -52,6 +55,7 @@ object WorkspaceMigration {
         newGoogleProjectConfigured,
         tmpBucketName.map(GcsBucketName),
         tmpBucketCreated,
+        workspaceBucketDeleted,
         finalBucketCreated
       )
     }
@@ -73,6 +77,7 @@ object WorkspaceMigration {
       migration.newGoogleProjectConfigured,
       migration.tmpBucketName.map(_.value),
       migration.tmpBucketCreated,
+      migration.workspaceBucketDeleted,
       migration.finalBucketCreated
     )
   }
@@ -98,12 +103,14 @@ object WorkspaceMigrationHistory {
     def newGoogleProjectConfigured = column[Option[Timestamp]]("NEW_GOOGLE_PROJECT_CONFIGURED")
     def tmpBucket = column[Option[String]]("TMP_BUCKET")
     def tmpBucketCreated = column[Option[Timestamp]]("TMP_BUCKET_CREATED")
+    def workspaceBucketDeleted = column[Option[Timestamp]]("WORKSPACE_BUCKET_DELETED")
     def finalBucketCreated = column[Option[Timestamp]]("FINAL_BUCKET_CREATED")
 
     override def * =
       (id, workspaceId, created, started, finished, outcome, message,
         newGoogleProjectId, newGoogleProjectNumber, newGoogleProjectConfigured,
         tmpBucket, tmpBucketCreated,
+        workspaceBucketDeleted,
         finalBucketCreated
       ) <>
         (MigrationUtils.unsafeFromEither(WorkspaceMigration.fromRecord, _),
