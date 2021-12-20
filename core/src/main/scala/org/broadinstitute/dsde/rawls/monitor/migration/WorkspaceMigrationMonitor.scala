@@ -126,13 +126,18 @@ object WorkspaceMigrationMonitor {
                                   googleStorageService: GoogleStorageService[IO]
                                  ): IO[WriteAction[Unit]] =
     for {
-      _ <- googleStorageService.deleteBucket(
+      msuccess <- googleStorageService.deleteBucket(
         GoogleProject(workspace.googleProjectId.value),
         GcsBucketName(workspace.bucketName),
         isRecursive = true
-      ).compile.drain
+      ).compile.last
 
       deleted <- timestampNow
+
+      _ <- IO.raiseUnless(msuccess.contains(true))(new IllegalStateException(
+        s"""Failed to delete workspace bucket: "${workspace.bucketName}" was not found."""
+      ))
+
     } yield workspaceMigrations
       .filter(_.id === migration.id)
       .map(_.workspaceBucketDeleted)
@@ -147,13 +152,19 @@ object WorkspaceMigrationMonitor {
       _ <- IO.whenA(migration.newGoogleProjectId.isEmpty)(failNoGoogleProject(migration))
       _ <- IO.whenA(migration.tmpBucketName.isEmpty)(failNoTmpBucket(migration))
 
-      _ <- googleStorageService.deleteBucket(
+      tmpBucketName = migration.tmpBucketName.get
+      msuccess <- googleStorageService.deleteBucket(
         GoogleProject(migration.newGoogleProjectId.get.value),
-        migration.tmpBucketName.get,
+        tmpBucketName,
         isRecursive = true
-      ).compile.drain
+      ).compile.last
 
       deleted <- timestampNow
+
+      _ <- IO.raiseUnless(msuccess.contains(true))(new IllegalStateException(
+        s"""Failed to delete temporary bucket: "${tmpBucketName}" was not found."""
+      ))
+
     } yield workspaceMigrations
       .filter(_.id === migration.id)
       .map(_.tmpBucketDeleted)
