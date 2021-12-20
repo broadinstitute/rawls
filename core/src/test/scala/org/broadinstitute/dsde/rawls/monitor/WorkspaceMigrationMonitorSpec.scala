@@ -173,16 +173,11 @@ class WorkspaceMigrationMonitorSpec
         )
       }
 
-      // We need a temp bucket to transfer the workspace bucket contents into
       val migration = runAndWait(
         WorkspaceMigrationMonitor.workspaceMigrations
           .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
       )
         .head
-        .copy(
-          newGoogleProjectId = GoogleProjectId(destProject).some,
-          tmpBucketName = GcsBucketName(sourceBucket).some
-        )
 
       val writeAction = WorkspaceMigrationMonitor.deleteWorkspaceBucket(
         migration,
@@ -204,6 +199,59 @@ class WorkspaceMigrationMonitorSpec
       )
 
       workspaceBucketDeleted shouldBe defined
+    }
+  }
+
+  "deleteTemporaryBucket" should "delete the temporary bucket and record when it was deleted" in {
+    val sourceProject = "general-dev-billing-account"
+    val sourceBucket = "az-leotest"
+    val destProject = "terra-dev-7af423b8"
+    val destBucket = "v1-migration-test-" + UUID.randomUUID.toString.replace("-", "")
+
+    val v1Workspace = minimalTestData.v1Workspace.copy(
+      namespace = sourceProject,
+      googleProjectId = GoogleProjectId(sourceProject),
+      bucketName = destBucket
+    )
+
+    withMinimalTestDatabase { _ =>
+      runAndWait {
+        DBIO.seq(
+          workspaceQuery.createOrUpdate(v1Workspace),
+          WorkspaceMigrationMonitor.schedule(v1Workspace)
+        )
+      }
+
+      // We need a temp bucket to transfer the workspace bucket contents into
+      val migration = runAndWait(
+        WorkspaceMigrationMonitor.workspaceMigrations
+          .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
+      )
+        .head
+        .copy(
+          newGoogleProjectId = GoogleProjectId(destProject).some,
+          tmpBucketName = GcsBucketName(sourceBucket).some
+        )
+
+      val writeAction = WorkspaceMigrationMonitor.deleteTemporaryBucket(
+        migration,
+        new MockGoogleStorageService[IO] {
+          override def deleteBucket(googleProject: GoogleProject, bucketName: GcsBucketName, isRecursive: Boolean, bucketSourceOptions: List[Storage.BucketSourceOption], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Boolean] =
+            fs2.Stream.emit(true)
+        }
+      ).unsafeRunSync
+
+      runAndWait(writeAction) shouldBe()
+
+      val tmpBucketDeleted = runAndWait(
+        WorkspaceMigrationMonitor.workspaceMigrations
+          .filter(_.id === migration.id)
+          .map(_.tmpBucketDeleted)
+          .result
+          .map(_.head)
+      )
+
+      tmpBucketDeleted shouldBe defined
     }
   }
 

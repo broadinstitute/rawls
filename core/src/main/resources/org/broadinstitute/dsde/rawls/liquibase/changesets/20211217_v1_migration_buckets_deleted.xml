@@ -10,4 +10,11 @@
             </column>
         </addColumn>
     </changeSet>
+    <changeSet logicalFilePath="dummy" author="ehigham" id="create_TMP_BUCKET_DELETED">
+        <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
+            <column name="TMP_BUCKET_DELETED" type="DATETIME">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
 </databaseChangeLog>
