@@ -69,26 +69,27 @@ object WorkspaceMigrationMonitor {
                                               workspace: Workspace,
                                               billingProject: RawlsBillingProject
                                              ): IO[(GoogleProjectId, GoogleProjectNumber, WriteAction[Unit])] =
-    IO.fromFuture {
-      IO {
-        for {
-          (googleProjectId, googleProjectNumber) <- workspaceService.setupGoogleProject(
-            billingProject,
-            workspace.currentBillingAccountOnGoogleProject.getOrElse(
-              throw new RawlsException(s"""No billing account for workspace '${workspace.workspaceId}'""")
-            ),
-            workspace.workspaceId,
-            workspace.toWorkspaceName
-          )
-        } yield (googleProjectId, googleProjectNumber, workspaceMigrations
-          .filter(_.id === migrationAttempt.id)
-          .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
-          .update((googleProjectId.value.some, googleProjectNumber.value.some, Timestamp.valueOf(LocalDateTime.now).some))
-          .ignore
+    for {
+      res <- IO.fromFuture(IO {
+        workspaceService.setupGoogleProject(
+          billingProject,
+          workspace.currentBillingAccountOnGoogleProject.getOrElse(
+            throw new RawlsException(s"""No billing account for workspace '${workspace.workspaceId}'""")
+          ),
+          workspace.workspaceId,
+          workspace.toWorkspaceName
         )
-      }
-    }
+      })
 
+      (googleProjectId, googleProjectNumber) = res
+      configured <- timestampNow
+
+    } yield (googleProjectId, googleProjectNumber, workspaceMigrations
+      .filter(_.id === migrationAttempt.id)
+      .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
+      .update((googleProjectId.value.some, googleProjectNumber.value.some, configured.some))
+      .ignore
+    )
 
   final def createTempBucket(attempt: WorkspaceMigration,
                              workspace: Workspace,
