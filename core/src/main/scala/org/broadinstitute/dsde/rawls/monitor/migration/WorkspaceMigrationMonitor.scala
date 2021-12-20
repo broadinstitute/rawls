@@ -64,7 +64,7 @@ object WorkspaceMigrationMonitor {
   final def timestampNow: IO[Timestamp] = IO.delay(Timestamp.valueOf(LocalDateTime.now))
 
 
-  final def claimAndConfigureNewGoogleProject(migrationAttempt: WorkspaceMigration,
+  final def claimAndConfigureNewGoogleProject(migration: WorkspaceMigration,
                                               workspaceService: WorkspaceService,
                                               workspace: Workspace,
                                               billingProject: RawlsBillingProject
@@ -85,7 +85,7 @@ object WorkspaceMigrationMonitor {
       configured <- timestampNow
 
     } yield (googleProjectId, googleProjectNumber, workspaceMigrations
-      .filter(_.id === migrationAttempt.id)
+      .filter(_.id === migration.id)
       .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
       .update((googleProjectId.value.some, googleProjectNumber.value.some, configured.some))
       .ignore
@@ -100,14 +100,11 @@ object WorkspaceMigrationMonitor {
     )
 
     for {
-      googleProject <- attempt.newGoogleProjectId match {
-        case Some(projectId) => IO.pure(GoogleProject(projectId.value))
-        case None            => failNoGoogleProject(attempt)
-      }
+      googleProjectId <- IO(attempt.newGoogleProjectId.getOrElse(throw noGoogleProjectError(attempt)))
 
       _ <- createBucketInSameRegion(
         GcsBucketName(workspace.bucketName),
-        googleProject,
+        GoogleProject(googleProjectId.value),
         tmpBucketName,
         googleStorageService
       )
@@ -135,9 +132,9 @@ object WorkspaceMigrationMonitor {
 
       deleted <- timestampNow
 
-      _ <- IO.raiseUnless(msuccess.contains(true))(new IllegalStateException(
-        s"""Failed to delete workspace bucket: "${workspace.bucketName}" was not found."""
-      ))
+      _<- IO.raiseUnless(msuccess.contains(true)) {
+        noWorkspaceBucketError(GcsBucketName(workspace.bucketName))
+      }
 
     } yield workspaceMigrations
       .filter(_.id === migration.id)
@@ -150,21 +147,18 @@ object WorkspaceMigrationMonitor {
                                   googleStorageService: GoogleStorageService[IO]
                                  ): IO[WriteAction[Unit]] =
     for {
-      _ <- IO.whenA(migration.newGoogleProjectId.isEmpty)(failNoGoogleProject(migration))
-      _ <- IO.whenA(migration.tmpBucketName.isEmpty)(failNoTmpBucket(migration))
+      googleProjectId <- IO(migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration)))
+      tmpBucketName <- IO(migration.tmpBucketName.getOrElse(throw noTmpBucketError(migration)))
 
-      tmpBucketName = migration.tmpBucketName.get
       msuccess <- googleStorageService.deleteBucket(
-        GoogleProject(migration.newGoogleProjectId.get.value),
+        GoogleProject(googleProjectId.value),
         tmpBucketName,
         isRecursive = true
       ).compile.last
 
       deleted <- timestampNow
 
-      _ <- IO.raiseUnless(msuccess.contains(true))(new IllegalStateException(
-        s"""Failed to delete temporary bucket: "${tmpBucketName}" was not found."""
-      ))
+      _ <- IO.raiseUnless(msuccess.contains(true))(noTmpBucketError(migration))
 
     } yield workspaceMigrations
       .filter(_.id === migration.id)
@@ -173,31 +167,24 @@ object WorkspaceMigrationMonitor {
       .ignore
 
 
-  final def createFinalBucket(attempt: WorkspaceMigration,
+  final def createFinalBucket(migration: WorkspaceMigration,
                               workspace: Workspace,
                               googleStorageService: GoogleStorageService[IO]
                             ): IO[(GcsBucketName, WriteAction[Unit])] =
     for {
-      googleProject <- attempt.newGoogleProjectId match {
-        case Some(projectId) => IO.pure(GoogleProject(projectId.value))
-        case None            => failNoGoogleProject(attempt)
-      }
-
-      tmpBucket <- attempt.tmpBucketName match {
-        case Some(bucketName) => IO.pure(bucketName)
-        case None             => failNoTmpBucket(attempt)
-      }
+      googleProjectId <- IO(migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration)))
+      tmpBucket <- IO(migration.tmpBucketName.getOrElse(throw noTmpBucketError(migration)))
 
       _ <- createBucketInSameRegion(
         tmpBucket,
-        googleProject,
+        GoogleProject(googleProjectId.value),
         GcsBucketName(workspace.bucketName),
         googleStorageService
       )
 
       created <- timestampNow
     } yield (GcsBucketName(workspace.bucketName), workspaceMigrations
-      .filter(_.id === attempt.id)
+      .filter(_.id === migration.id)
       .map(_.finalBucketCreated)
       .update(created.some)
       .ignore
@@ -217,10 +204,7 @@ object WorkspaceMigrationMonitor {
         List(BucketGetOption.userProject(destGoogleProject.value))
       )
 
-      sourceBucket <- sourceBucketOpt match {
-        case Some(bucket) => IO.pure(bucket)
-        case None         => failNoWorkspaceBucket(sourceBucketName)
-      }
+      sourceBucket <- IO(sourceBucketOpt.getOrElse(throw noWorkspaceBucketError(sourceBucketName)))
 
       // todo: CA-1637 do we need to transfer the storage logs for this workspace? the logs are prefixed
       // with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket
@@ -237,16 +221,46 @@ object WorkspaceMigrationMonitor {
     } yield ()
 
 
-  final def failNoWorkspaceBucket[A](name: GcsBucketName): IO[A] =
-    IO.raiseError(new IllegalStateException(s"""Failed to retrieve workspace bucket "${name}"."""))
+  final def startStorageTransferJobToTmpBucket(migration: WorkspaceMigration,
+                                               workspace: Workspace,
+                                               projectToBill: GoogleProject,
+                                               sts: GoogleStorageTransferService[IO]
+                                              ): IO[(TransferJob, WriteAction[Unit])] =
+    IO.raiseWhen(migration.tmpBucketName.isEmpty)(noTmpBucketError(migration)) *>
+      startBucketStorageTransferJob(
+        migration,
+        GcsBucketName(workspace.bucketName),
+        migration.tmpBucketName.get,
+        projectToBill,
+        sts
+      )
 
 
-  final def failNoGoogleProject[A](attempt: WorkspaceMigration): IO[A] =
-    IO.raiseError(new IllegalStateException(s"""Google Project was not created for migration "${attempt.id}.""""))
+  final def startStorageTransferJobToFinalBucket(migration: WorkspaceMigration,
+                                                 workspace: Workspace,
+                                                 projectToBill: GoogleProject,
+                                                 sts: GoogleStorageTransferService[IO]
+                                                ): IO[(TransferJob, WriteAction[Unit])] =
+    IO.raiseWhen(migration.tmpBucketName.isEmpty)(noTmpBucketError(migration)) *>
+      startBucketStorageTransferJob(
+        migration,
+        migration.tmpBucketName.get,
+        GcsBucketName(workspace.bucketName),
+        projectToBill,
+        sts
+      )
 
 
-  final def failNoTmpBucket[A](attempt: WorkspaceMigration): IO[A] =
-    IO.raiseError(new IllegalStateException(s"""Temporary storage bucket was not created for migration "${attempt.id}.""""))
+  final def noGoogleProjectError[A](migration: WorkspaceMigration): Throwable =
+    new IllegalStateException(s"""Google Project "${migration.newGoogleProjectId}" was not found for migration "${migration.id}."""")
+
+
+  final def noWorkspaceBucketError[A](name: GcsBucketName): Throwable =
+    new IllegalStateException(s"""Failed to retrieve workspace bucket "${name}".""")
+
+
+  final def noTmpBucketError[A](migration: WorkspaceMigration): Throwable =
+    new IllegalStateException(s"""Temporary storage bucket "${migration.tmpBucketName}" was not found for migration "${migration.id}."""")
 
 
   final def startBucketStorageTransferJob(migration: WorkspaceMigration,
@@ -260,7 +274,7 @@ object WorkspaceMigrationMonitor {
         jobName = GoogleStorageTransferService.JobName(
           "transferJobs/terra-workspace-migration-" + UUID.randomUUID.toString.replace("-", "")
         ),
-        jobDescription = s"""Bucket transfer job from ${originBucket} to ${destBucket}""",
+        jobDescription = s"""Bucket transfer job from "${originBucket}" to "${destBucket}".""",
         projectToBill = projectToBill,
         originBucket,
         destBucket,

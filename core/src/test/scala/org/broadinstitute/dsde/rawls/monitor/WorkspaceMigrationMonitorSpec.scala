@@ -255,7 +255,7 @@ class WorkspaceMigrationMonitorSpec
     }
   }
 
-  "startBucketStorageTransferJob" should "create and start a storage transfer job between teh source and destination bucket" in {
+  "startBucketStorageTransferJob" should "create and start a storage transfer job between the source and destination bucket" in {
     val sourceProject = "general-dev-billing-account"
     val sourceBucket = "az-leotest"
     val destProject = "terra-dev-7af423b8"
