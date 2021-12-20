@@ -155,8 +155,6 @@ class WorkspaceMigrationMonitorSpec
 
   "deleteWorkspaceBucket" should "delete the workspace bucket and record when it was deleted" in {
     val sourceProject = "general-dev-billing-account"
-    val sourceBucket = "az-leotest"
-    val destProject = "terra-dev-7af423b8"
     val destBucket = "v1-migration-test-" + UUID.randomUUID.toString.replace("-", "")
 
     val v1Workspace = minimalTestData.v1Workspace.copy(
@@ -255,52 +253,43 @@ class WorkspaceMigrationMonitorSpec
     }
   }
 
-  "startBucketStorageTransferJob" should "create and start a storage transfer job between the source and destination bucket" in {
-    val sourceProject = "general-dev-billing-account"
-    val sourceBucket = "az-leotest"
-    val destProject = "terra-dev-7af423b8"
-    val destBucket = "v1-migration-test-" + UUID.randomUUID.toString.replace("-", "")
+  val mockStsService = new MockGoogleStorageTransferService[IO] {
+    override def createTransferJob(jobName: JobName, jobDescription: String, projectToBill: GoogleProject, originBucket: GcsBucketName, destinationBucket: GcsBucketName, schedule: JobTransferSchedule): IO[TransferJob] =
+      IO.pure {
+        TransferJob.newBuilder()
+          .setName(s"${jobName}")
+          .setDescription(jobDescription)
+          .setProjectId(s"${projectToBill}")
+          .build
+      }
+  }
 
-    val v1Workspace = minimalTestData.v1Workspace.copy(
-      namespace = sourceProject,
-      googleProjectId = GoogleProjectId(sourceProject),
-      bucketName = destBucket
-    )
-
+  "startStorageTransferJobToTmpBucket" should "create and start a storage transfer job from the workspace bucket to the temp bucket" in {
     withMinimalTestDatabase { _ =>
       runAndWait {
         DBIO.seq(
-          workspaceQuery.createOrUpdate(v1Workspace),
-          WorkspaceMigrationMonitor.schedule(v1Workspace)
+          workspaceQuery.createOrUpdate(minimalTestData.v1Workspace),
+          WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace)
         )
       }
 
       // We need a temp bucket to transfer the workspace bucket contents into
       val migration = runAndWait(
         WorkspaceMigrationMonitor.workspaceMigrations
-          .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
+          .filter(_.workspaceId === minimalTestData.v1Workspace.workspaceIdAsUUID)
+          .result
       )
         .head
         .copy(
-          newGoogleProjectId = GoogleProjectId(destProject).some,
-          tmpBucketName = GcsBucketName(sourceBucket).some
+          tmpBucketName = GcsBucketName("tmp-bucket-name").some
         )
 
-      val (job, writeAction) = WorkspaceMigrationMonitor.startBucketStorageTransferJob(
+      val (job, writeAction) = WorkspaceMigrationMonitor.startStorageTransferJobToTmpBucket(
         migration,
-        GcsBucketName(v1Workspace.bucketName),
-        migration.tmpBucketName.get,
+        minimalTestData.v1Workspace,
         GoogleProject("to-be-determined"),
-        new MockGoogleStorageTransferService[IO] {
-          override def createTransferJob(jobName: JobName, jobDescription: String, projectToBill: GoogleProject, originBucket: GcsBucketName, destinationBucket: GcsBucketName, schedule: JobTransferSchedule): IO[TransferJob] =
-            IO.pure {
-              TransferJob.newBuilder()
-                .setName(s"${jobName}")
-                .setDescription(jobDescription)
-                .setProjectId(s"${projectToBill}")
-                .build
-            }
-        }).unsafeRunSync
+        mockStsService
+      ).unsafeRunSync
 
       runAndWait(writeAction) shouldBe()
 
@@ -312,8 +301,50 @@ class WorkspaceMigrationMonitorSpec
 
       transferJobs.length shouldBe 1
       transferJobs.head.jobName.value shouldBe job.getName
-      transferJobs.head.originBucket.value shouldBe v1Workspace.bucketName
+      transferJobs.head.originBucket.value shouldBe minimalTestData.v1Workspace.bucketName
       transferJobs.head.destBucket shouldBe migration.tmpBucketName.get
+    }
+  }
+
+  "startStorageTransferJobToFinalBucket" should "create and start a storage transfer job from the tmp bucket to the new workspace bucket" in {
+    withMinimalTestDatabase { _ =>
+      runAndWait {
+        DBIO.seq(
+          workspaceQuery.createOrUpdate(minimalTestData.v1Workspace),
+          WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace)
+        )
+      }
+
+      // We need a temp bucket to transfer the workspace bucket contents into
+      val migration = runAndWait(
+        WorkspaceMigrationMonitor.workspaceMigrations
+          .filter(_.workspaceId === minimalTestData.v1Workspace.workspaceIdAsUUID)
+          .result
+      )
+        .head
+        .copy(
+          tmpBucketName = GcsBucketName("tmp-bucket-name").some
+        )
+
+      val (job, writeAction) = WorkspaceMigrationMonitor.startStorageTransferJobToFinalBucket(
+        migration,
+        minimalTestData.v1Workspace,
+        GoogleProject("to-be-determined"),
+        mockStsService
+      ).unsafeRunSync
+
+      runAndWait(writeAction) shouldBe()
+
+      val transferJobs = runAndWait(
+        WorkspaceMigrationMonitor.storageTransferJobs
+          .filter(_.migrationId === migration.id)
+          .result
+      )
+
+      transferJobs.length shouldBe 1
+      transferJobs.head.jobName.value shouldBe job.getName
+      transferJobs.head.originBucket.value shouldBe migration.tmpBucketName.get.value
+      transferJobs.head.destBucket.value shouldBe minimalTestData.v1Workspace.bucketName
     }
   }
 
