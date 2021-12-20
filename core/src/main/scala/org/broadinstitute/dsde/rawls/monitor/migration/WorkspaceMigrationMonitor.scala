@@ -123,21 +123,40 @@ object WorkspaceMigrationMonitor {
 
   final def deleteWorkspaceBucket(migration: WorkspaceMigration,
                                   workspace: Workspace,
-                                  googleStorageService: GoogleStorageService[IO])
-                                : IO[WriteAction[Unit]] =
+                                  googleStorageService: GoogleStorageService[IO]
+                                 ): IO[WriteAction[Unit]] =
     for {
-      _ <- IO.whenA(migration.newGoogleProjectId.isEmpty)(failNoGoogleProject(migration))
-      _ <- IO.whenA(migration.tmpBucketName.isEmpty)(failNoTmpBucket(migration))
-
       _ <- googleStorageService.deleteBucket(
-        GoogleProject(migration.newGoogleProjectId.get.value),
-        GcsBucketName(workspace.bucketName)
+        GoogleProject(workspace.googleProjectId.value),
+        GcsBucketName(workspace.bucketName),
+        isRecursive = true
       ).compile.drain
 
       deleted <- timestampNow
     } yield workspaceMigrations
       .filter(_.id === migration.id)
       .map(_.workspaceBucketDeleted)
+      .update(deleted.some)
+      .ignore
+
+
+  final def deleteTemporaryBucket(migration: WorkspaceMigration,
+                                  googleStorageService: GoogleStorageService[IO]
+                                 ): IO[WriteAction[Unit]] =
+    for {
+      _ <- IO.whenA(migration.newGoogleProjectId.isEmpty)(failNoGoogleProject(migration))
+      _ <- IO.whenA(migration.tmpBucketName.isEmpty)(failNoTmpBucket(migration))
+
+      _ <- googleStorageService.deleteBucket(
+        GoogleProject(migration.newGoogleProjectId.get.value),
+        migration.tmpBucketName.get,
+        isRecursive = true
+      ).compile.drain
+
+      deleted <- timestampNow
+    } yield workspaceMigrations
+      .filter(_.id === migration.id)
+      .map(_.tmpBucketDeleted)
       .update(deleted.some)
       .ignore
 
