@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.google
 
-import java.io.{ByteArrayOutputStream, IOException, InputStream}
-import java.util.concurrent.TimeUnit
-
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
@@ -13,6 +10,8 @@ import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, InstrumentedRe
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, JsonSupport, WorkspaceJsonSupport}
 import spray.json.JsValue
 
+import java.io.{ByteArrayOutputStream, IOException, InputStream}
+import java.util.concurrent.TimeUnit
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 
@@ -28,6 +27,17 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
       case ioe: IOException => true
       case _ => false
     }
+  }
+
+  // Sadly when500orGoogleError retries on 404s which is not always the behaviour we want. 404s
+  // mean different things in different contexts. Sometimes they mean the resource does not
+  // exist/you can't access it; sometimes it means it does not exist *yet* and sometimes something
+  // else. As such, it should have been handled explicitly depending on the context and not rolled
+  // into a default retrying handler. This ship has sailed - it's used everywhere and changing it
+  // might cause a bunch of failures.
+  def when500orNon404GoogleError(throwable: Throwable): Boolean = throwable match {
+    case e: HttpResponseException if e.getStatusCode == 404 => false
+    case t => when500orGoogleError(t)
   }
 
   protected def retryWhen500orGoogleError[T](op: () => T)(implicit histo: Histogram): Future[T] = {

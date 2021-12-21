@@ -4,9 +4,9 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
 import org.scalatest.Assertions
+import org.scalatest.freespec.AnyFreeSpec
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-import org.scalatest.freespec.AnyFreeSpec
 
 class AttributeSpec extends AnyFreeSpec with Assertions {
 

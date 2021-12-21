@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import akka.stream.Materializer
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.{IO, Temporal}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
@@ -10,7 +10,6 @@ import com.google.api.services.cloudbilling.model.BillingAccount
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
 import org.joda.time.DateTime
 
 import scala.collection.mutable
@@ -36,7 +35,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   billingGroupEmailAliases: List[String],
   bucketLogsMaxAge: Int,
   resourceBufferJsonFile: String)
-  (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val cs: ContextShift[IO], override val timer: Timer[IO])
+  (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val timer: Temporal[IO])
   extends HttpGoogleServicesDAO(
     true,
     clientSecrets,
@@ -68,7 +67,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     terraBucketReaderRole = "fakeTerraBucketReader",
     terraBucketWriterRole = "fakeTerraBucketWriter",
     accessContextManagerDAO = new MockGoogleAccessContextManagerDAO,
-    resourceBufferJsonFile = resourceBufferJsonFile)(system, materializer, executionContext, cs, timer) {
+    resourceBufferJsonFile = resourceBufferJsonFile)(system, materializer, executionContext, timer) {
 
   private var token: String = null
   private var tokenDate: DateTime = null

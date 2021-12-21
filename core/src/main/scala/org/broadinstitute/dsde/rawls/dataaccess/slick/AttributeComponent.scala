@@ -1,16 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
-import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
+import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.{Sharded, Unsharded, WorkspaceShardState}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport}
 import slick.ast.{BaseTypedType, TypedType}
 import slick.dbio.Effect.Write
 import slick.jdbc.JdbcProfile
 
+import java.sql.Timestamp
+import java.util.UUID
 import scala.reflect.runtime.universe._
 
 /**
@@ -116,6 +117,8 @@ trait AttributeComponent {
 
   import driver.api._
 
+  type ShardId = String
+
   def isEntityRefRecord[T](rec: AttributeRecord[T]): Boolean = {
     val isEmptyRefListDummyRecord = rec.listLength.isDefined && rec.listLength.get == 0 && rec.valueNumber.isEmpty
     rec.valueEntityRef.isDefined || isEmptyRefListDummyRecord
@@ -143,13 +146,13 @@ trait AttributeComponent {
     def transactionId = column[String]("transaction_id")
   }
 
-  class EntityAttributeTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE") {
+  class EntityAttributeTable(shard: ShardId)(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, s"ENTITY_ATTRIBUTE_$shard") {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
 
     def uniqueIdx = index("UNQ_ENTITY_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
 
-    def entityRef = foreignKey("FK_ENT_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
-    def parentEntity = foreignKey("FK_ATTRIBUTE_PARENT_ENTITY", ownerId, entityQuery)(_.id)
+    def entityRef = foreignKey(s"FK_ENT_ATTRIBUTE_ENTITY_REF_$shard", valueEntityRef, entityQuery)(_.id.?)
+    def parentEntity = foreignKey(s"FK_ATTRIBUTE_PARENT_ENTITY_$shard", ownerId, entityQuery)(_.id)
   }
 
   class WorkspaceAttributeTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
@@ -178,7 +181,42 @@ trait AttributeComponent {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, deletedDate, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
-  protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
+  def determineShard(workspaceId: UUID, shardState: WorkspaceShardState): ShardId = {
+    /* Sharded workspaces use a shard identifier such as "04_07", while unsharded workspaces
+        use a shard identifier of "archived". This translates into referencing tables named
+        ENTITY_ATTRIBUTE_04_07 or ENTITY_ATTRIBUTE_archive, respectively.
+     */
+
+    shardState match {
+      case Unsharded => "archived"
+      case Sharded =>
+        val shardSize = 4 // range of characters in a shard, e.g. 4 = "00-03"
+
+        // see the liquibase changeset "20210923_sharded_entity_tables.xml" for expected shard identifier values
+        val idString = workspaceId.toString.take(2).toCharArray
+        val firstChar = idString(0) // first char of workspaceid
+        val secondInt = Integer.parseInt(idString(1).toString, 16) // second character of workspaceId, as integer 0-15
+
+        val lower = Math.floor(secondInt / shardSize) * shardSize
+        val upper = lower + shardSize - 1
+
+        s"$firstChar${lower.toLong.toHexString}_$firstChar${upper.toLong.toHexString}"
+      case unrecognizedState => throw new RawlsException(s"Unrecognized shard state [$unrecognizedState] for workspace $workspaceId.")
+    }
+  }
+
+  class EntityAttributeShardQuery(shard: ShardId) extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(shard)(_), EntityAttributeRecord)
+  def entityAttributeShardQuery(workspaceId: UUID, shardState: WorkspaceShardState): EntityAttributeShardQuery = {
+    new EntityAttributeShardQuery(determineShard(workspaceId, shardState))
+  }
+  def entityAttributeShardQuery(workspace: Workspace): EntityAttributeShardQuery = {
+    entityAttributeShardQuery(workspace.workspaceIdAsUUID, workspace.shardState)
+  }
+  def entityAttributeShardQuery(entityRec: EntityRecord, shardState: WorkspaceShardState): EntityAttributeShardQuery = {
+    entityAttributeShardQuery(entityRec.workspaceId, shardState)
+  }
+
+
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
@@ -228,7 +266,7 @@ trait AttributeComponent {
           refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(ownerId, attributeName, Option(index), ref, entityIdsByRef, Option(refs.length))}
 
         case AttributeValueList(values) =>
-          assertConsistentValueListMembers(values)
+          assertConsistentValueListMembers(values, attributeName)
           values.zipWithIndex.map { case (value, index) => marshalAttributeValue(ownerId, attributeName, value, Option(index), Option(values.length))}
         case value: AttributeValue => Seq(marshalAttributeValue(ownerId, attributeName, value, None, None))
         case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(ownerId, attributeName, None, ref, entityIdsByRef, None))
@@ -341,21 +379,23 @@ trait AttributeComponent {
       }
     }
 
-    def deleteAttributes(workspaceId: UUID, entityType: String, attributeNames: Set[AttributeName]) = {
-      DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceId, entityType, attributeNames)
+    def deleteAttributes(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) = {
+      DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceContext, entityType, attributeNames)
     }
 
     object DeleteAttributeColumnQueries extends RawSqlQuery {
       val driver: JdbcProfile = AttributeComponent.this.driver
 
-      def deleteAttributeColumn(workspaceId: UUID, entityType: String, attributeNames: Set[AttributeName]) = {
+      def deleteAttributeColumn(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) = {
         val attributeNamesSql = reduceSqlActionsWithDelim(attributeNames.map { attName =>
           sql"""(${attName.namespace},${attName.name})"""
         }.toSeq)
 
-        val deleteQueryBase = sql"""delete ea from ENTITY_ATTRIBUTE ea
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID, workspaceContext.shardState)
+
+        val deleteQueryBase = sql"""delete ea from ENTITY_ATTRIBUTE_#$shardId ea
                                     join ENTITY e on e.id = ea.owner_id
-                                    where e.workspace_id = ${workspaceId}
+                                    where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
                                       and e.entity_type = ${entityType}
                                       and (ea.namespace, ea.name) in """
 
@@ -446,11 +486,11 @@ trait AttributeComponent {
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
       def updateInMasterAction(transactionId: String) = {
-          val tableSuffix = getTableSuffix(baseTableRow.tableName)
+          val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
 
           sql"""
           update #${baseTableRow.tableName} a
-              join #${baseTableRow.tableName}_#${tableSuffix} ta
+              join #${joinTableName} ta
               on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
                  (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
                   and ta.transaction_id = $transactionId
@@ -466,10 +506,10 @@ trait AttributeComponent {
       }
 
       def clearAttributeScratchTableAction(transactionId: String) = {
-        val tableSuffix = getTableSuffix(baseTableRow.tableName)
+        val joinTableName = getTempOrScratchTableName(baseTableRow.tableName)
 
-        if(tableSuffix == "SCRATCH")
-          sqlu"""delete from #${baseTableRow.tableName}_#${tableSuffix} where transaction_id = $transactionId"""
+        if(joinTableName.endsWith("SCRATCH"))
+          sqlu"""delete from #${joinTableName} where transaction_id = $transactionId"""
         else DBIO.successful(0)
       }
 
@@ -523,11 +563,21 @@ trait AttributeComponent {
       }
     }
 
-    private def assertConsistentValueListMembers(attributes: Seq[AttributeValue]): Unit = {
+    private def assertConsistentValueListMembers(attributes: Seq[AttributeValue], attributeName: AttributeName): Unit = {
       if(!attributes.isEmpty) {
         val headAttribute = attributes.head
         if (!attributes.forall(_.getClass == headAttribute.getClass)) {
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"inconsistent attributes for list: $attributes"))
+          // determine the different attribute types
+          val typeNames = attributes.map(_.getClass.getSimpleName).distinct
+          // generate example values for those types
+          val exampleValues = typeNames.flatMap { typeName =>
+            attributes.find(x => x.getClass.getSimpleName == typeName).map(_.toString)
+          }
+          // generate a helpful error message
+          val errMsg = s"inconsistent attributes for list: attribute lists must consist of a single data type. For attribute " +
+            s"'${toDelimitedName(attributeName)}', found types: [${typeNames.mkString(", ")}]. " +
+            s"Sample values for these types: [${exampleValues.map(_.take(100)).mkString(", ")}]"
+          throw new RawlsFatalExceptionWithErrorReport(ErrorReport(errMsg))
         }
       }
     }
@@ -558,11 +608,15 @@ trait AttributeComponent {
 
     private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
 
-    private def getTableSuffix(tableName: String): String = {
-      if (tableName == "ENTITY_ATTRIBUTE" || tableName == "WORKSPACE_ATTRIBUTE")
-        "TEMP"
-      else
-        "SCRATCH"
+    private def getTempOrScratchTableName(tableName: String): String = {
+      if (tableName.startsWith("ENTITY_ATTRIBUTE_")) {
+        "ENTITY_ATTRIBUTE_TEMP"
+      } else if (tableName == "WORKSPACE_ATTRIBUTE") {
+        "WORKSPACE_ATTRIBUTE_TEMP"
+      } else {
+        s"${tableName}_SCRATCH"
+      }
     }
+
   }
 }

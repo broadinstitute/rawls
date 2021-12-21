@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.metrics
 
+import akka.http.scaladsl.model._
 import com.codahale.metrics.{Gauge => DropwizardGauge}
 import nl.grons.metrics4.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
 
 import scala.collection.JavaConverters._
-import akka.http.scaladsl.model._
 
 /**
   * Mixin trait for instrumentation.

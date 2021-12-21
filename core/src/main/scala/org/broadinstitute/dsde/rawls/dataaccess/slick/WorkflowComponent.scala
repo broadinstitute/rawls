@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
-import java.util.UUID
-
 import cats.instances.int._
 import cats.instances.list._
 import cats.instances.map._
@@ -16,6 +13,9 @@ import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import slick.dbio.Effect.Write
 import slick.jdbc.JdbcProfile
+
+import java.sql.Timestamp
+import java.util.UUID
 
 /**
  * Created by mbemis on 2/18/16.
@@ -634,8 +634,8 @@ trait WorkflowComponent {
     private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 
     def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus) = {
-      val where = sql"where (id, record_version) in ("
-      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
+      val where = sql"where ("
+      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(id = ${wf.id} AND record_version = ${wf.recordVersion})" }, sql" OR ")
       concatSqlActions(update(newStatus), where, workflowTuples, sql")").as[Int]
     }
 
@@ -654,8 +654,8 @@ trait WorkflowComponent {
     private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 
     def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = {
-      val where = sql"where (id, record_version) in ("
-      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
+      val where = sql"where ("
+      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(id=${wf.id} and record_version=${wf.recordVersion})" }, sql" OR ")
       concatSqlActions(update(newStatus, executionServiceId), where, workflowTuples, sql")").as[Int]
     }
 

@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import java.util.UUID
-
 import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
@@ -9,6 +7,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 import slick.dbio.{DBIOAction, Effect, NoStream}
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 /**

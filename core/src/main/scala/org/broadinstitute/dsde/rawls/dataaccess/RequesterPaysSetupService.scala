@@ -1,13 +1,13 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import cats.effect.{ContextShift, IO}
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace, WorkspaceVersions}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, Workspace}
 
 import scala.concurrent.{ExecutionContext, Future}
 
 class RequesterPaysSetupService(dataSource: SlickDataSource, val googleServicesDAO: GoogleServicesDAO, val bondApiDAO: BondApiDAO, val requesterPaysRole: String)(implicit executionContext: ExecutionContext) {
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(executionContext)
 
   def getBondProviderServiceAccountEmails(userInfo: UserInfo): Future[List[BondServiceAccountEmail]] = {
     for {

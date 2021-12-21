@@ -1,14 +1,12 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.util.UUID
-
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
-import org.broadinstitute.dsde.rawls.dataaccess.{HttpSamDAO, MockExecutionServiceDAO, MockGoogleServicesDAO, MockShardedExecutionServiceCluster}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.{HttpSamDAO, MockExecutionServiceDAO, MockGoogleServicesDAO, MockShardedExecutionServiceCluster}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{RefreshGlobalJobExecGauges, SaveCurrentWorkflowStatusCounts, SubmissionStarted}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -16,11 +14,12 @@ import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
-
-import scala.concurrent.duration._
-import scala.language.postfixOps
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+
+import java.util.UUID
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation
 class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisorSpec")) with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with RawlsTestUtils with MockitoTestUtils with RawlsStatsDTestUtils {

@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
@@ -16,12 +15,12 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsArray, JsBoolean, JsNumber, JsObject, JsString}
 
+import java.util.UUID
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -40,7 +39,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val service = mock[EntityService]
     override val entityServiceConstructor = UserInfo => service
     when(service.entityTypeMetadata(any[WorkspaceName], any[Option[DataReferenceName]], any[Option[GoogleProjectId]], any[Boolean]))
-      .thenReturn(Future.successful(new RequestComplete[Map[String, EntityTypeMetadata]](Map("Test" -> EntityTypeMetadata(5000, "for-test", List("Attribute1", "Attribute2"))))))
+      .thenReturn(Future.successful(Map("Test" -> EntityTypeMetadata(5000, "for-test", List("Attribute1", "Attribute2")))))
 
   }
 
@@ -109,7 +108,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   def dbId(ent: Entity): Long = runAndWait(entityQuery.getEntityRecords(testData.workspace.workspaceIdAsUUID, Set(ent.toReference))).head.id
-  def dbName(id: Long): String = runAndWait(entityQuery.getEntities(Seq(id))).head._2.name
+  def dbName(id: Long): String = runAndWait(entityQuery.getEntities(testData.workspace.workspaceIdAsUUID, WorkspaceShardStates.Sharded, Seq(id))).head._2.name
 
   def entityOfSize(size: Long) = {
     val json = s"""[{"name":"${"0" * (size - 56).toInt}","entityType":"participant","operations":[]}]""" //template already includes 56 bytes, subtract that from repeated string

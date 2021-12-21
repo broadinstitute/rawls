@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io._
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
@@ -10,10 +7,11 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
-import cats.effect.{ContextShift, IO, Timer}
 import cats.data.NonEmptyList
-import cats.syntax.functor._
+import cats.effect.unsafe.implicits.global
+import cats.effect.{IO, Temporal}
 import cats.instances.future._
+import cats.syntax.functor._
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -27,8 +25,13 @@ import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillin
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
-import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, TargetConfiguration}
 import com.google.api.services.deploymentmanager.DeploymentManagerV2Beta
+import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, TargetConfiguration}
+import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
+import com.google.api.services.iam.v1.Iam
+import com.google.api.services.iamcredentials.v1.IAMCredentials
+import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
+import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLifeSciencesScopes}
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.servicemanagement.ServiceManagement
@@ -38,10 +41,14 @@ import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
+import com.google.cloud.storage.StorageException
 import fs2.Stream
+import io.opencensus.scala.Tracing._
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
@@ -50,29 +57,19 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2._
+import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 import spray.json._
-import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import cats.implicits.toTraverseOps
-import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
-import com.google.api.services.iam.v1.Iam
-import com.google.api.services.iamcredentials.v1.IAMCredentials
-import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
-import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLifeSciencesScopes}
-import com.google.cloud.storage.StorageException
-import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
-import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 
+import java.io._
+import java.util.UUID
 import scala.collection.JavaConverters._
-import scala.concurrent.{Future, _}
+import scala.concurrent._
 import scala.io.Source
 import scala.util.matching.Regex
-import io.opencensus.scala.Tracing._
-
-import scala.util.control.NoStackTrace
 
 case class Resources (
                        name: String,
@@ -130,10 +127,10 @@ class HttpGoogleServicesDAO(
                              terraBucketReaderRole: String,
                              terraBucketWriterRole: String,
                              override val accessContextManagerDAO: AccessContextManagerDAO,
-                             resourceBufferJsonFile: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+                             resourceBufferJsonFile: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val timer: Temporal[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
-  implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
+  implicit val log4CatsLogger = Slf4jLogger.getLogger[IO]
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -245,7 +242,7 @@ class HttpGoogleServicesDAO(
                |""".stripMargin.getBytes))
           // use an object name that will always be superseded by a real storage log
           val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
-          val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(googleProject), storageObject, stream)
+          val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(GoogleServicesDAO.getStorageLogsBucketName(googleProject), storageObject, stream)
           executeGoogleRequest(objectInserter)
         }
       }
@@ -262,7 +259,7 @@ class HttpGoogleServicesDAO(
         labels = labels,
         traceId = Option(traceId),
         bucketPolicyOnlyEnabled = true,
-        logBucket = Option(GcsBucketName(getStorageLogsBucketName(googleProject))),
+        logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(googleProject))),
         location = bucketLocation
       ).compile.drain.unsafeToFuture().recoverWith{
         case e: StorageException if e.getCode == 400 =>
@@ -391,7 +388,7 @@ class HttpGoogleServicesDAO(
       // Fetch objects with a prefix of "${bucketName}_storage_", (ignoring "_usage_" logs)
       val fetcher = getStorage(getBucketServiceAccountCredential).
         objects().
-        list(getStorageLogsBucketName(googleProject)).
+        list(GoogleServicesDAO.getStorageLogsBucketName(googleProject)).
         setPrefix(s"${bucketName}_storage_")
       maxResults.foreach(fetcher.setMaxResults(_))
       pageToken.foreach(fetcher.setPageToken)
@@ -887,12 +884,10 @@ class HttpGoogleServicesDAO(
 
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
-
     val cloudResManager = getCloudResourceManagerWithBillingServiceAccountCredential
-
-    retryWhen500orGoogleError(() => {
-      executeGoogleRequest(cloudResManager.projects().get(googleProject.value))
-    })
+    retryExponentially(when500orNon404GoogleError)(() =>
+      Future(blocking(executeGoogleRequest(cloudResManager.projects().get(googleProject.value))))
+    )
   }
 
   def getDMConfigYamlString(googleProject: GoogleProjectId, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
@@ -941,9 +936,9 @@ class HttpGoogleServicesDAO(
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
 
-    import spray.json._
-    import spray.json.DefaultJsonProtocol._
     import DeploymentManagerJsonSupport._
+    import spray.json.DefaultJsonProtocol._
+    import spray.json._
 
     val templateLabels = parseTemplateLocation(dmTemplatePath).map(_.toJson).getOrElse(Map("template_path" -> labelSafeString(dmTemplatePath)).toJson)
 
@@ -1382,8 +1377,8 @@ class GenomicsV1DAO(implicit val system: ActorSystem, val materializer: Material
   val httpClientUtils = HttpClientUtilsStandard()
 
   def getOperation(opId: String, accessToken: OAuth2BearerToken): Future[Option[JsObject]] = {
-    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
     import DefaultJsonProtocol._
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
     executeRequestWithToken[Option[JsObject]](accessToken)(RequestBuilding.Get(s"https://genomics.googleapis.com/v1alpha2/$opId"))
   }
 }
@@ -1402,8 +1397,8 @@ class CloudResourceManagerV2DAO(implicit val system: ActorSystem, val materializ
   val httpClientUtils = HttpClientUtilsStandard()
 
   def getFolderId(folderName: String, accessToken: OAuth2BearerToken): Future[Option[String]] = {
-    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
     import DefaultJsonProtocol._
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 
     implicit val FolderFormat = jsonFormat1(Folder)
     implicit val FolderSearchResponseFormat = jsonFormat1(FolderSearchResponse)

@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
-
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directive1
@@ -16,6 +14,7 @@ import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json._
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 

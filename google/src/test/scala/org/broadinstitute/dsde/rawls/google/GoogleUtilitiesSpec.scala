@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.google
 
-import java.io.IOException
-
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.google.api.client.googleapis.json.GoogleJsonError.ErrorInfo
@@ -11,15 +9,16 @@ import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Span}
 import spray.json._
 
+import java.io.IOException
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
 class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtilities with AnyFlatSpecLike with BeforeAndAfterAll with Matchers with ScalaFutures with Eventually with MockitoTestUtils with StatsDTestUtils {
   implicit val executionContext = ExecutionContext.global
@@ -86,6 +85,14 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
     when500orGoogleError(buildHttpResponseException(503)) shouldBe true
 
     when500orGoogleError(new IOException("boom")) shouldBe true
+  }
+
+  "when500orNon404GoogleError" should "return true for 500 or Google errors except 404s" in {
+    when500orNon404GoogleError(buildGoogleJsonResponseException(400)) shouldBe true
+    when500orNon404GoogleError(buildGoogleJsonResponseException(404)) shouldBe false
+    when500orNon404GoogleError(buildGoogleJsonResponseException(500)) shouldBe true
+    when500orNon404GoogleError(buildHttpResponseException(500)) shouldBe true
+    when500orNon404GoogleError(new IOException("boom")) shouldBe true
   }
 
   "retryWhen500orGoogleError" should "retry once per backoff interval and then fail" in {

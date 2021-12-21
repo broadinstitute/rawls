@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -10,11 +11,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSou
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName}
 import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 object WorkspaceBillingAccountMonitor {
-  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
+  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
     Props(new WorkspaceBillingAccountMonitor(datasource, gcsDAO, initialDelay, pollInterval))
   }
 
@@ -22,7 +23,7 @@ object WorkspaceBillingAccountMonitor {
   case object CheckAll extends WorkspaceBillingAccountsMessage
 }
 
-class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
+class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext) extends Actor with LazyLogging {
 
   context.system.scheduler.scheduleWithFixedDelay(initialDelay, pollInterval, self, CheckAll)
 
@@ -37,7 +38,17 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       }
       _ = logger.info(s"Attempting to update workspaces: ${workspacesToUpdate.toList}")
       _ <- workspacesToUpdate.toList.traverse {
-        case (googleProjectId, newBillingAccount) => IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount)))
+        case (googleProjectId, newBillingAccount) =>
+          IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount))).attempt.map {
+            case Left(e) => {
+              // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
+              // want to continue traversing the list to update the rest of the google project billing accounts even
+              // if one of the update operations fails.
+              logger.warn(s"Failed to update billing account on $googleProjectId to $newBillingAccount", e)
+              ()
+            }
+            case Right(res) => res
+          }
       }.unsafeToFuture()
     } yield()
   }
@@ -61,7 +72,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
           }
       }
       dbResult <- dataSource.inTransaction( { dataAccess =>
-        logger.info(s"Updating billing account on ${googleProjectId} to ${newBillingAccount.get}")
+        logger.info(s"Updating billing account on ${googleProjectId} to ${newBillingAccount}")
         dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
       })
     } yield dbResult

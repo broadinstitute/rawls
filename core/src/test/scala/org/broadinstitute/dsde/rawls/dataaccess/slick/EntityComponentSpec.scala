@@ -1,11 +1,14 @@
 
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
-
 import _root_.slick.dbio.DBIOAction
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
+import com.mysql.jdbc.exceptions.MySQLTimeoutException
+import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
+import slick.jdbc.TransactionIsolation
+
+import java.util.UUID
 
 /**
  * Created by dvoet on 2/12/16.
@@ -113,9 +116,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(activeEntityCount2 + 1)(activeEntityCount3)
     assertResult(activeAttributeCount2)(activeAttributeCount3)
 
-    assertResult(entityCount3) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)) }
+    assertResult(entityCount3) { runAndWait(entityQuery.deleteFromDb(workspaceContext)) }
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "delete-me")) }
-    assertResult(0) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceIdAsUUID)) }
+    assertResult(0) { runAndWait(entityQuery.deleteFromDb(workspaceContext)) }
 
     val (entityCount4, attributeCount4) = countEntitiesAttrs(workspace)
     val (activeEntityCount4, activeAttributeCount4) = countActiveEntitiesAttrs(workspace)
@@ -319,7 +322,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
-      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID))
+      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded))
       assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
       desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
@@ -361,12 +364,40 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
     //so we test the existence of all keys correctly here...
-    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID))
+    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, WorkspaceShardStates.Sharded))
     assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
     desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
       //...and handle that the values are all correct here.
       assertSameElements(testTypesAndAttrNames(eType).map(AttributeName.toDelimitedName), attrNames)
+    }
+  }
+
+  // WARNING: I have fears that this unit test will be flaky, because it depends on timing.
+  // if this test runs on a too-powerful computer, the SQL query that should time out
+  // may run too fast, not time out, and the test will fail. If it turns out to be flaky,
+  // let's just delete this test since it is 90% testing Slick's timeout feature, and 10%
+  // testing that Rawls code is set up properly to pass a timeout argument to Slick.
+  it should "time out when listing all entity types with their attribute names, if a timeout is specified" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      // insert a whole lot of entities with a lot of unique attribute names
+      val numEntities = 1000
+      val numAttrsPerEntity = 400
+      (1 to numEntities) foreach { entityIdx =>
+        val attrs = (1 to numAttrsPerEntity) map { _ =>
+          val attrName = RandomStringUtils.randomAlphanumeric(12)
+          AttributeName.withDefaultNS(attrName) -> AttributeString(attrName)
+        }
+        val entity = Entity(s"entity$entityIdx", "unitTestType", attrs.toMap)
+        runAndWait(entityQuery.save(testData.workspace, entity))
+      }
+
+      // now attempt to calculate attr names and types, with a timeout of 1 second
+      withClue("This test is potentially flaky, failures should be reviewed: ") {
+        intercept[MySQLTimeoutException] {
+          runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded, 1))
+        }
+      }
     }
   }
 

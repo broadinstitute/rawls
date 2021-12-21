@@ -1,21 +1,20 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
-import org.broadinstitute.dsde.rawls.model._
-import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.AttributeName
-import akka.http.scaladsl.server
-import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-import CustomDirectives._
+import akka.http.scaladsl.server
+import akka.http.scaladsl.server.Directives._
 import io.opencensus.scala.akka.http.TracingDirective.traceRequest
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -25,7 +24,6 @@ import scala.util.{Failure, Success, Try}
  */
 
 trait EntityApiService extends UserInfoDirectives {
-  import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
   val entityServiceConstructor: UserInfo => EntityService
@@ -102,7 +100,10 @@ trait EntityApiService extends UserInfoDirectives {
           post {
             entity(as[Array[AttributeEntityReference]]) { entities =>
               complete {
-                entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, None, None)
+                entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, None, None).map {
+                  case entities if entities.isEmpty => StatusCodes.NoContent -> None
+                  case entities => StatusCodes.Conflict -> Option(entities)
+                }
               }
             }
           }
@@ -112,7 +113,7 @@ trait EntityApiService extends UserInfoDirectives {
             withSizeLimit(batchUpsertMaxBytes) {
               entity(as[Array[EntityUpdateDefinition]]) { operations =>
                 complete {
-                  entityServiceConstructor(userInfo).batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject)
+                  entityServiceConstructor(userInfo).batchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject).map(_ => StatusCodes.NoContent)
                 }
               }
             }
@@ -122,7 +123,7 @@ trait EntityApiService extends UserInfoDirectives {
           post {
             entity(as[Array[EntityUpdateDefinition]]) { operations =>
               complete {
-                entityServiceConstructor(userInfo).batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject)
+                entityServiceConstructor(userInfo).batchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations, dataReference, billingProject).map(_ => StatusCodes.NoContent)
               }
             }
           }
@@ -130,7 +131,7 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
           post {
             entity(as[EntityName]) { newEntityName =>
-              complete { entityServiceConstructor(userInfo).renameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name) }
+              complete { entityServiceConstructor(userInfo).renameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name).map(_ => StatusCodes.NoContent) }
             }
           }
         } ~
@@ -159,7 +160,7 @@ trait EntityApiService extends UserInfoDirectives {
                 }
               }
               complete {
-                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames())
+                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames()).map(_ => StatusCodes.NoContent)
               }
             }
           }
@@ -172,7 +173,10 @@ trait EntityApiService extends UserInfoDirectives {
                 entity(as[EntityCopyDefinition]) { copyDefinition =>
                   traceRequest { span =>
                     complete {
-                      entityServiceConstructor(userInfo).copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool, span)
+                      entityServiceConstructor(userInfo).copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool).map { response =>
+                        if (response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntitiesBool)) StatusCodes.Created -> response
+                        else StatusCodes.Conflict -> response
+                      }
                     }
                   }
                 }

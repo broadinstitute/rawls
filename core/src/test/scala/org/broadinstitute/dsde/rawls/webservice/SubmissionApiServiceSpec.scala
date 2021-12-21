@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
-
 import akka.actor.{ActorRef, PoisonPill}
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
@@ -25,6 +23,7 @@ import org.scalatest.time.{Seconds, Span}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps

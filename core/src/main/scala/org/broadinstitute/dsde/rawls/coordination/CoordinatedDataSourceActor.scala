@@ -2,8 +2,8 @@ package org.broadinstitute.dsde.rawls.coordination
 
 import akka.actor.{Actor, Props, Status}
 import org.broadinstitute.dsde.rawls.coordination.CoordinatedDataSourceActor.StartDeadlineException
-import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import slick.jdbc.TransactionIsolation
 
 import scala.concurrent.duration._

@@ -2,10 +2,10 @@ package org.broadinstitute.dsde.test.api
 
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.service.test.RandomUtil
 import org.broadinstitute.dsde.workbench.service.Rawls
-import org.scalatest.matchers.should.Matchers._
+import org.broadinstitute.dsde.workbench.service.test.RandomUtil
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 

@@ -92,4 +92,12 @@
     <include file="changesets/20210510_add_billing_project_export_columns.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20210915_create_entity_cache_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20210916_clone_workspace_file_transfer.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210924_sharded_entity_tables.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20211006_add_sharded_column.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20210924_populate_sharded_entity_tables.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20211117_drop_unused.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20211115_v1_workspace_migration_history.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20211129_v1_migration_temporary_bucket.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20211206_v1_migration_google_project.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20211209_v1_migration_final_bucket.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

@@ -1,37 +1,35 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.config.WDLParserConfig
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import slick.basic.DatabaseConfig
-import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.JdbcProfile
+import slick.jdbc.MySQLProfile.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.scalatest.Suite
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.config.WDLParserConfig
-import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
-import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
-import scala.language.{implicitConversions, postfixOps}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import java.sql.Timestamp
+import java.util.UUID
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
+import scala.language.{implicitConversions, postfixOps}
 
 // initialize database tables and connection pool only once
 object DbResource {
@@ -81,7 +79,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   // TODO: can we be any more targeted about inTransaction vs. inTransactionWithAttrTempTable here?
   // this is used by many tests to set up fixture data, which includes saving entities, therefore it needs
   // the temp table.
-  protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
+  def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
     Await.result(DbResource.dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity, AttributeTempTableType.Workspace))
     { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
   }
@@ -175,7 +173,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              attributes: AttributeMap,
                              isLocked: Boolean) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount, None, Option(createdDate))
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount, None, Option(createdDate), WorkspaceShardStates.Sharded)
   }
   def makeWorkspaceWithUsers(project: RawlsBillingProject,
                              name: String,
@@ -194,7 +192,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              billingAccountErrorMessage: Option[String],
                              completedCloneWorkspaceFileTransfer: Option[DateTime]) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, WorkspaceShardStates.Sharded)
   }
 
   class EmptyWorkspace() extends TestData {
@@ -228,7 +226,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
     val billingAccount = maybeBillingAccount
 
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount, None, Option(currentTime()))
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount, None, Option(currentTime()), WorkspaceShardStates.Sharded)
 
     override def save() = {
       DBIO.seq(
@@ -305,6 +303,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs)
 
     val (workspace) = makeWorkspaceWithUsers(billingProject, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceLocked) = makeWorkspaceWithUsers(billingProject, wsName.name + "_locked", UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, true)
     val (v1Workspace) = makeWorkspaceWithUsers(billingProject, wsName.name + "v1", UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, billingProject.billingAccount, None, Option(currentTime()))
 
     val (regionalWorkspace) = makeWorkspaceWithUsers(billingProject, wsRegionalName.name, UUID.randomUUID().toString, "fc-regional-bucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
@@ -909,6 +908,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val allWorkspaces = Seq(
       workspace,
+      workspaceLocked,
       v1Workspace,
       controlledWorkspace,
       workspacePublished,
@@ -1088,8 +1088,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     val workspace2 = Workspace(wsName2.namespace, wsName2.name, UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     // TODO (CA-1235): Remove these after PPW Migration is complete
-    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()))
-    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()))
+    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()), WorkspaceShardStates.Sharded)
+    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()), WorkspaceShardStates.Sharded)
 
     override def save() = {
       DBIO.seq(

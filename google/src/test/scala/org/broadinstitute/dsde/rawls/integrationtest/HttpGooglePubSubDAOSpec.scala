@@ -4,8 +4,6 @@ package org.broadinstitute.dsde.rawls.integrationtest
  * Created by mbemis on 5/10/16.
  */
 
-import java.io.{File, StringReader}
-
 import akka.actor.ActorSystem
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
@@ -15,13 +13,14 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.{MockitoTestUtils, Retry}
-import org.scalatest.concurrent.Eventually
 import org.scalatest.BeforeAndAfterAll
-
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import java.io.{File, StringReader}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 
 class HttpGooglePubSubDAOSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils {
   implicit val system = ActorSystem("HttpGooglePubSubDAOSpec")

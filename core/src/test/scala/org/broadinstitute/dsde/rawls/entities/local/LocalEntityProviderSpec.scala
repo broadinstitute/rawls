@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
@@ -9,16 +8,16 @@ import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.concurrent.ScalaFutures
-
-import scala.collection.immutable.Map
-import scala.concurrent.ExecutionContext
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.sql.Timestamp
 import java.time.Instant
+import scala.collection.immutable.Map
+import scala.concurrent.ExecutionContext
 
 class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFutures with TestDriverComponent with MethodConfigTestSupport {
   import driver.api._
@@ -60,6 +59,10 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       runAndWait(testResolveInputs(context, configSampleSet, sampleSet2, arrayWdl, this)) shouldBe
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayNameWithWfName)))
 
+      // attribute reference with 1 element array should resolve as AttributeValueList
+      runAndWait(testResolveInputs(context, configSampleSet, sampleSet4, arrayWdl, this)) shouldBe
+        Map(sampleSet4.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(101)))), None, intArrayNameWithWfName)))
+
       // failure cases
       assertResult(true, "Missing values should return an error") {
         runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this)).get("sampleMissingValue").get match {
@@ -78,6 +81,18 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayNameWithWfName)))
+    }
+
+    "resolve empty lists into empty Array in nested WDL Struct" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configNestedWdlStructWithEmptyList, sampleForWdlStruct, wdlStructInputWdlWithNestedStruct, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[]},"id":101,"sample":"sample1","samples":[]}}"""
     }
 
     "unpack AttributeValueRawJson into WDL-arrays" in withConfigData {
@@ -104,6 +119,30 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       wdlInputs shouldBe """{"w1.aint_array":[[10,11,12],[1,2]]}"""
     }
 
+    "correctly unpack wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configWdlStruct, sampleForWdlStruct2, wdlStructInputWdl, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct2.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"id":123,"sample":"sample1","samples":[101]}}"""
+    }
+
+    "correctly unpack nested wdl struct expression with attribute references containing 1 element array into WDL Struct input" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configNestedWdlStruct, sampleForWdlStruct2, wdlStructInputWdlWithNestedStruct, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct2.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[101]},"id":123,"sample":"sample1","samples":[101]}}"""
+    }
+
     "unpack wdl struct expression with attribute references into WDL Struct input" in withConfigData {
       val context = workspace
 
@@ -128,6 +167,18 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
     }
 
+    "unpack nested Array into WDL Struct" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configNestedArrayWdlStruct, sampleForWdlStruct, wdlStructInputWdlWithNestedArray, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[0,1,2],[3,4,5]]},"id":101,"sample":"sample1","samples":[[0,1,2],[3,4,5]]}}"""
+    }
+
     "unpack AttributeValueRawJson into lists-of WDL-arrays" in withConfigData {
       val context = workspace
 
@@ -138,6 +189,18 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
       wdlInputs shouldBe """{"w1.aaint_array":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}"""
+    }
+
+    "unpack triple Array into WDL Struct" in withConfigData {
+      val context = workspace
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configTripleArrayWdlStruct, sampleForWdlStruct, wdlStructInputWdlWithTripleArray, this))
+      val methodProps = resolvedInputs(sampleForWdlStruct.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]},"id":101,"sample":"sample1","samples":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}}"""
     }
 
     //The test data for the following entity cache tests are set up so that the cache will return results that are different
@@ -353,6 +416,33 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       secondMessage shouldBe empty
     }
 
+    "opportunistically update cache if user requests metadata while cache is out of date" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val wsid = workspaceContext.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+
+      withClue("cache record should not exist before requesting metadata") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      val isCurrentBefore = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be not-current before requesting metadata") {
+        assert(!isCurrentBefore)
+      }
+
+      // requesting metadata should update the cache as a side effect
+      localEntityProvider.entityTypeMetadata(true).futureValue
+
+      withClue("cache record should exist after requesting metadata") {
+        assert(runAndWait(workspaceFilter.exists.result))
+      }
+
+      val isCurrentAfter = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      withClue("cache should be current after requesting metadata") {
+        assert(isCurrentAfter)
+      }
+    }
 
     "return helpful error message when upserting case-divergent entity names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get

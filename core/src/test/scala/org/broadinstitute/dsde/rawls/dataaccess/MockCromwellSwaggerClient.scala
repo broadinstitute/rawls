@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import cromwell.client.model.ValueType.TypeNameEnum
-import cromwell.client.model.{ToolInputParameter, ToolOutputParameter, ValueType, WorkflowDescription}
+import cromwell.client.model._
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL}
 
+import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.collection.JavaConverters._
 import scala.util.Try
 
 class MockCromwellSwaggerClient extends CromwellSwaggerClient("fake/path") {
@@ -69,5 +69,12 @@ object MockCromwellSwaggerClient {
 
   def makeOptionalValueType(value: ValueType): ValueType = {
     new ValueType().typeName(TypeNameEnum.OPTIONAL).optionalType(value)
+  }
+
+  def makeObjectValueType(fields: Map[String, ValueType]): ValueType = {
+    val objectFields = fields.map{ case (name, valueType) => new ValueTypeObjectFieldTypes().fieldName(name).fieldType(valueType) }
+    val objectValueType = new ValueType().typeName(TypeNameEnum.OBJECT)
+    objectValueType.setObjectFieldTypes(objectFields.toList.asJava)
+    objectValueType
   }
 }

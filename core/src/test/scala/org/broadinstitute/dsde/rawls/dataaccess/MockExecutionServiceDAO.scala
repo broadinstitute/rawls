@@ -1,15 +1,15 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
-import akka.http.scaladsl.model.StatusCodes
 import spray.json.JsObject
 
 import scala.concurrent.Future
 import scala.util.Success
 
-class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "") extends ExecutionServiceDAO {
+class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "", failSubmission:Boolean = false) extends ExecutionServiceDAO {
   var submitWdlSource: String = null
   var submitInput: Seq[String] = null
   var submitOptions: Option[String] = None
@@ -30,8 +30,10 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
       case inputPattern(sampleName) => sampleName
       case _ => "69d1d92f-3895-4a7b-880a-82535e9a096e"
     }
-
-    if (timeout) {
+    if (failSubmission){
+      Future.successful(workflowIds.map(_ => Right(ExecutionServiceFailure("Fail", "Fail", Option.empty))))
+    }
+    else if (timeout) {
       Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.GatewayTimeout, s"Failed to submit")))
     }
     else {

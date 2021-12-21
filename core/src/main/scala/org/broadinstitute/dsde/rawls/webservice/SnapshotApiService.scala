@@ -1,18 +1,16 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
-
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import bio.terra.workspace.model.{DataReferenceDescription, DataReferenceList, DataRepoSnapshot, DataRepoSnapshotResource, ReferenceTypeEnum, ResourceList, UpdateDataReferenceRequestBody}
+import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, SnapshotListResponse, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 trait SnapshotApiService extends UserInfoDirectives {
@@ -35,7 +33,7 @@ trait SnapshotApiService extends UserInfoDirectives {
         // that method provides a 400 Bad Request response and nice error message
         parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) { (offset, limit, referencedSnapshotId) =>
           complete {
-            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit, referencedSnapshotId).map(StatusCodes.OK -> _)
+            snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit, referencedSnapshotId)
           }
         }
       }
@@ -43,7 +41,7 @@ trait SnapshotApiService extends UserInfoDirectives {
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
       get {
         complete {
-          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
+          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
         }
       } ~
       patch {
@@ -61,7 +59,7 @@ trait SnapshotApiService extends UserInfoDirectives {
     } ~
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / "name" / Segment) { (workspaceNamespace, workspaceName, referenceName) =>
       complete {
-        snapshotServiceConstructor(userInfo).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName), referenceName).map(StatusCodes.OK -> _)
+        snapshotServiceConstructor(userInfo).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName), referenceName)
       }
     } ~
     // ---- SNAPSHOT V1 ----
@@ -80,7 +78,6 @@ trait SnapshotApiService extends UserInfoDirectives {
           complete {
             snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit)
               .map(snapshotListResponseToDataReferenceList)
-              .map(StatusCodes.OK -> _)
           }
         }
       }
@@ -88,7 +85,7 @@ trait SnapshotApiService extends UserInfoDirectives {
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
       get {
         complete {
-          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
+          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
         }
       } ~
       patch {
@@ -120,7 +117,6 @@ trait SnapshotApiService extends UserInfoDirectives {
           complete {
             snapshotServiceConstructor(userInfo).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit)
               .map(snapshotListResponseToDataReferenceList)
-              .map(StatusCodes.OK -> _)
           }
         }
       }
@@ -130,7 +126,6 @@ trait SnapshotApiService extends UserInfoDirectives {
         complete {
           snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
             .map(dataRepoSnapshotResourceToDataReferenceDescription)
-            .map(StatusCodes.OK -> _)
         }
       } ~
       patch {

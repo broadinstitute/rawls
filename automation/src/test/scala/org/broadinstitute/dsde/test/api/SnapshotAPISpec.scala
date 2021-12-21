@@ -7,16 +7,14 @@ import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
 import bio.terra.datarepo.model.{EnumerateSnapshotModel, SnapshotModel}
 import bio.terra.workspace.model._
+import cats.effect.IO
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
-import com.google.api.services.compute.ComputeScopes
-import com.google.auth.oauth2.{AccessToken, GoogleCredentials, ServiceAccountCredentials}
-import java.nio.charset.Charset
-import java.util.UUID
-import org.apache.commons.io.IOUtils
-import org.broadinstitute.dsde.rawls.model._
+import com.google.auth.oauth2.{AccessToken, GoogleCredentials}
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.userLoginScopes
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
@@ -24,25 +22,21 @@ import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
+import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.time.{Minutes, Seconds, Span}
-import com.typesafe.scalalogging.LazyLogging
-import cats.effect.IO
+import spray.json._
+
+import java.util.UUID
 import scala.collection.JavaConverters._
-import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
-import spray.json._
-import spray.json.DefaultJsonProtocol._
 
 
 class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterAll
@@ -425,8 +419,8 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
   }
 
   private def getDataset(datasetName: String, projectId: String, authToken: AuthToken)(implicit executionContext: ExecutionContext) = {
-    import org.typelevel.log4cats.slf4j.Slf4jLogger
     import cats.effect.unsafe.implicits.global
+    import org.typelevel.log4cats.slf4j.Slf4jLogger
 
     implicit val logger: org.typelevel.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 

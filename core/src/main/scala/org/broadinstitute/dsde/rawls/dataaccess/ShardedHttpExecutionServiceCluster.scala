@@ -3,15 +3,15 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowRecord
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.Retry
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.json.JsObject
 
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.{Random, Try}
 
@@ -86,8 +86,8 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
   //    }
 
 
-    import spray.json._
     import spray.json.DefaultJsonProtocol._
+    import spray.json._
 
     for {
       callsObj <- metadata.getFields("calls")

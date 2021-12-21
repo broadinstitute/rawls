@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.OptionValues
 
+import java.util.UUID
 import scala.language.implicitConversions
 
 /**
@@ -37,7 +36,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     Option(googleProjectNumber),
     Option(workspaceBillingAccount),
     None,
-    Option(currentTime())
+    Option(currentTime()),
+    WorkspaceShardStates.Sharded
   )
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {

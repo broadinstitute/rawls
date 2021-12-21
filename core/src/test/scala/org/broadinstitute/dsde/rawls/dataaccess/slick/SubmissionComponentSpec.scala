@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats._
 import cats.implicits._
@@ -9,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.sql.Timestamp
+import java.util.UUID
 
 
 /**

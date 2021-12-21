@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.datarepo
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
-import java.util.UUID
-
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.SnapshotModel
+
+import java.util.UUID
 
 class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) extends DataRepoDAO {
 

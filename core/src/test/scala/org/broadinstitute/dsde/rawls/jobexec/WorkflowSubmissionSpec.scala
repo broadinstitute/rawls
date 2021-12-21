@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.util.UUID
-
 import akka.actor.{ActorSystem, PoisonPill}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
@@ -22,16 +20,17 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.util.UUID
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
 /**
  * Created by dvoet on 5/17/16.
@@ -93,6 +92,14 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
                                                processInterval: FiniteDuration = 25 milliseconds,
                                                pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, processInterval, pollInterval) {
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), dataSource)
+  }
+
+  class TestWorkflowSubmissionWithExecutionServiceFailure(
+                                                   dataSource: SlickDataSource,
+                                                   batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
+                                                   processInterval: FiniteDuration = 25 milliseconds,
+                                                   pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, processInterval, pollInterval) {
+    override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(failSubmission = true), dataSource)
   }
 
   class TestWorkflowSubmissionWithLabels(dataSource: SlickDataSource,
@@ -562,6 +569,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         }.toMap
       }
     }
+  }
+
+  it should "test our update failure db call" in withDefaultTestDatabase {
+    val workflowSubmission = new TestWorkflowSubmissionWithExecutionServiceFailure(slickDataSource)
+    val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submission1, testData.workspace)
+    Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+    assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status ==  WorkflowStatuses.Failed.toString))
   }
 
   it should "fail workflows that timeout when submitting to Cromwell" in withDefaultTestDatabase {

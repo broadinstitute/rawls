@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.client.{ApiException => DatarepoApiException}
 import bio.terra.workspace.client.{ApiException => WorkspaceApiException}
@@ -15,6 +14,7 @@ import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.model.DataReferenceName
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
 import scala.util.{Failure, Success, Try}

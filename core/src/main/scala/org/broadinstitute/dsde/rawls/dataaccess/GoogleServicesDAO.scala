@@ -8,11 +8,11 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.typesafe.config.Config
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
@@ -21,6 +21,10 @@ import spray.json.JsObject
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+
+object GoogleServicesDAO {
+  def getStorageLogsBucketName(googleProject: GoogleProjectId) = s"storage-logs-${googleProject.value}"
+}
 
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
@@ -54,8 +58,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return true if the bucket was deleted, false if not
     */
   def deleteBucket(bucketName: String): Future[Boolean]
-
-  def getStorageLogsBucketName(googleProject: GoogleProjectId) = s"storage-logs-${googleProject.value}"
 
   def isAdmin(userEmail: String): Future[Boolean]
 

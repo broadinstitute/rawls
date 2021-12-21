@@ -1,7 +1,8 @@
 package org.broadinstitute.dsde.rawls.mock
 
-import org.broadinstitute.dsde.rawls.dataaccess.{BondResponseData, _}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
+
 import scala.concurrent.{ExecutionContext, Future}
 
 class MockBondApiDAO(bondBaseUrl: String)(implicit executionContext: ExecutionContext) extends BondApiDAO {

@@ -1,17 +1,16 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ExprEvalRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
+import org.scalatest.funsuite.AnyFunSuite
 
+import java.util.UUID
 import scala.collection.immutable.IndexedSeq
 import scala.collection.mutable.Seq
 import scala.util.{Random, Success => TrySuccess}
-import org.scalatest.funsuite.AnyFunSuite
 
 
 /**
