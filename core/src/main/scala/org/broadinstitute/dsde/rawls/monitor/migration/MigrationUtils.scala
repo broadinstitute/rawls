@@ -2,6 +2,9 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import org.broadinstitute.dsde.rawls.RawlsException
+import slick.dbio.{DBIOAction, Effect, NoStream}
+
+import scala.language.higherKinds
 
 object MigrationUtils {
   sealed trait Outcome
@@ -30,4 +33,16 @@ object MigrationUtils {
     case Right(r) => r
     case Left(msg) => throw new RawlsException(msg)
   }
+
+  implicit class IgnoreResultExtensionMethod[+R, +S <: NoStream, -E <: Effect](action: DBIOAction[R, S, E]) {
+    /** Ignore the result of the DBIOAction and return unit */
+    def ignore: DBIOAction[Unit, NoStream, E with Effect] = action >> DBIOAction.successful()
+  }
+
+  import slick.jdbc.MySQLProfile.api._
+  implicit class InsertExtensionMethod[E, T, C[_]](query: Query[E, T, C]) {
+    /** alias for `+=` supporting dot syntax */
+    def insert(value: T) = query += value
+  }
+
 }

@@ -102,4 +102,5 @@
     <include file="changesets/20211209_v1_migration_final_bucket.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220107_update_shard_procedures.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20211208_storage_transfer_service_table.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20211217_v1_migration_buckets_deleted.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
