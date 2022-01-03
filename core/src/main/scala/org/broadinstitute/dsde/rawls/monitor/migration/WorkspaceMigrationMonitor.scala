@@ -124,7 +124,7 @@ object WorkspaceMigrationMonitor {
                                   googleStorageService: GoogleStorageService[IO]
                                  ): IO[WriteAction[Unit]] =
     for {
-      msuccess <- googleStorageService.deleteBucket(
+      successOpt <- googleStorageService.deleteBucket(
         GoogleProject(workspace.googleProjectId.value),
         GcsBucketName(workspace.bucketName),
         isRecursive = true
@@ -132,7 +132,7 @@ object WorkspaceMigrationMonitor {
 
       deleted <- timestampNow
 
-      _<- IO.raiseUnless(msuccess.contains(true)) {
+      _<- IO.raiseUnless(successOpt.contains(true)) {
         noWorkspaceBucketError(GcsBucketName(workspace.bucketName))
       }
 
