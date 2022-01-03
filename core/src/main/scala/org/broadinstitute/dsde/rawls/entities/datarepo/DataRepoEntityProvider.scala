@@ -410,6 +410,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
-    Future.successful(Seq())
+    throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
   }
 }
