@@ -150,7 +150,7 @@ object WorkspaceMigrationMonitor {
       googleProjectId <- IO(migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration)))
       tmpBucketName <- IO(migration.tmpBucketName.getOrElse(throw noTmpBucketError(migration)))
 
-      msuccess <- googleStorageService.deleteBucket(
+      successOpt <- googleStorageService.deleteBucket(
         GoogleProject(googleProjectId.value),
         tmpBucketName,
         isRecursive = true
@@ -158,7 +158,7 @@ object WorkspaceMigrationMonitor {
 
       deleted <- timestampNow
 
-      _ <- IO.raiseUnless(msuccess.contains(true))(noTmpBucketError(migration))
+      _ <- IO.raiseUnless(successOpt.contains(true))(noTmpBucketError(migration))
 
     } yield workspaceMigrations
       .filter(_.id === migration.id)
