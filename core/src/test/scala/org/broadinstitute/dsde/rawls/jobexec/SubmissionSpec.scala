@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, MockDeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -331,10 +330,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
       )_
 
-      val deltaLayer = new DeltaLayer(bigQueryServiceFactory, new MockDeltaLayerWriter, samDAO,
-        WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com"),
-        WorkbenchEmail("fake-delta-layer-service-account@serviceaccounts.google.com"))(global)
-
       val genomicsServiceConstructor = GenomicsService.constructor(
         slickDataSource,
         gcsDAO
@@ -352,7 +347,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
-      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, new MockDeltaLayerWriter(), DataRepoEntityProviderConfig(100, 10000, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
 
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
@@ -370,7 +365,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         execServiceCluster,
         execServiceBatchSize,
         workspaceManagerDAO,
-        deltaLayer,
         methodConfigResolver,
         gcsDAO,
         samDAO,

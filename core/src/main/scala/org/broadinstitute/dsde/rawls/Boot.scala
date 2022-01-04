@@ -22,7 +22,6 @@ import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, GcsDeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -42,8 +41,7 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
@@ -361,17 +359,9 @@ object Boot extends IOApp with LazyLogging {
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
       val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
-      // create the Delta Layer writer
-      val deltaLayerWriter = new GcsDeltaLayerWriter(appDependencies.googleStorageService,
-        GcsBucketName(conf.getString("deltaLayer.deltaLayerSourceBucket")),
-        metricsPrefix)
-      // create the Delta Layer main class
-      // TODO: AS-724 - move deltaLayerWriter construction inside the DeltaLayer class?
-      val deltaLayer = new DeltaLayer(appDependencies.bigQueryServiceFactory, deltaLayerWriter, samDAO, WorkbenchEmail(clientEmail),
-        WorkbenchEmail(conf.getString("deltaLayer.deltaLayerStreamerEmail")))
       // create the entity manager.
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
-        appDependencies.bigQueryServiceFactory, deltaLayerWriter,
+        appDependencies.bigQueryServiceFactory,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
         conf.getBoolean("entityStatisticsCache.enabled"))
 
@@ -387,7 +377,6 @@ object Boot extends IOApp with LazyLogging {
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         workspaceManagerDAO,
-        deltaLayer,
         methodConfigResolver,
         gcsDAO,
         samDAO,
@@ -420,10 +409,7 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         samDAO,
         workspaceManagerDAO,
-        deltaLayer,
-        conf.getString("dataRepo.terraInstanceName"),
-        WorkbenchEmail(clientEmail),
-        WorkbenchEmail(conf.getString("deltaLayer.deltaLayerStreamerEmail"))
+        conf.getString("dataRepo.terraInstanceName")
       )
 
       val service = new RawlsApiServiceImpl(

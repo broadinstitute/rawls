@@ -83,14 +83,4 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
     if (references.contains(workspaceId, referenceId))
       references -= ((workspaceId, referenceId))
   }
-
-  override def createBigQueryDatasetReference(workspaceId: UUID, metadata: ReferenceResourceCommonFields, dataset: GcpBigQueryDatasetAttributes, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource = new GcpBigQueryDatasetResource
-
-  override def deleteBigQueryDatasetReference(workspaceId: UUID, resourceId: UUID, accessToken: OAuth2BearerToken): Unit = ()
-
-  override def getBigQueryDatasetReferenceByName(workspaceId: UUID, name: String, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource = {
-    val resourceMetadata = new ResourceMetadata().resourceId(UUID.randomUUID())
-    val attributes = new GcpBigQueryDatasetAttributes()
-    new GcpBigQueryDatasetResource().metadata(resourceMetadata).attributes(attributes)
-  }
 }

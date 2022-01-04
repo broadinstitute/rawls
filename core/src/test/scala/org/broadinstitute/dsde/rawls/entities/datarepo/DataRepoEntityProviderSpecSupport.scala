@@ -6,7 +6,6 @@ import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.deltalayer.MockDeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, GoogleProjectId, RawlsUserEmail, UserInfo, Workspace}
@@ -46,7 +45,7 @@ trait DataRepoEntityProviderSpecSupport {
                          config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                         ): DataRepoEntityProvider = {
     // we may find that tests need to override the DataReferenceDescription provided by createDataRepoSnapshotResource() on the next line
-    new DataRepoEntityProvider(snapshotModel, createDataRepoSnapshotResource(), entityRequestArguments, samDAO, bqFactory, new MockDeltaLayerWriter(), config)
+    new DataRepoEntityProvider(snapshotModel, entityRequestArguments, samDAO, bqFactory, config)
   }
 
   def createTestBuilder(workspaceManagerDAO: WorkspaceManagerDAO = new SpecWorkspaceManagerDAO(Right(createDataRepoSnapshotResource())),
@@ -55,7 +54,7 @@ trait DataRepoEntityProviderSpecSupport {
                         bqServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
                         config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                        ): DataRepoEntityProviderBuilder = {
-    new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, new MockDeltaLayerWriter(), config)
+    new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, config)
   }
 
 

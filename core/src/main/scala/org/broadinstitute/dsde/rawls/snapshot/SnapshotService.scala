@@ -6,10 +6,8 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayer
 import org.broadinstitute.dsde.rawls.model.{DataReferenceName, ErrorReport, NamedDataRepoSnapshot, SamWorkspaceActions, SnapshotListResponse, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -18,15 +16,13 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object SnapshotService {
-
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, deltaLayer: DeltaLayer, terraDataRepoUrl: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)(userInfo: UserInfo)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoUrl: String)(userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): SnapshotService = {
-    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, deltaLayer, terraDataRepoUrl, clientEmail, deltaLayerStreamerEmail)
+    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, terraDataRepoUrl)
   }
-
 }
 
-class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, deltaLayer: DeltaLayer, terraDataRepoInstanceName: String, clientEmail: WorkbenchEmail, deltaLayerStreamerEmail: WorkbenchEmail)
+class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoInstanceName: String)
                      (implicit protected val executionContext: ExecutionContext)
   extends FutureSupport with WorkspaceSupport with LazyLogging {
 
@@ -40,28 +36,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       // create the requested snapshot reference
       val snapshotRef = workspaceManagerDAO.createDataRepoSnapshotReference(wsid, snapshot.snapshotId, snapshot.name,
         snapshot.description, terraDataRepoInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken)
-
-      // attempt to create the BQ dataset, which might already exist
-      deltaLayer.createDatasetIfNotExist(workspaceContext, userInfo).recover {
-        case t: Throwable =>
-          // something went wrong creating the companion dataset
-          logger.warn(s"Error creating Delta Layer companion dataset for workspace $workspaceName: ${t.getMessage}")
-          // since companion dataset creation failed, try to clean up this snapshot reference so the user can try again
-          Try(workspaceManagerDAO.deleteDataRepoSnapshotReference(wsid, snapshotRef.getMetadata.getResourceId, userInfo.accessToken)) match {
-            case Success(_) =>
-              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError,
-                s"Unable to create snapshot reference in workspace ${workspaceContext.workspaceId} due to problems creating " +
-                  s"the Delta Layer companion dataset. Error: [${t.getMessage}]"))
-            case Failure(ex) =>
-              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError,
-                s"Error while creating snapshot reference in workspace ${workspaceContext.workspaceId}. Additionally, there " +
-                  s"was an error cleaning up the snapshot reference. The reference may be in an unusable state. Original error " +
-                  s"during Delta Layer companion dataset creation was: [${t.getMessage}]. " +
-                  s"Error during snapshot reference cleanup: [${ex.getMessage}]."))
-          }
-      }.map { _ =>
-        snapshotRef
-      }
+      Future.successful(snapshotRef)
     }
   }
 

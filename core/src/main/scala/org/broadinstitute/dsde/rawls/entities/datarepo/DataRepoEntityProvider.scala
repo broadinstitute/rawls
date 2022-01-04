@@ -2,18 +2,15 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{SnapshotModel, TableModel}
-import bio.terra.workspace.model.DataRepoSnapshotResource
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.Field.Mode
 import com.google.cloud.bigquery.{LegacySQLTypeName, QueryJobConfiguration, QueryParameterValue, TableResult}
-import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
-import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, DeltaLayerException, DeltaLayerTranslator, DeltaLayerWriter}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base._
@@ -22,24 +19,20 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, U
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.deltalayer.v1.{DeltaInsert, InsertDestination, InsertSource}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
 
-import java.time.Instant
-import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRepoSnapshotResource,
+class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                              requestArguments: EntityRequestArguments,
                              samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory,
-                             deltaLayerWriter: DeltaLayerWriter,
                              config: DataRepoEntityProviderConfig)
                             (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with DataRepoBigQuerySupport with LazyLogging with ExpressionEvaluationSupport {
@@ -417,33 +410,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel, dataReference: DataRe
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
-    // translate to delta layer row objects. This method includes validation.
-    val inserts = DeltaLayerTranslator.translateEntityUpdates(entityUpdates)
-
-    // determine destination BQ dataset, based on snapshot reference.
-    val bqDataset = DeltaLayer.generateDatasetNameForWorkspace(requestArguments.workspace)
-
-    // create DeltaInsert object
-    val insertId = UUID.randomUUID()
-    val source = InsertSource(dataReference.getMetadata.getResourceId, requestArguments.userInfo.userSubjectId)
-    val destination = InsertDestination(requestArguments.workspace.workspaceIdAsUUID, bqDataset,
-      requestArguments.workspace.googleProjectId, requestArguments.billingProject)
-    val deltaInsert = DeltaInsert(insertId, Instant.now(), source, destination, inserts)
-
-    // consider making this async, so we respond to the user quicker. For now, leave as synchronous
-    // so we return any errors
-    deltaLayerWriter.writeFile(deltaInsert) map { _ =>
-      Seq.empty[Entity]
-    } recover {
-      case se: StorageException =>
-        val throwCode = StatusCodes.getForKey(se.getCode).getOrElse(StatusCodes.InternalServerError)
-        throw new DeltaLayerException(s"StorageException in Delta Layer: ${se.getMessage}", se, throwCode)
-      case t: Throwable =>
-        throw new DeltaLayerException(s"Error in Delta Layer: ${t.getClass.getName}: ${t.getMessage}", t)
-    }
-    // This method signature claims to return Traversable[Entity] - and we leave it that way for compatibility -
-    // but note that in practice we don't return any entities. That's good - we don't have access to the
-    // updated entities yet because they will be updated asynchronously by the code that reads the file
-    // we just wrote.
+    throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
   }
 }
