@@ -72,19 +72,4 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
   override def enumerateDataRepoSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): ResourceList = {
     getResourceApi(accessToken).enumerateResources(workspaceId, offset, limit, ResourceType.DATA_REPO_SNAPSHOT, StewardshipType.REFERENCED)
   }
-
-  override def createBigQueryDatasetReference(workspaceId: UUID, metadata: ReferenceResourceCommonFields, dataset: GcpBigQueryDatasetAttributes, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource = {
-    val createBigQueryDatasetReference = new CreateGcpBigQueryDatasetReferenceRequestBody().dataset(dataset).metadata(metadata)
-    getReferencedGcpResourceApi(accessToken).createBigQueryDatasetReference(createBigQueryDatasetReference, workspaceId)
-  }
-
-  override def deleteBigQueryDatasetReference(workspaceId: UUID, resourceId: UUID, accessToken: OAuth2BearerToken): Unit = {
-    getReferencedGcpResourceApi(accessToken).deleteBigQueryDatasetReference(workspaceId, resourceId)
-  }
-
-  override def getBigQueryDatasetReferenceByName(workspaceId: UUID, name: String, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource = {
-    getReferencedGcpResourceApi(accessToken).getBigQueryDatasetReferenceByName(workspaceId, name)
-  }
-
-
 }

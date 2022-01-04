@@ -21,10 +21,6 @@ import scala.concurrent.{Await, Future}
 
 class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSugar with TestDriverComponent {
 
-  //test constants
-  val fakeRawlsClientEmail: WorkbenchEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
-  val fakeDeltaLayerStreamerEmail: WorkbenchEmail = WorkbenchEmail("fake-rawls-service-account@serviceaccounts.google.com")
-
 
   "SnapshotService" should {
     "create a new snapshot reference to a TDR snapshot" in withMinimalTestDatabase { _ =>
@@ -60,9 +56,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       when(mockWorkspaceManagerDAO.getDataRepoSnapshotReference(any[UUID], any[UUID], any[OAuth2BearerToken]))
         .thenReturn(new DataRepoSnapshotResource().metadata(new ResourceMetadata().resourceId(snapshotDataReferenceId).workspaceId(UUID.randomUUID()).name("foo").description("").cloningInstructions(CloningInstructionsEnum.NOTHING)).attributes(new DataRepoSnapshotAttributes()))
 
-      when(mockWorkspaceManagerDAO.getBigQueryDatasetReferenceByName(any[UUID], any[String], any[OAuth2BearerToken]))
-        .thenReturn(new GcpBigQueryDatasetResource().metadata(new ResourceMetadata().resourceId(UUID.randomUUID())).attributes(new GcpBigQueryDatasetAttributes()))
-
       val workspace = minimalTestData.workspace
 
       val snapshotService = SnapshotService.constructor(
@@ -78,8 +71,6 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
 
       verify(mockWorkspaceManagerDAO, times(1)).getDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID),any[OAuth2BearerToken])
       verify(mockWorkspaceManagerDAO, times(1)).deleteDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID), any[OAuth2BearerToken])
-      // assert we do NOT attempt to delete the companion dataset or its WSM reference
-      verify(mockWorkspaceManagerDAO, times(0)).deleteBigQueryDatasetReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), any[UUID], any[OAuth2BearerToken])
     }
 
     "find one matching snapshot reference by referenced snapshotId if one page of references" in withMinimalTestDatabase { _ =>
