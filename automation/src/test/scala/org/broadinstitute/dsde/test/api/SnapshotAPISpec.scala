@@ -350,10 +350,4 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       new RepositoryApi(getApiClient(accessToken.value))
     }
   }
-
-  def generateReferenceName(workspaceId: UUID) = {
-    "deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_')
-  }
-
-
 }
