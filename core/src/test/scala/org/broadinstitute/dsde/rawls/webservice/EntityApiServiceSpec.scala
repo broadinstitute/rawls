@@ -375,37 +375,34 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 on create entity with invalid-namespace attributes" in withTestDataApiServices { services =>
-    val invalidAttrNamespace = "invalid"
+  List("default", "tag", "pfb", "import", "system", "sys", "tdr") foreach { namespace =>
+    it should s"return 201 on create entity with [$namespace]-namespaced attributes" in withTestDataApiServices { services =>
+      val newSample = Entity("sampleNew", "sample", Map(AttributeName(namespace, "attribute") -> AttributeString("foo")))
 
-    val wsName = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
-    val newSample = Entity("sampleNew", "sample", Map(AttributeName(invalidAttrNamespace, "attribute") -> AttributeString("foo")))
-
-    Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
+      Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
         }
-
-        val errorText = responseAs[ErrorReport].message
-        assert(errorText.contains(invalidAttrNamespace))
-      }
+    }
   }
+  List("defaultX", "library", " tag", "bfp", "imp", "TDR", "xxx", "") foreach { namespace =>
+    it should s"return 403 on create entity with [$namespace]-namespaced attributes" in withTestDataApiServices { services =>
+      val newSample = Entity("sampleNew", "sample", Map(AttributeName(namespace, "attribute") -> AttributeString("foo")))
 
-  it should "return 403 on create entity with library-namespace attributes " in withTestDataApiServices { services =>
-    revokeCuratorRole(services)
+      Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.Forbidden) {
+            status
+          }
 
-    val wsName = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
-    val newSample = Entity("sampleNew", "sample", Map(AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo")))
-
-    Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
+          val errorText = responseAs[ErrorReport].message
+          assert(errorText.contains(namespace))
         }
-      }
+    }
   }
 
   // entity and attribute counts, regardless of deleted status
