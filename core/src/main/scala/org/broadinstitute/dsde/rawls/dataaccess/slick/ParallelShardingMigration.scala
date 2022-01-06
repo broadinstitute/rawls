@@ -54,15 +54,24 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     shardsStarted.incrementAndGet()
     migrationsRunning.incrementAndGet()
 
-    // this is expensive, just for logging. Remove the counts?
-    val countSql =
+    logger.info(s"[$shardId] migration for shard $shardId starting " +
+      s"($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use). ")
+
+    // count rows in archived table for this shard
+    val rowsToMigrateSql =
       sql"""select count(1) from ENTITY_ATTRIBUTE_archived ea, ENTITY e, WORKSPACE w
               WHERE e.workspace_id = w.id
               AND ea.owner_id = e.id
               AND shardIdentifier(hex(w.id)) = $shardId;""".as[Int]
-    val countResult = Await.result(runSql(countSql), Duration.Inf).head
+    val rowsToMigrate = Await.result(runSql(rowsToMigrateSql), Duration.Inf).head
 
-    logger.warn(s"[$shardId] migration for shard $shardId starting ($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use). $countResult rows to migrate ...")
+    val shardCountSql =
+      sql"""select count(1) ENTITY_ATTRIBUTE_#$shardId;""".as[Int]
+
+    // count rows in shard, before migration
+    val shardCountBefore = Await.result(runSql(shardCountSql), Duration.Inf).head
+
+    logger.info(s"[$shardId] shard $shardId expects to migrate ${fmt(rowsToMigrate)} rows")
 
     // TODO: swap from the 'select count' sql to the 'call stored proc' sql ONLY when ready to actually migrate
     // TODO: verify that the call to populateShardAndMarkAsSharded($shardId); works as intended here in Scala (we
@@ -73,12 +82,24 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     // block for the result, helps with concurrency
     val procResult = Await.result(runSql(sql), Duration.Inf).head
 
+    // count rows in shard, after migration
+    val shardCountAfter = Await.result(runSql(shardCountSql), Duration.Inf).head
+
+    // TODO: compare row count after migration to expected row count
+    if (shardCountAfter != shardCountBefore + rowsToMigrate) {
+      logger.error(s"[$shardId] DANGER: shard $shardId finished with " +
+        s"${fmt(shardCountAfter)} rows, " +
+        s"expected ${fmt(shardCountBefore + rowsToMigrate)} (${fmt(shardCountBefore)} + ${fmt(rowsToMigrate)})")
+    }
+
     val elapsed = System.currentTimeMillis() - tick
 
     shardsFinished.incrementAndGet()
     migrationsRunning.decrementAndGet()
 
-    logger.warn(s"[$shardId] migration for shard $shardId done     ($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use) in $elapsed ms: $procResult")
+    logger.info(s"[$shardId] migration for shard $shardId done     " +
+      s"($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use) " +
+      s"in ${fmt(elapsed)} ms: $procResult")
     s"$shardId: $procResult"
 
   }
@@ -93,5 +114,9 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     slickDataSource.database.run(transaction)
   }
 
+  // for nice logging output
+  val formatter = java.text.NumberFormat.getIntegerInstance
+  private def fmt(in: Int) = formatter.format(in)
+  private def fmt(in: Long) = formatter.format(in)
 }
 
