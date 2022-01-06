@@ -91,12 +91,13 @@ object Boot extends IOApp with LazyLogging {
         2. Render configs for the environment you want to migrate (prod, alpha, dev, etc)
         3. back up the db in that env
         4. uncomment the "parallelShardingMigration.migrate()" line below
-        5. run this branch locally, connecting to the db. It's ok to run locally; this codebase simply issues
+        5. manually increase the slick.db.connectionTimeout value to avoid db connection issues
+        6. run this branch locally, connecting to the db. It's ok to run locally; this codebase simply issues
           small SQL statements ('call storedProc()') and all the actual data processing happens in the db
-        6. manually verify that all shards migrated properly
-        7. drop and re-create the ENTITY_ATTRIBUTE_archived table; this is equivalent to deleting all its rows.
+        7. manually verify that all shards migrated properly
+        8. drop and re-create the ENTITY_ATTRIBUTE_archived table; this is equivalent to deleting all its rows.
           This step is necessary, else the liquibase migration will fail because the table is not found.
-        8. shut down your local Rawls, and re-comment the "parallelShardingMigration.migrate()" line for safety
+        9. shut down your local Rawls, and re-comment the "parallelShardingMigration.migrate()" line for safety
         TODO: validate the SQL in ParallelShardingMigration.migrateShardImpl
      */
     val parallelShardingMigration = new ParallelShardingMigration(slickDataSource)
