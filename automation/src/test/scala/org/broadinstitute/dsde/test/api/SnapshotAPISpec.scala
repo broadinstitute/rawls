@@ -165,84 +165,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
     }
 
-    "should add a BigQuery dataset for each snapshot reference added" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-
-      val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
-      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
-
-      withCleanBillingProject(owner) { billingProject =>
-        withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
-
-          // we need the actual Google project for this workspace, not just its namespace
-          val googleProject = getWorkspaceGoogleProject(billingProject, workspaceName)
-
-          val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
-          val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
-
-          val snapshotName = "snapshotReferenceAddBQDataset"
-          // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
-          createSnapshotReference(billingProject, workspaceName, dataRepoSnapshotId, snapshotName)
-
-          // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
-          val listResponse = listSnapshotReferences(billingProject, workspaceName)
-          val resources = Rawls.parseResponseAs[SnapshotListResponse](listResponse).gcpDataRepoSnapshots
-          resources should have size 1
-
-          // check that the bq dataset has been created
-          val workspaceId = resources.head.getMetadata.getWorkspaceId
-          val dataset = getDataset(generateReferenceName(workspaceId), googleProject.value, ownerAuthToken)
-          dataset should not be empty
-        }
-      }
-    }
-
-    "should delete BigQuery dataset when a workspace is deleted" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-
-      val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
-      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
-
-      withCleanBillingProject(owner) { billingProject =>
-        withCleanUp {
-          // get the snapshot
-          val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
-          val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
-
-          // create workspace
-          val workspaceName = s"${UUID.randomUUID().toString}-delete-bq-dataset"
-          Rawls.workspaces.create(billingProject, workspaceName)
-
-          // we need the actual Google project for this workspace, not just its namespace
-          val googleProject = getWorkspaceGoogleProject(billingProject, workspaceName)
-
-          val snapshotName = "deleteWorkspaceDeleteBQDataset"
-          // add snapshot reference to the workspace. Under the covers, this creates the workspace in WSM and adds the ref
-          createSnapshotReference(billingProject, workspaceName, dataRepoSnapshotId, snapshotName)(owner.makeAuthToken())
-
-          // validate the snapshot was added correctly: list snapshots in Rawls, should return 1, which we just added.
-          val listResponse = listSnapshotReferences(billingProject, workspaceName)
-          val resources = Rawls.parseResponseAs[SnapshotListResponse](listResponse).gcpDataRepoSnapshots
-          resources should have size 1
-
-          // check that the bq dataset has been created
-          val workspaceId = resources.head.getMetadata.getWorkspaceId
-          val datasetName = generateReferenceName(workspaceId)
-          val datasetAfterCreation = getDataset(datasetName, googleProject.value, ownerAuthToken)
-          datasetAfterCreation should not be empty
-
-          // delete workspace
-          Rawls.workspaces.delete(billingProject, workspaceName)(owner.makeAuthToken())
-
-          // check that the bq dataset has been deleted
-          eventually {
-            val datasetAfterDeletion = getDataset(datasetName, googleProject.value, ownerAuthToken)
-            datasetAfterDeletion should be(None)
-          }
-        }
-      }
-    }
-
     "should be able to run analysis on a snapshot" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
@@ -358,11 +280,6 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       content = payload)
   }
 
-  private def deleteSnapshotReference(billingProject: String, workspaceName: String, resourceId: String)(implicit authToken: AuthToken) = {
-    val targetRawlsUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/snapshots/v2/$resourceId"))
-    Rawls.deleteRequest(uri = targetRawlsUrl.toString())
-  }
-
   private def getEntityTypeMetadata(billingProject: String, workspaceName: String, snapRefName: String)(implicit authToken: AuthToken): Map[String, EntityTypeMetadata] = {
     val targetRawlsUrl  = Uri(Rawls.url)
       .withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/entities"))
@@ -417,26 +334,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
         throw ex
     }
   }
-
-  private def getDataset(datasetName: String, projectId: String, authToken: AuthToken)(implicit executionContext: ExecutionContext) = {
-    import cats.effect.unsafe.implicits.global
-    import org.typelevel.log4cats.slf4j.Slf4jLogger
-
-    implicit val logger: org.typelevel.log4cats.StructuredLogger[IO] = Slf4jLogger.getLogger[IO]
-
-    val bqService = GoogleBigQueryService.resource[IO](
-      GoogleCredentials.create(new AccessToken(authToken.value, null)),
-      GoogleProject(projectId)
-    )
-
-    bqService.use(_.getDataset(datasetName)).unsafeRunSync()
-  }
-
-  private def getWorkspaceGoogleProject(billingProject: String, workspaceName: String)(implicit authToken: AuthToken) = {
-    Rawls.workspaces.getWorkspaceDetails(billingProject, workspaceName)
-      .parseJson.convertTo[WorkspaceResponse].workspace.googleProject
-  }
-
+  
   // a bastardized version of the HttpDataRepoDAO in the main rawls codebase
   class TestDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) {
 
@@ -452,10 +350,4 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       new RepositoryApi(getApiClient(accessToken.value))
     }
   }
-
-  def generateReferenceName(workspaceId: UUID) = {
-    "deltalayer_forworkspace_" + workspaceId.toString.replace('-', '_')
-  }
-
-
 }
