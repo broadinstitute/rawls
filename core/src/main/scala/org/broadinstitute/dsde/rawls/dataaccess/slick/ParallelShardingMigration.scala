@@ -4,11 +4,11 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import slick.jdbc.TransactionIsolation
 
-import java.util.concurrent.Executors
+import java.util.concurrent.{ConcurrentHashMap, Executors}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
-
+import scala.collection.JavaConverters._
 
 class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLogging {
 
@@ -20,27 +20,77 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
   val threadPool = Executors.newFixedThreadPool(nThreads)
   implicit val fixedThreadPool: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(threadPool)
 
-  // note: var!
-  var migrationsRunning: AtomicInteger = new AtomicInteger(0)
-  var shardsStarted: AtomicInteger = new AtomicInteger(0)
-  var shardsFinished: AtomicInteger = new AtomicInteger(0)
+  val migrationsRunning: AtomicInteger = new AtomicInteger(0)
+  val shardsStarted: AtomicInteger = new AtomicInteger(0)
+  val shardsFinished: AtomicInteger = new AtomicInteger(0)
+  val shardsWithWarnings: ConcurrentHashMap[String, Int] = new ConcurrentHashMap[String, Int](0)
 
+  // migrate all shards - except for "_archived". This will include the 4 shards we already migrated, but
+  // those will be quick no-ops.
   val shardsToMigrate = (slickDataSource.dataAccess.allShards - "archived").toSeq.sorted
   val nShards = shardsToMigrate.size
 
   def migrate() = {
-    // migrate all shards - except for "_archived". This will include the 4 shards we already migrated, but
-    // those will be quick no-ops.
-    logger.warn(s"migration of $nShards shards starting.")
 
+    // TODO: implement orphaned-row deletion here
+
+    logger.warn(s"migration of $nShards shards starting.")
     val migrationResults = Future.traverse(shardsToMigrate) { shardId => migrateShard(shardId) }
 
     val res = Await.result(migrationResults, Duration.Inf)
     logger.warn(s"******* res: $res")
 
+    if (shardsWithWarnings.isEmpty) {
+      logger.info(s"all $nShards shards migrated as expected.")
+    } else {
+      logger.error("===============================================")
+      logger.error(s"ALERT! ALERT! ${shardsWithWarnings.size()} shards did not migrate as expected. Details follow:")
+      val warns = shardsWithWarnings.asScala
+      val sortedKeys = warns.keys.toList.sorted
+      sortedKeys.foreach { shardId =>
+        logger.error(s"        shard $shardId was off by ${fmt(warns(shardId))} rows")
+      }
+      logger.error("===============================================")
+    }
+
     // now that all shards have migrated - and ONLY if they all succeeded - drop and recreate the _archived table
     // That should be a manual step to ensure a human is looking at the results and we don't
     // have any risk of losing data
+    logger.warn(s"IF AND ONLY IF you are satisfied with the migration results, you must manually delete " +
+      s"and re-create the ENTITY_ATTRIBUTE_archived table. This is necessary 1) to delete the now-orphaned rows, and " +
+      s"2) so future liquibase migrations still find the expected table")
+
+    val exampleDropCreateSQL =
+      """
+        |
+        |        DROP TABLE ENTITY_ATTRIBUTE_archived;
+        |
+        |        CREATE TABLE `ENTITY_ATTRIBUTE_archived` (
+        |          `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+        |          `name` varchar(200) NOT NULL,
+        |          `value_string` text,
+        |          `value_number` double DEFAULT NULL,
+        |          `value_boolean` bit(1) DEFAULT NULL,
+        |          `value_entity_ref` bigint(20) unsigned DEFAULT NULL,
+        |          `list_index` int(11) DEFAULT NULL,
+        |          `owner_id` bigint(20) unsigned NOT NULL,
+        |          `list_length` int(11) DEFAULT NULL,
+        |          `namespace` varchar(32) NOT NULL DEFAULT 'default',
+        |          `VALUE_JSON` longtext,
+        |          `deleted` bit(1) DEFAULT b'0',
+        |          `deleted_date` timestamp(6) NULL DEFAULT NULL,
+        |          PRIMARY KEY (`id`),
+        |          KEY `FK_ENT_ATTRIBUTE_ENTITY_REF` (`value_entity_ref`),
+        |          KEY `UNQ_ENTITY_ATTRIBUTE` (`owner_id`,`namespace`,`name`,`list_index`),
+        |          CONSTRAINT `FK_ATTRIBUTE_PARENT_ENTITY` FOREIGN KEY (`owner_id`) REFERENCES `ENTITY` (`id`),
+        |          CONSTRAINT `FK_ENT_ATTRIBUTE_ENTITY_REF` FOREIGN KEY (`value_entity_ref`) REFERENCES `ENTITY` (`id`)
+        |        ) ENGINE=InnoDB AUTO_INCREMENT=280224374 DEFAULT CHARSET=utf8;
+        |""".stripMargin
+
+    logger.warn(s"The SQL to drop and re-create the ENTITY_ATTRIBUTE_archived table is: $exampleDropCreateSQL")
+
+    logger.info("Rawls startup will now continue.")
+
   }
 
   // this shenanigans around futures and blocking makes it easy to use the Future.traverse above
@@ -85,11 +135,16 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     // count rows in shard, after migration
     val shardCountAfter = Await.result(runSql(shardCountSql), Duration.Inf).head
 
-    // TODO: compare row count after migration to expected row count
-    if (shardCountAfter != shardCountBefore + rowsToMigrate) {
+    // compare row count after migration to expected row count
+    val expectedCount = shardCountBefore + rowsToMigrate
+    val actualCount = shardCountAfter
+    if (actualCount == expectedCount) {
+      logger.info(s"[$shardId] SUCCESS: shard $shardId finished with ${fmt(actualCount)} rows, as expected")
+    } else {
+      shardsWithWarnings.put(shardId, expectedCount - actualCount)
       logger.error(s"[$shardId] DANGER: shard $shardId finished with " +
-        s"${fmt(shardCountAfter)} rows, " +
-        s"expected ${fmt(shardCountBefore + rowsToMigrate)} (${fmt(shardCountBefore)} + ${fmt(rowsToMigrate)})")
+        s"${fmt(actualCount)} rows, " +
+        s"expected ${fmt(expectedCount)} (${fmt(shardCountBefore)} + ${fmt(rowsToMigrate)})")
     }
 
     val elapsed = System.currentTimeMillis() - tick
