@@ -250,7 +250,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(billingAccount == accessibleBillingAccountName)
   }
 
-  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName], oldBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
     Future.successful(new ProjectBillingInfo().setBillingAccountName(newBillingAccount.map(_.value).getOrElse("")).setProjectId(googleProjectId.value))
   }
 

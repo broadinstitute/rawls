@@ -38,8 +38,8 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       }
       _ = logger.info(s"Attempting to update workspaces: ${workspacesToUpdate.toList}")
       _ <- workspacesToUpdate.toList.traverse {
-        case (googleProjectId, newBillingAccount) =>
-          IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount))).attempt.map {
+        case (googleProjectId, newBillingAccount, oldBillingAccount) =>
+          IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount, oldBillingAccount))).attempt.map {
             case Left(e) => {
               // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
               // want to continue traversing the list to update the rest of the google project billing accounts even
@@ -53,9 +53,11 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
     } yield()
   }
 
-  private def updateGoogleAndDatabase(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[Int] = {
+  private def updateGoogleAndDatabase(googleProjectId: GoogleProjectId,
+                                      newBillingAccount: Option[RawlsBillingAccountName],
+                                      oldBillingAccount: Option[RawlsBillingAccountName]): Future[Int] = {
     for {
-      _ <- gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, newBillingAccount).recoverWith {
+      _ <- gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, newBillingAccount, oldBillingAccount).recoverWith {
         case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
           dataSource.inTransaction( { dataAccess =>
             dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(newBillingAccount.get, isInvalid = true)

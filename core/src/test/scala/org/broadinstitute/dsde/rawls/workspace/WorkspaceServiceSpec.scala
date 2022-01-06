@@ -1312,12 +1312,13 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
     // in the Billing Project
     val billingAccountNameCaptor = captor[RawlsBillingAccountName]
-    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture))
+    // TODO: CA-1669 See TODO from WorkspaceService.scala:1987
+    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture), ???)
     billingAccountNameCaptor.getValue shouldEqual Option(billingProject.billingAccount.get)
   }
 
   it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct")), Option(any[RawlsBillingAccountName])))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
     val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
@@ -1564,12 +1565,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
     // in the Billing Project
     val billingAccountNameCaptor = captor[RawlsBillingAccountName]
-    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture))
+    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture), testData.testProject1.billingAccount)
     billingAccountNameCaptor.getValue shouldEqual Option(billingProject.billingAccount.get)
   }
 
   it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct")), Option(any[RawlsBillingAccountName])))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
     val baseWorkspace = testData.workspace

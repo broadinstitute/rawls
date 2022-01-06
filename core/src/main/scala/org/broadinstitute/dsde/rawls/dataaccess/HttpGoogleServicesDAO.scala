@@ -679,7 +679,12 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+  // This should only work if the existing Billing Account value for the Google Project is what Terra thinks it should be
+  // If it is some other value, then we should _not_ update the Billing Account because it was updated on Google via
+  // some other means and we don't want to mess things up
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId,
+                                                 newBillingAccount: Option[RawlsBillingAccountName],
+                                                 oldBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
     val billingSvcCred = getBillingServiceAccountCredential
     implicit val service = GoogleInstrumentedService.Billing
     val googleProjectName = s"projects/${googleProjectId.value}"
@@ -698,13 +703,24 @@ class HttpGoogleServicesDAO(
     retryWithRecoverWhen500orGoogleError(() => {
       blocking {
         val projectBillingInfo = executeGoogleRequest(fetcher)
+        // Check existing Billing Account from google against the value that Rawls thinks it should be before the update
+        if (oldBillingAccount.getOrElse(RawlsBillingAccountName("")).value != projectBillingInfo.getBillingAccountName) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.PreconditionFailed,
+            s"Could not update Billing Account on Google Project ID '${googleProjectId}' to Billing Account '${newBillingAccount}' because Billing Account in Rawls '${oldBillingAccount}' did not equal current Billing Account in Google '${projectBillingInfo.getBillingAccountName}'"))
+          // TODO: somewhere else - make sure we update the Workspace record's "error updating BA" message field
+        }
+
         val shouldUpdate = newBillingAccount match {
+          // The new billing account name is different than the existing billing account OR billing is disable and we are
+          // trying to enable
           case Some(RawlsBillingAccountName(billingAccountName)) =>
             projectBillingInfo.getBillingAccountName != billingAccountName || projectBillingInfo.getBillingEnabled == false
+          // Billing is enabled and we are trying to disable
           case None =>
             projectBillingInfo.getBillingEnabled == true
         }
         if (shouldUpdate) {
+          logger.info(s"Updating Billing Account on Google Project ID '${googleProjectId}' from '${projectBillingInfo.getBillingAccountName}' to '${newBillingAccount}'")
           executeGoogleRequest(updater)
         } else {
           projectBillingInfo

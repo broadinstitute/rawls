@@ -1984,7 +1984,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       _ = logger.info(s"Setting up billing account for ${googleProjectId}.")
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { _ =>
-        gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount))
+        // TODO: CA-1669 Either we implement a "force BA update" option, or we need to know the BA that is used for all RBS projects at creation time
+        gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount), ???)
       }
 
       _ = logger.info(s"Creating labels for ${googleProjectId}.")
