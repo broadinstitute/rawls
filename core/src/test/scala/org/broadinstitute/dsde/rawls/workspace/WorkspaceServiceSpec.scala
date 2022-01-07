@@ -1310,11 +1310,14 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
     // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
-    // in the Billing Project
-    val billingAccountNameCaptor = captor[RawlsBillingAccountName]
-    // TODO: CA-1669 See TODO from WorkspaceService.scala:1987
-    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture), ???)
-    billingAccountNameCaptor.getValue shouldEqual Option(billingProject.billingAccount.get)
+    // in the Billing Project.  Additionally, only when creating a new Workspace, we can `force` the update (and ignore
+    // the "oldBillingAccount" value
+    verify(services.gcsDAO).updateGoogleProjectBillingAccount(
+      any[GoogleProjectId],
+      ArgumentMatchers.eq(billingProject.billingAccount),
+      any[Option[RawlsBillingAccountName]],
+      ArgumentMatchers.eq(true)
+    )
   }
 
   it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
