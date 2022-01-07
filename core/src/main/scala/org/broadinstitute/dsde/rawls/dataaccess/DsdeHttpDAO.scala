@@ -43,11 +43,14 @@ trait DsdeHttpDAO extends LazyLogging {
 
   protected def pipeline[A](implicit um: Unmarshaller[ResponseEntity, A]) = executeRequest[A] _
 
-  protected def when500(throwable: Throwable ): Boolean = {
+  protected def when5xx(throwable: Throwable ): Boolean = DsdeHttpDAO.when5xx(throwable)
+}
+
+object DsdeHttpDAO {
+  def when5xx(throwable: Throwable ): Boolean = {
     throwable match {
       case t: RawlsExceptionWithErrorReport => t.errorReport.statusCode.exists(_.intValue/100 == 5)
       case _ => false
     }
   }
-
 }

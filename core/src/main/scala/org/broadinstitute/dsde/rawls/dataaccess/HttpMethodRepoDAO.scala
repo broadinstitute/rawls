@@ -45,11 +45,11 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
   )
 
   private def postAgoraEntity( url: String, agoraEntity: AgoraEntity, userInfo: UserInfo): Future[AgoraEntity] = {
-    retry(when500) { () => pipeline[AgoraEntity](userInfo) apply Post(url, agoraEntity) }
+    retry(when5xx) { () => pipeline[AgoraEntity](userInfo) apply Post(url, agoraEntity) }
   }
 
   override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    retry(when500) { () =>
+    retry(when5xx) { () =>
       getAgoraEntity(s"$agoraServiceURL/configurations/$namespace/$name/$version", userInfo)
     }
   }
@@ -59,7 +59,7 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
   }
 
   override def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[WDL]] = {
-    retry(when500) { () =>
+    retry(when5xx) { () =>
       method match {
         case agoraMethod: AgoraMethod =>
           getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo) map { maybeEntity =>
@@ -84,7 +84,7 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
   }
 
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    retry(when500) { () =>
+    retry(when5xx) { () =>
       pipeline[Option[AgoraEntity]](userInfo) apply Get(url) recover noneIfNotFound
     }
   }
