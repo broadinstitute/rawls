@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import slick.jdbc.TransactionIsolation
 
-import java.util.concurrent.{ConcurrentHashMap, Executors}
+import java.util.concurrent.{ConcurrentHashMap, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
@@ -26,7 +26,7 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
   val shardsWithWarnings: ConcurrentHashMap[String, Int] = new ConcurrentHashMap[String, Int](0)
 
   // migrate all shards - except for "_archived". This will include the 4 shards we already migrated, but
-  // those will be quick no-ops.
+  // those will be quick no-ops because they'll copy zero rows.
   val shardsToMigrate = (slickDataSource.dataAccess.allShards - "archived").toSeq.sorted
   val nShards = shardsToMigrate.size
 
@@ -68,7 +68,7 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
       logger.error("===============================================")
     }
 
-    logger.info(s"overall duration for migration: ${fmt(System.currentTimeMillis() - tsMigration)}ms")
+    logger.info(s"overall duration for migration: ${timefmt(System.currentTimeMillis() - tsMigration)}")
 
     // now that all shards have migrated - and ONLY if they all succeeded - drop and recreate the _archived table
     // That should be a manual step to ensure a human is looking at the results and we don't
@@ -151,10 +151,6 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
     logger.info(s"[$shardId] shard $shardId expects to migrate ${fmt(rowsToMigrate)} rows")
 
-    // TODO: swap from the 'select count' sql to the 'call stored proc' sql ONLY when ready to actually migrate
-    // TODO: verify that the call to populateShardAndMarkAsSharded($shardId); works as intended here in Scala (we
-    //        know it works in the db)
-    // val sql = sql"""select count(1) from ENTITY_ATTRIBUTE_#$shardId;""".as[String]
     val sql = sql"""call populateShardAndMarkAsSharded($shardId);""".as[Int]
 
     // block for the result, helps with concurrency
@@ -180,7 +176,7 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
     logger.info(s"[$shardId] migration for shard $shardId done     " +
       s"($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use) " +
-      s"in ${fmt(elapsed)} ms: $procResult")
+      s"- ${fmt(rowsToMigrate)} rows in ${timefmt(elapsed)}")
     s"$shardId: $procResult"
 
     procResult
@@ -203,5 +199,12 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
   val formatter = java.text.NumberFormat.getIntegerInstance
   private def fmt(in: Int) = formatter.format(in)
   private def fmt(in: Long) = formatter.format(in)
+
+  private def timefmt(millis: Long) = {
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(millis)
+    val seconds = TimeUnit.MILLISECONDS.toSeconds(millis) - TimeUnit.MINUTES.toSeconds(minutes)
+    s"$minutes min, $seconds sec"
+  }
+
 }
 
