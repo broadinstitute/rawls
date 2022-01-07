@@ -16,7 +16,7 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
   // prod db has 24 CPUs, that's the ideal for number of threads
   // NB increase slick.db.connectionTimeout setting to avoid "Connection is not available" errors
-  val nThreads = 24
+  val nThreads = 12
   val threadPool = Executors.newFixedThreadPool(nThreads)
   implicit val fixedThreadPool: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(threadPool)
 
@@ -32,13 +32,28 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
   def migrate() = {
 
-    // TODO: implement orphaned-row deletion here
+    val tsMigration = System.currentTimeMillis()
 
-    logger.warn(s"migration of $nShards shards starting.")
+    // orphaned-row deletion:
+    // when we migrated the initial 4 shards, we did not delete the migrated rows from
+    // ENTITY_ATTRIBUTE_archived. This saved time (since the deletion is slow), but
+    // it causes problems. When deleting a workspace or deleting individual entities,
+    // these orphaned rows throw foreign-key errors because they still have FKs to ENTITY.
+    //
+    // we do not need to concern ourselves with these orphans if we're doing a full migration
+    // that drops and recreates the _archived table upon completion. This code is here - commented
+    // out - in case we need it at any point.
+    /*
+    logger.warn(s"START deletion of orphan rows.")
+    val tsDeleteStart = System.currentTimeMillis()
+    val deleted = deleteOrphanRows()
+    logger.warn(s"deleted $deleted orphan rows in ${fmt(System.currentTimeMillis()-tsDeleteStart)}ms.")
+     */
+
+    logger.warn(s"START migration of $nShards shards.")
     val migrationResults = Future.traverse(shardsToMigrate) { shardId => migrateShard(shardId) }
 
-    val res = Await.result(migrationResults, Duration.Inf)
-    logger.warn(s"******* res: $res")
+    Await.result(migrationResults, Duration.Inf)
 
     if (shardsWithWarnings.isEmpty) {
       logger.info(s"all $nShards shards migrated as expected.")
@@ -52,6 +67,8 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
       }
       logger.error("===============================================")
     }
+
+    logger.info(s"overall duration for migration: ${fmt(System.currentTimeMillis() - tsMigration)}ms")
 
     // now that all shards have migrated - and ONLY if they all succeeded - drop and recreate the _archived table
     // That should be a manual step to ensure a human is looking at the results and we don't
@@ -93,12 +110,22 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
   }
 
+  private def deleteOrphanRows() = {
+    val deleteSql =
+      sqlu"""DELETE ea from ENTITY_ATTRIBUTE_archived ea, ENTITY e, WORKSPACE w
+                 WHERE e.workspace_id = w.id
+                 AND ea.owner_id = e.id
+                 AND w.shard_state = 'Sharded';"""
+
+    Await.result(runSql(deleteSql), Duration.Inf)
+  }
+
   // this shenanigans around futures and blocking makes it easy to use the Future.traverse above
-  private def migrateShard(shardId: String): Future[String] = {
+  private def migrateShard(shardId: String): Future[Int] = {
     Future(migrateShardImpl(shardId))
   }
 
-  private def migrateShardImpl(shardId: String): String = {
+  private def migrateShardImpl(shardId: String): Int = {
     val tick = System.currentTimeMillis()
 
     shardsStarted.incrementAndGet()
@@ -112,11 +139,12 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
       sql"""select count(1) from ENTITY_ATTRIBUTE_archived ea, ENTITY e, WORKSPACE w
               WHERE e.workspace_id = w.id
               AND ea.owner_id = e.id
-              AND shardIdentifier(hex(w.id)) = $shardId;""".as[Int]
+              AND shardIdentifier(hex(w.id)) = $shardId
+              AND w.shard_state = 'unsharded';""".as[Int]
     val rowsToMigrate = Await.result(runSql(rowsToMigrateSql), Duration.Inf).head
 
     val shardCountSql =
-      sql"""select count(1) ENTITY_ATTRIBUTE_#$shardId;""".as[Int]
+      sql"""select count(1) from ENTITY_ATTRIBUTE_#$shardId;""".as[Int]
 
     // count rows in shard, before migration
     val shardCountBefore = Await.result(runSql(shardCountSql), Duration.Inf).head
@@ -126,8 +154,8 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     // TODO: swap from the 'select count' sql to the 'call stored proc' sql ONLY when ready to actually migrate
     // TODO: verify that the call to populateShardAndMarkAsSharded($shardId); works as intended here in Scala (we
     //        know it works in the db)
-    val sql = sql"""select count(1) from ENTITY_ATTRIBUTE_#$shardId;""".as[String]
-    // val sql = sql"""call populateShardAndMarkAsSharded($shardId);""".as[String]
+    // val sql = sql"""select count(1) from ENTITY_ATTRIBUTE_#$shardId;""".as[String]
+    val sql = sql"""call populateShardAndMarkAsSharded($shardId);""".as[Int]
 
     // block for the result, helps with concurrency
     val procResult = Await.result(runSql(sql), Duration.Inf).head
@@ -136,15 +164,13 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     val shardCountAfter = Await.result(runSql(shardCountSql), Duration.Inf).head
 
     // compare row count after migration to expected row count
-    val expectedCount = shardCountBefore + rowsToMigrate
-    val actualCount = shardCountAfter
-    if (actualCount == expectedCount) {
-      logger.info(s"[$shardId] SUCCESS: shard $shardId finished with ${fmt(actualCount)} rows, as expected")
+    if (shardCountAfter == shardCountBefore + rowsToMigrate) {
+      logger.info(s"[$shardId] SUCCESS: shard $shardId finished with ${fmt(shardCountAfter)} rows, as expected")
     } else {
-      shardsWithWarnings.put(shardId, expectedCount - actualCount)
+      shardsWithWarnings.put(shardId, shardCountBefore + rowsToMigrate - shardCountAfter)
       logger.error(s"[$shardId] DANGER: shard $shardId finished with " +
-        s"${fmt(actualCount)} rows, " +
-        s"expected ${fmt(expectedCount)} (${fmt(shardCountBefore)} + ${fmt(rowsToMigrate)})")
+        s"${fmt(shardCountAfter)} rows, " +
+        s"expected ${fmt(shardCountBefore + rowsToMigrate)} (${fmt(shardCountBefore)} + ${fmt(rowsToMigrate)})")
     }
 
     val elapsed = System.currentTimeMillis() - tick
@@ -157,10 +183,14 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
       s"in ${fmt(elapsed)} ms: $procResult")
     s"$shardId: $procResult"
 
+    procResult
+
   }
 
   private def runSql[T](sql: ReadWriteAction[T]) = {
-    // ReadCommitted here? Since we intend this to run while Rawls as a whole is down, and no other db activity,
+    // Serializable here ensures the before/after row counts are accurate; these really help
+    // with verifying success of shard copies.
+    // Since we intend this to run while Rawls as a whole is down, and no other db activity,
     // it really shouldn't matter
     val transaction = sql
       .transactionally

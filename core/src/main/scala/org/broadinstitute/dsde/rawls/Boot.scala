@@ -91,7 +91,8 @@ object Boot extends IOApp with LazyLogging {
         2. Render configs for the environment you want to migrate (prod, alpha, dev, etc)
         3. back up the db in that env
         4. uncomment the "parallelShardingMigration.migrate()" line below
-        5. manually increase the slick.db.connectionTimeout value to avoid db connection issues
+        5. manually increase the slick.db.connectionTimeout value to avoid db connection issues, and
+          manually set slick.db.leakDetectionThreshold to 0 to avoid spurious leak warnings
         6. run this branch locally, connecting to the db. It's ok to run locally; this codebase simply issues
           small SQL statements ('call storedProc()') and all the actual data processing happens in the db
         7. manually verify that all shards migrated properly
