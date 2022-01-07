@@ -688,7 +688,7 @@ class HttpGoogleServicesDAO(
     * Terra users should not have IAM permissions to change the Billing Account on their Terra managed Google Projects
     * directly on Google.  However, Billing Account Admins (who may know nothing about Terra) _can_ at least remove
     * their Billing Account from Terra managed Google Projects as a means of disabling billing.  See https://broadworkbench.atlassian.net/browse/CA-1585
-    * TODO: Refactor method.  A decent amount of business logic has crept into this method and is currently untested as a result.
+    * TODO: Refactor method: https://broadworkbench.atlassian.net/browse/CA-1673.  A decent amount of business logic has crept into this method and is currently untested as a result.
     *
     * @param googleProjectId - Google Project ID that the Billing Account will be changed on
     * @param newBillingAccount - The new value we want to set on the project
