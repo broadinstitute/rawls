@@ -725,7 +725,7 @@ class HttpGoogleServicesDAO(
           Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
 
         // Check actual Billing Account value from google against the value that Rawls thinks it should be before the update
-        if (oldBillingAccount != currentBillingAccountFromGoogle) {
+        if (!force && (oldBillingAccount != currentBillingAccountFromGoogle)) {
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.PreconditionFailed,
             s"Could not update Billing Account on Google Project ID ${googleProjectId} to Billing Account ${newBillingAccount} because Billing Account in Rawls ${oldBillingAccount} did not equal current Billing Account in Google ${projectBillingInfo.getBillingAccountName}"))
         }
