@@ -50,8 +50,28 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     logger.warn(s"deleted $deleted orphan rows in ${fmt(System.currentTimeMillis()-tsDeleteStart)}ms.")
      */
 
-    logger.warn(s"START migration of $nShards shards.")
-    val migrationResults = Future.traverse(shardsToMigrate) { shardId => migrateShard(shardId) }
+    logger.info(s"START migration of $nShards shards.")
+
+    logger.info(s"calculating expected row counts to migrate for each shard (this will take some time) ... ")
+    val expectedCounts = Await.result(Future.traverse(shardsToMigrate) { shardId =>
+      expectedMigrationRowCount(shardId).map(count => (shardId -> count))
+    }.map(_.toMap), Duration.Inf)
+
+    // output rows-to-migrate, sorted by shardid
+    logger.info(s"        SHARD : ROWS TO MIGRATE")
+    expectedCounts.toList.sortBy(_._1).foreach {
+      case (shardId, rowsToMigrate) =>
+        logger.info(s"        $shardId : ${fmt(rowsToMigrate)}")
+    }
+
+    // now, order from least-to-most rows to migrate. In other words,
+    // we migrate the smallest shards first to get them over with.
+    // in the event that anything goes wrong mid-migration, we'll have
+    // gotten at least some of the shards migrated
+    val orderedShards = expectedCounts.toList.sortBy(_._2)
+    val migrationResults = Future.traverse(orderedShards) {
+      case (shardId, rowsToMigrate) => migrateShard(shardId, rowsToMigrate)
+    }
 
     Await.result(migrationResults, Duration.Inf)
 
@@ -121,11 +141,11 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
   }
 
   // this shenanigans around futures and blocking makes it easy to use the Future.traverse above
-  private def migrateShard(shardId: String): Future[Int] = {
-    Future(migrateShardImpl(shardId))
+  private def migrateShard(shardId: String, rowsToMigrate: Int): Future[Int] = {
+    Future(migrateShardImpl(shardId, rowsToMigrate))
   }
 
-  private def migrateShardImpl(shardId: String): Int = {
+  private def migrateShardImpl(shardId: String, rowsToMigrate: Int): Int = {
     val tick = System.currentTimeMillis()
 
     shardsStarted.incrementAndGet()
@@ -133,15 +153,6 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
     logger.info(s"[$shardId] migration for shard $shardId starting " +
       s"($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use). ")
-
-    // count rows in archived table for this shard
-    val rowsToMigrateSql =
-      sql"""select count(1) from ENTITY_ATTRIBUTE_archived ea, ENTITY e, WORKSPACE w
-              WHERE e.workspace_id = w.id
-              AND ea.owner_id = e.id
-              AND shardIdentifier(hex(w.id)) = $shardId
-              AND w.shard_state = 'unsharded';""".as[Int]
-    val rowsToMigrate = Await.result(runSql(rowsToMigrateSql), Duration.Inf).head
 
     val shardCountSql =
       sql"""select count(1) from ENTITY_ATTRIBUTE_#$shardId;""".as[Int]
@@ -181,6 +192,17 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
     procResult
 
+  }
+
+  private def expectedMigrationRowCount(shardId: String): Future[Int] = {
+    // count rows in archived table for this shard
+    val rowsToMigrateSql =
+      sql"""select count(1) from ENTITY_ATTRIBUTE_archived ea, ENTITY e, WORKSPACE w
+              WHERE e.workspace_id = w.id
+              AND ea.owner_id = e.id
+              AND shardIdentifier(hex(w.id)) = $shardId
+              AND w.shard_state = 'unsharded';""".as[Int]
+    runSql(rowsToMigrateSql.head)
   }
 
   private def runSql[T](sql: ReadWriteAction[T]) = {
