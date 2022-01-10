@@ -16,7 +16,7 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
   // prod db has 24 CPUs, that's the ideal for number of threads
   // NB increase slick.db.connectionTimeout setting to avoid "Connection is not available" errors
-  val nThreads = 12
+  val nThreads = 32
   val threadPool = Executors.newFixedThreadPool(nThreads)
   implicit val fixedThreadPool: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(threadPool)
 
@@ -69,6 +69,7 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     // in the event that anything goes wrong mid-migration, we'll have
     // gotten at least some of the shards migrated
     val orderedShards = expectedCounts.toList.sortBy(_._2)
+
     val migrationResults = Future.traverse(orderedShards) {
       case (shardId, rowsToMigrate) => migrateShard(shardId, rowsToMigrate)
     }
@@ -152,15 +153,14 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     migrationsRunning.incrementAndGet()
 
     logger.info(s"[$shardId] migration for shard $shardId starting " +
-      s"($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use). ")
+      s"($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use) " +
+      s"- ${fmt(rowsToMigrate)} rows expected to move")
 
     val shardCountSql =
       sql"""select count(1) from ENTITY_ATTRIBUTE_#$shardId;""".as[Int]
 
     // count rows in shard, before migration
     val shardCountBefore = Await.result(runSql(shardCountSql), Duration.Inf).head
-
-    logger.info(s"[$shardId] shard $shardId expects to migrate ${fmt(rowsToMigrate)} rows")
 
     val sql = sql"""call populateShardAndMarkAsSharded($shardId);""".as[Int]
 
@@ -172,11 +172,11 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
     // compare row count after migration to expected row count
     if (shardCountAfter == shardCountBefore + rowsToMigrate) {
-      logger.info(s"[$shardId] SUCCESS: shard $shardId finished with ${fmt(shardCountAfter)} rows, as expected")
+      logger.info(s"[$shardId] SUCCESS: shard $shardId finished with ${fmt(shardCountAfter)} rows in shard, as expected")
     } else {
       shardsWithWarnings.put(shardId, shardCountBefore + rowsToMigrate - shardCountAfter)
       logger.error(s"[$shardId] DANGER: shard $shardId finished with " +
-        s"${fmt(shardCountAfter)} rows, " +
+        s"${fmt(shardCountAfter)} rows in shard, " +
         s"expected ${fmt(shardCountBefore + rowsToMigrate)} (${fmt(shardCountBefore)} + ${fmt(rowsToMigrate)})")
     }
 
