@@ -14,9 +14,8 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
   import slickDataSource.dataAccess.driver.api._
 
-  // prod db has 24 CPUs, that's the ideal for number of threads
-  // NB increase slick.db.connectionTimeout setting to avoid "Connection is not available" errors
-  val nThreads = 32
+  // prod db has 24 CPUs, ideal number of migration threads seems to be about 125% of CPUs == 30 threads
+  val nThreads = 20
   val threadPool = Executors.newFixedThreadPool(nThreads)
   implicit val fixedThreadPool: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(threadPool)
 
@@ -68,7 +67,19 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     // we migrate the smallest shards first to get them over with.
     // in the event that anything goes wrong mid-migration, we'll have
     // gotten at least some of the shards migrated
-    val orderedShards = expectedCounts.toList.sortBy(_._2)
+    // however, this means that the end of the migration is copying the
+    // largest shards simultaneously in parallel.
+    // val orderedShards = expectedCounts.toList.sortBy(_._2)
+
+    // now, process the shards in *shardId* alphabetical order. This
+    // means the large and small row counts should be pretty evenly distributed,
+    // and thus we are migrating small shards in parallel to
+    // large shards for balanced CPU utilization
+    //
+    // we could also simply use expectedCounts.toList, since that returns a list
+    // in "map order," which is based on the key hashes - also should be evenly distributed.
+    // but, alpha order is easier for us humans to read about in the logs
+    val orderedShards = expectedCounts.toList.sortBy(_._1)
 
     val migrationResults = Future.traverse(orderedShards) {
       case (shardId, rowsToMigrate) => migrateShard(shardId, rowsToMigrate)
