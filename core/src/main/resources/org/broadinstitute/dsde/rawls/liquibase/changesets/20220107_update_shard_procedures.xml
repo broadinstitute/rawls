@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <!-- create db functions and stored procedures that will help with the db migration -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="update_shard_functions_and_procedures">
+        <sql stripComments="true" endDelimiter="~">
+            -- procedure to copy rows from ENTITY_ATTRIBUTE_archived to the appropriate shard table,
+            -- based on the attributes' owning workspace
+            DROP PROCEDURE IF EXISTS copyRowsToAttributeShard ~
+            CREATE PROCEDURE copyRowsToAttributeShard(IN shardIdentifier CHAR(5))
+            BEGIN
+                SET @tableSuffix := shardIdentifier;
+
+                SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;
+                SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
+                SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='TRADITIONAL,ALLOW_INVALID_DATES';
+
+                SET @sql_text:=CONCAT('INSERT INTO ENTITY_ATTRIBUTE_',@tableSuffix,'(name, value_string, value_number, value_boolean,'
+                    ' value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)'
+                    'SELECT ea.name, ea.value_string, ea.value_number, ea.value_boolean,'
+                    ' ea.value_entity_ref, ea.list_index, ea.owner_id, ea.list_length, ea.namespace, ea.VALUE_JSON, ea.deleted, ea.deleted_date'
+                    ' FROM ENTITY_ATTRIBUTE_archived ea, ENTITY e, WORKSPACE w'
+                    ' WHERE e.workspace_id = w.id'
+                    ' AND ea.owner_id = e.id'
+                    ' AND w.shard_state = ''unsharded'''
+                    ' AND shardIdentifier(hex(w.id)) = ''',@tableSuffix,''''
+                    ' ORDER BY ea.id;');
+                PREPARE stmt from @sql_text;
+                EXECUTE stmt;
+
+                SET SQL_MODE=@OLD_SQL_MODE;
+                SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
+                SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
+
+            END ~
+        </sql>
+        <rollback>
+            DROP PROCEDURE IF EXISTS copyRowsToAttributeShard;
+        </rollback>
+    </changeSet>
+
+
+</databaseChangeLog>
