@@ -1,4 +1,4 @@
-import sbt._
+import sbt.{compilerPlugin, _}
 
 object Dependencies {
   val akkaV = "2.6.17"
@@ -121,6 +121,8 @@ object Dependencies {
   val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.28.3" excludeAll(excludeProtobufJavalite)
   val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.28.3"
 
+  val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
+
   val openCensusDependencies = Seq(
     opencensusScalaCode,
     opencensusAkkaHttp,
@@ -239,6 +241,7 @@ object Dependencies {
     dataRepo,
     dataRepoJersey,
     antlrParser,
-    resourceBufferService
+    resourceBufferService,
+    kindProjector
   )
 }

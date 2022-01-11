@@ -1,7 +1,8 @@
 package org.broadinstitute.dsde.rawls.monitor.migration
 
-import cats.implicits.catsSyntaxOptionId
+import cats.implicits._
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationStatus._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
@@ -9,7 +10,6 @@ import java.sql.Timestamp
 import java.util.UUID
 
 
-private[migration]
 final case class WorkspaceMigration(id: Long,
                                     workspaceId: UUID,
                                     created: Timestamp,
@@ -24,7 +24,36 @@ final case class WorkspaceMigration(id: Long,
                                     workspaceBucketDeleted: Option[Timestamp],
                                     finalBucketCreated: Option[Timestamp],
                                     tmpBucketDeleted: Option[Timestamp]
-                                   )
+                                   ) {
+
+  def getStatus: MigrationStatus = (
+    ((finished fmap Finished.curried) <*> outcome).widen[MigrationStatus]
+      <+> (tmpBucketDeleted fmap TmpBucketDeleted)
+      <+> (finalBucketCreated fmap FinalWorkspaceBucketCreated)
+      <+> (workspaceBucketDeleted fmap WorkspaceBucketDeleted)
+      <+> ((tmpBucketCreated fmap TmpBucketCreated.curried) <*> tmpBucketName)
+      <+> ((newGoogleProjectConfigured fmap GoogleProjectConfigured.curried) <*> newGoogleProjectId)
+      <+> (started fmap Started)
+    )
+    .getOrElse(Created(created))
+}
+
+sealed trait MigrationStatus
+
+object MigrationStatus {
+
+  final case class Created(time: Timestamp) extends MigrationStatus
+  final case class Started(time: Timestamp) extends MigrationStatus
+  final case class GoogleProjectConfigured(time: Timestamp, googleProjectId: GoogleProjectId) extends MigrationStatus
+  final case class TmpBucketCreated(time: Timestamp, bucketName: GcsBucketName) extends MigrationStatus
+  final case class WorkspaceBucketTransferred(time: Timestamp) extends MigrationStatus
+  final case class WorkspaceBucketDeleted(time: Timestamp) extends MigrationStatus
+  final case class FinalWorkspaceBucketCreated(time: Timestamp) extends MigrationStatus
+  final case class TmpBucketTransferred(time: Timestamp) extends MigrationStatus
+  final case class TmpBucketDeleted(time: Timestamp) extends MigrationStatus
+  final case class Finished(time: Timestamp, outcome: Outcome) extends MigrationStatus
+
+}
 
 private[migration]
 object WorkspaceMigration {

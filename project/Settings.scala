@@ -37,7 +37,9 @@ object Settings {
     "-encoding", "utf8",
 //    "-Ywarn-unused-import", bad option for 2.13
     "-deprecation:false", // This is tricky to enable as of 03/2020 [AEN]
-    "-Xfatal-warnings"
+    "-Xfatal-warnings",
+    "-language:higherKinds",
+    "-Ypartial-unification"
   )
 
   //sbt assembly settings common to rawlsCore and rawlsModel
