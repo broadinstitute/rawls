@@ -6,7 +6,6 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits.catsSyntaxOptionId
 import com.google.cloud.storage.Storage
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
-import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
@@ -111,8 +110,6 @@ class WorkspaceMigrationMonitorSpec
     val sourceProject = "general-dev-billing-account"
     val sourceBucket = "az-leotest"
     val destProject = "terra-dev-7af423b8"
-    val config = ConfigFactory.load()
-    val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(sourceProject)
     val pathToCredentialJson = "config/rawls-account.json"
     val v1WorkspaceCopy = minimalTestData.v1Workspace.copy(
@@ -154,32 +151,23 @@ class WorkspaceMigrationMonitorSpec
   }
 
   "deleteWorkspaceBucket" should "delete the workspace bucket and record when it was deleted" in {
-    val sourceProject = "general-dev-billing-account"
-    val destBucket = "v1-migration-test-" + UUID.randomUUID.toString.replace("-", "")
-
-    val v1Workspace = minimalTestData.v1Workspace.copy(
-      namespace = sourceProject,
-      googleProjectId = GoogleProjectId(sourceProject),
-      bucketName = destBucket
-    )
-
     withMinimalTestDatabase { _ =>
       runAndWait {
         DBIO.seq(
-          workspaceQuery.createOrUpdate(v1Workspace),
-          WorkspaceMigrationMonitor.schedule(v1Workspace)
+          workspaceQuery.createOrUpdate(minimalTestData.v1Workspace),
+          WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace)
         )
       }
 
       val migration = runAndWait(
         WorkspaceMigrationMonitor.workspaceMigrations
-          .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
+          .filter(_.workspaceId === minimalTestData.v1Workspace.workspaceIdAsUUID).result
       )
         .head
 
       val writeAction = WorkspaceMigrationMonitor.deleteWorkspaceBucket(
         migration,
-        v1Workspace,
+        minimalTestData.v1Workspace,
         new MockGoogleStorageService[IO] {
           override def deleteBucket(googleProject: GoogleProject, bucketName: GcsBucketName, isRecursive: Boolean, bucketSourceOptions: List[Storage.BucketSourceOption], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Boolean] =
             fs2.Stream.emit(true)
@@ -200,35 +188,24 @@ class WorkspaceMigrationMonitorSpec
     }
   }
 
-  "deleteTemporaryBucket" should "delete the temporary bucket and record when it was deleted" in {
-    val sourceProject = "general-dev-billing-account"
-    val sourceBucket = "az-leotest"
-    val destProject = "terra-dev-7af423b8"
-    val destBucket = "v1-migration-test-" + UUID.randomUUID.toString.replace("-", "")
-
-    val v1Workspace = minimalTestData.v1Workspace.copy(
-      namespace = sourceProject,
-      googleProjectId = GoogleProjectId(sourceProject),
-      bucketName = destBucket
-    )
-
+  "deleteTemporaryBucket" should "delete the temporary bucket and record when it was deleted" in
     withMinimalTestDatabase { _ =>
       runAndWait {
         DBIO.seq(
-          workspaceQuery.createOrUpdate(v1Workspace),
-          WorkspaceMigrationMonitor.schedule(v1Workspace)
+          workspaceQuery.createOrUpdate(minimalTestData.v1Workspace),
+          WorkspaceMigrationMonitor.schedule(minimalTestData.v1Workspace)
         )
       }
 
       // We need a temp bucket to transfer the workspace bucket contents into
       val migration = runAndWait(
         WorkspaceMigrationMonitor.workspaceMigrations
-          .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID).result
+          .filter(_.workspaceId === minimalTestData.v1Workspace.workspaceIdAsUUID).result
       )
         .head
         .copy(
-          newGoogleProjectId = GoogleProjectId(destProject).some,
-          tmpBucketName = GcsBucketName(sourceBucket).some
+          newGoogleProjectId = GoogleProjectId("google-project-").some,
+          tmpBucketName = GcsBucketName("temp-bucket-name").some
         )
 
       val writeAction = WorkspaceMigrationMonitor.deleteTemporaryBucket(
@@ -251,7 +228,6 @@ class WorkspaceMigrationMonitorSpec
 
       tmpBucketDeleted shouldBe defined
     }
-  }
 
   val mockStsService = new MockGoogleStorageTransferService[IO] {
     override def createTransferJob(jobName: JobName, jobDescription: String, projectToBill: GoogleProject, originBucket: GcsBucketName, destinationBucket: GcsBucketName, schedule: JobTransferSchedule): IO[TransferJob] =
