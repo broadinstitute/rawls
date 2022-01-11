@@ -98,9 +98,10 @@ object Boot extends IOApp with LazyLogging {
              this codebase simply issues small SQL statements ('call storedProc()') and all the
              actual data processing happens in the db
         7. manually verify that all shards migrated properly
-        8. drop and re-create the ENTITY_ATTRIBUTE_archived table; this is equivalent to deleting all its rows.
+        8. back up the db again
+        9. drop and re-create the ENTITY_ATTRIBUTE_archived table; this is equivalent to deleting all its rows.
              This step is necessary, else the liquibase migration will fail because the table is not found.
-        9. shut down your local Rawls, and re-comment the "parallelShardingMigration.migrate()" line for safety
+        10. shut down your local Rawls, and re-comment the "parallelShardingMigration.migrate()" line for safety
      */
     val parallelShardingMigration = new ParallelShardingMigration(slickDataSource)
     // parallelShardingMigration.migrate()
