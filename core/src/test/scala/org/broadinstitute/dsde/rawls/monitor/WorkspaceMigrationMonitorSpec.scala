@@ -128,7 +128,7 @@ class WorkspaceMigrationMonitorSpec
     val sourceProject = "general-dev-billing-account"
     val sourceBucket = "az-leotest"
     val destProject = "terra-dev-7af423b8"
-    val pathToCredentialJson = "config/rawls-account.json"
+
     val v1Workspace = spec.testData.v1Workspace.copy(
       namespace = sourceProject,
       googleProjectId = GoogleProjectId(sourceProject),
@@ -158,9 +158,12 @@ class WorkspaceMigrationMonitorSpec
       attempt.tmpBucketCreated shouldBe defined
     }
 
+    val serviceProject = GoogleProject(sourceProject)
+    val pathToCredentialJson = "config/rawls-account.json"
+
     runMigrationTest(ReaderT { env =>
-      GoogleStorageService.resource[IO](pathToCredentialJson).use { googleStorageService =>
-        test.run(env.copy(storageService = googleStorageService))
+      GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
+        googleStorageService => test.run(env.copy(storageService = googleStorageService))
       }
     })
   }
@@ -244,7 +247,6 @@ class WorkspaceMigrationMonitorSpec
     val sourceBucket = "az-leotest"
     val destProject = "terra-dev-7af423b8"
     val destBucket = "v1-migration-test-" + UUID.randomUUID.toString.replace("-", "")
-    val pathToCredentialJson = "config/rawls-account.json"
 
     val v1Workspace = spec.testData.v1Workspace.copy(
       namespace = sourceProject,
@@ -279,9 +281,12 @@ class WorkspaceMigrationMonitorSpec
       attempt.finalBucketCreated shouldBe defined
     }
 
+    val serviceProject = GoogleProject(sourceProject)
+    val pathToCredentialJson = "config/rawls-account.json"
+
     runMigrationTest(ReaderT { env =>
-      GoogleStorageService.resource[IO](pathToCredentialJson).use { googleStorageService =>
-        test.run(env.copy(storageService = googleStorageService))
+      GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
+        googleStorageService => test.run(env.copy(storageService = googleStorageService))
       }
     })
   }
