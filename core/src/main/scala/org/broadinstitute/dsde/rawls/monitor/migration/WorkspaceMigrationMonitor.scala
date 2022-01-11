@@ -2,10 +2,9 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-import cats.Functor
 import cats.data.ReaderT
 import cats.effect.IO
-import cats.implicits.catsSyntaxOptionId
+import cats.implicits._
 import com.google.cloud.storage.Storage.BucketGetOption
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -128,7 +127,7 @@ object WorkspaceMigrationMonitor {
 
     } yield GcsBucketName(tmpBucketName)
 
-  
+
   final def deleteWorkspaceBucket(migration: WorkspaceMigration, workspace: Workspace)
   : ReaderT[IO, MigrationDeps, Unit] =
     for {
@@ -143,7 +142,7 @@ object WorkspaceMigrationMonitor {
           deleted <- timestampNow
 
           _ <- IO.raiseUnless(successOpt.contains(true)) {
-              noWorkspaceBucketError(GcsBucketName(workspace.bucketName))
+            noWorkspaceBucketError(GcsBucketName(workspace.bucketName))
           }
         } yield deleted
       }
@@ -304,50 +303,55 @@ object WorkspaceMigrationMonitor {
     str ++ UUID.randomUUID.toString.replace("-", "")
   }
 
+
   def getWorkspace(workspaceId: UUID): ReaderT[IO, MigrationDeps, Workspace] =
-    inTransaction { _.workspaceQuery.findByIdOrFail(workspaceId.toString) }
+    inTransaction(_.workspaceQuery.findByIdOrFail(workspaceId.toString))
+
+
+  def getMigrations(workspaceUuid: UUID): ReaderT[IO, MigrationDeps, Seq[WorkspaceMigration]] =
+    inTransaction { _ =>
+      workspaceMigrations
+        .filter(_.workspaceId === workspaceUuid)
+        .sortBy(_.id)
+        .result
+    }
 
 
   def step(m: WorkspaceMigration): ReaderT[IO, MigrationDeps, Unit] =
     getWorkspace(m.workspaceId).flatMap { workspace =>
+      val ignore: ReaderT[IO, MigrationDeps, Unit] = ReaderT.pure()
       m.getStatus match {
         case Created(_) => for {
           time <- ReaderT.liftF(timestampNow)
           _ <- inTransaction(_ => workspaceMigrations.update(m.copy(started = time.some)))
         } yield ()
 
-        case Started(_) => Functor[ReaderT[IO, MigrationDeps, *]].void {
-          claimAndConfigureNewGoogleProject(m, workspace)
-        }
+        case Started(_) =>
+          claimAndConfigureNewGoogleProject(m, workspace) *> ignore
 
-        case GoogleProjectConfigured(_, googleProjectId) => Functor[ReaderT[IO, MigrationDeps, *]].void {
-          createTempBucket(m, workspace, googleProjectId)
-        }
+        case GoogleProjectConfigured(_, googleProjectId) =>
+          createTempBucket(m, workspace, googleProjectId) *> ignore
 
-        case TmpBucketCreated(_, tmpBucket) => Functor[ReaderT[IO, MigrationDeps, *]].void {
-          startBucketStorageTransferJob(m, GcsBucketName(workspace.bucketName), tmpBucket)
-        }
+        case TmpBucketCreated(_, tmpBucket) =>
+          startBucketStorageTransferJob(m, GcsBucketName(workspace.bucketName), tmpBucket) *> ignore
 
         // todo yield while sts job is in progress
 
         case WorkspaceBucketTransferred(_) =>
           deleteWorkspaceBucket(m, workspace)
 
-        case WorkspaceBucketDeleted(_) => Functor[ReaderT[IO, MigrationDeps, *]].void {
-          createFinalBucket(m, workspace)
-        }
+        case WorkspaceBucketDeleted(_) =>
+          createFinalBucket(m, workspace) *> ignore
 
-        case FinalWorkspaceBucketCreated(_) => Functor[ReaderT[IO, MigrationDeps, *]].void {
-          startStorageTransferJobToFinalBucket(m, workspace)
-        }
+        case FinalWorkspaceBucketCreated(_) =>
+          startStorageTransferJobToFinalBucket(m, workspace) *> ignore
 
         // todo yield while sts job is in progress
 
-        case TmpBucketTransferred(_) => Functor[ReaderT[IO, MigrationDeps, *]].void {
-          startStorageTransferJobToFinalBucket(m, workspace)
-        }
+        case TmpBucketTransferred(_) =>
+          startStorageTransferJobToFinalBucket(m, workspace) *> ignore
 
-        case _ => ReaderT.pure()
+        case _ => ignore
       }
     }
 }

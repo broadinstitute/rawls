@@ -80,15 +80,11 @@ class WorkspaceMigrationMonitorSpec
 
 
   def getAttempt(workspaceUuid: UUID): ReaderT[IO, MigrationDeps, WorkspaceMigration] =
-    WorkspaceMigrationMonitor.inTransaction { _ =>
-      WorkspaceMigrationMonitor.workspaceMigrations
-        .filter(_.workspaceId === workspaceUuid)
-        .result
-    }
-      .map(_.head)
+    WorkspaceMigrationMonitor.getMigrations(workspaceUuid).map(_.last)
 
 
   override def afterAll(): Unit = testKit.shutdownTestKit()
+
 
   "isMigrating" should "return false when a workspace is not being migrated" in
     spec.withMinimalTestDatabase { _ =>
