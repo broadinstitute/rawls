@@ -15,6 +15,7 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
   import slickDataSource.dataAccess.driver.api._
 
   // prod db has 24 CPUs, ideal number of migration threads seems to be about 125% of CPUs == 30 threads
+  // dev db has 16 CPUs, so currently nThreads is set to 20
   val nThreads = 20
   val threadPool = Executors.newFixedThreadPool(nThreads)
   implicit val fixedThreadPool: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(threadPool)
@@ -160,11 +161,11 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
   private def migrateShardImpl(shardId: String, rowsToMigrate: Int): Int = {
     val tick = System.currentTimeMillis()
 
-    shardsStarted.incrementAndGet()
-    migrationsRunning.incrementAndGet()
+    val nStarted = shardsStarted.incrementAndGet()
+    val nRunningAtStart = migrationsRunning.incrementAndGet()
 
     logger.info(s"[$shardId] migration for shard $shardId starting " +
-      s"($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use) " +
+      s"($nStarted/$nShards started, $shardsFinished/$nShards finished, $nRunningAtStart/$nThreads threads in use) " +
       s"- ${fmt(rowsToMigrate)} rows expected to move")
 
     val shardCountSql =
@@ -193,11 +194,11 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
     val elapsed = System.currentTimeMillis() - tick
 
-    shardsFinished.incrementAndGet()
-    migrationsRunning.decrementAndGet()
+    val nFinished = shardsFinished.incrementAndGet()
+    val nRunningAtFinish = migrationsRunning.decrementAndGet()
 
     logger.info(s"[$shardId] migration for shard $shardId done     " +
-      s"($shardsStarted/$nShards started, $shardsFinished/$nShards finished, $migrationsRunning/$nThreads threads in use) " +
+      s"($shardsStarted/$nShards started, $nFinished/$nShards finished, $nRunningAtFinish/$nThreads threads in use) " +
       s"- ${fmt(rowsToMigrate)} rows in ${timefmt(elapsed)}")
     s"$shardId: $procResult"
 
