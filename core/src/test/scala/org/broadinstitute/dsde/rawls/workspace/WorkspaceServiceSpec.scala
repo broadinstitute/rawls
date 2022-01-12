@@ -21,7 +21,7 @@ import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.V1WorkspaceMigrationMonitor
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMonitor
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -1189,7 +1189,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   "migrateWorkspace" should "create an entry in the migration table" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
       Await.result(services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName), Duration.Inf)
-      val isMigrating = runAndWait(V1WorkspaceMigrationMonitor.isInQueueToMigrate(testData.workspace))
+      val isMigrating = runAndWait(WorkspaceMigrationMonitor.isInQueueToMigrate(testData.workspace))
       isMigrating should be(true)
     }
   }
