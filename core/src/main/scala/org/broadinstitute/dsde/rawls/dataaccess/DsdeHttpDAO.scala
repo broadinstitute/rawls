@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import akka.http.scaladsl.HttpExt
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
-import akka.http.scaladsl.model.{HttpHeader, HttpRequest, ResponseEntity}
+import akka.http.scaladsl.model.{HttpHeader, HttpRequest, ResponseEntity, StatusCode}
 import akka.http.scaladsl.unmarshalling.Unmarshaller
 import akka.stream.Materializer
 import com.typesafe.scalalogging.LazyLogging
@@ -44,13 +44,17 @@ trait DsdeHttpDAO extends LazyLogging {
   protected def pipeline[A](implicit um: Unmarshaller[ResponseEntity, A]) = executeRequest[A] _
 
   protected def when5xx(throwable: Throwable ): Boolean = DsdeHttpDAO.when5xx(throwable)
+
+
 }
 
 object DsdeHttpDAO {
-  def when5xx(throwable: Throwable ): Boolean = {
-    throwable match {
-      case t: RawlsExceptionWithErrorReport => t.errorReport.statusCode.exists(_.intValue/100 == 5)
-      case _ => false
-    }
+
+  private def statusCodePredicate(check: StatusCode => Boolean): Throwable => Boolean = {
+    case t: RawlsExceptionWithErrorReport => t.errorReport.statusCode.exists(check)
+    case _ => false
   }
+
+  def when5xx: Throwable => Boolean = statusCodePredicate(_.intValue/100 == 5)
+  def whenUnauthorized: Throwable => Boolean = statusCodePredicate(_.intValue == 401)
 }

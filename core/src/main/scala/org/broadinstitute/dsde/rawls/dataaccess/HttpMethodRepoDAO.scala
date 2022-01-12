@@ -59,7 +59,7 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
   }
 
   override def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[WDL]] = {
-    retry(when5xx) { () =>
+    retry(anyOf(when5xx, DsdeHttpDAO.whenUnauthorized)) { () =>
       method match {
         case agoraMethod: AgoraMethod =>
           getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo) map { maybeEntity =>

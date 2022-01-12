@@ -56,7 +56,7 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
 
     val formData = Multipart.FormData(bodyParts:_*)
 
-    retry(when5xx) { () => pipeline[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]](userInfo) apply (Post(url, Marshal(formData).to[RequestEntity])) }
+    retry(anyOf(when5xx, DsdeHttpDAO.whenUnauthorized)) { () => pipeline[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]](userInfo) apply (Post(url, Marshal(formData).to[RequestEntity])) }
   }
 
   override def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus] = {
