@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatest.{Assertion, BeforeAndAfterAll, OptionValues}
 import slick.jdbc.MySQLProfile.api._
 
@@ -100,6 +101,38 @@ class WorkspaceMigrationMonitorSpec
       }
     }
 
+  implicit val timestampOrdering = new Ordering[Timestamp] {
+    override def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
+  }
+
+  "updated" should "automagically get bumped to the current timestamp when the record is updated" in
+    runMigrationTest {
+      for {
+        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+          spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
+            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
+        }
+
+        before <- WorkspaceMigrationMonitor
+          .getMigrations(spec.testData.v1Workspace.workspaceIdAsUUID)
+          .map(_.last)
+
+        // sleep needed due to Timestamp imprecision
+        _ <- ReaderT.liftK(IO.sleep(1.second))
+
+        after <- WorkspaceMigrationMonitor.inTransaction { _ =>
+          val migration = WorkspaceMigrationMonitor.workspaceMigrations
+              .filter(_.id === before.id)
+
+          migration
+            .map(_.newGoogleProjectConfigured)
+            .update(now.some) >> migration.result
+        }
+          .map(_.last)
+
+      } yield before.updated should be < after.updated
+    }
+
 
   "claimAndConfigureGoogleProject" should "return a valid database operation" in
     runMigrationTest {
@@ -123,7 +156,7 @@ class WorkspaceMigrationMonitorSpec
     }
 
 
-  // use an existing test project (broad-dsde-dev)
+  // test is run manually until we figure out how to integration test without dockerising
   "createTempBucket" should "create a new bucket in the same region as the workspace bucket" ignore {
     val sourceProject = "general-dev-billing-account"
     val sourceBucket = "az-leotest"
@@ -241,7 +274,7 @@ class WorkspaceMigrationMonitorSpec
       }
     }
 
-
+  // test is run manually until we figure out how to integration test without dockerising
   "createFinalBucket" should "create a new bucket in the same region as the tmp workspace bucket" ignore {
     val sourceProject = "general-dev-billing-account"
     val sourceBucket = "az-leotest"

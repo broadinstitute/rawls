@@ -319,39 +319,60 @@ object WorkspaceMigrationMonitor {
 
   def step(m: WorkspaceMigration): ReaderT[IO, MigrationDeps, Unit] =
     getWorkspace(m.workspaceId).flatMap { workspace =>
-      val ignore: ReaderT[IO, MigrationDeps, Unit] = ReaderT.pure()
+      val pass: ReaderT[IO, MigrationDeps, Unit] = ReaderT.pure()
       m.getStatus match {
-        case Created(_) => for {
-          time <- ReaderT.liftF(timestampNow)
-          _ <- inTransaction(_ => workspaceMigrations.update(m.copy(started = time.some)))
-        } yield ()
+        case Created(_) =>
+          for {
+            time <- ReaderT.liftF(timestampNow)
+            _ <- inTransaction(_ => workspaceMigrations.update(m.copy(started = time.some)))
+          } yield ()
 
         case Started(_) =>
-          claimAndConfigureNewGoogleProject(m, workspace) *> ignore
+          claimAndConfigureNewGoogleProject(m, workspace) *> pass
 
         case GoogleProjectConfigured(_, googleProjectId) =>
-          createTempBucket(m, workspace, googleProjectId) *> ignore
+          createTempBucket(m, workspace, googleProjectId) *> pass
 
         case TmpBucketCreated(_, tmpBucket) =>
-          startBucketStorageTransferJob(m, GcsBucketName(workspace.bucketName), tmpBucket) *> ignore
+          for {
+            _ <- startBucketStorageTransferJob(m, GcsBucketName(workspace.bucketName), tmpBucket)
+            issued <- ReaderT.liftF(timestampNow)
+            _ <- inTransaction { _ =>
+              workspaceMigrations
+                .filter(_.id === m.id)
+                .map(_.workspaceBucketTransferJobIssued)
+                .update(issued.some)
+            }
+          } yield ()
 
-        // todo yield while sts job is in progress
+        case WorkspaceBucketTransferJobIssued(_) => pass
+        // todo update sts job progress
 
         case WorkspaceBucketTransferred(_) =>
           deleteWorkspaceBucket(m, workspace)
 
         case WorkspaceBucketDeleted(_) =>
-          createFinalBucket(m, workspace) *> ignore
+          createFinalBucket(m, workspace) *> pass
 
         case FinalWorkspaceBucketCreated(_) =>
-          startStorageTransferJobToFinalBucket(m, workspace) *> ignore
+          for {
+            _ <- startStorageTransferJobToFinalBucket(m, workspace)
+            issued <- ReaderT.liftF(timestampNow)
+            _ <- inTransaction { _ =>
+              workspaceMigrations
+                .filter(_.id === m.id)
+                .map(_.tmpBucketTransferJobIssued)
+                .update(issued.some)
+            }
+          } yield ()
 
+        case TmpBucketTransferJobIssued(_) => pass
         // todo yield while sts job is in progress
 
         case TmpBucketTransferred(_) =>
-          startStorageTransferJobToFinalBucket(m, workspace) *> ignore
+          startStorageTransferJobToFinalBucket(m, workspace) *> pass
 
-        case _ => ignore
+        case _ => pass
       }
     }
 }
