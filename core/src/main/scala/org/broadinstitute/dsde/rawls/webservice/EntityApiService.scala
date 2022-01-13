@@ -163,6 +163,12 @@ trait EntityApiService extends UserInfoDirectives {
                 entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames()).map(_ => StatusCodes.NoContent)
               }
             }
+          } ~
+          post {
+            // total abuse of REST APIs, we're just hacking an available API
+            complete {
+              entityServiceConstructor(userInfo).indexToOpenSearch(WorkspaceName(workspaceNamespace, workspaceName), entityType)
+            }
           }
         } ~
         path("workspaces" / "entities" / "copy") {

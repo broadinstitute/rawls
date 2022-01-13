@@ -8,6 +8,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.opensearch.{OpenSearchEntityProvider, OpenSearchEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -111,6 +112,28 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         }
       }
     }
+
+  def indexToOpenSearch(workspaceName: WorkspaceName, entityType: String): Future[String] = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
+        .map { ents =>
+          val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, Option(DataReferenceName("opensearch")), None)
+          new OpenSearchEntityProviderBuilder().build(entityRequestArguments) match {
+            case Success(searchprovider:OpenSearchEntityProvider) =>
+              searchprovider.createWorkspaceIndex(workspaceContext)
+              // TODO: create per-workspace index, if it does not exist
+              // TODO: loop through entities, insert into OpenSearch
+              ents.map { ent =>
+                searchprovider.indexEntity(workspaceContext, ent)
+              }.mkString(", ")
+            case Failure(ex) =>
+              ex.toString
+          }
+        }
+      }
+    }
+  }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>

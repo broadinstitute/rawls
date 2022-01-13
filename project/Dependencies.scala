@@ -121,6 +121,8 @@ object Dependencies {
   val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.28.3" excludeAll(excludeProtobufJavalite)
   val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.28.3"
 
+  val openSearch: ModuleID = "org.opensearch.client" % "opensearch-rest-high-level-client" % "1.2.3"
+
   val openCensusDependencies = Seq(
     opencensusScalaCode,
     opencensusAkkaHttp,
@@ -239,6 +241,7 @@ object Dependencies {
     dataRepo,
     dataRepoJersey,
     antlrParser,
-    resourceBufferService
+    resourceBufferService,
+    openSearch
   )
 }

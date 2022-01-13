@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProvid
 import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.{LocalEntityProvider, LocalEntityProviderBuilder}
+import org.broadinstitute.dsde.rawls.entities.opensearch.{OpenSearchEntityProvider, OpenSearchEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.model.ErrorReport
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -44,10 +45,11 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
 
     // soon: look up the reference name to ensure it exists.
     // for now, this simplistic logic illustrates the approach: choose the right builder for the job.
-    val targetTag = if (requestArguments.dataReference.isDefined) {
-      typeTag[DataRepoEntityProvider]
-    } else {
-      typeTag[LocalEntityProvider]
+    val targetTag = requestArguments.dataReference match {
+      // this is a hack: if the data reference name is the magic string "opensearch", use opensearch
+      case Some(x) if x.value.toLowerCase == "opensearch" => typeTag[OpenSearchEntityProvider]
+      case Some(_) => typeTag[DataRepoEntityProvider]
+      case _ => typeTag[LocalEntityProvider]
     }
 
     providerBuilders.find(_.builds == targetTag) match {
@@ -81,7 +83,8 @@ object EntityManager {
     // and execution context for the rawls entity provider that the entity service uses.
     val defaultEntityProviderBuilder = new LocalEntityProviderBuilder(dataSource, cacheEnabled) // implicit executionContext
     val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, config) // implicit executionContext
+    val openSearchEntityProviderBuilder = new OpenSearchEntityProviderBuilder() // implicit executionContext
 
-    new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))
+    new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder, openSearchEntityProviderBuilder))
   }
 }

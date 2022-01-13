@@ -1958,6 +1958,26 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+    post:
+      tags:
+        - entities
+      summary: index this type into OpenSearch
+      description: this is sUcH A HAck
+      operationId: index_entity_type
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content: {}
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}:
     get:
       tags:
