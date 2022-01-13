@@ -679,7 +679,27 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
+  /**
+    * This should only perform the update if the current Billing Account value for the Google Project on Google matches
+    * what Terra thinks it should be.  If it is some other value, then we should _not_ update the Billing Account because
+    * a user most likely changed the Billing Account directly on Google and we don't want to mess things up. This check
+    * can be bypassed if caller sets `force` to true.
+    *
+    * Terra users should not have IAM permissions to change the Billing Account on their Terra managed Google Projects
+    * directly on Google.  However, Billing Account Admins (who may know nothing about Terra) _can_ at least remove
+    * their Billing Account from Terra managed Google Projects as a means of disabling billing.  See https://broadworkbench.atlassian.net/browse/CA-1585
+    * TODO: Refactor method: https://broadworkbench.atlassian.net/browse/CA-1673.  A decent amount of business logic has crept into this method and is currently untested as a result.
+    *
+    * @param googleProjectId - Google Project ID that the Billing Account will be changed on
+    * @param newBillingAccount - The new value we want to set on the project
+    * @param oldBillingAccount - The value Rawls expect to see set on the project on Google prior executing this update
+    * @param force - If TRUE, bypass the check to confirm that that the oldBillingAccount value is correct.  USE WITH CAUTION.
+    * @return
+    */
+  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId,
+                                                 newBillingAccount: Option[RawlsBillingAccountName],
+                                                 oldBillingAccount: Option[RawlsBillingAccountName],
+                                                 force: Boolean = false): Future[ProjectBillingInfo] = {
     val billingSvcCred = getBillingServiceAccountCredential
     implicit val service = GoogleInstrumentedService.Billing
     val googleProjectName = s"projects/${googleProjectId.value}"
@@ -698,13 +718,29 @@ class HttpGoogleServicesDAO(
     retryWithRecoverWhen500orGoogleError(() => {
       blocking {
         val projectBillingInfo = executeGoogleRequest(fetcher)
+
+        val currentBillingAccountFromGoogle = if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
+          None
+        else
+          Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
+
+        // Check actual Billing Account value from google against the value that Rawls thinks it should be before the update
+        if (!force && (oldBillingAccount != currentBillingAccountFromGoogle)) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.PreconditionFailed,
+            s"Could not update Billing Account on Google Project ID ${googleProjectId} to Billing Account ${newBillingAccount} because Billing Account in Rawls ${oldBillingAccount} did not equal current Billing Account in Google ${projectBillingInfo.getBillingAccountName}"))
+        }
+
         val shouldUpdate = newBillingAccount match {
+          // The new billing account name is different than the existing billing account OR billing is disable and we are
+          // trying to enable
           case Some(RawlsBillingAccountName(billingAccountName)) =>
             projectBillingInfo.getBillingAccountName != billingAccountName || projectBillingInfo.getBillingEnabled == false
+          // Billing is enabled and we are trying to disable
           case None =>
             projectBillingInfo.getBillingEnabled == true
         }
         if (shouldUpdate) {
+          logger.info(s"Updating Billing Account on Google Project ID '${googleProjectId}' from '${projectBillingInfo.getBillingAccountName}' to '${newBillingAccount}'")
           executeGoogleRequest(updater)
         } else {
           projectBillingInfo
