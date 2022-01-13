@@ -21,7 +21,7 @@
             END ~
         </sql>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="ehigham" id="add_WORKSPACE_BUCKET_TRANSFER_JOB_TIMESTAMPS">
+    <changeSet logicalFilePath="dummy" author="ehigham" id="add_WORKSPACE_BUCKET_TRANSFER_TIMESTAMPS">
         <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
             <column name="WORKSPACE_BUCKET_TRANSFER_JOB_ISSUED" type="DATETIME">
                 <constraints nullable="true"/>
