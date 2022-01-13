@@ -24,7 +24,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 
 class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
-  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(None)
+  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Either[String, Bucket]] = Future.successful(Left("No bucket in this mock"))
 }
 
 class MockGoogleServicesCriticalErrorDAO extends MockGoogleServicesDAO("test") {

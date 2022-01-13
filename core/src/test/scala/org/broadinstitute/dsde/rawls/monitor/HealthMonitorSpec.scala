@@ -261,7 +261,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     val dao = spy(mockGoogleServicesDAO)
     when {
       dao.getBucket(anyString, any[Option[GoogleProjectId]])(any[ExecutionContext])
-    } thenReturn Future.successful(None)
+    } thenReturn Future.successful(Left("No buckets in this mock"))
     dao
   }
 
