@@ -1,16 +1,15 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.testkit.typed.scaladsl.ActorTestKit
-import cats.data.{NonEmptyList, ReaderT}
+import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import cats.implicits.catsSyntaxOptionId
+import cats.implicits._
 import com.google.cloud.storage.{Acl, Storage}
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationStatus._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMonitor.MigrationDeps
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMonitor._
 import org.broadinstitute.dsde.rawls.monitor.migration.{WorkspaceMigration, WorkspaceMigrationMonitor}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
@@ -45,7 +44,7 @@ class WorkspaceMigrationMonitorSpec
   val spec = new WorkspaceServiceSpec()
 
 
-  def runMigrationTest(test: ReaderT[IO, MigrationDeps, Assertion]): Assertion =
+  def runMigrationTest(test: MigrateAction[Assertion]): Assertion = {
     spec.withTestDataServices { services =>
       test.run {
         WorkspaceMigrationMonitor.MigrationDeps(
@@ -55,8 +54,12 @@ class WorkspaceMigrationMonitorSpec
           mockStorageService,
           mockStorageTransferService
         )
-      }.unsafeRunSync
+      }
+        .value
+        .unsafeRunSync
+        .getOrElse(throw new AssertionError("The test exited prematurely."))
     }
+  }
 
 
   val mockStorageTransferService = new MockGoogleStorageTransferService[IO] {
@@ -80,7 +83,7 @@ class WorkspaceMigrationMonitorSpec
   }
 
 
-  def getAttempt(workspaceUuid: UUID): ReaderT[IO, MigrationDeps, WorkspaceMigration] =
+  def getAttempt(workspaceUuid: UUID): MigrateAction[WorkspaceMigration] =
     WorkspaceMigrationMonitor.getMigrations(workspaceUuid).map(_.last)
 
 
@@ -101,9 +104,11 @@ class WorkspaceMigrationMonitorSpec
       }
     }
 
+
   implicit val timestampOrdering = new Ordering[Timestamp] {
     override def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
   }
+
 
   "updated" should "automagically get bumped to the current timestamp when the record is updated" in
     runMigrationTest {
@@ -118,7 +123,7 @@ class WorkspaceMigrationMonitorSpec
           .map(_.last)
 
         // sleep needed due to Timestamp imprecision
-        _ <- ReaderT.liftK(IO.sleep(1.second))
+        _ <- MigrateAction.liftIO(IO.sleep(1.second))
 
         after <- WorkspaceMigrationMonitor.inTransaction { _ =>
           val migration = WorkspaceMigrationMonitor.workspaceMigrations
@@ -134,24 +139,40 @@ class WorkspaceMigrationMonitorSpec
     }
 
 
+  "startMigration" should "update the migration record to be started" in
+    runMigrationTest {
+      for {
+        _ <- inTransaction { _ =>
+          spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
+            schedule(spec.testData.v1Workspace)
+        }
+
+        _ <- startMigration
+
+        migration <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+      } yield migration.started shouldBe defined
+    }
+
+
   "claimAndConfigureGoogleProject" should "return a valid database operation" in
     runMigrationTest {
       for {
         _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
+            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            workspaceMigrations
+              .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+              .map(_.started)
+              .update(now.some)
         }
 
-        _ <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID).flatMap {
-          WorkspaceMigrationMonitor.claimAndConfigureNewGoogleProject(_, spec.testData.v1Workspace)
-        }
+        _ <- claimAndConfigureGoogleProject
 
-        attempt <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
-
+        migration <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
       } yield {
-        attempt.newGoogleProjectId shouldBe defined
-        attempt.newGoogleProjectNumber shouldBe defined
-        attempt.newGoogleProjectConfigured shouldBe defined
+        migration.newGoogleProjectId shouldBe defined
+        migration.newGoogleProjectNumber shouldBe defined
+        migration.newGoogleProjectConfigured shouldBe defined
       }
     }
 
@@ -159,47 +180,82 @@ class WorkspaceMigrationMonitorSpec
   // test is run manually until we figure out how to integration test without dockerising
   "createTempBucket" should "create a new bucket in the same region as the workspace bucket" ignore {
     val sourceProject = "general-dev-billing-account"
-    val sourceBucket = "az-leotest"
     val destProject = "terra-dev-7af423b8"
 
     val v1Workspace = spec.testData.v1Workspace.copy(
+      workspaceId = UUID.randomUUID.toString,
       namespace = sourceProject,
       googleProjectId = GoogleProjectId(sourceProject),
-      bucketName = sourceBucket
+      bucketName = "az-leotest"
     )
 
     val test = for {
       _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
         spec.workspaceQuery.createOrUpdate(v1Workspace) >>
-          WorkspaceMigrationMonitor.schedule(v1Workspace)
+          WorkspaceMigrationMonitor.schedule(v1Workspace) >>
+          workspaceMigrations
+            .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID)
+            .map(m => (m.newGoogleProjectConfigured, m.newGoogleProjectId))
+            .update((now.some, destProject.some))
       }
 
-      bucketName <- getAttempt(v1Workspace.workspaceIdAsUUID).flatMap { migration =>
-        WorkspaceMigrationMonitor.createTempBucket(migration, v1Workspace, GoogleProjectId(destProject))
+      _ <- createTempBucket
+
+      migration <- getAttempt(v1Workspace.workspaceIdAsUUID)
+
+      storageService <- MigrateAction.asks(_.storageService)
+      bucket <- MigrateAction.liftIO {
+        storageService.getBucket(GoogleProject(destProject), migration.tmpBucketName.get) <*
+          storageService.deleteBucket(GoogleProject(destProject), migration.tmpBucketName.get, isRecursive = true).compile.drain
       }
-
-      bucket <- ReaderT { env: MigrationDeps =>
-        env.storageService.getBucket(GoogleProject(destProject), bucketName) <*
-          env.storageService.deleteBucket(GoogleProject(destProject), bucketName, isRecursive = true).compile.drain
-      }
-
-      attempt <- getAttempt(v1Workspace.workspaceIdAsUUID)
-
     } yield {
       bucket shouldBe defined
-      attempt.tmpBucketName shouldBe bucketName.some
-      attempt.tmpBucketCreated shouldBe defined
+      migration.tmpBucketCreated shouldBe defined
     }
 
     val serviceProject = GoogleProject(sourceProject)
     val pathToCredentialJson = "config/rawls-account.json"
 
     runMigrationTest(ReaderT { env =>
-      GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-        googleStorageService => test.run(env.copy(storageService = googleStorageService))
+      OptionT {
+        GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
+          googleStorageService => test.run(env.copy(storageService = googleStorageService)).value
+        }
       }
     })
   }
+
+  "issueWorkspaceBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
+    runMigrationTest {
+      for {
+        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+          spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
+            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            workspaceMigrations
+              .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+              .map(m => (m.tmpBucketCreated, m.newGoogleProjectId, m.tmpBucket))
+              .update((now.some, "new-google-project".some, "tmp-bucket-name".some))
+        }
+
+        job <- issueWorkspaceBucketTransferJob
+
+        transferJob <- WorkspaceMigrationMonitor.inTransaction { _ =>
+          WorkspaceMigrationMonitor.storageTransferJobs
+            .filter(_.jobName === job.getName)
+            .take(1)
+            .result
+        }
+          .map(_.head)
+
+        migration <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+      } yield {
+        transferJob.jobName.value shouldBe job.getName
+        transferJob.migrationId shouldBe migration.id
+        transferJob.originBucket.value shouldBe spec.testData.v1Workspace.bucketName
+        transferJob.destBucket.value shouldBe "tmp-bucket-name"
+        migration.workspaceBucketTransferJobIssued shouldBe defined
+      }
+    }
 
 
   "deleteWorkspaceBucket" should "delete the workspace bucket and record when it was deleted" in
@@ -207,178 +263,120 @@ class WorkspaceMigrationMonitorSpec
       for {
         _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
+            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            workspaceMigrations
+              .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+              .map(_.workspaceBucketTransferred)
+              .update(now.some)
         }
 
-        _ <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID).flatMap {
-          WorkspaceMigrationMonitor.deleteWorkspaceBucket(_, spec.testData.v1Workspace)
-        }
+        _ <- deleteWorkspaceBucket
 
         migration <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+
       } yield migration.workspaceBucketDeleted shouldBe defined
     }
 
+
+  // test is run manually until we figure out how to integration test without dockerising
+  "createFinalBucket" should "create a new bucket in the same region as the tmp workspace bucket" ignore {
+    val destProject = "general-dev-billing-account"
+    val dstBucketName = "migration-test-" + UUID.randomUUID.toString.replace("-", "")
+
+    val v1Workspace = spec.testData.v1Workspace.copy(
+      namespace = "test-namespace",
+      workspaceId = UUID.randomUUID.toString,
+      bucketName = dstBucketName
+    )
+
+    val test = for {
+      _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+        spec.workspaceQuery.createOrUpdate(v1Workspace) >>
+          WorkspaceMigrationMonitor.schedule(v1Workspace) >>
+          workspaceMigrations
+            .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID)
+            .map(m => (m.workspaceBucketDeleted, m.newGoogleProjectId, m.tmpBucket))
+            .update((now.some, destProject.some, "az-leotest".some))
+      }
+
+      _ <- createFinalWorkspaceBucket
+
+      migration <- getAttempt(v1Workspace.workspaceIdAsUUID)
+
+      storageService <- MigrateAction.asks(_.storageService)
+      bucket <- MigrateAction.liftIO {
+        storageService.getBucket(GoogleProject(destProject), GcsBucketName(dstBucketName)) <*
+          storageService.deleteBucket(GoogleProject(destProject), GcsBucketName(dstBucketName), isRecursive = true).compile.drain
+      }
+
+    } yield {
+      bucket shouldBe defined
+      migration.finalBucketCreated shouldBe defined
+    }
+
+    val serviceProject = GoogleProject(destProject)
+    val pathToCredentialJson = "config/rawls-account.json"
+
+    runMigrationTest(ReaderT { env =>
+      OptionT {
+        GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
+          googleStorageService => test.run(env.copy(storageService = googleStorageService)).value
+        }
+      }
+    })
+  }
+
+  "issueTmpBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
+    runMigrationTest {
+      for {
+        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+          spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
+            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            workspaceMigrations
+              .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+              .map(m => (m.finalBucketCreated, m.newGoogleProjectId, m.tmpBucket))
+              .update((now.some, "new-google-project".some,"tmp-bucket-name".some))
+        }
+
+        job <- issueTmpBucketTransferJob
+
+        transferJob <- WorkspaceMigrationMonitor.inTransaction { _ =>
+          WorkspaceMigrationMonitor.storageTransferJobs
+            .filter(_.jobName === job.getName)
+            .take(1)
+            .result
+        }
+          .map(_.head)
+
+        migration <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+      } yield {
+        transferJob.jobName.value shouldBe job.getName
+        transferJob.migrationId shouldBe migration.id
+        transferJob.originBucket.value shouldBe "tmp-bucket-name"
+        transferJob.destBucket.value shouldBe spec.testData.v1Workspace.bucketName
+        migration.tmpBucketTransferJobIssued shouldBe defined
+      }
+    }
 
   "deleteTemporaryBucket" should "delete the temporary bucket and record when it was deleted" in
     runMigrationTest {
       for {
         _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
+            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            workspaceMigrations
+              .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+              .map(m => (m.tmpBucketTransferred, m.newGoogleProjectId, m.tmpBucket))
+              .update((now.some, "google-project-id".some, "tmp-bucket-name".some))
         }
 
-        _ <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID).flatMap { attempt =>
-          WorkspaceMigrationMonitor.deleteTemporaryBucket(
-            attempt.copy(
-              newGoogleProjectId = GoogleProjectId("new-google-project-id").some,
-              tmpBucketName = GcsBucketName("tmp-bucket-name").some
-            )
-          )
-        }
+        _ <- deleteTemporaryBucket
 
         migration <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
       } yield migration.tmpBucketDeleted shouldBe defined
     }
 
-
-  "startBucketStorageTransferJob" should "create and start a storage transfer job between the specified buckets" in
-    runMigrationTest {
-      for {
-        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
-          spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
-        }
-
-        job <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID).flatMap { attempt =>
-          WorkspaceMigrationMonitor.startBucketStorageTransferJob(
-            attempt,
-            GcsBucketName(spec.testData.v1Workspace.bucketName),
-            GcsBucketName("tmp-bucket-name")
-          )
-        }
-
-        transferJob <- WorkspaceMigrationMonitor.inTransaction { _ =>
-          WorkspaceMigrationMonitor.storageTransferJobs
-            .filter(_.jobName === job.getName)
-            .result
-        }
-          .map(_.head)
-
-        attempt <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
-
-      } yield {
-        transferJob.jobName.value shouldBe job.getName
-        transferJob.migrationId shouldBe attempt.id
-        transferJob.originBucket.value shouldBe spec.testData.v1Workspace.bucketName
-        transferJob.destBucket shouldBe GcsBucketName("tmp-bucket-name")
-      }
-    }
-
-  // test is run manually until we figure out how to integration test without dockerising
-  "createFinalBucket" should "create a new bucket in the same region as the tmp workspace bucket" ignore {
-    val sourceProject = "general-dev-billing-account"
-    val sourceBucket = "az-leotest"
-    val destProject = "terra-dev-7af423b8"
-    val destBucket = "v1-migration-test-" + UUID.randomUUID.toString.replace("-", "")
-
-    val v1Workspace = spec.testData.v1Workspace.copy(
-      namespace = sourceProject,
-      googleProjectId = GoogleProjectId(sourceProject),
-      bucketName = destBucket
-    )
-
-    val test = for {
-      _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
-        spec.workspaceQuery.createOrUpdate(v1Workspace) >>
-          WorkspaceMigrationMonitor.schedule(v1Workspace)
-      }
-
-      bucketName <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID).flatMap { attempt =>
-        WorkspaceMigrationMonitor.createFinalBucket(
-          attempt.copy(
-            newGoogleProjectId = GoogleProjectId(destProject).some,
-            tmpBucketName = GcsBucketName(sourceBucket).some
-          ),
-          v1Workspace
-        )
-      }
-
-      bucket <- ReaderT { env: MigrationDeps =>
-        env.storageService.getBucket(GoogleProject(destProject), bucketName) <*
-          env.storageService.deleteBucket(GoogleProject(destProject), bucketName, isRecursive = true).compile.drain
-      }
-
-      attempt <- getAttempt(v1Workspace.workspaceIdAsUUID)
-    } yield {
-      bucket shouldBe defined
-      attempt.finalBucketCreated shouldBe defined
-    }
-
-    val serviceProject = GoogleProject(sourceProject)
-    val pathToCredentialJson = "config/rawls-account.json"
-
-    runMigrationTest(ReaderT { env =>
-      GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-        googleStorageService => test.run(env.copy(storageService = googleStorageService))
-      }
-    })
-  }
-
-
-  def runStep(configureBefore: WorkspaceMigration => WorkspaceMigration,
-              assertAfter: WorkspaceMigration => Assertion) =
-    runMigrationTest {
-      for {
-        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
-          spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
-        }
-
-        _ <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
-          .map(configureBefore)
-          .flatMap(WorkspaceMigrationMonitor.step)
-
-        migration <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
-      } yield assertAfter(migration)
-    }
-
-
-  "step" should "advance the migration from Created -> Started" in
-    runStep(identity, _.getStatus.isInstanceOf[Started] shouldBe true)
-
-
   def now: Timestamp = Timestamp.valueOf(LocalDateTime.now())
-
-  it should "advance the migration from Started -> GoogleProjectConfigured" in
-    runStep(
-      _.copy(started = now.some),
-      _.getStatus.isInstanceOf[GoogleProjectConfigured] shouldBe true
-    )
-
-
-  // cant mock out creating a Bucket - thanks google.
-  it should "advance the migration from GoogleProjectConfigured -> TmpBucketCreated" ignore
-    runStep(
-      _.copy(
-        started = now.some,
-        newGoogleProjectConfigured = now.some,
-        newGoogleProjectId = GoogleProjectId(UUID.randomUUID.toString).some
-      ),
-      _.getStatus.isInstanceOf[TmpBucketCreated] shouldBe true
-    )
-
-
-  it should "advance the migration from TmpBucketCreated -> TmpBucketCreated" ignore
-    runStep(
-      _.copy(
-        started = now.some,
-        newGoogleProjectConfigured = now.some,
-        newGoogleProjectId = GoogleProjectId(UUID.randomUUID.toString).some,
-        tmpBucketCreated = now.some,
-        tmpBucketName = GcsBucketName("tmp-bucket").some
-      ),
-      m => m.getStatus.isInstanceOf[TmpBucketCreated] shouldBe true
-    )
 
 }
 
