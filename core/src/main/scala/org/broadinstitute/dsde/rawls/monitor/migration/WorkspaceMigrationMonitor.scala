@@ -130,16 +130,17 @@ object WorkspaceMigrationMonitor {
       }
 
       workspace <- getWorkspace(migration.workspaceId)
-
       currentBillingAccountOnGoogleProject <- MigrateAction.liftIO(IO {
         workspace.currentBillingAccountOnGoogleProject.getOrElse(
           throw new RawlsException(s"""No billing account for workspace '${workspace.workspaceId}'""")
         )
       })
 
-      workspaceService <- MigrateAction.asks(_.workspaceService)
-      billingProject <- MigrateAction.asks(_.billingProject)
-      result <- MigrateAction.liftIO {
+      (workspaceService, billingProject) <- MigrateAction.asks { env =>
+        (env.workspaceService, env.billingProject)
+      }
+
+      (googleProjectId, googleProjectNumber) <- MigrateAction.liftIO {
         workspaceService.setupGoogleProject(
           billingProject,
           currentBillingAccountOnGoogleProject,
@@ -148,7 +149,6 @@ object WorkspaceMigrationMonitor {
         ).io
       }
 
-      (googleProjectId, googleProjectNumber) = result
       configured <- timestampNow
       _ <- inTransaction { _ =>
         workspaceMigrations
@@ -249,12 +249,11 @@ object WorkspaceMigrationMonitor {
         m.workspaceBucketDeleted.isDefined && m.finalBucketCreated.isEmpty
       }
 
-      tmpBucketName <- MigrateAction.liftIO(IO {
-        migration.tmpBucketName.getOrElse(throw noTmpBucketError(migration))
-      })
-
-      googleProjectId <- MigrateAction.liftIO(IO {
-        migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration))
+      (googleProjectId, tmpBucketName) <- MigrateAction.liftIO(IO {
+        (
+          migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration)),
+          migration.tmpBucketName.getOrElse(throw noTmpBucketError(migration))
+        )
       })
 
       workspace <- getWorkspace(migration.workspaceId)
@@ -297,12 +296,11 @@ object WorkspaceMigrationMonitor {
         m.tmpBucketTransferred.isDefined && m.tmpBucketDeleted.isEmpty
       }
 
-      googleProjectId <- MigrateAction.liftIO(IO {
-        migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration))
-      })
-
-      tmpBucketName <- MigrateAction.liftIO(IO {
-        migration.tmpBucketName.getOrElse(throw noTmpBucketError(migration))
+      (googleProjectId, tmpBucketName) <- MigrateAction.liftIO(IO {
+        (
+          migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration)),
+          migration.tmpBucketName.getOrElse(throw noTmpBucketError(migration))
+        )
       })
 
       storageService <- MigrateAction.asks(_.storageService)
@@ -349,8 +347,9 @@ object WorkspaceMigrationMonitor {
                                      destBucketName: GcsBucketName)
   : MigrateAction[Unit] =
     for {
-      storageService <- MigrateAction.asks(_.storageService)
-      billingProject <- MigrateAction.asks(_.billingProject)
+      (storageService, billingProject) <- MigrateAction.asks { env =>
+        (env.storageService, env.billingProject)
+      }
       _ <- MigrateAction.liftIO {
         for {
           sourceBucketOpt <- storageService.getBucket(
@@ -383,8 +382,9 @@ object WorkspaceMigrationMonitor {
                                    destBucket: GcsBucketName)
   : MigrateAction[TransferJob] =
     for {
-      storageTransferService <- MigrateAction.asks(_.storageTransferService)
-      billingProject <- MigrateAction.asks(_.billingProject)
+      (storageTransferService, billingProject) <- MigrateAction.asks { env =>
+        (env.storageTransferService, env.billingProject)
+      }
       transferJob <- MigrateAction.liftIO {
         for {
           jobName <- randomSuffix("transferJobs/terra-workspace-migration-")

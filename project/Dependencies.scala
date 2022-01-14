@@ -122,6 +122,7 @@ object Dependencies {
   val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.28.3"
 
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
+  val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
   val openCensusDependencies = Seq(
     opencensusScalaCode,
@@ -242,6 +243,7 @@ object Dependencies {
     dataRepoJersey,
     antlrParser,
     resourceBufferService,
-    kindProjector
+    kindProjector,
+    betterMonadicFor
   )
 }
