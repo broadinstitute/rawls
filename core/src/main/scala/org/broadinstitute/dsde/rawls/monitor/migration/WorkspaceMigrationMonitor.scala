@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-import cats.Traverse
 import cats.data.{OptionT, ReaderT}
 import cats.effect.IO
 import cats.implicits._
