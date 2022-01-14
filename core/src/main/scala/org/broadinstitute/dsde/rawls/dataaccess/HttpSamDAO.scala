@@ -22,9 +22,10 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.Work
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 import spray.json.DefaultJsonProtocol._
 import spray.json.{DefaultJsonProtocol, JsValue, RootJsonReader}
-
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+
+import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -42,13 +43,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   private def asRawlsSAPipeline[A](implicit um: Unmarshaller[ResponseEntity, A]) = executeRequestWithToken[A](OAuth2BearerToken(getServiceAccountAccessToken)) _
 
-  protected def when401or500(throwable: Throwable): Boolean = {
-    throwable match {
-      case t: RawlsExceptionWithErrorReport =>
-        t.errorReport.statusCode.exists(status => (status.intValue/100 == 5) || status.intValue == 401)
-      case _ => false
-    }
-  }
+  protected def when401or500: Predicate[Throwable] = anyOf(when5xx, DsdeHttpDAO.whenUnauthorized)
 
   private def doSuccessOrFailureRequest(request: HttpRequest, userInfo: UserInfo): RetryableFuture[Unit] = {
     retry(when401or500) { () =>
@@ -248,7 +243,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   override def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId, userEmail: RawlsUserEmail): Future[String] = {
     val url = samServiceURL + s"/api/google/v1/petServiceAccount/${googleProject.value}/${URLEncoder.encode(userEmail.value, UTF_8.name)}"
-    retry(when401or500) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
+    retryUntilSuccessOrTimeout(when401or500)(interval = 5.seconds, timeout = 55.seconds) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
   }
 
   override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, userInfo: UserInfo): Future[Unit] = {
