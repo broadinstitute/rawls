@@ -74,14 +74,15 @@ object WorkspaceMigrationMonitor {
   type MigrateAction[T] = ReaderT[OptionT[IO, *], MigrationDeps, T]
 
   object MigrateAction {
+    // lookup a value in the environment
     final def asks[T](f: MigrationDeps => T): MigrateAction[T] =
       ReaderT.ask[OptionT[IO, *], MigrationDeps].map(f)
 
-
+    // lift an IO action into the context of a MigrateAction
     final def liftIO[A](ioa: IO[A]): MigrateAction[A] =
       ReaderT.liftF(OptionT.liftF(ioa))
 
-
+    // empty action
     final def unit: MigrateAction[Unit] =
       ReaderT.pure()
   }
@@ -95,7 +96,8 @@ object WorkspaceMigrationMonitor {
         .result
     }
 
-
+  // Read workspace migrations in various states, attempt to advance their state forward by one
+  // step and write the outcome of each step to the database.
   final def migrate: MigrateAction[Unit] =
     startMigration >>
       claimAndConfigureGoogleProject >>
