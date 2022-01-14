@@ -114,6 +114,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def indexToOpenSearch(workspaceName: WorkspaceName, entityType: String): Future[String] = {
+    val responseString = StringBuilder.newBuilder
+
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
@@ -121,12 +123,28 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
           val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, Option(DataReferenceName("opensearch")), None)
           new OpenSearchEntityProviderBuilder().build(entityRequestArguments) match {
             case Success(searchprovider:OpenSearchEntityProvider) =>
+              // reate per-workspace index, if it does not exist
               searchprovider.createWorkspaceIndex(workspaceContext)
-              // TODO: create per-workspace index, if it does not exist
-              // TODO: loop through entities, insert into OpenSearch
-              ents.map { ent =>
+
+              val listents = ents.toList
+
+              // loop through entities, insert into OpenSearch
+              logger.info(s"attempting to index ${listents.size} entities ... ")
+              responseString.appendAll(s"attempting to index ${listents.size} entities ... \n")
+
+              val indexStatuses = listents.map { ent =>
                 searchprovider.indexEntity(workspaceContext, ent)
-              }.mkString(", ")
+              }
+
+              val statusesByCount = indexStatuses.groupBy(identity).mapValues(_.size)
+              statusesByCount foreach {
+                case (status, count) =>
+                  logger.info(s"$status: $count")
+                  responseString.appendAll(s"$status: $count\n")
+              }
+
+              responseString.toString()
+
             case Failure(ex) =>
               ex.toString
           }

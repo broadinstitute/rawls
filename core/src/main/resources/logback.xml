@@ -45,52 +45,52 @@
         <appender-ref ref="Sentry" />
     </logger>
 
-    <logger name="org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor" level="debug" additivity="false">
+    <logger name="org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor" level="warn" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
     </logger>
 
-    <logger name="org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor" level="debug" additivity="false">
+    <logger name="org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor" level="warn" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
     </logger>
 
-    <logger name="org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor" level="debug" additivity="false">
+    <logger name="org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor" level="warn" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
     </logger>
 
-    <logger name="org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO" level="debug" additivity="false">
-        <appender-ref ref="file"/>
-        <appender-ref ref="console"/>
-        <appender-ref ref="SYSLOG"/>
-        <appender-ref ref="Sentry" />
-    </logger>
-
-    <logger name="org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO" level="debug" additivity="false">
+    <logger name="org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO" level="warn" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
         <appender-ref ref="Sentry" />
     </logger>
 
-    <logger name="org.broadinstitute.dsde.rawls.dataaccess.SubmissionCostService" level="debug" additivity="false">
+    <logger name="org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO" level="warn" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
         <appender-ref ref="Sentry" />
     </logger>
 
-    <logger name="org.broadinstitute.dsde.rawls.util.HttpClientUtils" level="debug" additivity="false">
+    <logger name="org.broadinstitute.dsde.rawls.dataaccess.SubmissionCostService" level="warn" additivity="false">
+        <appender-ref ref="file"/>
+        <appender-ref ref="console"/>
+        <appender-ref ref="SYSLOG"/>
+        <appender-ref ref="Sentry" />
+    </logger>
+
+    <logger name="org.broadinstitute.dsde.rawls.util.HttpClientUtils" level="warn" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
     </logger>
 
-    <logger name="akka" level="info" additivity="false">
+    <logger name="akka" level="warn" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
