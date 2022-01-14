@@ -162,9 +162,8 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       errorMessages = {
         case (GoogleBuckets, Some(messages)) =>
           messages.size should be (2)
-          messages.foreach(_ should startWith ("Could not find"))
-          messages(0) should endWith ("bucket1")
-          messages(1) should endWith ("bucket2")
+          messages(0) should be("Could not find bucket1. No buckets in this mock")
+          messages(1) should be("Could not find bucket2. No buckets in this mock")
       })
   }
 

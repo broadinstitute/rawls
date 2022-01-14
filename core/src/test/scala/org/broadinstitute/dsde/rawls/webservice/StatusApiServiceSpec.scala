@@ -127,7 +127,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
               status
             }
             assertResult(StatusCheckResponse(false, AllSubsystems.map {
-              case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not find bucket: my-favorite-bucket")))
+              case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not find bucket: my-favorite-bucket. No bucket in this mock")))
               case other => other -> HealthMonitor.OkStatus
             }.toMap)) {
               responseAs[StatusCheckResponse]
