@@ -162,8 +162,8 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       errorMessages = {
         case (GoogleBuckets, Some(messages)) =>
           messages.size should be (2)
-          messages(0) should be("Could not find bucket1. No buckets in this mock")
-          messages(1) should be("Could not find bucket2. No buckets in this mock")
+          messages(0) should be("Could not find bucket: bucket1. No buckets in this mock")
+          messages(1) should be("Could not find bucket: bucket2. No buckets in this mock")
       })
   }
 
@@ -203,31 +203,34 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
                          failures: Set[Subsystem] = Set.empty,
                          unknowns: Set[Subsystem] = Set.empty,
                          errorMessages: PartialFunction[(Subsystem, Option[List[String]]), Unit] = PartialFunction.empty): Unit = {
+    var actual: StatusCheckResponse = null
+
     eventually {
       whenReady(actor ? GetCurrentStatus) { resp =>
         resp shouldBe a[StatusCheckResponse]
-        val actual = resp.asInstanceOf[StatusCheckResponse]
+        actual = resp.asInstanceOf[StatusCheckResponse]
         actual.ok should equal(overall)
         actual.systems.filter(_._2.ok).keySet should equal(successes)
         actual.systems.filterNot(_._2.ok).filterNot(_._2 == UnknownStatus).keySet should equal(failures)
         actual.systems.filterNot(_._2.ok).filter(_._2 == UnknownStatus).keySet should equal(unknowns)
-        actual.systems.foreach { case (sub, SubsystemStatus(_, messages)) =>
-          val fallback: PartialFunction[(Subsystem, Option[List[String]]), Unit] = {
-            case (s, None) =>
-              successes should contain(s)
-            case (s, Some(messages)) =>
-              successes should not contain(s)
-              messages should not be empty
-              messages.size should be (1)
-              if (unknowns.contains(s)) {
-                messages should equal (UnknownStatus.messages.get)
-              } else {
-                messages(0) should not be empty
-              }
-          }
-          errorMessages.orElse(fallback).apply((sub, messages))
-        }
       }
+    }
+
+    actual.systems.foreach { case (sub, SubsystemStatus(_, messages)) =>
+      val fallback: PartialFunction[(Subsystem, Option[List[String]]), Unit] = {
+        case (s, None) =>
+          successes should contain(s)
+        case (s, Some(messages)) =>
+          successes should not contain(s)
+          messages should not be empty
+          messages.size should be (1)
+          if (unknowns.contains(s)) {
+            messages should equal (UnknownStatus.messages.get)
+          } else {
+            messages(0) should not be empty
+          }
+      }
+      errorMessages.orElse(fallback).apply((sub, messages))
     }
   }
 
