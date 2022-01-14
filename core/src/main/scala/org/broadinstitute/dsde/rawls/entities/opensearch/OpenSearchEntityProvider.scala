@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.opensearch
 
+import akka.http.scaladsl.model.Uri
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -23,11 +24,12 @@ import org.opensearch.common.document.DocumentField
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import org.opensearch.common.xcontent.XContentType
-import org.opensearch.index.query.QueryBuilder
+import org.opensearch.index.query.{BoolQueryBuilder, MatchQueryBuilder, QueryBuilder, QueryStringQueryBuilder, TermsQueryBuilder}
 import org.opensearch.search.SearchHit
 import org.opensearch.search.aggregations.bucket.terms.ParsedStringTerms
 import org.opensearch.search.aggregations.{Aggregation, AggregationBuilder, AggregationBuilders}
 import org.opensearch.search.builder.SearchSourceBuilder
+import org.opensearch.search.sort.SortOrder
 
 import java.util
 import scala.collection.JavaConverters._
@@ -96,13 +98,10 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
     val props: Map[String, AnyRef] = wigglyMapLookup(mapping, "properties")
 
-    logger.info(s"***** props: $props")
-
     val typesAndMetadata = typesAndCounts.sortBy(_._1).map {
       case (entityType, count) =>
         // find the attribute names associated with this entityType
         val thisTypeMappings: Map[String, AnyRef] = wigglyMapLookup(props, entityType)
-        logger.info(s"***** thisTypeMappings for $entityType: $thisTypeMappings")
         val thisTypeAttributes = wigglyMapLookup(thisTypeMappings, "properties").keySet.toSeq.sorted
 
         entityType -> EntityTypeMetadata(count.toInt, s"${entityType}_id", thisTypeAttributes)
@@ -119,8 +118,6 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     val getRequest = new GetRequest(indexname, s"${entityType}/${entityName}")
     val getResponse = client.get(getRequest, RequestOptions.DEFAULT)
 
-    logger.info(s"${getResponse.getSourceAsString}")
-
     if (getResponse.isExists) {
       Try(entity(getResponse.getId, getResponse.getSource.asScala.toMap)) match {
         case Success(e) => Future(e)
@@ -133,6 +130,71 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     }
   }
 
+  override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
+    val indexname = indexName(requestArguments.workspace)
+
+    val req = new SearchRequest(indexname)
+
+    val typeQuery = new TermsQueryBuilder(TYPE_FIELD, entityType)
+
+    // branch depending on if a term is specified
+    val filterTermsQueryOption = incomingQuery.filterTerms.map { terms =>
+      val params = Uri.Query(("query", terms))
+      new QueryStringQueryBuilder(params.toString())
+    }
+
+    val finalQuery = filterTermsQueryOption match {
+      case None => typeQuery
+      case Some(filterTermsQuery) =>
+        val bq = new BoolQueryBuilder()
+        bq.must(typeQuery)
+        bq.must(filterTermsQuery)
+        bq
+    }
+
+    val searchSourceBuilder = new SearchSourceBuilder()
+    searchSourceBuilder.size(incomingQuery.pageSize)
+    searchSourceBuilder.from((incomingQuery.page-1)*incomingQuery.pageSize)
+    searchSourceBuilder.query(finalQuery)
+    val sortOrder = if (incomingQuery.sortDirection == SortDirections.Descending)
+      SortOrder.DESC
+    else {
+      SortOrder.ASC
+    }
+    val sortField = fieldName(entityType, AttributeName.fromDelimitedName(incomingQuery.sortField)) + ".keyword"
+    searchSourceBuilder.sort(sortField, sortOrder)
+
+    req.source(searchSourceBuilder)
+
+    val resp = client.search(req, RequestOptions.DEFAULT)
+
+    val filteredCount = resp.getHits.getTotalHits.value
+    val filteredPageCount = Math.max(Math.ceil(filteredCount.toFloat / incomingQuery.pageSize), 1)
+
+    // if we have terms, we need to make a separate query just to get the unfiltered count
+    val unfilteredCount = if (incomingQuery.filterTerms.isDefined) {
+      val searchSourceBuilder = new SearchSourceBuilder()
+      searchSourceBuilder.size(0)
+      searchSourceBuilder.query(typeQuery)
+      req.source(searchSourceBuilder)
+      val resp = client.search(req, RequestOptions.DEFAULT)
+      resp.getHits.getTotalHits.value
+    } else {
+      filteredCount
+    }
+
+    val resultMetadata = EntityQueryResultMetadata(unfilteredCount.toInt, filteredCount.toInt, filteredPageCount.toInt)
+
+    val searchHits = resp.getHits.asScala
+
+    val results = searchHits.map { hit =>
+      entity(hit)
+    }
+
+    Future(EntityQueryResponse(incomingQuery, resultMetadata, results.toSeq))
+
+  }
+
   // ================================================================================================
   // API methods we haven't implemented
 
@@ -141,9 +203,6 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities not supported by this provider.")
-
-  override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] =
-    throw new UnsupportedEntityOperationException("queryEntities not supported by this provider.")
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] =
     throw new UnsupportedEntityOperationException("evaluateExpressions not supported by this provider.")
@@ -243,12 +302,18 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
   /** generate a Terra entity from an OpenSearch result */
   private def entity(hit: SearchHit): Entity = {
-    val fields: Map[String, DocumentField] = hit.getFields.asScala.toMap
+
+    val fields = hit.getSourceAsMap.asScala.toMap
+
     entity(hit.getId, fields)
   }
 
   private def entity(id: String, fields: Map[String, AnyRef]): Entity = {
     val name = entityName(id)
+
+    if (!fields.contains(TYPE_FIELD)) {
+      logger.error(s"[document $id]: $TYPE_FIELD not found in ${fields.keys.toList.sorted}")
+    }
 
     val entityType = fields(TYPE_FIELD).toString
 
