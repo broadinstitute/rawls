@@ -386,22 +386,34 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   //
   // and look for a section called "LAST DETECTED DEADLOCK".
   it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices { services =>
-    withWorkflowSubmissionActor(services) { _ =>
-      val wsName = largeSampleTestData.wsName
-      val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
-      val numIterations = 20
+    withStatsD {
+      withWorkflowSubmissionActor(services) { _ =>
+        val wsName = largeSampleTestData.wsName
+        val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+        val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+        val numIterations = 20
 
-      (1 to numIterations).map { i =>
-        logger.info(s"deadlock test: iteration $i/$numIterations")
-        val submission = createAndMonitorSubmission(wsName, methodConf, largeSampleTestData.sampleSet, Option("this.hasSamples"), services)
+        (1 to numIterations).map { i =>
+          logger.info(s"deadlock test: iteration $i/$numIterations")
+          val submission = createAndMonitorSubmission(wsName, methodConf, largeSampleTestData.sampleSet, Option("this.hasSamples"), services)
 
-        assertResult(numSamples) {
-          submission.workflows.size
+          assertResult(numSamples) {
+            submission.workflows.size
+          }
+
+          abortSubmission(services, wsName, submission.submissionId, false)
         }
-
-        abortSubmission(services, wsName, submission.submissionId, false)
       }
+    } { capturedMetrics =>
+      var counter: Int = 0
+      for (metric <- capturedMetrics) {
+        metric match {
+          case ("test.transient.workspace.submission_to_cromwell.latency.mean_rate", _) =>
+            counter += 1
+          case _ => ()
+        }
+      }
+      counter should not be 0
     }
   }
 

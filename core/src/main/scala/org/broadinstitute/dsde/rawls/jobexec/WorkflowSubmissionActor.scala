@@ -20,6 +20,7 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -411,6 +412,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       // call to submitWorkflows returns a tuple:
       val executionServiceKey = workflowSubmitResult._1
       val executionServiceResults = workflowSubmitResult._2
+
+      // Emit metric for time until Cromwell has processed workflow.
+      val elapsedTime = System.currentTimeMillis() - submissionRec.submissionDate.getTime
+      workflowToCromwellLatency.update(elapsedTime, TimeUnit.MILLISECONDS)
 
       (executionServiceKey, workflowRecs.zip(executionServiceResults))
     }
