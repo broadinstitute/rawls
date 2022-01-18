@@ -62,7 +62,6 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   protected def workflowToCromwellLatency: Timer =
     ExpandedMetricBuilder
       .expand(WorkspaceMetricKey, "submission_to_cromwell")
-      .transient()
       .asTimer("latency")
 }
 
