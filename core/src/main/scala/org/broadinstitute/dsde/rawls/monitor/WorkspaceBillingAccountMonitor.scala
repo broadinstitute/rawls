@@ -38,13 +38,13 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       }
       _ = logger.info(s"Attempting to update workspaces: ${workspacesToUpdate.toList}")
       _ <- workspacesToUpdate.toList.traverse {
-        case (googleProjectId, newBillingAccount) =>
-          IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount))).attempt.map {
+        case (googleProjectId, newBillingAccount, oldBillingAccount) =>
+          IO.fromFuture(IO(updateGoogleAndDatabase(googleProjectId, newBillingAccount, oldBillingAccount))).attempt.map {
             case Left(e) => {
               // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
               // want to continue traversing the list to update the rest of the google project billing accounts even
               // if one of the update operations fails.
-              logger.warn(s"Failed to update billing account on $googleProjectId to $newBillingAccount", e)
+              logger.warn(s"Failed to update billing account from ${oldBillingAccount}to ${newBillingAccount} on project $googleProjectId", e)
               ()
             }
             case Right(res) => res
@@ -53,9 +53,11 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
     } yield()
   }
 
-  private def updateGoogleAndDatabase(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[Int] = {
+  private def updateGoogleAndDatabase(googleProjectId: GoogleProjectId,
+                                      newBillingAccount: Option[RawlsBillingAccountName],
+                                      oldBillingAccount: Option[RawlsBillingAccountName]): Future[Int] = {
     for {
-      _ <- gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, newBillingAccount).recoverWith {
+      _ <- gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, newBillingAccount, oldBillingAccount).recoverWith {
         case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
           dataSource.inTransaction( { dataAccess =>
             dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(newBillingAccount.get, isInvalid = true)
@@ -67,12 +69,12 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
           dataSource.inTransaction { dataAccess =>
             dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, e.getMessage)
           }.map { _ =>
-            logger.error(s"Failure to set the billing account on ${googleProjectId} to ${newBillingAccount.get}", e)
+            logger.error(s"Failure while trying to update Billing Account from ${oldBillingAccount} to ${newBillingAccount} on Google Project ${googleProjectId}", e)
             throw e
           }
       }
       dbResult <- dataSource.inTransaction( { dataAccess =>
-        logger.info(s"Updating billing account on ${googleProjectId} to ${newBillingAccount}")
+        logger.info(s"Updating Billing Account from ${oldBillingAccount} to ${newBillingAccount} on all Workspaces in Google Project ${googleProjectId}")
         dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
       })
     } yield dbResult

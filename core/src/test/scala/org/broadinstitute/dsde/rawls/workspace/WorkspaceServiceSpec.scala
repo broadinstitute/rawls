@@ -1310,14 +1310,18 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
     // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
-    // in the Billing Project
-    val billingAccountNameCaptor = captor[RawlsBillingAccountName]
-    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture))
-    billingAccountNameCaptor.getValue shouldEqual Option(billingProject.billingAccount.get)
+    // in the Billing Project.  Additionally, only when creating a new Workspace, we can `force` the update (and ignore
+    // the "oldBillingAccount" value
+    verify(services.gcsDAO).updateGoogleProjectBillingAccount(
+      any[GoogleProjectId],
+      ArgumentMatchers.eq(billingProject.billingAccount),
+      any[Option[RawlsBillingAccountName]],
+      ArgumentMatchers.eq(true)
+    )
   }
 
   it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct")), None, true))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
     val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
@@ -1553,34 +1557,38 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   }
 
   it should "set the Billing Account on the Workspace's Google Project to match the Billing Project's Billing Account" in withTestDataServices { services =>
-    val billingProject = testData.testProject1
-    val workspaceName = WorkspaceName(billingProject.projectName.value, "cool_workspace")
-    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
+    val destBillingProject = testData.testProject1
+    val destWorkspaceName = WorkspaceName(destBillingProject.projectName.value, "cool_workspace")
+    val workspaceRequest = WorkspaceRequest(destWorkspaceName.namespace, destWorkspaceName.name, Map.empty)
 
     val baseWorkspace = testData.workspace
     Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
 
     // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
-    // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
-    // in the Billing Project
-    val billingAccountNameCaptor = captor[RawlsBillingAccountName]
-    verify(services.gcsDAO).updateGoogleProjectBillingAccount(any[GoogleProjectId], Option(billingAccountNameCaptor.capture))
-    billingAccountNameCaptor.getValue shouldEqual Option(billingProject.billingAccount.get)
+    // we set the right Billing Account on it, which is the Billing Account specified by the Billing Project in the
+    // clone Workspace Request
+    verify(services.gcsDAO, times(1)).updateGoogleProjectBillingAccount(
+      any[GoogleProjectId],
+      ArgumentMatchers.eq(destBillingProject.billingAccount),
+      ArgumentMatchers.eq(None),
+      ArgumentMatchers.eq(true))
   }
 
   it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct"))))
+    val baseWorkspace = testData.workspace
+    val destBillingProject = testData.testProject1
+    val clonedWorkspaceName = WorkspaceName(destBillingProject.projectName.value, "sad_workspace")
+    val cloneWorkspaceRequest = WorkspaceRequest(clonedWorkspaceName.namespace, clonedWorkspaceName.name, Map.empty)
+
+    // Note: It seems that trying to use ArgumentMatchers when stubbing this method on a Spy results in NPE.  I do not know why.
+    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct")), None, true))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
-    val baseWorkspace = testData.workspace
-    val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
-    val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
-
     intercept[Exception] {
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest), Duration.Inf)
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, cloneWorkspaceRequest), Duration.Inf)
     }
 
-    val maybeWorkspace = runAndWait(workspaceQuery.findByName(workspaceName))
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(clonedWorkspaceName))
     maybeWorkspace shouldBe None
   }
 

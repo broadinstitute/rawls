@@ -1982,9 +1982,11 @@ class WorkspaceService(protected val userInfo: UserInfo,
         maybeMoveGoogleProjectToFolder(billingProject.servicePerimeter, googleProjectId)
       }
 
-      _ = logger.info(s"Setting up billing account for ${googleProjectId}.")
+      _ = logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing the RBS billing account.")
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { _ =>
-        gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount))
+        // Since we don't necessarily know what the RBS Billing Account is, we need to bypass the "oldBillingAccount"
+        // check when updating the Billing Account on the project
+        gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount), None, force = true)
       }
 
       _ = logger.info(s"Creating labels for ${googleProjectId}.")
