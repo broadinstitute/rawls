@@ -3434,6 +3434,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
       x-codegen-request-body-name: catalogUpdates
+  /api/workspaces_v2:
+    post:
+      tags:
+        - workspaces_v2
+      summary: Create a new MC workspace
+      description: Create a new MC workspace
+      operationId: createMcWorkspace
+      requestBody:
+        description: MC Workspace Contents
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/WorkspaceRequest'
+        required: true
+      responses:
+        201:
+          description: Successful Request
+          headers:
+            Location:
+              description: The path to the newly created workspace
+              schema:
+                type: string
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceDetails'
+        400:
+          description: Workspace namespace is not ready
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: User does not have access to create workspace in namespace
+            or user does not have permission to set attributes in the namespace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: Workspace by that name already exists
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        x-codegen-request-body-name: workspaceJson
   /api/workspaces:
     get:
       tags:

@@ -26,6 +26,19 @@ trait WorkspaceApiService extends UserInfoDirectives {
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 
   val workspaceRoutes: server.Route = requireUserInfo() { userInfo =>
+    path("workspaces_v2") {
+      post {
+        entity(as[WorkspaceRequest]) { workspace =>
+          addLocationHeader(workspace.path) {
+            traceRequest { span =>
+              complete {
+                workspaceServiceConstructor(userInfo).createMcWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+              }
+            }
+          }
+        }
+      }
+    } ~
     path("workspaces") {
       post {
         entity(as[WorkspaceRequest]) { workspace =>

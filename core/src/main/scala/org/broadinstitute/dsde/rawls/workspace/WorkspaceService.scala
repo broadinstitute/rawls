@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.CreatedWorkspace
 import cats.implicits._
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.StorageObject
@@ -161,6 +162,22 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // Note: this limit is also hard-coded in the terra-ui code to allow client-side validation.
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
+
+  def createMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+    println("---- Creating MC Workspace")
+
+    traceWithParent("withNewMcWorkspaceContext", parentSpan)(s1 =>
+    for {
+      workspace <-  dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
+        withNewMcWorkspaceContext(workspaceRequest, dataAccess, s1) { workspaceContext =>
+          DBIO.successful(workspaceContext)
+        }
+      }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
+    } yield {
+      workspace
+    }
+    )
+  }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
@@ -2250,6 +2267,26 @@ class WorkspaceService(protected val userInfo: UserInfo,
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)
+  }
+
+  private def withNewMcWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)
+                                        (op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    println("------ Creating new MC workspace via WSM")
+
+    traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
+      case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
+      case None =>
+        val workspaceId = UUID.randomUUID
+        logger.info(s"createMcWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
+        val wsmResult = workspaceManagerDAO.createWorkspace(workspaceId, userInfo.accessToken)
+
+        for {
+          dbResult <- createWorkspaceInDatabase (workspaceId.toString, workspaceRequest, "FAKE_BUCKET", WorkbenchEmail("FAKE_BILLING_PROJECT_OWNER_POLICY_EMAIL"), GoogleProjectId("FAKE_GCP_PROJECT_ID"), None, None, dataAccess, parentSpan)
+          response <- op(dbResult)
+        } yield {
+          response
+        }
+    }
   }
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.

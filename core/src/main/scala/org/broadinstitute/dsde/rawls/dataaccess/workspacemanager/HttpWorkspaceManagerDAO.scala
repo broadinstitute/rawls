@@ -38,7 +38,9 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
   }
 
   override def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace = {
-    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
+    println("----- Calling WSM to create new workspace")
+    val request = new CreateWorkspaceRequestBody().id(workspaceId).stage(WorkspaceStageModel.MC_WORKSPACE)
+    getWorkspaceApi(accessToken).createWorkspace(request)
   }
 
   override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = {
