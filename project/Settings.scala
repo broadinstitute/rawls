@@ -6,7 +6,7 @@ import Merging._
 import Publishing._
 import Testing._
 import Version._
-import sbt.Keys._
+import sbt.Keys.{crossScalaVersions, _}
 import sbt._
 import sbtassembly.AssemblyPlugin.autoImport._
 
@@ -31,16 +31,31 @@ object Settings {
     javacOptions ++= Seq("--release", "11")
   )
 
-  val commonCompilerSettings = Seq(
-    "-unchecked",
-    "-feature",
-    "-encoding", "utf8",
-//    "-Ywarn-unused-import", bad option for 2.13
-    "-deprecation:false", // This is tricky to enable as of 03/2020 [AEN]
-    "-Xfatal-warnings",
-    "-language:higherKinds",
-    "-Ypartial-unification"
-  )
+  def scalacOptionsVersion(scalaVersion: String) = {
+    val commonCompilerSettings = Seq(
+      "-unchecked",
+      "-feature",
+      "-encoding", "utf8",
+      "-deprecation:false", // This is tricky to enable as of 03/2020 [AEN]
+      "-Xfatal-warnings",
+      "-language:higherKinds"
+    )
+
+    val scala212CompilerSettings = Seq(
+      "-Ypartial-unification",
+//      "-Ywarn-unused-import"    // re-enable when imports optimised
+    )
+
+    val scala213CompilerSettings = Seq(
+//      "-Ywarn-unused:imports"   // re-enable when imports optimised
+    )
+
+    commonCompilerSettings ++ (CrossVersion.partialVersion(scalaVersion) match {
+      case Some((2, 12)) => scala212CompilerSettings
+      case Some((2, 13)) => scala213CompilerSettings
+      case _ => Nil
+    })
+  }
 
   //sbt assembly settings common to rawlsCore and rawlsModel
   val commonAssemblySettings = Seq(
@@ -75,7 +90,7 @@ object Settings {
     organization  := "org.broadinstitute.dsde",
     scalaVersion  := "2.12.15", // `cromwell-client` needs to support 2.13 for rawls to be able to upgrade
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
-    scalacOptions ++= commonCompilerSettings
+    scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
   )
 
   //the full list of settings for the workbenchGoogle project (see build.sbt)
