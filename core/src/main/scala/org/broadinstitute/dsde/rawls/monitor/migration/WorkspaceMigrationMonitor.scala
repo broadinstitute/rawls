@@ -74,9 +74,9 @@ object WorkspaceMigrationMonitor {
   type MigrateAction[T] = ReaderT[OptionT[IO, *], MigrationDeps, T]
 
   object MigrateAction {
-    // lookup a value in the environment
-    final def asks[T](f: MigrationDeps => T): MigrateAction[T] =
-      ReaderT.ask[OptionT[IO, *], MigrationDeps].map(f)
+    // lookup a value in the environment using `selector`
+    final def asks[T](selector: MigrationDeps => T): MigrateAction[T] =
+      ReaderT.ask[OptionT[IO, *], MigrationDeps].map(selector)
 
     // lift an IO action into the context of a MigrateAction
     final def liftIO[A](ioa: IO[A]): MigrateAction[A] =
