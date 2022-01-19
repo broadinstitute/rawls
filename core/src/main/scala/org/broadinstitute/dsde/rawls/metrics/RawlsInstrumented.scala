@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import nl.grons.metrics4.scala.Counter
+import nl.grons.metrics4.scala.{Counter, Timer}
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -55,6 +55,14 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
       .expand(WorkflowStatusMetricKey, status)
       .transient()
       .asCounter("count")
+
+  /**
+    * A timer for capturing latency between initial Rawls submission and workflow processing in Cromwell.
+    */
+  protected def workflowToCromwellLatency: Timer =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "submission_to_cromwell")
+      .asTimer("latency")
 }
 
 object RawlsInstrumented {
