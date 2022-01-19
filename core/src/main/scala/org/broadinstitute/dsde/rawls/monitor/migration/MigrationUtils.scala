@@ -2,7 +2,9 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import cats.effect.IO
 import cats.implicits._
+import cats.kernel.Semigroup
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Success, Failure}
 import slick.dbio.{DBIOAction, Effect, NoStream}
 
 import scala.concurrent.Future
@@ -29,6 +31,16 @@ object MigrationUtils {
       case Success => ("Success".some, None)
       case Failure(msg) => ("Failure".some, msg.some)
     }
+  }
+
+  object Implicits {
+    implicit val semigroupOutcome: Semigroup[Outcome] = (a, b) => a match {
+        case Success => b
+        case Failure(msgA) => b match {
+          case Success => a
+          case Failure(msgB) => Failure (msgA ++ "\n" ++ msgB)
+        }
+      }
   }
 
 
