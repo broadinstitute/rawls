@@ -9,8 +9,8 @@ import com.google.cloud.storage.{Acl, Storage}
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.rawls.model.GoogleProjectId
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMonitor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{WorkspaceMigration, WorkspaceMigrationMonitor}
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
+import org.broadinstitute.dsde.rawls.monitor.migration.{WorkspaceMigration, WorkspaceMigrationActor}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
@@ -25,11 +25,10 @@ import org.scalatest.{Assertion, BeforeAndAfterAll, OptionValues}
 import slick.jdbc.MySQLProfile.api._
 
 import java.sql.{SQLException, Timestamp}
-import java.time.LocalDateTime
 import java.util.UUID
 import scala.language.postfixOps
 
-class WorkspaceMigrationMonitorSpec
+class WorkspaceMigrationActorSpec
   extends AnyFlatSpecLike
     with BeforeAndAfterAll
     with Matchers
@@ -46,7 +45,7 @@ class WorkspaceMigrationMonitorSpec
   def runMigrationTest(test: MigrateAction[Assertion]): Assertion = {
     spec.withTestDataServices { services =>
       test.run {
-        WorkspaceMigrationMonitor.MigrationDeps(
+        WorkspaceMigrationActor.MigrationDeps(
           services.slickDataSource,
           spec.testData.billingProject,
           services.workspaceService,
@@ -83,7 +82,7 @@ class WorkspaceMigrationMonitorSpec
 
 
   def getAttempt(workspaceUuid: UUID): MigrateAction[WorkspaceMigration] =
-    WorkspaceMigrationMonitor.getMigrations(workspaceUuid).map(_.last)
+    WorkspaceMigrationActor.getMigrations(workspaceUuid).map(_.last)
 
 
   override def afterAll(): Unit = testKit.shutdownTestKit()
@@ -91,15 +90,15 @@ class WorkspaceMigrationMonitorSpec
 
   "isMigrating" should "return false when a workspace is not being migrated" in
     spec.withMinimalTestDatabase { _ =>
-      spec.runAndWait(WorkspaceMigrationMonitor.isMigrating(spec.minimalTestData.v1Workspace)) shouldBe false
+      spec.runAndWait(WorkspaceMigrationActor.isMigrating(spec.minimalTestData.v1Workspace)) shouldBe false
     }
 
 
   "schedule" should "error when a workspace is scheduled concurrently" in
     spec.withMinimalTestDatabase { _ =>
-      spec.runAndWait(WorkspaceMigrationMonitor.schedule(spec.minimalTestData.v1Workspace)) shouldBe()
+      spec.runAndWait(WorkspaceMigrationActor.schedule(spec.minimalTestData.v1Workspace)) shouldBe()
       assertThrows[SQLException] {
-        spec.runAndWait(WorkspaceMigrationMonitor.schedule(spec.minimalTestData.v1Workspace))
+        spec.runAndWait(WorkspaceMigrationActor.schedule(spec.minimalTestData.v1Workspace))
       }
     }
 
@@ -112,17 +111,18 @@ class WorkspaceMigrationMonitorSpec
   "updated" should "automagically get bumped to the current timestamp when the record is updated" in
     runMigrationTest {
       for {
-        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+        _ <- WorkspaceMigrationActor.inTransaction { _ =>
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace)
+            WorkspaceMigrationActor.schedule(spec.testData.v1Workspace)
         }
 
-        before <- WorkspaceMigrationMonitor
+        before <- WorkspaceMigrationActor
           .getMigrations(spec.testData.v1Workspace.workspaceIdAsUUID)
           .map(_.last)
 
-        after <- WorkspaceMigrationMonitor.inTransaction { _ =>
-          val migration = WorkspaceMigrationMonitor.workspaceMigrations
+        now <- nowTimestamp
+        after <- WorkspaceMigrationActor.inTransaction { _ =>
+          val migration = WorkspaceMigrationActor.workspaceMigrations
               .filter(_.id === before.id)
 
           migration
@@ -153,9 +153,10 @@ class WorkspaceMigrationMonitorSpec
   "claimAndConfigureGoogleProject" should "return a valid database operation" in
     runMigrationTest {
       for {
-        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+        now <- WorkspaceMigrationActor.nowTimestamp
+        _ <- WorkspaceMigrationActor.inTransaction { _ =>
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            WorkspaceMigrationActor.schedule(spec.testData.v1Workspace) >>
             workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(_.started)
@@ -186,9 +187,10 @@ class WorkspaceMigrationMonitorSpec
     )
 
     val test = for {
-      _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+      now <- WorkspaceMigrationActor.nowTimestamp
+      _ <- WorkspaceMigrationActor.inTransaction { _ =>
         spec.workspaceQuery.createOrUpdate(v1Workspace) >>
-          WorkspaceMigrationMonitor.schedule(v1Workspace) >>
+          WorkspaceMigrationActor.schedule(v1Workspace) >>
           workspaceMigrations
             .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID)
             .map(m => (m.newGoogleProjectConfigured, m.newGoogleProjectId))
@@ -224,9 +226,10 @@ class WorkspaceMigrationMonitorSpec
   "issueWorkspaceBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
     runMigrationTest {
       for {
-        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+        now <- WorkspaceMigrationActor.nowTimestamp
+        _ <- WorkspaceMigrationActor.inTransaction { _ =>
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            WorkspaceMigrationActor.schedule(spec.testData.v1Workspace) >>
             workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(m => (m.tmpBucketCreated, m.newGoogleProjectId, m.tmpBucket))
@@ -235,8 +238,8 @@ class WorkspaceMigrationMonitorSpec
 
         job <- issueWorkspaceBucketTransferJob
 
-        transferJob <- WorkspaceMigrationMonitor.inTransaction { _ =>
-          WorkspaceMigrationMonitor.storageTransferJobs
+        transferJob <- WorkspaceMigrationActor.inTransaction { _ =>
+          WorkspaceMigrationActor.storageTransferJobs
             .filter(_.jobName === job.getName)
             .take(1)
             .result
@@ -257,9 +260,10 @@ class WorkspaceMigrationMonitorSpec
   "deleteWorkspaceBucket" should "delete the workspace bucket and record when it was deleted" in
     runMigrationTest {
       for {
-        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+        now <- WorkspaceMigrationActor.nowTimestamp
+        _ <- WorkspaceMigrationActor.inTransaction { _ =>
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            WorkspaceMigrationActor.schedule(spec.testData.v1Workspace) >>
             workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(_.workspaceBucketTransferred)
@@ -286,9 +290,10 @@ class WorkspaceMigrationMonitorSpec
     )
 
     val test = for {
-      _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+      now <- WorkspaceMigrationActor.nowTimestamp
+      _ <- WorkspaceMigrationActor.inTransaction { _ =>
         spec.workspaceQuery.createOrUpdate(v1Workspace) >>
-          WorkspaceMigrationMonitor.schedule(v1Workspace) >>
+          WorkspaceMigrationActor.schedule(v1Workspace) >>
           workspaceMigrations
             .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID)
             .map(m => (m.workspaceBucketDeleted, m.newGoogleProjectId, m.tmpBucket))
@@ -325,9 +330,10 @@ class WorkspaceMigrationMonitorSpec
   "issueTmpBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
     runMigrationTest {
       for {
-        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+        now <- WorkspaceMigrationActor.nowTimestamp
+        _ <- WorkspaceMigrationActor.inTransaction { _ =>
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            WorkspaceMigrationActor.schedule(spec.testData.v1Workspace) >>
             workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(m => (m.finalBucketCreated, m.newGoogleProjectId, m.tmpBucket))
@@ -336,8 +342,8 @@ class WorkspaceMigrationMonitorSpec
 
         job <- issueTmpBucketTransferJob
 
-        transferJob <- WorkspaceMigrationMonitor.inTransaction { _ =>
-          WorkspaceMigrationMonitor.storageTransferJobs
+        transferJob <- WorkspaceMigrationActor.inTransaction { _ =>
+          WorkspaceMigrationActor.storageTransferJobs
             .filter(_.jobName === job.getName)
             .take(1)
             .result
@@ -357,9 +363,10 @@ class WorkspaceMigrationMonitorSpec
   "deleteTemporaryBucket" should "delete the temporary bucket and record when it was deleted" in
     runMigrationTest {
       for {
-        _ <- WorkspaceMigrationMonitor.inTransaction { _ =>
+        now <- WorkspaceMigrationActor.nowTimestamp
+        _ <- WorkspaceMigrationActor.inTransaction { _ =>
           spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace) >>
-            WorkspaceMigrationMonitor.schedule(spec.testData.v1Workspace) >>
+            WorkspaceMigrationActor.schedule(spec.testData.v1Workspace) >>
             workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(m => (m.tmpBucketTransferred, m.newGoogleProjectId, m.tmpBucket))
@@ -371,8 +378,6 @@ class WorkspaceMigrationMonitorSpec
         migration <- getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
       } yield migration.tmpBucketDeleted shouldBe defined
     }
-
-  def now: Timestamp = Timestamp.valueOf(LocalDateTime.now())
 
 }
 
