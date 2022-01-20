@@ -1,4 +1,4 @@
-import sbt.{compilerPlugin, _}
+import sbt._
 
 object Dependencies {
   val akkaV = "2.6.17"
