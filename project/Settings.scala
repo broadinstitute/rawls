@@ -6,7 +6,7 @@ import Merging._
 import Publishing._
 import Testing._
 import Version._
-import sbt.Keys.{crossScalaVersions, _}
+import sbt.Keys._
 import sbt._
 import sbtassembly.AssemblyPlugin.autoImport._
 
