@@ -470,6 +470,12 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/billing/v2/{projectId}/spendReport:
+    get:
+      tags:
+        - billing_v2
+      operationId: getSpendReport
+
   /api/billing/v2/{projectId}/spendReportConfiguration:
     get:
       tags:
