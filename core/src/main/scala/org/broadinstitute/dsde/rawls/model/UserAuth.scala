@@ -219,6 +219,14 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val WorkspaceBillingAccountFormat = jsonFormat2(WorkspaceBillingAccount)
 
   implicit val RawlsBillingProjectResponseFormat = jsonFormat7(RawlsBillingProjectResponse)
+
+
+  implicit val SpendReportingResultsFormat = jsonFormat2(SpendReportingResults)
+
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
+
+
+case class SpendReportingResults(foo: String, bar: String)
+

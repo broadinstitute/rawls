@@ -5,8 +5,8 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.user.UserService
-import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
@@ -22,9 +22,11 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
   import spray.json.DefaultJsonProtocol._
 
   val userServiceConstructor: UserInfo => UserService
+  val spendReportingConstructor: UserInfo => SpendReportingService
 
   val billingRoutesV2: server.Route = requireUserInfo() { userInfo =>
     pathPrefix("billing" / "v2") {
+
       pathPrefix(Segment) { projectId =>
         pathEnd {
           get {
@@ -41,6 +43,15 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                 userServiceConstructor(userInfo).deleteBillingProject(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
               }
             }
+        } ~
+        pathPrefix("spendReport") {
+          pathEnd {
+            get {
+              complete {
+                spendReportingConstructor(userInfo).getSpendForBillingAccount(projectId)
+              }
+            }
+          }
         } ~
         pathPrefix("spendReportConfiguration") {
           pathEnd {

@@ -32,6 +32,7 @@ import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
+import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
@@ -412,12 +413,31 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("dataRepo.terraInstanceName")
       )
 
+
+      /**
+        *       val submissionCostService: SubmissionCostService =
+        SubmissionCostService.constructor(
+          gcsConfig.getString("billingExportTableName"),
+          gcsConfig.getString("serviceProject"),
+          gcsConfig.getInt("billingSearchWindowDays"),
+          bigQueryDAO
+        )
+
+        */
+      val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
+        gcsConfig.getString("billingExportTableName"),
+        GoogleProjectId(gcsConfig.getString("serviceProject")),
+        gcsConfig.getString("billingExportTableName"),
+        bigQueryDAO
+      )
+
       val service = new RawlsApiServiceImpl(
         workspaceServiceConstructor,
         entityServiceConstructor,
         userServiceConstructor,
         genomicsServiceConstructor,
         snapshotServiceConstructor,
+        spendReportingServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(
