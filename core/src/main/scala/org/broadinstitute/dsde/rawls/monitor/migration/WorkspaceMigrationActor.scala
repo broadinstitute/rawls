@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import cats.data.{OptionT, ReaderT}
-import cats.effect.unsafe.IORuntime
 import cats.effect.{Clock, IO}
 import cats.implicits._
 import com.google.cloud.storage.Storage.BucketGetOption
@@ -100,16 +99,26 @@ object WorkspaceMigrationActor {
 
   // Read workspace migrations in various states, attempt to advance their state forward by one
   // step and write the outcome of each step to the database.
+  // These operations are combined backwards for testing so only one step is run at a time. This
+  // has the effect of eagerly finishing migrations rather than starting new ones.
   final def migrate: MigrateAction[Unit] =
-    startMigration >>
-      claimAndConfigureGoogleProject >>
-      createTempBucket >>
-      issueWorkspaceBucketTransferJob >>
-      deleteWorkspaceBucket >>
-      createFinalWorkspaceBucket >>
-      issueTmpBucketTransferJob >>
-      deleteTemporaryBucket >>
-      MigrateAction.unit
+    List(
+      startMigration,
+      claimAndConfigureGoogleProject,
+      createTempBucket,
+      issueWorkspaceBucketTransferJob,
+      deleteWorkspaceBucket,
+      createFinalWorkspaceBucket,
+      issueTmpBucketTransferJob,
+      deleteTemporaryBucket
+    )
+      .reverse
+      .traverse_(runStep)
+
+
+  // Sequence the action and return an empty MigrateAction if the action succeeded
+  def runStep(action: MigrateAction[Unit]): MigrateAction[Unit] =
+    action.mapF(optionT => OptionT(optionT.value.as(().some)))
 
 
   final def startMigration: MigrateAction[Unit] =
@@ -190,7 +199,7 @@ object WorkspaceMigrationActor {
     } yield ()
 
 
-  final def issueWorkspaceBucketTransferJob: MigrateAction[TransferJob] =
+  final def issueWorkspaceBucketTransferJob: MigrateAction[Unit] =
     for {
       migration <- findMigration { m =>
         m.tmpBucketCreated.isDefined && m.workspaceBucketTransferJobIssued.isEmpty
@@ -201,7 +210,12 @@ object WorkspaceMigrationActor {
       })
 
       workspace <- getWorkspace(migration.workspaceId)
-      transferJob <- startBucketTransferJob(migration, GcsBucketName(workspace.bucketName), tmpBucketName)
+      _ <- startBucketTransferJob(
+        migration.id,
+        GcsBucketName(workspace.bucketName),
+        tmpBucketName
+      )
+
       issued <- nowTimestamp
       _ <- inTransaction { _ =>
         workspaceMigrations
@@ -209,7 +223,7 @@ object WorkspaceMigrationActor {
           .map(_.workspaceBucketTransferJobIssued)
           .update(issued.some)
       }
-    } yield transferJob
+    } yield ()
 
 
   final def deleteWorkspaceBucket: MigrateAction[Unit] =
@@ -270,7 +284,7 @@ object WorkspaceMigrationActor {
     } yield ()
 
 
-  final def issueTmpBucketTransferJob: MigrateAction[TransferJob] =
+  final def issueTmpBucketTransferJob: MigrateAction[Unit] =
     for {
       migration <- findMigration { m =>
         m.finalBucketCreated.isDefined && m.tmpBucketTransferJobIssued.isEmpty
@@ -281,7 +295,12 @@ object WorkspaceMigrationActor {
       })
 
       workspace <- getWorkspace(migration.workspaceId)
-      transferJob <- startBucketTransferJob(migration, tmpBucketName, GcsBucketName(workspace.bucketName))
+      _ <- startBucketTransferJob(
+        migration.id,
+        tmpBucketName,
+        GcsBucketName(workspace.bucketName)
+      )
+
       issued <- nowTimestamp
       _ <- inTransaction { _ =>
         workspaceMigrations
@@ -289,7 +308,7 @@ object WorkspaceMigrationActor {
           .map(_.tmpBucketTransferJobIssued)
           .update(issued.some)
       }
-    } yield transferJob
+    } yield ()
 
 
   final def deleteTemporaryBucket: MigrateAction[Unit] =
@@ -366,7 +385,7 @@ object WorkspaceMigrationActor {
     } yield ()
 
 
-  final def startBucketTransferJob(migration: WorkspaceMigration,
+  final def startBucketTransferJob(migrationId: Long,
                                    originBucket: GcsBucketName,
                                    destBucket: GcsBucketName)
   : MigrateAction[TransferJob] =
@@ -391,7 +410,7 @@ object WorkspaceMigrationActor {
       _ <- inTransaction { _ =>
         storageTransferJobs
           .map(job => (job.jobName, job.migrationId, job.destBucket, job.originBucket))
-          .insert((transferJob.getName, migration.id, destBucket.value, originBucket.value))
+          .insert((transferJob.getName, migrationId, destBucket.value, originBucket.value))
           .ignore
       }
 
@@ -439,11 +458,34 @@ object WorkspaceMigrationActor {
     }
 
 
-  final def transferJobCompleted(migrationId: Long): MigrateAction[Unit] =
+  final def transferJobSucceeded(migrationId: Long): MigrateAction[Unit] =
     nowTimestamp.flatMap { transferred =>
-      inTransaction { _ =>
+      inTransaction { dataAccess =>
         val migrations = workspaceMigrations.filter(_.id === migrationId)
+        // we can encode which bucket was transferred by filtering instead of explicitly looking
+        // it up and branching. If the workspace bucket was already transferred then the job
+        // relates to the tmp bucket, otherwise the job relates to the workspace bucket.
         DBIO.seq(
+          migrations
+            .filter(m => m.workspaceBucketTransferred.isDefined && m.tmpBucketTransferred.isDefined)
+            .take(1)
+            .result
+            .headOption
+            .flatMap {
+              case None => DBIO.successful()
+              // If this triggers then a job has been issued more than once. This is likely caused
+              // by running the migration pipeline in parallel.
+              case Some(m) => dataAccess
+                .workspaceQuery
+                .findByIdOrFail(m.workspaceId.toString)
+                .flatMap { workspace =>
+                  DBIO.failed(new RawlsException(
+                    s"""Workspace migration "$migrationId" has already transferred
+                       |workspace "${m.workspaceId}" bucket "${workspace.bucketName}"
+                       |to Google Project "${m.newGoogleProjectId}".""".stripMargin
+                  ))
+                }
+            },
           migrations
             .filter(_.workspaceBucketTransferred.isDefined)
             .map(_.tmpBucketTransferred)
@@ -602,7 +644,7 @@ object WorkspaceMigrationActor {
               case RefreshTransferJobs =>
                 refreshTransferJobs.flatMap { case (migrationId, outcome) =>
                   outcome match {
-                    case Success => transferJobCompleted(migrationId)
+                    case Success => transferJobSucceeded(migrationId)
                     case Failure(_) => migrationFinished(migrationId, outcome)
                   }
                 }
