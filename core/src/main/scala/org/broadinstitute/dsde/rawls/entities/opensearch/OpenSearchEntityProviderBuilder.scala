@@ -36,22 +36,24 @@ class OpenSearchEntityProviderBuilder()
 
   // Establish credentials to use basic authentication.
   // Only for demo purposes. Don't specify your credentials in code.
-  val credentialsProvider = new BasicCredentialsProvider
-  credentialsProvider.setCredentials(AuthScope.ANY,
-    new UsernamePasswordCredentials("admin", "admin"))
-
-  class ClientCallback extends RestClientBuilder.HttpClientConfigCallback {
-    override def customizeHttpClient(httpClientBuilder: HttpAsyncClientBuilder) = {
-      httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider)
-    }
-  }
+//  val credentialsProvider = new BasicCredentialsProvider
+//  credentialsProvider.setCredentials(AuthScope.ANY,
+//    new UsernamePasswordCredentials("admin", "admin"))
+//
+//  class ClientCallback extends RestClientBuilder.HttpClientConfigCallback {
+//    override def customizeHttpClient(httpClientBuilder: HttpAsyncClientBuilder) = {
+//      httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider)
+//    }
+//  }
 
   override def build(requestArguments: EntityRequestArguments): Try[OpenSearchEntityProvider] = {
     // build high-level client, pass it in to the provider
 
+    // http://elasticsearch-test.dsde-dev.broadinstitute.org:9200/
+    // http://host.docker.internal:9200/
     val builder = RestClient.builder(
-      new HttpHost("host.docker.internal", 9200, "http"))
-        .setHttpClientConfigCallback(new ClientCallback)
+      new HttpHost("elasticsearch-test.dsde-dev.broadinstitute.org", 9200, "http"))
+//        .setHttpClientConfigCallback(new ClientCallback)
 
     val client = new RestHighLevelClient(builder)
 
