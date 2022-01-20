@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
+import org.joda.time.DateTime
 import spray.json._
 
 import scala.language.implicitConversions
@@ -219,6 +220,28 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val WorkspaceBillingAccountFormat = jsonFormat2(WorkspaceBillingAccount)
 
   implicit val RawlsBillingProjectResponseFormat = jsonFormat7(RawlsBillingProjectResponse)
+
+  implicit val SpendReportingForDateRangeFormat = jsonFormat5(SpendReportingForDateRange)
+
+  implicit val SpendReportingAggregationKeyFormat = jsonFormat1(SpendReportingAggregationKey)
+  implicit val SpendReportingAggregationFormat = jsonFormat2(SpendReportingAggregation)
+  implicit val SpendReportingResultsFormat = jsonFormat2(SpendReportingResults)
+
+
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
+
+// TODO don't dump these case classes here
+case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], spendSummary: SpendReportingForDateRange)
+case class SpendReportingAggregation(aggregationKey: SpendReportingAggregationKey, spendData: Seq[SpendReportingForDateRange])
+case class SpendReportingForDateRange(
+                                       cost: String,
+                                       credits: String,
+                                       currency: String,
+                                       startTime: DateTime,
+                                       endTime: DateTime
+                                     )
+
+case class SpendReportingAggregationKey(key: String)
+
