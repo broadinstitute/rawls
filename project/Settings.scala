@@ -33,12 +33,14 @@ object Settings {
 
   def scalacOptionsVersion(scalaVersion: String) = {
     val commonCompilerSettings = Seq(
-      "-unchecked",
-      "-feature",
-      "-encoding", "utf8",
       "-deprecation:false", // This is tricky to enable as of 03/2020 [AEN]
-      "-Xfatal-warnings",
-      "-language:higherKinds"
+      "-encoding", "utf8",
+      "-feature",
+      "-language:higherKinds",
+      "-opt:l:inline",
+      "-opt-inline-from:org.broadinstitute.dsde.rawls.**",
+      "-unchecked",
+      "-Xfatal-warnings"
     )
 
     val scala212CompilerSettings = Seq(
