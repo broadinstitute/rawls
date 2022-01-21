@@ -114,7 +114,8 @@ object WorkspaceMigrationActor {
       deleteWorkspaceBucket,
       createFinalWorkspaceBucket,
       issueTmpBucketTransferJob,
-      deleteTemporaryBucket
+      deleteTemporaryBucket,
+      updateWorkspaceRecord
     )
       .reverse
       .traverse_(runStep)
@@ -418,6 +419,25 @@ object WorkspaceMigrationActor {
       }
 
     } yield transferJob
+
+  final def updateWorkspaceRecord: MigrateAction[Unit] =
+    for {
+      migration <- findMigration(_.tmpBucketDeleted.isDefined)
+      _ <- MigrateAction.liftIO {
+        IO.raiseWhen(migration.newGoogleProjectId.isEmpty || migration.newGoogleProjectNumber.isEmpty) {
+          noGoogleProjectError(migration)
+        }
+      }
+      workspace <- getWorkspace(migration.workspaceId)
+      _ <- inTransaction(dataAccess =>
+        dataAccess
+          .workspaceQuery
+          .filter(_.id === workspace.workspaceIdAsUUID)
+          .map(w => (w.googleProjectId, w.googleProjectNumber))
+          .update((migration.newGoogleProjectId.get.toString, migration.newGoogleProjectNumber.map(_.toString)))
+      )
+      _ <- migrationFinished(migration.id, Success)
+    } yield ()
 
 
   final def refreshTransferJobs: MigrateAction[(Long, Outcome)] =
