@@ -253,7 +253,7 @@ class WorkspaceMigrationActorSpec
             .update((now.some, "new-google-project".some, "tmp-bucket-name".some))
         }
 
-        _ <- issueWorkspaceBucketTransferJob
+        _ <- migrate
         migration <- inTransactionT { _ =>
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
@@ -576,15 +576,15 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        outcome = Failure("oh noes :(")
-        _ <- updateMigrationTransferJobStatus(before.id, outcome)
+        failure = Failure("oh noes :(")
+        _ <- updateMigrationTransferJobStatus(before.id, failure)
 
         after <- inTransactionT { _ =>
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield {
         after.finished shouldBe defined
-        after.outcome shouldBe outcome.some
+        after.outcome shouldBe failure.some
       }
     }
 

@@ -21,7 +21,7 @@ import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleSt
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
 import java.sql.Timestamp
-import java.time.{Clock, Instant, LocalDateTime, ZoneOffset}
+import java.time.{Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
