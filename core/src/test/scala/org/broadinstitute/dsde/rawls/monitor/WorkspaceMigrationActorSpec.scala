@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigration
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
@@ -518,6 +519,72 @@ class WorkspaceMigrationActorSpec
           transferJobsAfter(0).updated shouldBe transferJobsMid(0).updated
           transferJobsAfter(1).updated should be > transferJobsMid(1).updated
         }
+      }
+    }
+
+
+  "updateMigrationTransferJobStatus" should "update WORKSPACE_BUCKET_TRANSFERRED on job success" in
+    runMigrationTest {
+      for {
+        before <- inTransactionT { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace) >>
+            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- updateMigrationTransferJobStatus(before.id, Success)
+
+        after <- inTransactionT { _ =>
+          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        after.workspaceBucketTransferred shouldBe defined
+        after.tmpBucketTransferred should not be defined
+      }
+    }
+
+
+  it should "update TMP_BUCKET_TRANSFERRED on job success" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        before <- inTransactionT { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace) >>
+            workspaceMigrations
+              .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+              .map(_.workspaceBucketTransferred)
+              .update(now.some) >>
+            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- updateMigrationTransferJobStatus(before.id, Success)
+
+        after <- inTransactionT { _ =>
+          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        after.workspaceBucketTransferred shouldBe defined
+        after.tmpBucketTransferred shouldBe defined
+      }
+    }
+
+
+  it should "fail the migration on job failure" in
+    runMigrationTest {
+      for {
+        before <- inTransactionT { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace) >>
+            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        outcome = Failure("oh noes :(")
+        _ <- updateMigrationTransferJobStatus(before.id, outcome)
+
+        after <- inTransactionT { _ =>
+          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        after.finished shouldBe defined
+        after.outcome shouldBe outcome.some
       }
     }
 
