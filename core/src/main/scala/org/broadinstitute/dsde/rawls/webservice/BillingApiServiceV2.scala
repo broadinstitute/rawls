@@ -55,7 +55,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     GoogleProjectId("FAKE_PROJ"),
                     "fake_dataset",
                     "fake_table",
-                    "fake_billing_acct_id",
+                    "fake_baid",
                     DateTime.parse(startDate),
                     DateTime.parse(endDate)
                   )
