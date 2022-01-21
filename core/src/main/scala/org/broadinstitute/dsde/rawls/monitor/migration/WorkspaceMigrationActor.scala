@@ -8,10 +8,10 @@ import cats.implicits._
 import com.google.cloud.storage.Storage.BucketGetOption
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProject, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProject, RawlsBillingProjectName, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationHistory._
@@ -92,8 +92,12 @@ object WorkspaceMigrationActor {
       ReaderT.liftF(OptionT.liftF(ioa))
 
     // modify the environment that action is evaluated in
-    final def local[A](f: MigrationDeps => MigrationDeps)(action: MigrateAction[A]): MigrateAction[A]
-      = ReaderT.local(f)(action)
+    final def local[A](f: MigrationDeps => MigrationDeps)(action: MigrateAction[A]): MigrateAction[A] =
+      ReaderT.local(f)(action)
+
+    // Raises the error when the condition is true, otherwise returns unit
+    final def raiseWhen(condition: Boolean)(t: => Throwable): MigrateAction[Unit] =
+      MigrateAction.liftIO(IO.raiseWhen(condition)(t))
 
     // empty action
     final def unit: MigrateAction[Unit] =
@@ -146,11 +150,61 @@ object WorkspaceMigrationActor {
       }
 
       workspace <- getWorkspace(migration.workspaceId)
-      currentBillingAccountOnGoogleProject <- MigrateAction.liftIO(IO {
+
+      _ <- MigrateAction.raiseWhen(workspace.billingAccountErrorMessage.isDefined) {
+        MigrationException(
+          message = "Workspace migration failed: billing account error exists on workspace",
+          data = Map(
+            ("migrationId" -> migration.id),
+            ("workspaceId" -> workspace.workspaceId),
+            ("billingProjectErrorMessage" -> workspace.billingAccountErrorMessage.get)
+          )
+        )
+      }
+
+      workspaceBillingAccount <- MigrateAction.liftIO(IO {
         workspace.currentBillingAccountOnGoogleProject.getOrElse(
-          throw new RawlsException(s"""No billing account for workspace '${workspace.workspaceId}'""")
+          throw MigrationException(
+            message = "Workspace migration failed: no billing account on workspace",
+            data = Map(
+              ("migrationId" -> migration.id),
+              ("workspaceId" -> workspace.workspaceId)
+            )
+          )
         )
       })
+
+      // Safe to assume that this exists if the workspace exists
+      billingProject <- inTransactionT { _
+        .rawlsBillingProjectQuery
+        .load(RawlsBillingProjectName(workspace.namespace))
+      }
+
+      billingProjectBillingAccount <- MigrateAction.liftIO(IO {
+        billingProject.billingAccount.getOrElse(
+          throw MigrationException(
+            message = "Workspace migration failed: no billing account on billing project",
+            data = Map(
+              ("migrationId" -> migration.id),
+              ("workspaceId" -> workspace.workspaceId),
+              ("billingProject" -> billingProject.projectName)
+            )
+          )
+        )
+      })
+
+      _ <- MigrateAction.raiseWhen(workspaceBillingAccount != billingProjectBillingAccount) {
+        MigrationException(
+          message = "Workspace migration failed: billing account on workspace differs from billing account on billing project",
+          data = Map(
+            ("migrationId" -> migration.id),
+            ("workspaceId" -> workspace.workspaceId),
+            ("workspaceBillingAccount" -> workspaceBillingAccount),
+            ("billingProject" -> billingProject.projectName),
+            ("billingProjectBillingAccount" -> billingProjectBillingAccount)
+          )
+        )
+      }
 
       (workspaceService, billingProject) <- MigrateAction.asks { env =>
         (env.workspaceService, env.billingProject)
@@ -159,7 +213,7 @@ object WorkspaceMigrationActor {
       (googleProjectId, googleProjectNumber) <- MigrateAction.liftIO {
         workspaceService.setupGoogleProject(
           billingProject,
-          currentBillingAccountOnGoogleProject,
+          workspaceBillingAccount,
           workspace.workspaceId,
           workspace.toWorkspaceName
         ).io
@@ -199,7 +253,6 @@ object WorkspaceMigrationActor {
           .filter(_.id === migration.id)
           .map(r => (r.tmpBucket, r.tmpBucketCreated))
           .update((tmpBucketName.some, created.some))
-          .ignore
       }
     } yield ()
 
@@ -259,7 +312,6 @@ object WorkspaceMigrationActor {
           .filter(_.id === migration.id)
           .map(_.workspaceBucketDeleted)
           .update(deleted.some)
-          .ignore
       }
     } yield ()
 
@@ -350,7 +402,6 @@ object WorkspaceMigrationActor {
           .filter(_.id === migration.id)
           .map(_.tmpBucketDeleted)
           .update(deleted.some)
-          .ignore
       }
     } yield ()
 
