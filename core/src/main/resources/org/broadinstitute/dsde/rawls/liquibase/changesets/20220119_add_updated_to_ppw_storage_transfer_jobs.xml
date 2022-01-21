@@ -6,9 +6,10 @@
     <changeSet logicalFilePath="dummy" author="ehigham" id="add_UPDATED_TO_PPW_STORAGE_TRANSFER_SERVICE_JOB">
         <addColumn tableName="PPW_STORAGE_TRANSFER_SERVICE_JOB">
             <column name="UPDATED"
-                    type="DATETIME"
-                    defaultValueComputed="CURRENT_TIMESTAMP"
-                    remarks="When the system scheduled migrating the WORKSPACE.">
+                    type="DATETIME(6)"
+                    defaultValueDate=""
+                    defaultValueComputed="NOW(6)"
+                    remarks="When the system last updated the storage transfer service job.">
                 <constraints nullable="false"/>
             </column>
         </addColumn>
@@ -17,7 +18,7 @@
                 BEFORE UPDATE ON PPW_STORAGE_TRANSFER_SERVICE_JOB
                 FOR EACH ROW
             BEGIN
-                SET NEW.UPDATED = CURRENT_TIMESTAMP();
+                SET NEW.UPDATED = NOW(6);
             END ~
         </sql>
     </changeSet>
