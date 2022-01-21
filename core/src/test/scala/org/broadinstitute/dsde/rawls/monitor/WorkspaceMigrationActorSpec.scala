@@ -11,7 +11,7 @@ import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigration
@@ -388,6 +388,34 @@ class WorkspaceMigrationActorSpec
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield migration.tmpBucketDeleted shouldBe defined
+    }
+
+  it should "update the Workspace record when the temporary bucket has been deleted" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        googleProjectId = GoogleProjectId("whatever dude")
+        googleProjectNumber = GoogleProjectNumber("abc123")
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace) >> workspaceMigrations
+            .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+            .map(m => (m.tmpBucketDeleted, m.newGoogleProjectId, m.newGoogleProjectNumber))
+            .update((now.some, googleProjectId.value.some, googleProjectNumber.value.some))
+        }
+
+        _ <- migrate
+
+        workspace <- getWorkspace(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransactionT { _ =>
+          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.finished shouldBe defined
+        migration.outcome shouldBe Success.some
+        workspace.googleProjectId shouldBe googleProjectId
+        workspace.googleProjectNumber shouldBe googleProjectNumber.some
+      }
+
     }
 
 
