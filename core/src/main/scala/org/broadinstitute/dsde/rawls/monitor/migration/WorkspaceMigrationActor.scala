@@ -242,6 +242,7 @@ object WorkspaceMigrationActor {
       workspace <- getWorkspace(migration.workspaceId)
       tmpBucketName <- MigrateAction.liftIO(randomSuffix("terra-workspace-migration-"))
       _ <- createBucketInSameRegion(
+        migration,
         GcsBucketName(workspace.bucketName),
         googleProjectId,
         GcsBucketName(tmpBucketName)
@@ -301,7 +302,7 @@ object WorkspaceMigrationActor {
           ).compile.last
 
           _ <- IO.raiseUnless(successOpt.contains(true)) {
-            noWorkspaceBucketError(GcsBucketName(workspace.bucketName))
+            noWorkspaceBucketError(migration, GcsBucketName(workspace.bucketName))
           }
         } yield ()
       }
@@ -330,7 +331,13 @@ object WorkspaceMigrationActor {
       })
 
       workspace <- getWorkspace(migration.workspaceId)
-      _ <- createBucketInSameRegion(tmpBucketName, googleProjectId, GcsBucketName(workspace.bucketName))
+      _ <- createBucketInSameRegion(
+        migration,
+        tmpBucketName,
+        googleProjectId,
+        GcsBucketName(workspace.bucketName)
+      )
+
       created <- nowTimestamp
       _ <- inTransaction { _ =>
         workspaceMigrations
@@ -406,7 +413,8 @@ object WorkspaceMigrationActor {
     } yield ()
 
 
-  final def createBucketInSameRegion(sourceBucketName: GcsBucketName,
+  final def createBucketInSameRegion(migration: WorkspaceMigration,
+                                     sourceBucketName: GcsBucketName,
                                      destGoogleProject: GoogleProjectId,
                                      destBucketName: GcsBucketName)
   : MigrateAction[Unit] =
@@ -423,7 +431,7 @@ object WorkspaceMigrationActor {
             List(BucketGetOption.userProject(destGoogleProject.value))
           )
 
-          sourceBucket <- IO(sourceBucketOpt.getOrElse(throw noWorkspaceBucketError(sourceBucketName)))
+          sourceBucket <- IO(sourceBucketOpt.getOrElse(throw noWorkspaceBucketError(migration, sourceBucketName)))
 
           // todo: CA-1637 do we need to transfer the storage logs for this workspace? the logs are prefixed
           // with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket
@@ -641,15 +649,36 @@ object WorkspaceMigrationActor {
   }
 
   final def noGoogleProjectError[A](migration: WorkspaceMigration): Throwable =
-    new IllegalStateException(s"""Google Project "${migration.newGoogleProjectId}" was not found for migration "${migration.id}".""")
+    MigrationException(
+      message = "Workspace migration failed: Google Project not found.",
+      data = Map(
+        ("migrationId" -> migration.id),
+        ("workspaceId" -> migration.workspaceId),
+        ("googleProjectId" -> migration.newGoogleProjectId)
+      )
+    )
 
 
-  final def noWorkspaceBucketError[A](name: GcsBucketName): Throwable =
-    new IllegalStateException(s"""Failed to retrieve workspace bucket "${name}".""")
+  final def noWorkspaceBucketError[A](migration: WorkspaceMigration, bucket: GcsBucketName): Throwable =
+    MigrationException(
+      message = "Workspace migration failed: Workspace cloud bucket not found.",
+      data = Map(
+        ("migrationId" -> migration.id),
+        ("workspaceId" -> migration.workspaceId),
+        ("workspaceBucket" -> bucket)
+      )
+    )
 
 
   final def noTmpBucketError[A](migration: WorkspaceMigration): Throwable =
-    new IllegalStateException(s"""Temporary storage bucket "${migration.tmpBucketName}" was not found for migration "${migration.id}".""")
+    MigrationException(
+      message = "Workspace migration failed: Temporary cloud storage bucket not found.",
+      data = Map(
+        ("migrationId" -> migration.id),
+        ("workspaceId" -> migration.workspaceId),
+        ("tmpBucket" -> migration.tmpBucketName)
+      )
+    )
 
 
   sealed trait Message
