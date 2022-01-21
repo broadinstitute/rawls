@@ -157,7 +157,7 @@ object WorkspaceMigrationActor {
           data = Map(
             ("migrationId" -> migration.id),
             ("workspaceId" -> workspace.workspaceId),
-            ("billingProjectErrorMessage" -> workspace.billingAccountErrorMessage.get)
+            ("billingAccountErrorMessage" -> workspace.billingAccountErrorMessage.get)
           )
         )
       }
