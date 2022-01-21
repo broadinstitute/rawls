@@ -436,6 +436,7 @@ object WorkspaceMigrationActor {
           .map(w => (w.googleProjectId, w.googleProjectNumber))
           .update((migration.newGoogleProjectId.get.toString, migration.newGoogleProjectNumber.map(_.toString)))
       )
+      _ <- migrationFinished(migration.id, Success)
     } yield ()
 
 
