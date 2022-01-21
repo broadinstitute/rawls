@@ -21,7 +21,6 @@ import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 import org.scalatest.{Assertion, BeforeAndAfterAll, OptionValues}
 import slick.jdbc.MySQLProfile.api._
 
@@ -121,9 +120,6 @@ class WorkspaceMigrationMonitorSpec
         before <- WorkspaceMigrationMonitor
           .getMigrations(spec.testData.v1Workspace.workspaceIdAsUUID)
           .map(_.last)
-
-        // sleep needed due to Timestamp imprecision
-        _ <- MigrateAction.liftIO(IO.sleep(1.second))
 
         after <- WorkspaceMigrationMonitor.inTransaction { _ =>
           val migration = WorkspaceMigrationMonitor.workspaceMigrations

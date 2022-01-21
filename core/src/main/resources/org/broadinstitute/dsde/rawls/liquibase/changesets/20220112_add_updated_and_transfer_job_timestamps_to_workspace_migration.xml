@@ -6,9 +6,9 @@
     <changeSet logicalFilePath="dummy" author="ehigham" id="add_UPDATED_TIMESTAMP_TO_WORKSPACE_MIGRATION">
         <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
             <column name="UPDATED"
-                    type="DATETIME"
-                    defaultValueComputed="CURRENT_TIMESTAMP"
-                    remarks="When the system scheduled migrating the WORKSPACE.">
+                    type="DATETIME(6)"
+                    defaultValueComputed="NOW(6)"
+                    remarks="When the system updated the migration attempt.">
                 <constraints nullable="false"/>
             </column>
         </addColumn>
@@ -17,26 +17,26 @@
                 BEFORE UPDATE ON V1_WORKSPACE_MIGRATION_HISTORY
                 FOR EACH ROW
             BEGIN
-                SET NEW.UPDATED = CURRENT_TIMESTAMP();
+                SET NEW.UPDATED = NOW(6);
             END ~
         </sql>
     </changeSet>
     <changeSet logicalFilePath="dummy" author="ehigham" id="add_WORKSPACE_BUCKET_TRANSFER_TIMESTAMPS">
         <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
-            <column name="WORKSPACE_BUCKET_TRANSFER_JOB_ISSUED" type="DATETIME">
+            <column name="WORKSPACE_BUCKET_TRANSFER_JOB_ISSUED" type="DATETIME(6)">
                 <constraints nullable="true"/>
             </column>
-            <column name="WORKSPACE_BUCKET_TRANSFERRED" type="DATETIME">
+            <column name="WORKSPACE_BUCKET_TRANSFERRED" type="DATETIME(6)">
                 <constraints nullable="true"/>
             </column>
         </addColumn>
     </changeSet>
     <changeSet logicalFilePath="dummy" author="ehigham" id="add_TMP_BUCKET_TRANSFER_TIMESTAMPS">
         <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
-            <column name="TMP_BUCKET_TRANSFER_JOB_ISSUED" type="DATETIME">
+            <column name="TMP_BUCKET_TRANSFER_JOB_ISSUED" type="DATETIME(6)">
                 <constraints nullable="true"/>
             </column>
-            <column name="TMP_BUCKET_TRANSFERRED" type="DATETIME">
+            <column name="TMP_BUCKET_TRANSFERRED" type="DATETIME(6)">
                 <constraints nullable="true"/>
             </column>
         </addColumn>
