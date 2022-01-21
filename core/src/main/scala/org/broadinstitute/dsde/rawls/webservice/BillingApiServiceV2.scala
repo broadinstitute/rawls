@@ -7,7 +7,9 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.user.UserService
+import org.joda.time.DateTime
 
+import scala.collection.immutable
 import scala.concurrent.ExecutionContext
 
 /**
@@ -47,8 +49,17 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
         pathPrefix("spendReport") {
           pathEnd {
             get {
-              complete {
-                spendReportingConstructor(userInfo).getSpendForBillingAccount(projectId)
+              parameters("startDate".as[String], "endDate".as[String]) { (startDate, endDate) =>
+                complete {
+                  spendReportingConstructor(userInfo).getSpendForBillingAccount(
+                    GoogleProjectId("FAKE_PROJ"),
+                    "fake_dataset",
+                    "fake_table",
+                    "fake_billing_acct_id",
+                    DateTime.parse(startDate),
+                    DateTime.parse(endDate)
+                  )
+                }
               }
             }
           }

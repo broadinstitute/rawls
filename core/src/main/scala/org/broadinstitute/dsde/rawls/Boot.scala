@@ -425,9 +425,6 @@ object Boot extends IOApp with LazyLogging {
 
         */
       val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
-        gcsConfig.getString("billingExportTableName"),
-        GoogleProjectId(gcsConfig.getString("serviceProject")),
-        gcsConfig.getString("billingExportTableName"),
         bigQueryDAO
       )
 
