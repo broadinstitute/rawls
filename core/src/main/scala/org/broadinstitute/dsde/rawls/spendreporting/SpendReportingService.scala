@@ -87,5 +87,4 @@ class SpendReportingService(  bigQueryDAO: GoogleBigQueryDAO)(implicit val execu
       extractSpendReportingResults(result.getRows, startDate, endDate)
     }
   }
-
 }

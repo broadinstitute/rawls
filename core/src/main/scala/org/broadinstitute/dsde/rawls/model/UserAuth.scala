@@ -232,7 +232,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
 
-
+// TODO don't dump these case classes here
 case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], spendSummary: SpendReportingForDateRange)
 case class SpendReportingAggregation(aggregationKey: SpendReportingAggregationKey, spendData: Seq[SpendReportingForDateRange])
 case class SpendReportingForDateRange(
