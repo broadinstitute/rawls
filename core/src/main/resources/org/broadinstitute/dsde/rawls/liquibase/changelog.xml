@@ -103,4 +103,5 @@
     <include file="changesets/20220107_update_shard_procedures.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20211208_storage_transfer_service_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20211217_v1_migration_buckets_deleted.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20220112_add_updated_and_transfer_job_timestamps_to_workspace_migration.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
