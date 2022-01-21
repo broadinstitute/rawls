@@ -238,6 +238,33 @@ class WorkspaceMigrationActorSpec
       }
     }
 
+  it should "error when the billing account on the billing project is invalid" in
+    assertThrows[MigrationException] {
+      runMigrationTest {
+        for {
+          now <- nowTimestamp
+
+          _ <- inTransaction { dataAccess =>
+            DBIO.seq(
+              createAndScheduleWorkspace(spec.testData.v1Workspace),
+              workspaceMigrations
+                .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+                .map(_.started)
+                .update(now.some),
+              dataAccess
+                .rawlsBillingProjectQuery
+                .filter(_.projectName === spec.testData.v1Workspace.namespace)
+                .map(_.invalidBillingAccount)
+                .update(true)
+            )
+          }
+
+          _ <- migrate
+
+        } yield fail("it did not fail")
+      }
+    }
+
 
   it should "error when the billing account on the workspace does not match the billing account on the billing project" in
     assertThrows[MigrationException] {
