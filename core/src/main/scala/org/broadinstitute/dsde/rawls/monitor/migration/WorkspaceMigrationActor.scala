@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import cats.data.{OptionT, ReaderT}
-import cats.effect.{Clock, IO}
+import cats.effect.IO
 import cats.implicits._
 import com.google.cloud.storage.Storage.BucketGetOption
 import com.google.longrunning.Operation
@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProject, Workspace}
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.semigroupOutcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationHistory._
@@ -22,6 +21,7 @@ import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleSt
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
 import java.sql.Timestamp
+import java.time.{Clock, Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -90,6 +90,10 @@ object WorkspaceMigrationActor {
     // lift an IO action into the context of a MigrateAction
     final def liftIO[A](ioa: IO[A]): MigrateAction[A] =
       ReaderT.liftF(OptionT.liftF(ioa))
+
+    // modify the environment that action is evaluated in
+    final def local[A](f: MigrationDeps => MigrationDeps)(action: MigrateAction[A]): MigrateAction[A]
+      = ReaderT.local(f)(action)
 
     // empty action
     final def unit: MigrateAction[Unit] =
@@ -411,7 +415,6 @@ object WorkspaceMigrationActor {
         storageTransferJobs
           .map(job => (job.jobName, job.migrationId, job.destBucket, job.originBucket))
           .insert((transferJob.getName, migrationId, destBucket.value, originBucket.value))
-          .ignore
       }
 
     } yield transferJob
@@ -428,9 +431,7 @@ object WorkspaceMigrationActor {
         OptionT {
           storageTransferService
             .listTransferOperations(record.jobName, billingProject)
-            .map(_.foldLeft(Option.empty[Outcome]) {
-              (outcome, operation) => outcome |+| getOperationOutcome(operation)
-            })
+            .map(_.toList.foldMapK(getOperationOutcome))
         }
       }
 
@@ -438,9 +439,8 @@ object WorkspaceMigrationActor {
       _ <- inTransaction { _ =>
         storageTransferJobs
           .filter(_.id === record.id)
-          .take(1)
-            .map(row => (row.outcome, row.message))
-            .update(status, message)
+          .map(row => (row.outcome, row.message))
+          .update(status, message)
       }
     } yield (record.migrationId, outcome)
 
@@ -458,38 +458,26 @@ object WorkspaceMigrationActor {
     }
 
 
+  final def updateMigrationTransferJobStatus(migrationId: Long, jobOutcome: Outcome): MigrateAction[Unit] =
+    jobOutcome match {
+      case Success => transferJobSucceeded(migrationId)
+      case Failure(_) => migrationFinished(migrationId, jobOutcome)
+    }
+
+
   final def transferJobSucceeded(migrationId: Long): MigrateAction[Unit] =
     nowTimestamp.flatMap { transferred =>
-      inTransaction { dataAccess =>
+      inTransaction { _ =>
         val migrations = workspaceMigrations.filter(_.id === migrationId)
-        // we can encode which bucket was transferred by filtering instead of explicitly looking
-        // it up and branching. If the workspace bucket was already transferred then the job
-        // relates to the tmp bucket, otherwise the job relates to the workspace bucket.
         DBIO.seq(
-          migrations
-            .filter(m => m.workspaceBucketTransferred.isDefined && m.tmpBucketTransferred.isDefined)
-            .take(1)
-            .result
-            .headOption
-            .flatMap {
-              case None => DBIO.successful()
-              // If this triggers then a job has been issued more than once. This is likely caused
-              // by running the migration pipeline in parallel.
-              case Some(m) => dataAccess
-                .workspaceQuery
-                .findByIdOrFail(m.workspaceId.toString)
-                .flatMap { workspace =>
-                  DBIO.failed(new RawlsException(
-                    s"""Workspace migration "$migrationId" has already transferred
-                       |workspace "${m.workspaceId}" bucket "${workspace.bucketName}"
-                       |to Google Project "${m.newGoogleProjectId}".""".stripMargin
-                  ))
-                }
-            },
+          // if the workspace bucket has already been transferred then this job relates transferring
+          // the tmp -> final workspace bucket
           migrations
             .filter(_.workspaceBucketTransferred.isDefined)
             .map(_.tmpBucketTransferred)
             .update(transferred.some),
+          // if the workspace bucket has not been defined then this job relates to transferring
+          // old workspace bucket -> tmp bucket
           migrations
             .filter(_.workspaceBucketTransferred.isEmpty)
             .map(_.workspaceBucketTransferred)
@@ -516,7 +504,7 @@ object WorkspaceMigrationActor {
     inTransaction { _ =>
       workspaceMigrations
         .filter(_.workspaceId === workspaceUuid)
-        .sortBy(_.id)
+        .sortBy(_.id.asc)
         .result
     }
 
@@ -526,26 +514,32 @@ object WorkspaceMigrationActor {
     inTransactionT { _ =>
       workspaceMigrations
         .filter(row => row.finished.isEmpty && predicate(row))
-        .sortBy(_.updated)
+        .sortBy(_.updated.asc)
         .take(1)
         .result
         .map(_.headOption)
     }
 
 
-  final def peekTransferJob
-  : MigrateAction[PpwStorageTransferJob] =
+  final def peekTransferJob: MigrateAction[PpwStorageTransferJob] =
     nowTimestamp.flatMap { now =>
       inTransactionT { _ =>
-        val job = storageTransferJobs
-          .filter(_.finished.isEmpty)
-          .sortBy(_.updated)
-          .take(1)
+        for {
+          job <- storageTransferJobs
+            .filter(_.finished.isEmpty)
+            .sortBy(_.updated.asc)
+            .take(1)
+            .result
+            .headOption
 
-        // touch the job so the next peek considers another row to update
-        job.map(_.updated).update(now) >> job.result.headOption
+          // touch the job so that next call to peek returns another
+          _ <- if (job.isDefined)
+            storageTransferJobs.filter(_.id === job.get.id).map(_.updated).update(now) else
+            DBIO.successful()
+
+        } yield job.map(_.copy(updated = now))
+      }
     }
-  }
 
 
   final def inTransactionT[T](action: DataAccess => ReadWriteAction[Option[T]]): MigrateAction[T] =
@@ -566,9 +560,9 @@ object WorkspaceMigrationActor {
 
 
   final def nowTimestamp: MigrateAction[Timestamp] =
-    MigrateAction.liftIO {
-      Clock[IO].realTimeInstant.map(Timestamp.from)
-    }
+    MigrateAction.liftIO(IO {
+      Timestamp.valueOf(LocalDateTime.ofInstant(Instant.now, ZoneOffset.UTC))
+    })
 
 
   final def randomSuffix(str: String): IO[String] = IO {
@@ -589,8 +583,8 @@ object WorkspaceMigrationActor {
 
   sealed trait Message
   final case class Schedule(workspace: Workspace) extends Message
-  final case object RunMigration extends Message
-  final case object RefreshTransferJobs extends Message
+  case object RunMigration extends Message
+  case object RefreshTransferJobs extends Message
 
 
   def apply(dataSource: SlickDataSource,
@@ -642,12 +636,7 @@ object WorkspaceMigrationActor {
                 migrate
 
               case RefreshTransferJobs =>
-                refreshTransferJobs.flatMap { case (migrationId, outcome) =>
-                  outcome match {
-                    case Success => transferJobSucceeded(migrationId)
-                    case Failure(_) => migrationFinished(migrationId, outcome)
-                  }
-                }
+                refreshTransferJobs >>= (updateMigrationTransferJobStatus _).tupled
             }
           }
         }

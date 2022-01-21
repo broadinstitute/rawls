@@ -7,10 +7,12 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.cloud.storage.{Acl, Storage}
+import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigration
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
@@ -20,6 +22,7 @@ import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{J
 import org.broadinstitute.dsde.workbench.model.TraceId
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
+import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -39,6 +42,7 @@ class WorkspaceMigrationActorSpec
 
   val testKit: ActorTestKit = ActorTestKit()
   implicit val logger = new ConsoleLogger("unit_test", LogLevel(false, false, true, true))
+  implicit val ec = IORuntime.global.compute
 
   // This is a horrible hack to avoid refactoring the tangled mess in the WorkspaceServiceSpec.
   val spec = new WorkspaceServiceSpec()
@@ -51,8 +55,8 @@ class WorkspaceMigrationActorSpec
           services.slickDataSource,
           spec.testData.billingProject,
           services.workspaceService,
-          mockStorageService,
-          mockStorageTransferService
+          MockStorageService(),
+          MockStorageTransferService()
         )
       }
         .value
@@ -62,19 +66,24 @@ class WorkspaceMigrationActorSpec
   }
 
 
-  val mockStorageTransferService = new MockGoogleStorageTransferService[IO] {
+  case class MockStorageTransferService() extends MockGoogleStorageTransferService[IO] {
     override def createTransferJob(jobName: JobName, jobDescription: String, projectToBill: GoogleProject, originBucket: GcsBucketName, destinationBucket: GcsBucketName, schedule: JobTransferSchedule): IO[TransferJob] =
       IO.pure {
-        TransferJob.newBuilder()
+        TransferJob.newBuilder
           .setName(s"${jobName}")
           .setDescription(jobDescription)
           .setProjectId(s"${projectToBill}")
           .build
       }
+
+    override def listTransferOperations(jobName: JobName, project: GoogleProject): IO[Seq[Operation]] =
+      IO.pure {
+        Seq(Operation.newBuilder.setDone(true).build)
+      }
   }
 
 
-  val mockStorageService = new MockGoogleStorageService[IO] {
+  case class MockStorageService() extends MockGoogleStorageService[IO] {
     override def deleteBucket(googleProject: GoogleProject, bucketName: GcsBucketName, isRecursive: Boolean, bucketSourceOptions: List[Storage.BucketSourceOption], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Boolean] =
       fs2.Stream.emit(true)
 
@@ -130,7 +139,7 @@ class WorkspaceMigrationActorSpec
         now <- nowTimestamp
         after <- inTransactionT { _ =>
           val migration = workspaceMigrations
-              .filter(_.id === before.id)
+            .filter(_.id === before.id)
 
           migration
             .map(_.newGoogleProjectConfigured)
@@ -380,9 +389,9 @@ class WorkspaceMigrationActorSpec
       } yield migration.tmpBucketDeleted shouldBe defined
     }
 
+
   "startBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
     runMigrationTest {
-      implicit val ec = IORuntime.global.compute
       for {
         // just need a unique migration id
         migration <- inTransactionT { _ =>
@@ -407,5 +416,110 @@ class WorkspaceMigrationActorSpec
         transferJob.destBucket shouldBe tmpBucketName
       }
     }
+
+
+  "peekTransferJob" should "return the first active job that ws updated last and touch it" in
+    runMigrationTest {
+      for {
+        migration <- inTransactionT { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace) >>
+            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
+        job <- peekTransferJob
+      } yield job.updated should be > job.created
+    }
+
+
+  it should "ignore finished jobs" in
+    runMigrationTest {
+      for {
+        migration <- inTransactionT { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace) >>
+            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        job <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
+        finished <- nowTimestamp
+        _ <- inTransaction { _ =>
+          storageTransferJobs
+            .filter(_.jobName === job.getName)
+            .map(_.finished)
+            .update(finished.some)
+        }
+
+        job <- peekTransferJob.mapF { optionT => OptionT(optionT.value.map(_.some)) }
+      } yield job should not be defined
+    }
+
+
+  "refreshTransferJobs" should "update the state of storage transfer jobs" in
+    runMigrationTest {
+      for {
+        migration <- inTransactionT { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace) >>
+            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
+        (migrationId, outcome) <- refreshTransferJobs
+      } yield {
+        migrationId shouldBe migration.id
+        outcome shouldBe Outcome.Success
+      }
+    }
+
+
+  it should "update the state of jobs in order of last updated" in
+    runMigrationTest {
+      val storageTransferService = new MockStorageTransferService {
+        override def listTransferOperations(jobName: JobName, project: GoogleProject): IO[Seq[Operation]] =
+          IO.pure(Seq(Operation.newBuilder.build))
+      }
+
+      MigrateAction.local(_.copy(storageTransferService = storageTransferService)) {
+        for {
+          migration1 <- inTransactionT { _ =>
+            createAndScheduleWorkspace(spec.testData.v1Workspace) >>
+              getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+          }
+
+          migration2 <- inTransactionT { _ =>
+            createAndScheduleWorkspace(spec.testData.workspace) >>
+              getAttempt(spec.testData.workspace.workspaceIdAsUUID)
+          }
+
+          _ <- startBucketTransferJob(migration1.id, GcsBucketName("foo"), GcsBucketName("bar"))
+          _ <- startBucketTransferJob(migration2.id, GcsBucketName("foo"), GcsBucketName("bar"))
+
+          getTransferJobs = inTransaction { _ =>
+            storageTransferJobs
+              .sortBy(_.id.asc)
+              .result
+              .map(_.toList)
+          }
+
+          transferJobsBefore <- getTransferJobs
+
+          _ <- runStep(refreshTransferJobs *> MigrateAction.unit)
+          transferJobsMid <- getTransferJobs
+
+          _ <- runStep(refreshTransferJobs *> MigrateAction.unit)
+          transferJobsAfter <- getTransferJobs
+        } yield {
+          forAll(transferJobsBefore) { job => job.finished should not be defined }
+
+          // the first job created should be updated first
+          transferJobsMid(0).updated should be > transferJobsBefore(0).updated
+          transferJobsMid(1).updated shouldBe transferJobsBefore(1).updated
+
+          // the second job should be updated next as it was updated the longest time ago
+          transferJobsAfter(0).updated shouldBe transferJobsMid(0).updated
+          transferJobsAfter(1).updated should be > transferJobsMid(1).updated
+        }
+      }
+    }
+
 }
 
