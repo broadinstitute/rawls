@@ -52,7 +52,7 @@ class WorkspaceMigrationActorSpec
   val spec = new WorkspaceServiceSpec()
 
 
-  def runMigrationTest(test: MigrateAction[Assertion]): Assertion = {
+  def runMigrationTest(test: MigrateAction[Assertion]): Assertion =
     spec.withTestDataServices { services =>
       test.run {
         MigrationDeps(
@@ -67,7 +67,6 @@ class WorkspaceMigrationActorSpec
         .unsafeRunSync
         .getOrElse(throw new AssertionError("The test exited prematurely."))
     }
-  }
 
 
   case class MockStorageTransferService() extends MockGoogleStorageTransferService[IO] {
