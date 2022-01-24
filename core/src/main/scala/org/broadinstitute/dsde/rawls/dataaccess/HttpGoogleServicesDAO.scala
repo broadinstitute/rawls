@@ -754,6 +754,26 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
+    val billingSvcCred = getBillingServiceAccountCredential
+    implicit val service = GoogleInstrumentedService.Billing
+    val googleProjectName = s"projects/${googleProjectId.value}"
+    val cloudBillingProjectsApi = getCloudBillingManager(billingSvcCred).projects()
+
+    val fetcher = cloudBillingProjectsApi.getBillingInfo(googleProjectName)
+
+    retryWithRecoverWhen500orGoogleError(() => {
+      blocking {
+        executeGoogleRequest(fetcher)
+      }
+    }) {
+      case e: GoogleJsonResponseException
+        if e.getStatusCode == StatusCodes.Forbidden.intValue =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
+          s"Rawls service account does not have access to Billing Info for project: ${googleProjectId.value}", e))
+    }
+  }
+
   //Note that these APIs only allow for returning the fully qualified name i.e. billingAccounts/01010-01010-01010
   //This will return just the ID of the billing account by stripping off the `billingAccounts/` prefix
   override def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]] = {

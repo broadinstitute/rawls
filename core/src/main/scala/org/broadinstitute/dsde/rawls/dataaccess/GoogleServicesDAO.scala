@@ -135,6 +135,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                                         oldBillingAccount: Option[RawlsBillingAccountName],
                                         force: Boolean = false): Future[ProjectBillingInfo]
 
+  def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo]
+
   def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
 
   def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit]
@@ -192,6 +194,55 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     *
     */
   def cleanupDMProject(googleProject: GoogleProjectId): Future[Unit]
+
+  def NEW_updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId,
+                                            newBillingAccount: Option[RawlsBillingAccountName],
+                                            oldBillingAccount: Option[RawlsBillingAccountName],
+                                            force: Boolean = false)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
+
+    // Guiding Principle:  Always try to make Terra match what is on Google.  If they fall out of sync with each other,
+    // Google wins.  If we don't know how to reconcile the difference, throw an error.
+    // 1. DO NOT reenable billing if Google says Billing is disabled and Terra does not ALSO think billing is disabled
+    // 2. DO NOT overwrite Billing Account if Terra and Google do not both agree on what the current Billing Account is
+    //    2a. Except if Terra is trying to set the value to match whatever is currently set on Google
+
+    for {
+      projectBillingInfo <- getBillingInfoForGoogleProject(googleProjectId)
+    } yield projectBillingInfo
+  }
+
+  // maybe return a bool or just throw errors
+  def validateBillingAccount(newBillingAccount: Option[RawlsBillingAccountName],
+                             oldBillingAccount: Option[RawlsBillingAccountName],
+                             projectBillingInfo: ProjectBillingInfo): Boolean = {
+    val currentBillingAccountOnGoogle = if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
+      None
+    else
+      Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
+
+    val isBillingEnableOnGoogle = projectBillingInfo.getBillingEnabled
+
+    false
+  }
+
+  // validation should already be done
+  // will determine which call to make to google to update the Billing Account or to disable billing
+  def performUpdate(googleProjectId: GoogleProjectId,
+                    newBillingAccount: Option[RawlsBillingAccountName],
+                    billingAccountOnGoogle: Option[RawlsBillingAccountName]): Future[Unit] = {
+    newBillingAccount match {
+      case Some(billingAccountName) =>
+        if (newBillingAccount != billingAccountOnGoogle) {
+          setBillingAccountName(googleProjectId, billingAccountName)
+        }
+      case None =>
+        disableBillingOnGoogleProject(googleProjectId)
+    }
+  }
+
+  def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[Unit]
+
+  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[Unit]
 
   /**
     * Removes the IAM policies from the project's existing policies
