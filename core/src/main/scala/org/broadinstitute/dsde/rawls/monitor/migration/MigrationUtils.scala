@@ -19,14 +19,12 @@ object MigrationUtils {
 
     final case class Failure(message: String) extends Outcome
 
-    final def fromFields(outcome: Option[String], message: Option[String]): Either[String, Option[Outcome]] = {
-      type EitherStringT[T] = Either[String, T]
-      outcome.traverse[EitherStringT, Outcome] {
+    final def fromFields(outcome: Option[String], message: Option[String]): Either[String, Option[Outcome]] =
+      outcome.traverse[Either[String, *], Outcome] {
         case "Success" => Right(Success)
         case "Failure" => Right(Failure(message.getOrElse("")))
         case other => Left(s"""Failed to read outcome: unknown value -- "$other"""")
       }
-    }
 
     final def toTuple(outcome: Outcome): (Option[String], Option[String]) = outcome match {
       case Success => ("Success".some, None)
@@ -50,14 +48,14 @@ object MigrationUtils {
 
 
     import slick.jdbc.MySQLProfile.api._
-    implicit class InsertExtensionMethod[E, T, C[_]](query: Query[E, T, C]) {
+    implicit class InsertExtensionMethod[E, A, C[_]](query: Query[E, A, C]) {
       /** alias for `+=` supporting dot syntax */
-      def insert(value: T) = query += value
+      def insert(value: A) = query += value
     }
 
 
-    implicit class FutureToIO[+T](future: => Future[T]) {
-      def io: IO[T] = IO.fromFuture(IO(future))
+    implicit class FutureToIO[+A](future: => Future[A]) {
+      def io: IO[A] = IO.fromFuture(IO(future))
     }
   }
 
@@ -68,9 +66,11 @@ object MigrationUtils {
   }
 
 
-  final case class MigrationException(message: String, data: Map[String, Any] = Map.empty, cause: Throwable = null)
+  final case class WorkspaceMigrationException(message: String,
+                                               data: Map[String, Any] = Map.empty,
+                                               cause: Throwable = null)
     extends RawlsException(
-      message = JsObject((data + ("message" -> message)).mapValues(s => new JsString(s.toString))).toString,
+      message = JsObject((Map("message" -> message) ++ data).mapValues(s => new JsString(s.toString))).toString,
       cause = cause
     ) {}
 

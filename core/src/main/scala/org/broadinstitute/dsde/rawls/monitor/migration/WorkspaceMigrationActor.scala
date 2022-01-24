@@ -80,7 +80,7 @@ object WorkspaceMigrationActor {
   object MigrateAction {
 
     // lookup a value in the environment using `selector`
-    final def asks[T](selector: MigrationDeps => T): MigrateAction[T] =
+    final def asks[A](selector: MigrationDeps => A): MigrateAction[A] =
       ReaderT.ask[OptionT[IO, *], MigrationDeps].map(selector)
 
     // create a MigrateAction that ignores its input and returns the OptionT
@@ -156,7 +156,7 @@ object WorkspaceMigrationActor {
       )
 
       _ <- MigrateAction.raiseWhen(workspace.billingAccountErrorMessage.isDefined) {
-        MigrationException(
+        WorkspaceMigrationException(
           message = "Workspace migration failed: billing account error exists on workspace",
           data = errorDetails + ("billingAccountErrorMessage" -> workspace.billingAccountErrorMessage.get)
         )
@@ -164,7 +164,7 @@ object WorkspaceMigrationActor {
 
       workspaceBillingAccount <- MigrateAction.liftIO(IO {
         workspace.currentBillingAccountOnGoogleProject.getOrElse(
-          throw MigrationException(
+          throw WorkspaceMigrationException(
             message = "Workspace migration failed: no billing account on workspace",
             data = errorDetails
           )
@@ -179,7 +179,7 @@ object WorkspaceMigrationActor {
 
       billingProjectBillingAccount <- MigrateAction.liftIO(IO {
         billingProject.billingAccount.getOrElse(
-          throw MigrationException(
+          throw WorkspaceMigrationException(
             message = "Workspace migration failed: no billing account on billing project",
             data = errorDetails + ("billingProject" -> billingProject.projectName)
           )
@@ -187,7 +187,7 @@ object WorkspaceMigrationActor {
       })
 
       _ <- MigrateAction.raiseWhen(billingProject.invalidBillingAccount) {
-        MigrationException(
+        WorkspaceMigrationException(
           message = "The migration failed: invalid billing account on billing project",
           data = errorDetails ++ Map(
             ("billingProject" -> billingProject.projectName),
@@ -197,7 +197,7 @@ object WorkspaceMigrationActor {
       }
 
       _ <- MigrateAction.raiseWhen(workspaceBillingAccount != billingProjectBillingAccount) {
-        MigrationException(
+        WorkspaceMigrationException(
           message = "Workspace migration failed: billing account on workspace differs from billing account on billing project",
           data = errorDetails ++ Map(
             ("workspaceBillingAccount" -> workspaceBillingAccount),
@@ -480,13 +480,12 @@ object WorkspaceMigrationActor {
 
     } yield transferJob
 
+
   final def updateWorkspaceRecord: MigrateAction[Unit] =
     for {
       migration <- findMigration(_.tmpBucketDeleted.isDefined)
-      _ <- MigrateAction.liftIO {
-        IO.raiseWhen(migration.newGoogleProjectId.isEmpty || migration.newGoogleProjectNumber.isEmpty) {
-          noGoogleProjectError(migration)
-        }
+      _ <- MigrateAction.raiseWhen(migration.newGoogleProjectId.isEmpty || migration.newGoogleProjectNumber.isEmpty) {
+        noGoogleProjectError(migration)
       }
       workspace <- getWorkspace(migration.workspaceId)
       _ <- inTransaction(dataAccess =>
@@ -622,11 +621,11 @@ object WorkspaceMigrationActor {
     }
 
 
-  final def inTransactionT[T](action: DataAccess => ReadWriteAction[Option[T]]): MigrateAction[T] =
+  final def inTransactionT[A](action: DataAccess => ReadWriteAction[Option[A]]): MigrateAction[A] =
     inTransaction(action).mapF(optT => OptionT(optT.value.map(_.flatten)))
 
 
-  final def inTransaction[T](action: DataAccess => ReadWriteAction[T]): MigrateAction[T] =
+  final def inTransaction[A](action: DataAccess => ReadWriteAction[A]): MigrateAction[A] =
     for {
       dataSource <- MigrateAction.asks(_.dataSource)
       result <- MigrateAction.liftIO(dataSource.inTransaction(action).io)
@@ -649,8 +648,9 @@ object WorkspaceMigrationActor {
     str ++ UUID.randomUUID.toString.replace("-", "")
   }
 
+
   final def noGoogleProjectError[A](migration: WorkspaceMigration): Throwable =
-    MigrationException(
+    WorkspaceMigrationException(
       message = "Workspace migration failed: Google Project not found.",
       data = Map(
         ("migrationId" -> migration.id),
@@ -661,7 +661,7 @@ object WorkspaceMigrationActor {
 
 
   final def noWorkspaceBucketError[A](migration: WorkspaceMigration, bucket: GcsBucketName): Throwable =
-    MigrationException(
+    WorkspaceMigrationException(
       message = "Workspace migration failed: Workspace cloud bucket not found.",
       data = Map(
         ("migrationId" -> migration.id),
@@ -672,7 +672,7 @@ object WorkspaceMigrationActor {
 
 
   final def noTmpBucketError[A](migration: WorkspaceMigration): Throwable =
-    MigrationException(
+    WorkspaceMigrationException(
       message = "Workspace migration failed: Temporary cloud storage bucket not found.",
       data = Map(
         ("migrationId" -> migration.id),
@@ -687,7 +687,10 @@ object WorkspaceMigrationActor {
   case object RunMigration extends Message
   case object RefreshTransferJobs extends Message
 
-
+  // ehigham: I've included this actor implementation as it's helped inform how to refresh
+  // the status of storage transfer jobs. While it's as yet untested, this can be plumbed-in
+  // and integration tested as part of CA-1132.
+  // todo: finalise design and test in CA-1132
   def apply(dataSource: SlickDataSource,
             billingProject: RawlsBillingProject,
             workspaceService: WorkspaceService,
@@ -696,9 +699,10 @@ object WorkspaceMigrationActor {
   : Behavior[Message] =
     Behaviors.setup { context =>
 
-      def unsafeStartMigrateAction[T](action: MigrateAction[T]): Behavior[Message] = {
+      def unsafeStartMigrateAction[A](action: MigrateAction[A]): Behavior[Message] = {
         context.executionContext.execute { () =>
           try {
+            implicit val ioRuntime = cats.effect.unsafe.IORuntime.global
             action
               .run(
                 MigrationDeps(
@@ -711,7 +715,7 @@ object WorkspaceMigrationActor {
               )
               .value
               .void
-              .unsafeRunSync()(cats.effect.unsafe.IORuntime.global)
+              .unsafeRunSync
           } catch {
             case failure: Throwable => context.executionContext.reportFailure(failure)
           }

@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{MigrationException, Outcome}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, WorkspaceMigrationException}
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigration
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
@@ -44,6 +44,9 @@ class WorkspaceMigrationActorSpec
   val testKit: ActorTestKit = ActorTestKit()
   implicit val logger = new ConsoleLogger("unit_test", LogLevel(false, false, true, true))
   implicit val ec = IORuntime.global.compute
+  implicit val timestampOrdering = new Ordering[Timestamp] {
+    override def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
+  }
 
   // This is a horrible hack to avoid refactoring the tangled mess in the WorkspaceServiceSpec.
   val spec = new WorkspaceServiceSpec()
@@ -124,11 +127,6 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  implicit val timestampOrdering = new Ordering[Timestamp] {
-    override def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
-  }
-
-
   "updated" should "automagically get bumped to the current timestamp when the record is updated" in
     runMigrationTest {
       for {
@@ -190,7 +188,7 @@ class WorkspaceMigrationActorSpec
 
 
   it should "error when there's an error on the workspace billing account" in
-    assertThrows[MigrationException] {
+    assertThrows[WorkspaceMigrationException] {
       runMigrationTest {
         for {
           now <- nowTimestamp
@@ -215,7 +213,7 @@ class WorkspaceMigrationActorSpec
 
 
   it should "error when there's no billing account on the workspace" in
-    assertThrows[MigrationException] {
+    assertThrows[WorkspaceMigrationException] {
       runMigrationTest {
         for {
           now <- nowTimestamp
@@ -238,8 +236,9 @@ class WorkspaceMigrationActorSpec
       }
     }
 
+
   it should "error when the billing account on the billing project is invalid" in
-    assertThrows[MigrationException] {
+    assertThrows[WorkspaceMigrationException] {
       runMigrationTest {
         for {
           now <- nowTimestamp
@@ -267,7 +266,7 @@ class WorkspaceMigrationActorSpec
 
 
   it should "error when the billing account on the workspace does not match the billing account on the billing project" in
-    assertThrows[MigrationException] {
+    assertThrows[WorkspaceMigrationException] {
       runMigrationTest {
         for {
           now <- nowTimestamp
@@ -491,6 +490,7 @@ class WorkspaceMigrationActorSpec
         }
       } yield migration.tmpBucketDeleted shouldBe defined
     }
+
 
   it should "update the Workspace record when the temporary bucket has been deleted" in
     runMigrationTest {
