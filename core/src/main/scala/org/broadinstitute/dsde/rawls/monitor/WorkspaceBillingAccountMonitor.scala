@@ -80,16 +80,24 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
     else
       Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
 
-    currentBillingAccountOnGoogle match {
-      case oldBillingAccount => true // google and rawls
-      case _ => false
-    }
+    currentBillingAccountOnGoogle == oldBillingAccount
+  }
+
+  def shouldRawlsBeUpdated(newBillingAccount: Option[RawlsBillingAccountName],
+                           oldBillingAccount: Option[RawlsBillingAccountName],
+                           projectBillingInfo: ProjectBillingInfo): Boolean = {
+    val currentBillingAccountOnGoogle = if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
+      None
+    else
+      Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
+
+    (currentBillingAccountOnGoogle == oldBillingAccount) || (currentBillingAccountOnGoogle == newBillingAccount)
   }
 
   // maybe return a bool or just throw errors
   def validateBillingAccountShouldBeUpdatedInGoogle(newBillingAccount: Option[RawlsBillingAccountName],
-                             oldBillingAccount: Option[RawlsBillingAccountName],
-                             projectBillingInfo: ProjectBillingInfo): Boolean = {
+                                                    oldBillingAccount: Option[RawlsBillingAccountName],
+                                                    projectBillingInfo: ProjectBillingInfo): List[String] = {
     val currentBillingAccountOnGoogle = if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
       None
     else
@@ -97,13 +105,20 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
 
     val isBillingEnableOnGoogle = projectBillingInfo.getBillingEnabled
 
-    currentBillingAccountOnGoogle match {
-      case oldBillingAccount => true // google and rawls
-      case newBillingAccount => true // just rawls
-      case _ => // neither
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.PreconditionFailed,
-          s"Could not update Billing Account on Google Project ID ${projectBillingInfo.getProjectId} to Billing Account ${newBillingAccount} because Billing Account in Rawls ${oldBillingAccount} did not equal current Billing Account in Google ${projectBillingInfo.getBillingAccountName}"))
+    val validationErrors = List[String]()
+
+    if (currentBillingAccountOnGoogle != oldBillingAccount && currentBillingAccountOnGoogle != newBillingAccount) {
+      validationErrors + "Billing Account on Google does not match new or old billing Account"
     }
+
+    validationErrors
+//    currentBillingAccountOnGoogle match {
+//      case oldBillingAccount => true // google and rawls
+//      case newBillingAccount => true // just rawls
+//      case _ => // neither
+//        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.PreconditionFailed,
+//          s"Could not update Billing Account on Google Project ID ${projectBillingInfo.getProjectId} to Billing Account ${newBillingAccount} because Billing Account in Rawls ${oldBillingAccount} did not equal current Billing Account in Google ${projectBillingInfo.getBillingAccountName}"))
+//    }
 
     //    newBillingAccount match {
     //      case Some(billingAccount) if !isBillingEnableOnGoogle && oldBillingAccount.nonEmpty => // we don't think we need this...?
