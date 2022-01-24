@@ -57,7 +57,7 @@ class WorkspaceMigrationActorSpec
       test.run {
         MigrationDeps(
           services.slickDataSource,
-          spec.testData.billingProject,
+          GoogleProject("fake-google-project"),
           services.workspaceService,
           MockStorageService(),
           MockStorageTransferService()
@@ -304,7 +304,7 @@ class WorkspaceMigrationActorSpec
     val test = for {
       now <- nowTimestamp
       _ <- inTransaction { _ =>
-        createAndScheduleWorkspace(spec.testData.v1Workspace) >> workspaceMigrations
+        createAndScheduleWorkspace(v1Workspace) >> workspaceMigrations
           .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID)
           .map(m => (m.newGoogleProjectConfigured, m.newGoogleProjectId))
           .update((now.some, destProject.some))
@@ -335,7 +335,12 @@ class WorkspaceMigrationActorSpec
     runMigrationTest(ReaderT { env =>
       OptionT {
         GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-          googleStorageService => test.run(env.copy(storageService = googleStorageService)).value
+          googleStorageService => test.run(
+            env.copy(
+              googleProjectToBill = serviceProject,
+              storageService = googleStorageService
+            )
+          ).value
         }
       }
     })
@@ -405,7 +410,7 @@ class WorkspaceMigrationActorSpec
     val test = for {
       now <- nowTimestamp
       _ <- inTransaction { _ =>
-        createAndScheduleWorkspace(spec.testData.v1Workspace) >> workspaceMigrations
+        createAndScheduleWorkspace(v1Workspace) >> workspaceMigrations
           .filter(_.workspaceId === v1Workspace.workspaceIdAsUUID)
           .map(m => (m.workspaceBucketDeleted, m.newGoogleProjectId, m.tmpBucket))
           .update((now.some, destProject.some, "az-leotest".some))
@@ -413,7 +418,7 @@ class WorkspaceMigrationActorSpec
 
       _ <- migrate
       migration <- inTransactionT { _ =>
-        getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        getAttempt(v1Workspace.workspaceIdAsUUID)
       }
       storageService <- MigrateAction.asks(_.storageService)
       bucket <- MigrateAction.liftIO {
@@ -434,7 +439,12 @@ class WorkspaceMigrationActorSpec
     runMigrationTest(ReaderT { env =>
       OptionT {
         GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-          googleStorageService => test.run(env.copy(storageService = googleStorageService)).value
+          googleStorageService => test.run(
+            env.copy(
+              googleProjectToBill = serviceProject,
+              storageService = googleStorageService
+            )
+          ).value
         }
       }
     })

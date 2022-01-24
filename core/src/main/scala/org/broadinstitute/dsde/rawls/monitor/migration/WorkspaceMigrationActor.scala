@@ -10,7 +10,7 @@ import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProject, RawlsBillingProjectName, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
@@ -25,7 +25,7 @@ import java.time.{Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration.FiniteDuration
 import scala.language.higherKinds
 
 
@@ -69,7 +69,7 @@ object WorkspaceMigrationActor {
 
 
   final case class MigrationDeps(dataSource: SlickDataSource,
-                                 billingProject: RawlsBillingProject,
+                                 googleProjectToBill: GoogleProject,
                                  workspaceService: WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO])
@@ -207,10 +207,7 @@ object WorkspaceMigrationActor {
         )
       }
 
-      (workspaceService, billingProject) <- MigrateAction.asks { env =>
-        (env.workspaceService, env.billingProject)
-      }
-
+      workspaceService <- MigrateAction.asks(_.workspaceService)
       (googleProjectId, googleProjectNumber) <- MigrateAction.liftIO {
         workspaceService.setupGoogleProject(
           billingProject,
@@ -420,14 +417,13 @@ object WorkspaceMigrationActor {
                                      destBucketName: GcsBucketName)
   : MigrateAction[Unit] =
     for {
-      (storageService, billingProject) <- MigrateAction.asks { env =>
-        (env.storageService, env.billingProject)
+      (storageService, googleProjectToBill) <- MigrateAction.asks { env =>
+        (env.storageService, env.googleProjectToBill)
       }
       _ <- MigrateAction.liftIO {
         for {
           sourceBucketOpt <- storageService.getBucket(
-            // todo: figure out who pays for this
-            GoogleProject(billingProject.googleProjectId.value),
+            googleProjectToBill, // bill "requester-pays" requests to the migration project
             sourceBucketName,
             List(BucketGetOption.userProject(destGoogleProject.value))
           )
@@ -455,8 +451,8 @@ object WorkspaceMigrationActor {
                                    destBucket: GcsBucketName)
   : MigrateAction[TransferJob] =
     for {
-      (storageTransferService, billingProject) <- MigrateAction.asks { env =>
-        (env.storageTransferService, GoogleProject(env.billingProject.googleProjectId.value))
+      (storageTransferService, googleProject) <- MigrateAction.asks { env =>
+        (env.storageTransferService, env.googleProjectToBill)
       }
       transferJob <- MigrateAction.liftIO {
         for {
@@ -464,7 +460,7 @@ object WorkspaceMigrationActor {
           transferJob <- storageTransferService.createTransferJob(
             jobName = GoogleStorageTransferService.JobName(jobName),
             jobDescription = s"""Bucket transfer job from "${originBucket}" to "${destBucket}".""",
-            projectToBill = billingProject,
+            projectToBill = googleProject,
             originBucket,
             destBucket,
             JobTransferSchedule.Immediately
@@ -502,14 +498,14 @@ object WorkspaceMigrationActor {
   final def refreshTransferJobs: MigrateAction[(Long, Outcome)] =
     for {
       record <- peekTransferJob
-      (storageTransferService, billingProject) <- MigrateAction.asks { env =>
-        (env.storageTransferService, GoogleProject(env.billingProject.googleProjectId.value))
+      (storageTransferService, googleProject) <- MigrateAction.asks { env =>
+        (env.storageTransferService, env.googleProjectToBill)
       }
 
       outcome <- MigrateAction.liftF {
         OptionT {
           storageTransferService
-            .listTransferOperations(record.jobName, billingProject)
+            .listTransferOperations(record.jobName, googleProject)
             .map(_.toList.foldMapK(getOperationOutcome))
         }
       }
@@ -691,8 +687,9 @@ object WorkspaceMigrationActor {
   // the status of storage transfer jobs. While it's as yet untested, this can be plumbed-in
   // and integration tested as part of CA-1132.
   // todo: finalise design and test in CA-1132
-  def apply(dataSource: SlickDataSource,
-            billingProject: RawlsBillingProject,
+  def apply(pollingInterval: FiniteDuration,
+            dataSource: SlickDataSource,
+            googleProjectToBill: GoogleProject,
             workspaceService: WorkspaceService,
             storageService: GoogleStorageService[IO],
             storageTransferService: GoogleStorageTransferService[IO])
@@ -707,7 +704,7 @@ object WorkspaceMigrationActor {
               .run(
                 MigrationDeps(
                   dataSource,
-                  billingProject,
+                  googleProjectToBill,
                   workspaceService,
                   storageService,
                   storageTransferService
@@ -724,12 +721,9 @@ object WorkspaceMigrationActor {
       }
 
       Behaviors.withTimers { scheduler =>
-        // run migration pipeline every 10s
-        val period = 10.second
-        scheduler.startTimerAtFixedRate(RunMigration, period)
-
+        scheduler.startTimerAtFixedRate(RunMigration, pollingInterval)
         // two sts jobs are created per migration so run at twice frequency
-        scheduler.startTimerAtFixedRate(RefreshTransferJobs, period / 2)
+        scheduler.startTimerAtFixedRate(RefreshTransferJobs, pollingInterval / 2)
 
         Behaviors.receiveMessage { message =>
           unsafeStartMigrateAction {
