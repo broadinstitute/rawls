@@ -427,17 +427,6 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("dataRepo.terraInstanceName")
       )
 
-
-      /**
-        *       val submissionCostService: SubmissionCostService =
-        SubmissionCostService.constructor(
-          gcsConfig.getString("billingExportTableName"),
-          gcsConfig.getString("serviceProject"),
-          gcsConfig.getInt("billingSearchWindowDays"),
-          bigQueryDAO
-        )
-
-        */
       val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
         bigQueryDAO
       )
