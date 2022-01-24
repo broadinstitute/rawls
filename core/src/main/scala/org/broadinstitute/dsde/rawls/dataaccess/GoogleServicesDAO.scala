@@ -214,13 +214,27 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   // maybe return a bool or just throw errors
   def validateBillingAccount(newBillingAccount: Option[RawlsBillingAccountName],
                              oldBillingAccount: Option[RawlsBillingAccountName],
-                             projectBillingInfo: ProjectBillingInfo): Boolean = {
+                             projectBillingInfo: ProjectBillingInfo,
+                             force: Boolean = false): Boolean = {
     val currentBillingAccountOnGoogle = if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
       None
     else
       Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
 
     val isBillingEnableOnGoogle = projectBillingInfo.getBillingEnabled
+
+    // Check actual Billing Account value from google against the value that Rawls thinks it should be before the update
+    if (!force
+        && (oldBillingAccount != currentBillingAccountOnGoogle)
+        && (newBillingAccount != currentBillingAccountOnGoogle)) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.PreconditionFailed,
+        s"Could not update Billing Account on Google Project ID ${projectBillingInfo.getProjectId} to Billing Account ${newBillingAccount} because Billing Account in Rawls ${oldBillingAccount} did not equal current Billing Account in Google ${projectBillingInfo.getBillingAccountName}"))
+    }
+
+    if (!force
+        && (oldBillingAccount.nonEmpty && !isBillingEnableOnGoogle)) {
+      // throw error - Billing is disabled on Google and Terra didn't know about it
+    }
 
     false
   }
