@@ -11,9 +11,9 @@ import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, Workspace}
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{MigrationException, Outcome}
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigration
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
@@ -185,6 +185,108 @@ class WorkspaceMigrationActorSpec
         migration.newGoogleProjectId shouldBe defined
         migration.newGoogleProjectNumber shouldBe defined
         migration.newGoogleProjectConfigured shouldBe defined
+      }
+    }
+
+
+  it should "error when there's an error on the workspace billing account" in
+    assertThrows[MigrationException] {
+      runMigrationTest {
+        for {
+          now <- nowTimestamp
+          workspace = spec.testData.v1Workspace.copy(
+            billingAccountErrorMessage = "oh noes :(".some,
+            name = UUID.randomUUID.toString,
+            workspaceId = UUID.randomUUID.toString
+          )
+
+          _ <- inTransaction { _ =>
+            createAndScheduleWorkspace(workspace) >> workspaceMigrations
+              .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+              .map(_.started)
+              .update(now.some)
+          }
+
+          _ <- migrate
+
+        } yield fail("it did not fail")
+      }
+    }
+
+
+  it should "error when there's no billing account on the workspace" in
+    assertThrows[MigrationException] {
+      runMigrationTest {
+        for {
+          now <- nowTimestamp
+          workspace = spec.testData.v1Workspace.copy(
+            currentBillingAccountOnGoogleProject = None,
+            name = UUID.randomUUID.toString,
+            workspaceId = UUID.randomUUID.toString
+          )
+
+          _ <- inTransaction { _ =>
+            createAndScheduleWorkspace(workspace) >> workspaceMigrations
+              .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+              .map(_.started)
+              .update(now.some)
+          }
+
+          _ <- migrate
+
+        } yield fail("it did not fail")
+      }
+    }
+
+  it should "error when the billing account on the billing project is invalid" in
+    assertThrows[MigrationException] {
+      runMigrationTest {
+        for {
+          now <- nowTimestamp
+
+          _ <- inTransaction { dataAccess =>
+            DBIO.seq(
+              createAndScheduleWorkspace(spec.testData.v1Workspace),
+              workspaceMigrations
+                .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
+                .map(_.started)
+                .update(now.some),
+              dataAccess
+                .rawlsBillingProjectQuery
+                .filter(_.projectName === spec.testData.v1Workspace.namespace)
+                .map(_.invalidBillingAccount)
+                .update(true)
+            )
+          }
+
+          _ <- migrate
+
+        } yield fail("it did not fail")
+      }
+    }
+
+
+  it should "error when the billing account on the workspace does not match the billing account on the billing project" in
+    assertThrows[MigrationException] {
+      runMigrationTest {
+        for {
+          now <- nowTimestamp
+          workspace = spec.testData.v1Workspace.copy(
+            currentBillingAccountOnGoogleProject = RawlsBillingAccountName("greg").some,
+            name = UUID.randomUUID.toString,
+            workspaceId = UUID.randomUUID.toString
+          )
+
+          _ <- inTransaction { _ =>
+            createAndScheduleWorkspace(workspace) >> workspaceMigrations
+              .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+              .map(_.started)
+              .update(now.some)
+          }
+
+          _ <- migrate
+
+        } yield fail("it did not fail")
       }
     }
 

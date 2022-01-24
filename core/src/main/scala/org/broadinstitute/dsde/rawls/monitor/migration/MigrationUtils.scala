@@ -4,8 +4,9 @@ import cats.effect.IO
 import cats.implicits._
 import cats.kernel.Semigroup
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Success, Failure}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
 import slick.dbio.{DBIOAction, Effect, NoStream}
+import spray.json.{JsObject, JsString}
 
 import scala.concurrent.Future
 import scala.language.higherKinds
@@ -41,6 +42,23 @@ object MigrationUtils {
           case Failure(msgB) => Failure (msgA ++ "\n" ++ msgB)
         }
       }
+
+    implicit class IgnoreResultExtensionMethod[+R, +S <: NoStream, -E <: Effect](action: DBIOAction[R, S, E]) {
+      /** Ignore the result of the DBIOAction and return unit */
+      def ignore: DBIOAction[Unit, NoStream, E with Effect] = action >> DBIOAction.successful()
+    }
+
+
+    import slick.jdbc.MySQLProfile.api._
+    implicit class InsertExtensionMethod[E, T, C[_]](query: Query[E, T, C]) {
+      /** alias for `+=` supporting dot syntax */
+      def insert(value: T) = query += value
+    }
+
+
+    implicit class FutureToIO[+T](future: => Future[T]) {
+      def io: IO[T] = IO.fromFuture(IO(future))
+    }
   }
 
 
@@ -50,20 +68,10 @@ object MigrationUtils {
   }
 
 
-  implicit class IgnoreResultExtensionMethod[+R, +S <: NoStream, -E <: Effect](action: DBIOAction[R, S, E]) {
-    /** Ignore the result of the DBIOAction and return unit */
-    def ignore: DBIOAction[Unit, NoStream, E with Effect] = action >> DBIOAction.successful()
-  }
+  final case class MigrationException(message: String, data: Map[String, Any] = Map.empty, cause: Throwable = null)
+    extends RawlsException(
+      message = JsObject((data + ("message" -> message)).mapValues(s => new JsString(s.toString))).toString,
+      cause = cause
+    ) {}
 
-
-  import slick.jdbc.MySQLProfile.api._
-  implicit class InsertExtensionMethod[E, T, C[_]](query: Query[E, T, C]) {
-    /** alias for `+=` supporting dot syntax */
-    def insert(value: T) = query += value
-  }
-
-
-  implicit class FutureToIO[+T](future: => Future[T]) {
-    def io: IO[T] = IO.fromFuture(IO(future))
-  }
 }
