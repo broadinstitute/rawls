@@ -186,8 +186,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "error when there's an error on the workspace billing account" in
-    assertThrows[WorkspaceMigrationException] {
+  it should "fail the migration when there's an error on the workspace billing account" in
       runMigrationTest {
         for {
           now <- nowTimestamp
@@ -206,85 +205,100 @@ class WorkspaceMigrationActorSpec
 
           _ <- migrate
 
-        } yield fail("it did not fail")
+          migration <- inTransactionT { _ =>
+            getAttempt(workspace.workspaceIdAsUUID)
+          }
+        } yield {
+          migration.finished shouldBe defined
+          migration.outcome.value shouldBe a [Failure]
+        }
+      }
+
+
+  it should "fail the migration when there's no billing account on the workspace" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        workspace = spec.testData.v1Workspace.copy(
+          currentBillingAccountOnGoogleProject = None,
+          name = UUID.randomUUID.toString,
+          workspaceId = UUID.randomUUID.toString
+        )
+
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(workspace) >> workspaceMigrations
+            .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+            .map(_.started)
+            .update(now.some)
+        }
+
+        _ <- migrate
+
+        migration <- inTransactionT { _ =>
+          getAttempt(workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.finished shouldBe defined
+        migration.outcome.value shouldBe a[Failure]
       }
     }
 
 
-  it should "error when there's no billing account on the workspace" in
-    assertThrows[WorkspaceMigrationException] {
-      runMigrationTest {
-        for {
-          now <- nowTimestamp
-          workspace = spec.testData.v1Workspace.copy(
-            currentBillingAccountOnGoogleProject = None,
-            name = UUID.randomUUID.toString,
-            workspaceId = UUID.randomUUID.toString
-          )
-
-          _ <- inTransaction { _ =>
-            createAndScheduleWorkspace(workspace) >> workspaceMigrations
-              .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+  it should "fail the migration when the billing account on the billing project is invalid" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          DBIO.seq(
+            createAndScheduleWorkspace(spec.testData.v1Workspace),
+            workspaceMigrations
+              .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(_.started)
-              .update(now.some)
-          }
-
-          _ <- migrate
-
-        } yield fail("it did not fail")
-      }
-    }
-
-
-  it should "error when the billing account on the billing project is invalid" in
-    assertThrows[WorkspaceMigrationException] {
-      runMigrationTest {
-        for {
-          now <- nowTimestamp
-
-          _ <- inTransaction { dataAccess =>
-            DBIO.seq(
-              createAndScheduleWorkspace(spec.testData.v1Workspace),
-              workspaceMigrations
-                .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
-                .map(_.started)
-                .update(now.some),
-              dataAccess
-                .rawlsBillingProjectQuery
-                .filter(_.projectName === spec.testData.v1Workspace.namespace)
-                .map(_.invalidBillingAccount)
-                .update(true)
-            )
-          }
-
-          _ <- migrate
-
-        } yield fail("it did not fail")
-      }
-    }
-
-
-  it should "error when the billing account on the workspace does not match the billing account on the billing project" in
-    assertThrows[WorkspaceMigrationException] {
-      runMigrationTest {
-        for {
-          now <- nowTimestamp
-          workspace = spec.testData.v1Workspace.copy(
-            currentBillingAccountOnGoogleProject = RawlsBillingAccountName("greg").some,
-            name = UUID.randomUUID.toString,
-            workspaceId = UUID.randomUUID.toString
+              .update(now.some),
+            dataAccess
+              .rawlsBillingProjectQuery
+              .filter(_.projectName === spec.testData.v1Workspace.namespace)
+              .map(_.invalidBillingAccount)
+              .update(true)
           )
+        }
 
-          _ <- inTransaction { _ =>
-            createAndScheduleWorkspace(workspace) >> workspaceMigrations
-              .filter(_.workspaceId === workspace.workspaceIdAsUUID)
-              .map(_.started)
-              .update(now.some)
-          }
+        _ <- migrate
 
-          _ <- migrate
+        migration <- inTransactionT { _ =>
+          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.finished shouldBe defined
+        migration.outcome.value shouldBe a[Failure]
+      }
+    }
 
-        } yield fail("it did not fail")
+
+  it should "fail the migration when the billing account on the workspace does not match the billing account on the billing project" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        workspace = spec.testData.v1Workspace.copy(
+          currentBillingAccountOnGoogleProject = RawlsBillingAccountName("greg").some,
+          name = UUID.randomUUID.toString,
+          workspaceId = UUID.randomUUID.toString
+        )
+
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(workspace) >> workspaceMigrations
+            .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+            .map(_.started)
+            .update(now.some)
+        }
+
+        _ <- migrate
+        migration <- inTransactionT { _ =>
+          getAttempt(workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.finished shouldBe defined
+        migration.outcome.value shouldBe a[Failure]
       }
     }
 
