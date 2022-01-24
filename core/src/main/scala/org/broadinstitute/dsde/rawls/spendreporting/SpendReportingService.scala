@@ -27,7 +27,7 @@ class SpendReportingService(  bigQueryDAO: GoogleBigQueryDAO)(implicit val execu
   def extractSpendReportingResults(rows: util.List[TableRow], startTime: DateTime, endTime: DateTime): SpendReportingResults = {
     val currency = Currency.getInstance(rows.asScala.head.getF.get(2).getV.toString)
 
-    val perDateSpend = rows.asScala.map { row =>
+    val dailySpend = rows.asScala.map { row =>
       val rowCost = BigDecimal(row.getF.get(0).getV.toString).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
       val rowCredits = BigDecimal(row.getF.get(1).getV.toString).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
       SpendReportingForDateRange(rowCost.toString(),
@@ -36,25 +36,26 @@ class SpendReportingService(  bigQueryDAO: GoogleBigQueryDAO)(implicit val execu
         DateTime.parse(row.getF.get(3).getV.toString),
         DateTime.parse(row.getF.get(3).getV.toString).plusDays(1).minusSeconds(1))
     }
-    val spendDetails = SpendReportingAggregation(
-      SpendReportingAggregationKey(""), perDateSpend
+    val dailySpendAggregation = SpendReportingAggregation(
+      SpendReportingAggregationKey(""), dailySpend
     )
-    val cost = rows.asScala.map { row =>
-      BigDecimal(row.getF.get(0).getV.toString)//
+
+    val costRollup = rows.asScala.map { row =>
+      BigDecimal(row.getF.get(0).getV.toString)
     }.sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-    val credits = rows.asScala.map { row =>
+    val creditsRollup = rows.asScala.map { row =>
       BigDecimal(row.getF.get(1).getV.toString)
     }.sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
 
     val spendSummary = SpendReportingForDateRange(
-      cost.toString(),
-      credits.toString(),
+      costRollup.toString(),
+      creditsRollup.toString(),
       currency.getCurrencyCode,
       startTime,
       endTime
     )
 
-    SpendReportingResults(Seq(spendDetails), spendSummary)
+    SpendReportingResults(Seq(dailySpendAggregation), spendSummary)
   }
 
   def dateTimeToISODateString(dt: DateTime) =
