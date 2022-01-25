@@ -14,9 +14,8 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
 
   import slickDataSource.dataAccess.driver.api._
 
-  // prod db has 24 CPUs, ideal number of migration threads seems to be about 125% of CPUs == 30 threads
-  // dev db has 16 CPUs, so currently nThreads is set to 20
-  val nThreads = 20
+  // prod db has 24 CPUs, empirical testing found that 18 threads offered best overall duration
+  val nThreads = 18
   val threadPool = Executors.newFixedThreadPool(nThreads)
   implicit val fixedThreadPool: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(threadPool)
 
@@ -50,7 +49,7 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
     logger.warn(s"deleted $deleted orphan rows in ${fmt(System.currentTimeMillis()-tsDeleteStart)}ms.")
      */
 
-    logger.info(s"START migration of $nShards shards.")
+    logger.info(s"START migration of $nShards shards, using $nThreads threads.")
 
     logger.info(s"calculating expected row counts to migrate for each shard (this will take some time) ... ")
     val expectedCounts = Await.result(Future.traverse(shardsToMigrate) { shardId =>
@@ -64,23 +63,13 @@ class ParallelShardingMigration(slickDataSource: SlickDataSource) extends LazyLo
         logger.info(s"        $shardId : ${fmt(rowsToMigrate)}")
     }
 
-    // now, order from least-to-most rows to migrate. In other words,
-    // we migrate the smallest shards first to get them over with.
-    // in the event that anything goes wrong mid-migration, we'll have
-    // gotten at least some of the shards migrated
-    // however, this means that the end of the migration is copying the
-    // largest shards simultaneously in parallel.
-    // val orderedShards = expectedCounts.toList.sortBy(_._2)
-
-    // now, process the shards in *shardId* alphabetical order. This
-    // means the large and small row counts should be pretty evenly distributed,
-    // and thus we are migrating small shards in parallel to
-    // large shards for balanced CPU utilization
-    //
-    // we could also simply use expectedCounts.toList, since that returns a list
-    // in "map order," which is based on the key hashes - also should be evenly distributed.
-    // but, alpha order is easier for us humans to read about in the logs
-    val orderedShards = expectedCounts.toList.sortBy(_._1)
+    // now, order from most-to-least rows to migrate. In other words,
+    // we migrate the largest shards first. This ensures that the shards
+    // with the largest duration start earliest. Since we have more shards than
+    // threads, we don't want a long-duration shard to be delayed starting.
+    // However, this means that upon launch of the migration, there will be a delay
+    // of close to an hour before any shards finish ... just keep waiting for it!
+    val orderedShards = expectedCounts.toList.sortBy(_._2).reverse
 
     val migrationResults = Future.traverse(orderedShards) {
       case (shardId, rowsToMigrate) => migrateShard(shardId, rowsToMigrate)
