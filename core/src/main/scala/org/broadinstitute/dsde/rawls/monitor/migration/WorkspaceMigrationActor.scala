@@ -464,13 +464,13 @@ object WorkspaceMigrationActor {
           // STS requires the following to read from the origin bucket
           _ <- storageService.setIamPolicy(originBucket, Map(
             (StorageRole.LegacyBucketReader -> serviceAccountList),
-            (StorageRole.ObjectViewer, serviceAccountList)
+            (StorageRole.ObjectViewer -> serviceAccountList)
           )).compile.drain
 
           // STS requires the following to write to the destination bucket
           _ <- storageService.setIamPolicy(destBucket, Map(
             (StorageRole.LegacyBucketWriter -> serviceAccountList),
-            (StorageRole.ObjectCreator, serviceAccountList)
+            (StorageRole.ObjectCreator -> serviceAccountList)
           )).compile.drain
 
           jobName <- randomSuffix("transferJobs/terra-workspace-migration-")
@@ -573,12 +573,12 @@ object WorkspaceMigrationActor {
 
           _ <- storageService.removeIamPolicy(transferJob.originBucket, Map(
             (StorageRole.LegacyBucketReader -> serviceAccountList),
-            (StorageRole.ObjectViewer, serviceAccountList)
+            (StorageRole.ObjectViewer -> serviceAccountList)
           )).compile.drain
 
           _ <- storageService.removeIamPolicy(transferJob.destBucket, Map(
             (StorageRole.LegacyBucketWriter -> serviceAccountList),
-            (StorageRole.ObjectCreator, serviceAccountList)
+            (StorageRole.ObjectCreator -> serviceAccountList)
           )).compile.drain
 
         } yield ()
