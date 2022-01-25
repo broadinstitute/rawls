@@ -69,17 +69,16 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
     */
   def updateBillingAccountInRawlsAndGoogle(googleProjectId: GoogleProjectId,
                                            newBillingAccount: Option[RawlsBillingAccountName],
-                                           oldBillingAccount: Option[RawlsBillingAccountName],
-                                           force: Boolean = false)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
+                                           oldBillingAccount: Option[RawlsBillingAccountName])(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
     logger.info(s"Attempting to update Billing Account from ${oldBillingAccount} to ${newBillingAccount} on all Workspaces in Google Project ${googleProjectId}")
     for {
       projectBillingInfo <- gcsDAO.getBillingInfoForGoogleProject(googleProjectId)
       currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
       _ = validateBillingAccountValuesOrThrow(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)
-      shouldUpdateGoogle = force || shouldGoogleBeUpdated(oldBillingAccount, currentBillingAccountOnGoogle)
-      shouldUpdateRawls = force || shouldRawlsBeUpdated(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)
-      _ <- setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount) if shouldUpdateGoogle
-      _ <- setBillingAccountOnWorkspacesInProject(googleProjectId, oldBillingAccount, newBillingAccount) if shouldUpdateRawls
+      _ <- setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount) if
+        shouldGoogleBeUpdated(oldBillingAccount, currentBillingAccountOnGoogle)
+      _ <- setBillingAccountOnWorkspacesInProject(googleProjectId, oldBillingAccount, newBillingAccount) if
+        shouldRawlsBeUpdated(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)
     } yield projectBillingInfo
   }
 
