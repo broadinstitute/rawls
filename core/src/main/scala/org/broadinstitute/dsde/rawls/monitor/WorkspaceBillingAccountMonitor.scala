@@ -65,43 +65,37 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
     // 2. DO NOT overwrite Billing Account if Terra and Google do not both agree on what the current Billing Account is
     //    2a. Except if Terra is trying to set the value to match whatever is currently set on Google
 
-    val shouldUpdate, projectBillingInfo = for {
-      projectBillingInfo <- getBillingInfoForGoogleProject(googleProjectId)
-      shouldUpdate = force || validateBillingAccountShouldBeUpdatedInGoogle(newBillingAccount, oldBillingAccount, projectBillingInfo)
-    } yield (shouldUpdate, projectBillingInfo)
-
-
+    for {
+      projectBillingInfo <- gcsDAO.getBillingInfoForGoogleProject(googleProjectId)
+      currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
+      shouldUpdateGoogle = force || shouldGoogleBeUpdated(oldBillingAccount, currentBillingAccountOnGoogle)
+      shouldUpdateRawls = force || shouldRawlsBeUpdated(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)
+    } yield projectBillingInfo
   }
 
-  def shouldGoogleBeUpdated(oldBillingAccount: Option[RawlsBillingAccountName],
-                            projectBillingInfo: ProjectBillingInfo): Boolean = {
-    val currentBillingAccountOnGoogle = if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
+  private def getBillingAccountOption(projectBillingInfo: ProjectBillingInfo): Option[RawlsBillingAccountName] = {
+    if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
       None
     else
       Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
-
-    currentBillingAccountOnGoogle == oldBillingAccount
   }
 
-  def shouldRawlsBeUpdated(newBillingAccount: Option[RawlsBillingAccountName],
+  private def shouldGoogleBeUpdated(oldBillingAccount: Option[RawlsBillingAccountName],
+                                    currentBillingAccountOnGoogle: Option[RawlsBillingAccountName]): Boolean = {
+        currentBillingAccountOnGoogle == oldBillingAccount
+  }
+
+  private def shouldRawlsBeUpdated(newBillingAccount: Option[RawlsBillingAccountName],
                            oldBillingAccount: Option[RawlsBillingAccountName],
-                           projectBillingInfo: ProjectBillingInfo): Boolean = {
-    val currentBillingAccountOnGoogle = if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
-      None
-    else
-      Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
-
+                           currentBillingAccountOnGoogle: Option[RawlsBillingAccountName]): Boolean = {
     (currentBillingAccountOnGoogle == oldBillingAccount) || (currentBillingAccountOnGoogle == newBillingAccount)
   }
 
   // maybe return a bool or just throw errors
-  def validateBillingAccountShouldBeUpdatedInGoogle(newBillingAccount: Option[RawlsBillingAccountName],
+  private def validateBillingAccountShouldBeUpdatedInGoogle(newBillingAccount: Option[RawlsBillingAccountName],
                                                     oldBillingAccount: Option[RawlsBillingAccountName],
                                                     projectBillingInfo: ProjectBillingInfo): List[String] = {
-    val currentBillingAccountOnGoogle = if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
-      None
-    else
-      Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
+    val currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
 
     val isBillingEnableOnGoogle = projectBillingInfo.getBillingEnabled
 
@@ -128,7 +122,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
 
   // validation should already be done
   // will determine which call to make to google to update the Billing Account or to disable billing
-  def performUpdate(googleProjectId: GoogleProjectId,
+  private def performUpdate(googleProjectId: GoogleProjectId,
                     newBillingAccount: Option[RawlsBillingAccountName],
                     billingAccountOnGoogle: Option[RawlsBillingAccountName]): Future[Unit] = {
     newBillingAccount match {
