@@ -681,6 +681,19 @@ class WorkspaceMigrationActorSpec
     }
 
 
+  def storageTransferJobForTesting = new PpwStorageTransferJob(
+    id = -1,
+    jobName = null,
+    migrationId = -1,
+    created = null,
+    updated = null,
+    destBucket = null,
+    originBucket = null,
+    finished = null,
+    outcome = null
+  )
+
+
   "updateMigrationTransferJobStatus" should "update WORKSPACE_BUCKET_TRANSFERRED on job success" in
     runMigrationTest {
       for {
@@ -690,7 +703,7 @@ class WorkspaceMigrationActorSpec
         }
 
         _ <- updateMigrationTransferJobStatus(
-          PpwStorageTransferJob.forTesting.copy(
+          storageTransferJobForTesting.copy(
             migrationId = before.id,
             destBucket = GcsBucketName("tmp-bucket-name"),
             originBucket = GcsBucketName("workspace-bucket"),
@@ -722,7 +735,7 @@ class WorkspaceMigrationActorSpec
         }
 
         _ <- updateMigrationTransferJobStatus(
-          PpwStorageTransferJob.forTesting.copy(
+          storageTransferJobForTesting.copy(
             migrationId = before.id,
             originBucket = GcsBucketName("workspace-bucket"),
             destBucket = GcsBucketName("tmp-bucket-name"),
@@ -750,7 +763,7 @@ class WorkspaceMigrationActorSpec
 
         failure = Failure("oh noes :(")
         _ <- updateMigrationTransferJobStatus(
-          PpwStorageTransferJob.forTesting.copy(migrationId = before.id, outcome = failure.some)
+          storageTransferJobForTesting.copy(migrationId = before.id, outcome = failure.some)
         )
 
         after <- inTransactionT { _ =>
