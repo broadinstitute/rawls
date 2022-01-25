@@ -86,11 +86,9 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       val failingGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       val failureMessage = "because I feel like it"
       val exception = new RawlsException(failureMessage)
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
+      when(failingGcsDAO.setBillingAccountName(
         ArgumentMatchers.eq(badWorkspace.googleProjectId),
-        ArgumentMatchers.eq(Option(newBillingAccount)),
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]))
+        ArgumentMatchers.eq(newBillingAccount)))
         .thenReturn(Future.failed(exception))
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -103,7 +101,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
         runAndWait(workspaceQuery.findByName(badWorkspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
           .billingAccountErrorMessage shouldBe Option(failureMessage)
       }
-      verify(failingGcsDAO, times(1)).updateGoogleProjectBillingAccount(badWorkspace.googleProjectId, Option(newBillingAccount), originalBillingAccount)
+      verify(failingGcsDAO, times(1)).setBillingAccountName(badWorkspace.googleProjectId, newBillingAccount)
 
       system.stop(actor)
     }
@@ -127,21 +125,17 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       val failingGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
 
       // "generic" matcher will catch all calls to this method that don't match the "exception" case below
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
+      when(failingGcsDAO.setBillingAccountName(
         any[GoogleProjectId],
-        any[Option[RawlsBillingAccountName]],
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]
+        any[RawlsBillingAccountName]
       )).thenReturn(Future.successful(new ProjectBillingInfo()))
 
       val failureMessage = "because I feel like it"
       val exception = new RawlsException(failureMessage)
       // the "exception" case.  When method is called with these specific params, we want to Fail the Future.
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
+      when(failingGcsDAO.setBillingAccountName(
         ArgumentMatchers.eq(badWorkspace.googleProjectId),
-        ArgumentMatchers.eq(Option(newBillingAccount)),
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]))
+        ArgumentMatchers.eq(newBillingAccount)))
         .thenReturn(Future.failed(exception))
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -181,20 +175,16 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       // We are going to mock this method that will get called multiple times with different params.  Need to implement
       // a "catch-all" mock first before implementing a specific param matcher that will change the behavior.  Last
       // matching param list wins per Mockito docs
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
+      when(failingGcsDAO.setBillingAccountName(
         any[GoogleProjectId],
-        any[Option[RawlsBillingAccountName]],
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]
+        any[RawlsBillingAccountName]
       )).thenReturn(Future.successful(new ProjectBillingInfo()))
 
       val failureMessage = "because I feel like it"
       val exception = new RawlsException(failureMessage)
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
+      when(failingGcsDAO.setBillingAccountName(
         secondV1Workspace.googleProjectId,
-        Option(newBillingAccount),
-        originalBillingAccount,
-        false))
+        newBillingAccount))
         .thenReturn(Future.failed(exception))
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -217,7 +207,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       // "force" boolean will be true and we do not want to count those calls during this assertion.  We only want to
       // count the number of times this was called from the WorkspaceBillingAccountMonitor spec, and in that case, the
       // "force" boolean will be false.
-      verify(failingGcsDAO, times(1)).updateGoogleProjectBillingAccount(secondV1Workspace.googleProjectId, Option(newBillingAccount), originalBillingAccount, false)
+      verify(failingGcsDAO, times(1)).setBillingAccountName(secondV1Workspace.googleProjectId, newBillingAccount)
 
       system.stop(actor)
     }
@@ -236,20 +226,16 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       // We are going to mock this method that will get called multiple times with different params.  Need to implement
       // a "catch-all" mock first before implementing a specific param matcher that will change the behavior.  Last
       // matching param list wins per Mockito docs
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
+      when(failingGcsDAO.setBillingAccountName(
         any[GoogleProjectId],
-        any[Option[RawlsBillingAccountName]],
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]
+        any[RawlsBillingAccountName]
       )).thenReturn(Future.successful(new ProjectBillingInfo()))
 
       val failureMessage = "because I feel like it"
       val exception = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, failureMessage))
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
+      when(failingGcsDAO.setBillingAccountName(
         any[GoogleProjectId],
-        ArgumentMatchers.eq(Option(newBillingAccount)),
-        ArgumentMatchers.eq(originalBillingAccount),
-        ArgumentMatchers.eq(false)))
+        ArgumentMatchers.eq(newBillingAccount)))
         .thenReturn(Future.failed(exception))
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))

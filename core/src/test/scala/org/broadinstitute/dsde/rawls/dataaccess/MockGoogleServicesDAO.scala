@@ -8,7 +8,7 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -257,7 +257,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(new ProjectBillingInfo().setBillingEnabled(false))
 
   override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] =
-    Future.successful(new ProjectBillingInfo().setBillingAccountName("some-billing-account-name").setBillingEnabled(true))
+    Future.failed(new RawlsExceptionWithErrorReport(ErrorReport("Implement this for your specific test")))
 
   override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] = {
     Future.successful {

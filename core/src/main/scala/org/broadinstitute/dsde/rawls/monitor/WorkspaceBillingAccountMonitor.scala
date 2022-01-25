@@ -75,10 +75,21 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       projectBillingInfo <- gcsDAO.getBillingInfoForGoogleProject(googleProjectId)
       currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
       _ = validateBillingAccountValuesOrThrow(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)
-      _ <- setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount) if
-        shouldGoogleBeUpdated(oldBillingAccount, currentBillingAccountOnGoogle)
-      _ <- setBillingAccountOnWorkspacesInProject(googleProjectId, oldBillingAccount, newBillingAccount) if
-        shouldRawlsBeUpdated(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)
+      _ <- if (shouldGoogleBeUpdated(oldBillingAccount, currentBillingAccountOnGoogle)) {
+        logger.warn("true google should be updated")
+        setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount)
+      } else {
+        logger.warn(s"Not updating google oldBillingAccount:${oldBillingAccount} currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle}")
+        Future.successful()
+      }
+      _ <- if (shouldRawlsBeUpdated(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)) {
+        logger.warn("true rawls should be updated")
+        setBillingAccountOnWorkspacesInProject(googleProjectId, oldBillingAccount, newBillingAccount)
+      } else {
+        logger.warn(s"Not updating rawls newBillingAccount:${newBillingAccount} oldBillingAccount:${oldBillingAccount} currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle}")
+
+        Future.successful()
+      }
     } yield projectBillingInfo
   }
 
@@ -105,7 +116,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
           logger.warn(message, e)
           throw e
         }
-      case e =>
+      case e: Throwable =>
         dataSource.inTransaction { dataAccess =>
           dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, e.getMessage)
         }.map { _ =>
@@ -125,6 +136,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
   private def setBillingAccountOnWorkspacesInProject(googleProjectId: GoogleProjectId,
                                                      oldBillingAccount: Option[RawlsBillingAccountName],
                                                      newBillingAccount: Option[RawlsBillingAccountName]): Future[Int] = {
+    logger.warn("In setting billing account on workspaces")
     dataSource.inTransaction( { dataAccess =>
       dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
     })
