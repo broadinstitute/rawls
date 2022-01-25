@@ -6,6 +6,7 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
+import com.google.cloud.Identity
 import com.google.cloud.storage.{Acl, Storage}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
@@ -18,10 +19,10 @@ import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigration
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
-import org.broadinstitute.dsde.workbench.model.TraceId
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, ServiceAccount, ServiceAccountDisplayName, ServiceAccountSubjectId}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
 import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.Eventually
@@ -70,6 +71,15 @@ class WorkspaceMigrationActorSpec
 
 
   case class MockStorageTransferService() extends MockGoogleStorageTransferService[IO] {
+    override def getStsServiceAccount(project: GoogleProject): IO[ServiceAccount] =
+      IO.pure {
+        ServiceAccount(
+          ServiceAccountSubjectId("fake-storage-transfer-service"),
+          WorkbenchEmail(s"fake-storage-transfer-service@${project}.iam.gserviceaccount.com"),
+          ServiceAccountDisplayName("Fake Google Storage Transfer Service")
+        )
+      }
+
     override def createTransferJob(jobName: JobName, jobDescription: String, projectToBill: GoogleProject, originBucket: GcsBucketName, destinationBucket: GcsBucketName, schedule: JobTransferSchedule): IO[TransferJob] =
       IO.pure {
         TransferJob.newBuilder
@@ -91,6 +101,9 @@ class WorkspaceMigrationActorSpec
       fs2.Stream.emit(true)
 
     override def insertBucket(googleProject: GoogleProject, bucketName: GcsBucketName, acl: Option[NonEmptyList[Acl]], labels: Map[String, String], traceId: Option[TraceId], bucketPolicyOnlyEnabled: Boolean, logBucket: Option[GcsBucketName], retryConfig: RetryConfig, location: Option[String]): fs2.Stream[IO, Unit] =
+      fs2.Stream.emit(())
+
+    override def setIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Unit] =
       fs2.Stream.emit(())
   }
 

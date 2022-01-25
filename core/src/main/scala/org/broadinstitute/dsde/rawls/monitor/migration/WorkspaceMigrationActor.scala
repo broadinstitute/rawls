@@ -2,9 +2,10 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-import cats.data.{OptionT, ReaderT}
+import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
 import cats.implicits._
+import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketGetOption
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
@@ -17,7 +18,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationHistory._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.JobTransferSchedule
-import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
 import java.sql.Timestamp
@@ -451,12 +452,29 @@ object WorkspaceMigrationActor {
                                    destBucket: GcsBucketName)
   : MigrateAction[TransferJob] =
     for {
-      (storageTransferService, googleProject) <- MigrateAction.asks { env =>
-        (env.storageTransferService, env.googleProjectToBill)
+      (storageTransferService, storageService, googleProject) <- MigrateAction.asks { env =>
+        (env.storageTransferService, env.storageService, env.googleProjectToBill)
       }
+
       transferJob <- MigrateAction.liftIO {
         for {
+          serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
+          serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
+
+          // STS requires the following to read from the origin bucket
+          _ <- storageService.setIamPolicy(originBucket, Map(
+            (StorageRole.LegacyBucketReader -> serviceAccountList),
+            (StorageRole.ObjectViewer, serviceAccountList)
+          )).compile.drain
+
+          // STS requires the following to write to the destination bucket
+          _ <- storageService.setIamPolicy(destBucket, Map(
+            (StorageRole.LegacyBucketWriter -> serviceAccountList),
+            (StorageRole.ObjectCreator, serviceAccountList)
+          )).compile.drain
+
           jobName <- randomSuffix("transferJobs/terra-workspace-migration-")
+
           transferJob <- storageTransferService.createTransferJob(
             jobName = GoogleStorageTransferService.JobName(jobName),
             jobDescription = s"""Bucket transfer job from "${originBucket}" to "${destBucket}".""",
