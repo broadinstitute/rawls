@@ -45,7 +45,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
               // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
               // want to continue traversing the list to update the rest of the google project billing accounts even
               // if one of the update operations fails.
-              logger.warn(s"Failed to update billing account from ${oldBillingAccount}to ${newBillingAccount} on project $googleProjectId", e)
+              logger.warn(s"Failed to update billing account from ${oldBillingAccount} to ${newBillingAccount} on project $googleProjectId", e)
               ()
             }
             case Right(res) => res
@@ -78,7 +78,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       _ = validateBillingAccountValuesOrThrow(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)
       shouldUpdateGoogle = force || shouldGoogleBeUpdated(oldBillingAccount, currentBillingAccountOnGoogle)
       shouldUpdateRawls = force || shouldRawlsBeUpdated(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)
-      _ <- setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount, oldBillingAccount) if shouldUpdateGoogle
+      _ <- setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount) if shouldUpdateGoogle
       _ <- setBillingAccountOnWorkspacesInProject(googleProjectId, oldBillingAccount, newBillingAccount) if shouldUpdateRawls
     } yield projectBillingInfo
   }
@@ -90,7 +90,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
     * @param newBillingAccount
     */
   private def setBillingAccountOnGoogleProject(googleProjectId: GoogleProjectId,
-                                               newBillingAccount: Option[RawlsBillingAccountName]): Future[Unit] = {
+                                               newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] = {
     try {
       newBillingAccount match {
         case Some(billingAccount) => gcsDAO.setBillingAccountName(googleProjectId, billingAccount)
@@ -98,17 +98,18 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       }
     } catch {
       case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
+        val message = s"Rawls does not have permission to set the Billing Account on ${googleProjectId} to ${newBillingAccount.get}"
         dataSource.inTransaction({ dataAccess =>
           dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(newBillingAccount.get, isInvalid = true)
+          dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, s"${message} ${e.getMessage}")
         }).map { _ =>
-          logger.error(s"Rawls does not have permission to set the Billing Account on ${googleProjectId} to ${newBillingAccount.get}", e)
+          logger.warn(message, e)
           throw e
         }
       case e =>
         dataSource.inTransaction { dataAccess =>
           dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, e.getMessage)
         }.map { _ =>
-          logger.error(s"Failure while trying to update Billing Account to ${newBillingAccount} on Google Project ${googleProjectId}", e)
           throw e
         }
     }
@@ -123,8 +124,8 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
     * @return
     */
   private def setBillingAccountOnWorkspacesInProject(googleProjectId: GoogleProjectId,
-                                                       oldBillingAccount: Option[RawlsBillingAccountName],
-                                                       newBillingAccount: Option[RawlsBillingAccountName]): Future[Int] = {
+                                                     oldBillingAccount: Option[RawlsBillingAccountName],
+                                                     newBillingAccount: Option[RawlsBillingAccountName]): Future[Int] = {
     dataSource.inTransaction( { dataAccess =>
       dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
     })
@@ -184,14 +185,13 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
                                                   currentBillingAccountOnGoogle: Option[RawlsBillingAccountName]): Unit = {
     val validationErrors = List[String]()
 
-    // !(currentBillingAccountOnGoogle == oldBillingAccount || currentBillingAccountOnGoogle == newBillingAccount)
+    // This uses `shouldRawlsBeUpdated` for efficiency, but nothing needs to fundamentally tie this method to shouldRawlsBeUpdated in the future
     if (!shouldRawlsBeUpdated(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)) {
       validationErrors + s"Billing Account on Google ${currentBillingAccountOnGoogle} does not match existing Billing Account in Rawls ${currentBillingAccountOnGoogle} or the desired new Billing Account ${newBillingAccount}"
     }
 
     if (validationErrors.nonEmpty) {
       val validationErrorMessage = s"Update Billing Account validation failed: ${validationErrors}"
-      logger.info(validationErrorMessage)
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.PreconditionFailed, validationErrorMessage))
     }
 
