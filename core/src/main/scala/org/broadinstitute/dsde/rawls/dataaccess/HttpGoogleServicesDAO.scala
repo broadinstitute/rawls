@@ -753,26 +753,6 @@ class HttpGoogleServicesDAO(
     }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
   }
 
-  // TODO: Remove method.  Seems to not be used.  Write tests for CA-1714 first, get everything green before removing
-  override def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Billing
-
-    val projectNameFormatted = s"projects/${googleProjectName.value}"
-
-    val credential = getUserCredential(userInfo)
-    val billingAccountInfo = new ProjectBillingInfo()
-
-    billingAccountName.foreach(name => billingAccountInfo.setBillingAccountName(name.value))
-
-    val setter = getCloudBillingManager(credential).projects().updateBillingInfo(projectNameFormatted, billingAccountInfo)
-
-    retryWhen500orGoogleError(() => {
-      blocking {
-        executeGoogleRequest(setter)
-      }
-    })
-  }
-
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
