@@ -513,9 +513,9 @@ object WorkspaceMigrationActor {
     } yield ()
 
 
-  final def refreshTransferJobs: MigrateAction[(Long, Outcome)] =
+  final def refreshTransferJobs: MigrateAction[PpwStorageTransferJob] =
     for {
-      record <- peekTransferJob
+      transferJob <- peekTransferJob
       (storageTransferService, googleProject) <- MigrateAction.asks { env =>
         (env.storageTransferService, env.googleProjectToBill)
       }
@@ -523,7 +523,7 @@ object WorkspaceMigrationActor {
       outcome <- MigrateAction.liftF {
         OptionT {
           storageTransferService
-            .listTransferOperations(record.jobName, googleProject)
+            .listTransferOperations(transferJob.jobName, googleProject)
             .map(_.toList.foldMapK(getOperationOutcome))
         }
       }
@@ -531,11 +531,11 @@ object WorkspaceMigrationActor {
       (status, message) = toTuple(outcome)
       _ <- inTransaction { _ =>
         storageTransferJobs
-          .filter(_.id === record.id)
+          .filter(_.id === transferJob.id)
           .map(row => (row.outcome, row.message))
           .update(status, message)
       }
-    } yield (record.migrationId, outcome)
+    } yield transferJob.copy(outcome = outcome.some)
 
 
   final def getOperationOutcome(operation: Operation): Option[Outcome] =
@@ -551,33 +551,48 @@ object WorkspaceMigrationActor {
     }
 
 
-  final def updateMigrationTransferJobStatus(migrationId: Long, jobOutcome: Outcome): MigrateAction[Unit] =
-    jobOutcome match {
-      case Success => transferJobSucceeded(migrationId)
-      case Failure(_) => migrationFinished(migrationId, jobOutcome)
+  final def updateMigrationTransferJobStatus(transferJob: PpwStorageTransferJob): MigrateAction[Unit] =
+    transferJob.outcome match {
+      case Some(Success) => transferJobSucceeded(transferJob)
+      case Some(failure) => migrationFinished(transferJob.migrationId, failure)
+      case _ => MigrateAction.unit
     }
 
 
-  final def transferJobSucceeded(migrationId: Long): MigrateAction[Unit] =
-    nowTimestamp.flatMap { transferred =>
-      inTransaction { _ =>
-        val migrations = workspaceMigrations.filter(_.id === migrationId)
-        DBIO.seq(
-          // if the workspace bucket has already been transferred then this job relates transferring
-          // the tmp -> final workspace bucket
-          migrations
-            .filter(_.workspaceBucketTransferred.isDefined)
-            .map(_.tmpBucketTransferred)
-            .update(transferred.some),
-          // if the workspace bucket has not been defined then this job relates to transferring
-          // old workspace bucket -> tmp bucket
-          migrations
-            .filter(_.workspaceBucketTransferred.isEmpty)
-            .map(_.workspaceBucketTransferred)
-            .update(transferred.some)
-        )
+  final def transferJobSucceeded(transferJob: PpwStorageTransferJob): MigrateAction[Unit] =
+    for {
+      migration <- findMigration(_.id === transferJob.migrationId)
+      (storageTransferService, storageService, googleProject) <- MigrateAction.asks { env =>
+        (env.storageTransferService, env.storageService, env.googleProjectToBill)
       }
-    }
+
+      _ <- MigrateAction.liftIO {
+        for {
+          serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
+          serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
+
+          _ <- storageService.removeIamPolicy(transferJob.originBucket, Map(
+            (StorageRole.LegacyBucketReader -> serviceAccountList),
+            (StorageRole.ObjectViewer, serviceAccountList)
+          )).compile.drain
+
+          _ <- storageService.removeIamPolicy(transferJob.destBucket, Map(
+            (StorageRole.LegacyBucketWriter -> serviceAccountList),
+            (StorageRole.ObjectCreator, serviceAccountList)
+          )).compile.drain
+
+        } yield ()
+      }
+
+      transferred <- nowTimestamp.map(_.some)
+      _ <- inTransaction { _ =>
+        val migrationQuery = workspaceMigrations.filter(_.id === transferJob.migrationId)
+        if (migration.workspaceBucketTransferred.isEmpty)
+          migrationQuery.map(_.workspaceBucketTransferred).update(transferred) else
+          migrationQuery.map(_.tmpBucketTransferred).update(transferred)
+
+      }
+    } yield ()
 
 
   final def migrationFinished(migrationId: Long, outcome: Outcome): MigrateAction[Unit] =
@@ -753,7 +768,7 @@ object WorkspaceMigrationActor {
                 migrate
 
               case RefreshTransferJobs =>
-                refreshTransferJobs >>= (updateMigrationTransferJobStatus _).tupled
+                refreshTransferJobs >>= updateMigrationTransferJobStatus
             }
           }
         }

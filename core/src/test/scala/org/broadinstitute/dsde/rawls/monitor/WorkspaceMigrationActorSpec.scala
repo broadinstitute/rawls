@@ -6,8 +6,8 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
-import com.google.cloud.Identity
 import com.google.cloud.storage.{Acl, Storage}
+import com.google.cloud.{Identity, Policy}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -15,14 +15,14 @@ import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleS
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, WorkspaceMigrationException}
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigration
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
+import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigration}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
-import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
+import org.broadinstitute.dsde.workbench.model.google._
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, ServiceAccount, ServiceAccountDisplayName, ServiceAccountSubjectId}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
 import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.Eventually
@@ -101,10 +101,16 @@ class WorkspaceMigrationActorSpec
       fs2.Stream.emit(true)
 
     override def insertBucket(googleProject: GoogleProject, bucketName: GcsBucketName, acl: Option[NonEmptyList[Acl]], labels: Map[String, String], traceId: Option[TraceId], bucketPolicyOnlyEnabled: Boolean, logBucket: Option[GcsBucketName], retryConfig: RetryConfig, location: Option[String]): fs2.Stream[IO, Unit] =
-      fs2.Stream.emit(())
+      fs2.Stream.emit()
+
+    override def getIamPolicy(bucketName: GcsBucketName, traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Policy] =
+      fs2.Stream.emit(Policy.newBuilder.build)
 
     override def setIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Unit] =
-      fs2.Stream.emit(())
+      fs2.Stream.emit()
+
+    override def overrideIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Policy] =
+      fs2.Stream.emit(Policy.newBuilder.build)
   }
 
 
@@ -616,10 +622,10 @@ class WorkspaceMigrationActorSpec
         }
 
         _ <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
-        (migrationId, outcome) <- refreshTransferJobs
+        transferJob <- refreshTransferJobs
       } yield {
-        migrationId shouldBe migration.id
-        outcome shouldBe Outcome.Success
+        transferJob.migrationId shouldBe migration.id
+        transferJob.outcome.value shouldBe Outcome.Success
       }
     }
 
@@ -683,7 +689,14 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        _ <- updateMigrationTransferJobStatus(before.id, Success)
+        _ <- updateMigrationTransferJobStatus(
+          PpwStorageTransferJob.forTesting.copy(
+            migrationId = before.id,
+            destBucket = GcsBucketName("tmp-bucket-name"),
+            originBucket = GcsBucketName("workspace-bucket"),
+            outcome = Success.some
+          )
+        )
 
         after <- inTransactionT { _ =>
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
@@ -708,7 +721,14 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        _ <- updateMigrationTransferJobStatus(before.id, Success)
+        _ <- updateMigrationTransferJobStatus(
+          PpwStorageTransferJob.forTesting.copy(
+            migrationId = before.id,
+            originBucket = GcsBucketName("workspace-bucket"),
+            destBucket = GcsBucketName("tmp-bucket-name"),
+            outcome = Success.some
+          )
+        )
 
         after <- inTransactionT { _ =>
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
@@ -729,7 +749,9 @@ class WorkspaceMigrationActorSpec
         }
 
         failure = Failure("oh noes :(")
-        _ <- updateMigrationTransferJobStatus(before.id, failure)
+        _ <- updateMigrationTransferJobStatus(
+          PpwStorageTransferJob.forTesting.copy(migrationId = before.id, outcome = failure.some)
+        )
 
         after <- inTransactionT { _ =>
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)

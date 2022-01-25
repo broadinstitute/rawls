@@ -1,13 +1,21 @@
 package org.broadinstitute.dsde.rawls.monitor.migration
 
+import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.implicits._
 import cats.kernel.Semigroup
+import com.google.cloud.{Identity, Policy, Role}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
+import org.broadinstitute.dsde.workbench.RetryConfig
+import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates.standardGoogleRetryConfig
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
+import org.broadinstitute.dsde.workbench.model.TraceId
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import slick.dbio.{DBIOAction, Effect, NoStream}
 import spray.json.{JsObject, JsString}
 
+import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.language.higherKinds
 
@@ -56,6 +64,37 @@ object MigrationUtils {
 
     implicit class FutureToIO[+A](future: => Future[A]) {
       def io: IO[A] = IO.fromFuture(IO(future))
+    }
+
+    // TODO: move into workbench-libs
+    implicit class StorageServiceExtensions[F[_]](storageService: GoogleStorageService[F]) {
+      final def policyToStorageRoles(policy: Policy): Map[StorageRole, NonEmptyList[Identity]] =
+        policy
+          .getBindings
+          .foldLeft(Map.newBuilder[StorageRole, NonEmptyList[Identity]]) { (builder, binding) =>
+            NonEmptyList.fromList(binding._2.toList).map { identities =>
+              builder += (StorageRole.CustomStorageRole(binding._1.getValue).asInstanceOf[StorageRole] -> identities)
+            }.getOrElse(builder)
+          }
+          .result
+
+
+      def removeIamPolicy(bucketName: GcsBucketName,
+                          roles: Map[StorageRole, NonEmptyList[Identity]],
+                          traceId: Option[TraceId] = None,
+                          retryConfig: RetryConfig = standardGoogleRetryConfig)
+      : fs2.Stream[F, Unit] =
+        for {
+          policy <- storageService.getIamPolicy(bucketName, traceId, retryConfig)
+          newStorageRoles = policyToStorageRoles {
+            roles
+              .foldLeft(policy.toBuilder) { (builder, role) =>
+                builder.removeIdentity(Role.of(role._1.name), role._2.head, role._2.tail: _*)
+              }
+              .build
+          }
+          _ <- storageService.overrideIamPolicy(bucketName, newStorageRoles, traceId, retryConfig)
+        } yield ()
     }
   }
 
