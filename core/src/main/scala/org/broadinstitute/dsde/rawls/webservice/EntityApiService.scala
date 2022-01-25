@@ -100,7 +100,7 @@ trait EntityApiService extends UserInfoDirectives {
           post {
             entity(as[Array[AttributeEntityReference]]) { entities =>
               complete {
-                entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, None, None).map {
+                entityServiceConstructor(userInfo).deleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities, dataReference, None).map {
                   case entities if entities.isEmpty => StatusCodes.NoContent -> None
                   case entities => StatusCodes.Conflict -> Option(entities)
                 }
@@ -164,7 +164,7 @@ trait EntityApiService extends UserInfoDirectives {
               }
             }
           } ~
-          post {
+          head {
             // total abuse of REST APIs, we're just hacking an available API
             complete {
               entityServiceConstructor(userInfo).indexToOpenSearch(WorkspaceName(workspaceNamespace, workspaceName), entityType)

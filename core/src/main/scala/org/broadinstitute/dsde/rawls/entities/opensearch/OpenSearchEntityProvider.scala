@@ -9,25 +9,22 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model._
-import org.opensearch.action.admin.cluster.health.ClusterHealthRequest
+import org.opensearch.action.bulk.BulkRequest
+import org.opensearch.action.delete.DeleteRequest
 import org.opensearch.action.get.GetRequest
-import org.opensearch.action.get.GetResponse
 import org.opensearch.action.index.IndexRequest
-import org.opensearch.action.search.{SearchAction, SearchRequest, SearchRequestBuilder}
-import org.opensearch.client.core.CountRequest
+import org.opensearch.action.search.SearchRequest
 import org.opensearch.client.{RequestOptions, RestHighLevelClient}
 import org.opensearch.client.indices.{CreateIndexRequest, GetIndexRequest, GetMappingsRequest}
-import org.opensearch.common.document.DocumentField
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import org.opensearch.common.xcontent.XContentType
-import org.opensearch.index.query.{BoolQueryBuilder, MatchQueryBuilder, QueryBuilder, QueryStringQueryBuilder, TermsQueryBuilder}
+import org.opensearch.index.query.{BoolQueryBuilder, QueryStringQueryBuilder, TermsQueryBuilder}
 import org.opensearch.search.SearchHit
 import org.opensearch.search.aggregations.bucket.terms.ParsedStringTerms
-import org.opensearch.search.aggregations.{Aggregation, AggregationBuilder, AggregationBuilders}
+import org.opensearch.search.aggregations.{Aggregation, AggregationBuilders}
 import org.opensearch.search.builder.SearchSourceBuilder
 import org.opensearch.search.sort.SortOrder
 
@@ -48,14 +45,15 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
   final val FIELD_DELIMITER = "."
   final val TYPE_FIELD = "sys_entity_type"
 
+  // OpenSearch index for this workspace
+  val workspaceIndex = indexName(requestArguments.workspace)
+
   // ================================================================================================
   // API methods we support
 
   override def entityTypeMetadata(useCache: Boolean = false): Future[Map[String, EntityTypeMetadata]] = {
-    val indexname = indexName(requestArguments.workspace)
-
     // one request to get the entityType->document count aggregation
-    val req = new SearchRequest(indexname)
+    val req = new SearchRequest(workspaceIndex)
 
     val entityTypeAgg = AggregationBuilders.terms(TYPE_FIELD).field(s"$TYPE_FIELD")
 
@@ -79,11 +77,11 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
     // another request to get the field mappings for this index
     val mappingsRequest = new GetMappingsRequest()
-      mappingsRequest.indices(indexname)
+      mappingsRequest.indices(workspaceIndex)
     val mappingsResponse = client.indices().getMapping(mappingsRequest, RequestOptions.DEFAULT)
 
     // TODO: find a better way than the asInstanceOfs in here
-    val indexMapping = mappingsResponse.mappings().get(indexname)
+    val indexMapping = mappingsResponse.mappings().get(workspaceIndex)
     val mapping: Map[String, AnyRef] = indexMapping.getSourceAsMap.asScala.toMap
 
     def wigglyMapLookup(source: Map[String, AnyRef], key: String): Map[String, AnyRef] = {
@@ -112,10 +110,8 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
   }
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
-    val indexname = indexName(requestArguments.workspace)
-
     //Getting back the document
-    val getRequest = new GetRequest(indexname, s"${entityType}/${entityName}")
+    val getRequest = new GetRequest(workspaceIndex, s"${entityType}/${entityName}")
     val getResponse = client.get(getRequest, RequestOptions.DEFAULT)
 
     if (getResponse.isExists) {
@@ -131,9 +127,7 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
   }
 
   override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
-    val indexname = indexName(requestArguments.workspace)
-
-    val req = new SearchRequest(indexname)
+    val req = new SearchRequest(workspaceIndex)
 
     val typeQuery = new TermsQueryBuilder(TYPE_FIELD, entityType)
 
@@ -161,6 +155,7 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     else {
       SortOrder.ASC
     }
+    // TODO OpenSearch: better handling when the sort field does not exist or does not have a .keyword mapping
     val sortField = fieldName(entityType, AttributeName.fromDelimitedName(incomingQuery.sortField)) + ".keyword"
     searchSourceBuilder.sort(sortField, sortOrder)
 
@@ -195,14 +190,35 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
   }
 
+  override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = {
+    val bulkRequest = new BulkRequest(workspaceIndex)
+    // val brb = new BulkRequestBuilder(client.getLowLevelClient, BulkAction.INSTANCE)
+
+    entityRefs.foreach { ref =>
+      val docid = documentId(ref.entityType, ref.entityName)
+      val deleteRequest = new DeleteRequest(workspaceIndex, docid)
+      bulkRequest.add(deleteRequest)
+    }
+
+    val bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT)
+    val successes = bulkResponse.getItems.collect {
+      case item if !item.isFailed => item
+    }
+
+    if (successes.length == entityRefs.length) {
+      Future.successful(successes.length)
+    } else {
+      Future.failed(new Exception(s"Expected to delete ${entityRefs.length}; only deleted ${successes.length}"))
+    }
+  }
+
   // ================================================================================================
   // API methods we haven't implemented
 
   override def createEntity(entity: Entity): Future[Entity] =
     throw new UnsupportedEntityOperationException("create entity not supported by this provider.")
 
-  override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] =
-    throw new UnsupportedEntityOperationException("delete entities not supported by this provider.")
+
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] =
     throw new UnsupportedEntityOperationException("evaluateExpressions not supported by this provider.")
@@ -219,13 +235,11 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
   // ================================================================================================
   // class-specific methods
   def createWorkspaceIndex(workspace: Workspace) = {
-    val indexname = indexName(workspace)
-
-    val getIndexRequest = new GetIndexRequest(indexname)
+    val getIndexRequest = new GetIndexRequest(workspaceIndex)
     val getIndexResponse = client.indices().exists(getIndexRequest, RequestOptions.DEFAULT)
     if (!getIndexResponse) {
       logger.info(s"OpenSearch index for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} does not exist; creating ... ")
-      val createIndexRequest = new CreateIndexRequest(indexname)
+      val createIndexRequest = new CreateIndexRequest(workspaceIndex)
 
       // easiest way to create mappings
       val mappings =
@@ -253,6 +267,17 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     indexResponse.status().toString
   }
 
+  def indexEntities(workspace: Workspace, entities: List[Entity]): List[String] = {
+    val bulkRequest = new BulkRequest()
+    entities.foreach { entity =>
+      val indexRequest = indexableDocument(workspace, entity)
+      bulkRequest.add(indexRequest)
+    }
+    val bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT)
+    val statusResponses = bulkResponse.getItems map { bulkItemResponse => bulkItemResponse.status().toString }
+    statusResponses.toList
+  }
+
   // ================================================================================================
   // utilities for translating from Terra to OpenSearch
 
@@ -266,7 +291,7 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
   /** generate the OpenSearch request to index a single entity */
   private def indexableDocument(workspace: Workspace, entity: Entity): IndexRequest = {
-    val request = new IndexRequest(indexName(workspace)) // Use the workspace-specific index
+    val request = new IndexRequest(workspaceIndex) // Use the workspace-specific index
     request.id(documentId(entity)) // Unique id for this document in the index
 
     // prepend the entityType to each attribute name, to ensure that same-named

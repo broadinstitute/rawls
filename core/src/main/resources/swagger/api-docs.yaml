@@ -1901,6 +1901,8 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       responses:
         200:
           description: Successful Request
@@ -1932,6 +1934,8 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
         - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
         - name: attributeNames
           in: query
           description: |
@@ -1958,10 +1962,10 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
-    post:
+    head:
       tags:
         - entities
-      summary: index this type into OpenSearch
+      summary: HACK index this type into OpenSearch HACK
       description: this is sUcH A HAck
       operationId: index_entity_type
       parameters:
@@ -2091,6 +2095,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       requestBody:
         description: Set of entities to delete
         content:
@@ -2204,6 +2210,8 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       requestBody:
         description: Entity update definitions
         content:
