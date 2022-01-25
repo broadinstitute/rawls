@@ -135,9 +135,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                                         oldBillingAccount: Option[RawlsBillingAccountName],
                                         force: Boolean = false): Future[ProjectBillingInfo]
 
-  def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[Unit]
+  def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo]
 
-  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[Unit]
+  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo]
 
   def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo]
 

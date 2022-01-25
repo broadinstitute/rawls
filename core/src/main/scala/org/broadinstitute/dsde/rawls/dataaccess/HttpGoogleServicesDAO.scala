@@ -754,6 +754,43 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  /**
+    * Explicitly sets the Billing Account on a Google Project to the value given, even if it is empty.  Callers should
+    * ensure that the new Billing Account value is valid and non-empty as this method will not perform any input
+    * validations.
+    * @param googleProjectId
+    * @param billingAccountName
+    * @return
+    */
+  override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] = {
+    // Since this method should only be called with a non-empty Billing Account Name, then Rawls should also make sure
+    // that Billing is enabled for the Google Project, otherwise users' projects could get "stuck" in a Disabled Billing
+    // state with no way to reenable because they do not have permissions to do this directly on the Google Project.
+    val newProjectBillingInfo = new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(true)
+    updateBillingInfo(googleProjectId, newProjectBillingInfo)
+  }
+
+  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo] = {
+    val newProjectBillingInfo = new ProjectBillingInfo().setBillingEnabled(false)
+    updateBillingInfo(googleProjectId, newProjectBillingInfo)
+  }
+
+  private def updateBillingInfo(googleProjectId: GoogleProjectId, projectBillingInfo: ProjectBillingInfo): Future[ProjectBillingInfo] = {
+    implicit val service = GoogleInstrumentedService.Billing
+    val billingSvcCred = getBillingServiceAccountCredential
+    val cloudBillingProjectsApi = getCloudBillingManager(billingSvcCred).projects()
+    val updater = cloudBillingProjectsApi.updateBillingInfo(googleProjectId.value, projectBillingInfo)
+    retryWithRecoverWhen500orGoogleError(() => {
+      blocking {
+        executeGoogleRequest(updater)
+      }
+    }) {
+      case e: GoogleJsonResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
+          s"Rawls service account does not have access to Billing Account on Google Project ${googleProjectId}: ${projectBillingInfo}", e))
+    }
+  }
+
   override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
     val billingSvcCred = getBillingServiceAccountCredential
     implicit val service = GoogleInstrumentedService.Billing
@@ -791,6 +828,7 @@ class HttpGoogleServicesDAO(
     }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
   }
 
+  // TODO: Remove method.  Seems to not be used.  Write tests for CA-1714 first, get everything green before removing
   override def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Billing
 

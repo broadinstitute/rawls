@@ -257,6 +257,15 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(new ProjectBillingInfo().setBillingAccountName(newBillingAccount.map(_.value).getOrElse("")).setProjectId(googleProjectId.value))
   }
 
+  override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] =
+    Future.successful(new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(true))
+
+  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo] =
+    Future.successful(new ProjectBillingInfo().setBillingEnabled(false))
+
+  override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] =
+    Future.successful(new ProjectBillingInfo().setBillingAccountName("some-billing-account-name").setBillingEnabled(true))
+
   override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] = {
     Future.successful {
       bucketName match {
