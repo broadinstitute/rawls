@@ -12,8 +12,8 @@ import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, WorkspaceMigrationException}
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigration
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
@@ -23,8 +23,10 @@ import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{J
 import org.broadinstitute.dsde.workbench.model.TraceId
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
+import org.scalactic.source
 import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.Eventually
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Assertion, BeforeAndAfterAll, OptionValues}
@@ -46,6 +48,12 @@ class WorkspaceMigrationActorSpec
   implicit val ec = IORuntime.global.compute
   implicit val timestampOrdering = new Ordering[Timestamp] {
     override def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
+  }
+  implicit class FailureMessageOps(outcome: Outcome)(implicit pos: source.Position) {
+    def failureMessage: String = outcome match {
+      case Failure(message) => message
+      case _ => throw new TestFailedException(_ => Some(s"""Expected "Failure", instead got "${outcome}"."""), None, pos)
+    }
   }
 
   // This is a horrible hack to avoid refactoring the tangled mess in the WorkspaceServiceSpec.
@@ -210,7 +218,7 @@ class WorkspaceMigrationActorSpec
           }
         } yield {
           migration.finished shouldBe defined
-          migration.outcome.value shouldBe a [Failure]
+          migration.outcome.value.failureMessage should include("billing account error exists on workspace")
         }
       }
 
@@ -239,7 +247,7 @@ class WorkspaceMigrationActorSpec
         }
       } yield {
         migration.finished shouldBe defined
-        migration.outcome.value shouldBe a[Failure]
+        migration.outcome.value.failureMessage should include("no billing account on workspace")
       }
     }
 
@@ -270,7 +278,7 @@ class WorkspaceMigrationActorSpec
         }
       } yield {
         migration.finished shouldBe defined
-        migration.outcome.value shouldBe a[Failure]
+        migration.outcome.value.failureMessage should include("invalid billing account on billing project")
       }
     }
 
@@ -298,7 +306,7 @@ class WorkspaceMigrationActorSpec
         }
       } yield {
         migration.finished shouldBe defined
-        migration.outcome.value shouldBe a[Failure]
+        migration.outcome.value.failureMessage should include("billing account on workspace differs from billing account on billing project")
       }
     }
 
@@ -515,7 +523,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "update the Workspace record when the temporary bucket has been deleted" in
+  it should "update the Workspace record after the temporary bucket has been deleted" in
     runMigrationTest {
       for {
         now <- nowTimestamp

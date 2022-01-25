@@ -104,12 +104,11 @@ object WorkspaceMigrationActor {
       ReaderT.pure()
   }
 
+
   implicit class MigrateActionOps[A](action: MigrateAction[A]) {
-    final def recoverWith(f: PartialFunction[Throwable, MigrateAction[A]]): MigrateAction[A] =
+    final def handleErrorWith(f: Throwable => MigrateAction[A]): MigrateAction[A] =
       ReaderT { env =>
-        OptionT {
-          action.run(env).value.recoverWith(f.andThen(_.run(env).value))
-        }
+        OptionT(action.run(env).value.handleErrorWith(f(_).run(env).value))
       }
   }
 
@@ -589,7 +588,7 @@ object WorkspaceMigrationActor {
           .result
           .map(_.headOption)
       }
-      _ <- attempt(migration).recoverWith { case t: Throwable =>
+      _ <- attempt(migration).handleErrorWith { t =>
         migrationFinished(migration.id, Failure(t.getMessage))
       }
     } yield ()
