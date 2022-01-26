@@ -49,7 +49,8 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
   "WorkspaceBillingAccountMonitor" should "update the billing account on all workspaces in a billing project" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, Option(defaultBillingAccountName), None, googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val billingAccountName = defaultBillingAccountName
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, Option(billingAccountName), None, googleProjectNumber = Option(defaultGoogleProjectNumber))
       val v1Workspace = Workspace(billingProject.projectName.value, "v1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, GoogleProjectId(billingProject.projectName.value), billingProject.googleProjectNumber, billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded)
       val v2Workspace = Workspace(billingProject.projectName.value, "v2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("differentId"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded)
       val workspaceWithoutBillingAccount = v2Workspace.copy(
@@ -65,7 +66,11 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(workspaceQuery.createOrUpdate(workspaceWithoutBillingAccount))
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
 
-      val actor = createWorkspaceBillingAccountMonitor(dataSource)
+      val mockGcsDao = new MockGoogleServicesDAO("test") {
+        override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] =
+          Future.successful(new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(true))
+      }
+      val actor = createWorkspaceBillingAccountMonitor(dataSource, mockGcsDao)
 
       eventually (timeout = timeout(Span(10, Seconds))) {
         runAndWait(workspaceQuery.listWithBillingProject(billingProject.projectName)).map(_.currentBillingAccountOnGoogleProject).toSet shouldBe Set(Option(newBillingAccount))
@@ -83,13 +88,12 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
 
-      val failingGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       val failureMessage = "because I feel like it"
       val exception = new RawlsException(failureMessage)
-      when(failingGcsDAO.setBillingAccountName(
-        ArgumentMatchers.eq(badWorkspace.googleProjectId),
-        ArgumentMatchers.eq(newBillingAccount)))
-        .thenReturn(Future.failed(exception))
+      val failingGcsDAO = new MockGoogleServicesDAO("") {
+        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] =
+          Future.failed(exception)
+      }
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(badWorkspace))
