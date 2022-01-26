@@ -60,13 +60,15 @@ class WorkspaceMigrationActorSpec
   // This is a horrible hack to avoid refactoring the tangled mess in the WorkspaceServiceSpec.
   val spec = new WorkspaceServiceSpec()
 
+  val fakeGoogleProjectUsedForMigrationExpenses = GoogleProject("fake-google-project")
+
 
   def runMigrationTest(test: MigrateAction[Assertion]): Assertion =
     spec.withTestDataServices { services =>
       test.run {
         MigrationDeps(
           services.slickDataSource,
-          GoogleProject("fake-google-project"),
+          fakeGoogleProjectUsedForMigrationExpenses,
           services.workspaceService,
           MockStorageService(),
           MockStorageTransferService()
@@ -307,7 +309,10 @@ class WorkspaceMigrationActorSpec
       for {
         now <- nowTimestamp
         workspace = spec.testData.v1Workspace.copy(
-          currentBillingAccountOnGoogleProject = RawlsBillingAccountName("greg").some,
+          currentBillingAccountOnGoogleProject =
+            spec.testData.v1Workspace.currentBillingAccountOnGoogleProject.map { billingAccount =>
+              RawlsBillingAccountName(billingAccount.value ++ UUID.randomUUID.toString)
+            },
           name = UUID.randomUUID.toString,
           workspaceId = UUID.randomUUID.toString
         )
@@ -567,7 +572,6 @@ class WorkspaceMigrationActorSpec
         workspace.googleProjectId shouldBe googleProjectId
         workspace.googleProjectNumber shouldBe googleProjectNumber.some
       }
-
     }
 
 
@@ -599,7 +603,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  "peekTransferJob" should "return the first active job that ws updated last and touch it" in
+  "peekTransferJob" should "return the first active job that was updated last and touch it" in
     runMigrationTest {
       for {
         migration <- inTransactionT { _ =>
@@ -655,6 +659,8 @@ class WorkspaceMigrationActorSpec
   it should "update the state of jobs in order of last updated" in
     runMigrationTest {
       val storageTransferService = new MockStorageTransferService {
+        // want to return no operations to make sure that the job does not complete and is
+        // updated continually
         override def listTransferOperations(jobName: JobName, project: GoogleProject): IO[Seq[Operation]] =
           IO.pure(Seq(Operation.newBuilder.build))
       }

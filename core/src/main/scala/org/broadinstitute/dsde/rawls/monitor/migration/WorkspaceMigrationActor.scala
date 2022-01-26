@@ -601,15 +601,6 @@ object WorkspaceMigrationActor {
     }
 
 
-  def getMigrations(workspaceUuid: UUID): MigrateAction[Seq[WorkspaceMigration]] =
-    inTransaction { _ =>
-      workspaceMigrations
-        .filter(_.workspaceId === workspaceUuid)
-        .sortBy(_.id.asc)
-        .result
-    }
-
-
   final def withMigration(filter: WorkspaceMigrationHistory => Rep[Boolean])
                          (attempt: WorkspaceMigration => MigrateAction[Unit])
   : MigrateAction[Unit] =
