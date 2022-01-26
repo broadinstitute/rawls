@@ -90,13 +90,13 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
   }
 
   it should "only insert rows into the workspace's shard" in withTestDataServices { services =>
-    val createdEntity = services.entityService.createEntity(testWorkspaceName, s1).futureValue
+    val createdEntity = services.entityService.createEntity(testWorkspaceName, s1, None, None).futureValue
     createdEntity shouldBe s1
     checkShardCounts(Map(testWorkspaceShardId -> 6)) // 3 scalar attributes, 1 list attribute with 3 values
   }
 
   it should "only delete rows from the workspace's shard" in withTestDataServices { services =>
-    val createdEntity = services.entityService.createEntity(testWorkspaceName, s1).futureValue
+    val createdEntity = services.entityService.createEntity(testWorkspaceName, s1, None, None).futureValue
     createdEntity shouldBe s1
 
     checkShardCounts(Map(testWorkspaceShardId -> 6)) // 3 scalar attributes, 1 list attribute with 3 values
@@ -110,7 +110,7 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
   }
 
   it should "only update rows in the workspace's shard" in withTestDataServices { services =>
-    val createdEntity = services.entityService.createEntity(testWorkspaceName, s1).futureValue
+    val createdEntity = services.entityService.createEntity(testWorkspaceName, s1, None, None).futureValue
     createdEntity shouldBe s1
 
     checkShardCounts(Map(testWorkspaceShardId -> 6)) // 3 scalar attributes, 1 list attribute with 3 values
@@ -148,11 +148,11 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
     AttributeName.withDefaultNS("two") -> AttributeNumber(222)))
 
     // create entity in testWorkspace (entity s1 has 6 attribute rows)
-    val created = services.entityService.createEntity(testWorkspaceName, s1).futureValue
+    val created = services.entityService.createEntity(testWorkspaceName, s1, None, None).futureValue
     created shouldBe s1
 
     // create entity in secondWorkspace (entity s2 has 2 attribute rows)
-    val created2 = services.entityService.createEntity(secondWorkspace.toWorkspaceName, s2).futureValue
+    val created2 = services.entityService.createEntity(secondWorkspace.toWorkspaceName, s2, None, None).futureValue
     created2 shouldBe s2
 
     checkShardCounts(Map(testWorkspaceShardId -> 6, secondShardId -> 2))
