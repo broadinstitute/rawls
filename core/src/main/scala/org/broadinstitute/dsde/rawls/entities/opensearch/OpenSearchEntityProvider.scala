@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.opensearch
 
-import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
-import com.typesafe.scalalogging.LazyLogging
+import akka.http.scaladsl.model.{StatusCode, Uri}
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
@@ -9,59 +8,90 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model._
 import org.opensearch.action.bulk.BulkRequest
 import org.opensearch.action.delete.DeleteRequest
 import org.opensearch.action.get.GetRequest
-import org.opensearch.action.index.IndexRequest
 import org.opensearch.action.search.SearchRequest
 import org.opensearch.client.{RequestOptions, RestHighLevelClient}
-import org.opensearch.client.indices.{CreateIndexRequest, GetIndexRequest, GetMappingsRequest}
-import spray.json._
-import spray.json.DefaultJsonProtocol._
+import org.opensearch.client.indices.{CreateIndexRequest, GetIndexRequest, GetMappingsRequest, PutMappingRequest}
 import org.opensearch.common.xcontent.XContentType
-import org.opensearch.index.query.{BoolQueryBuilder, QueryShardContext, QueryStringQueryBuilder, ScriptQueryBuilder, TermsQueryBuilder}
+import org.opensearch.index.query.{BoolQueryBuilder, QueryStringQueryBuilder, TermsQueryBuilder}
 import org.opensearch.index.reindex.UpdateByQueryRequest
 import org.opensearch.rest.RestStatus
 import org.opensearch.script.Script
-import org.opensearch.search.SearchHit
 import org.opensearch.search.aggregations.bucket.terms.ParsedStringTerms
 import org.opensearch.search.aggregations.{Aggregation, AggregationBuilders}
 import org.opensearch.search.builder.SearchSourceBuilder
 import org.opensearch.search.sort.SortOrder
 
-import java.util
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client: RestHighLevelClient)
+class OpenSearchEntityProvider(override val requestArguments: EntityRequestArguments,
+                               override val client: RestHighLevelClient)
                               (implicit protected val executionContext: ExecutionContext)
-  extends WorkspaceJsonSupport with EntityProvider with LazyLogging with ExpressionEvaluationSupport {
+  extends EntityProvider
+    with OpenSearchSupport
+    with ExpressionEvaluationSupport {
 
   override val entityStoreId: Option[String] = Option("OpenSearch")
-
-  // list attributes should serialize as ["foo", "bar"], not as {itemsType: "AttributeValue", items: ["45", "46", "47", "48"]}
-  override implicit val attributeFormat: AttributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
-
-  // constants used when talking to OpenSearch
-  final val ID_DELIMITER = "/"
-  final val FIELD_DELIMITER = "."
-  final val TYPE_FIELD = "sys_entity_type"
-
-  // OpenSearch index for this workspace
-  val workspaceIndex = indexName(requestArguments.workspace)
 
   // ================================================================================================
   // API methods we support
 
+  /** entity type metadata - in good shape except for unused mappings */
   override def entityTypeMetadata(useCache: Boolean = false): Future[Map[String, EntityTypeMetadata]] = {
-    // one request to get the entityType->document count aggregation
+    // TODO Opensearch: need a way to detect unused mappings.
+    /* To handle deletes and prune unused mappings:
+        - reindex into a temp index, which recreate mappings. Compare mappings with the temp index. (yuck)
+        - scroll-query all documents, collect field names in middleware (yuck)
+        - run exists query for each mapping (https://www.elastic.co/guide/en/elasticsearch/reference/7.10/query-dsl-exists-query.html),
+            this will show unused for null, [], larger than ignore_above, malformed and ignore_malformed
+        -
+     */
+
+    // one request to get the field mappings for this index
+    val mappingsRequest = new GetMappingsRequest()
+    mappingsRequest.indices(workspaceIndex)
+    val mappingsResponse = client.indices().getMapping(mappingsRequest, RequestOptions.DEFAULT)
+
+    val indexMapping = mappingsResponse.mappings().get(workspaceIndex)
+    val mapping: Map[String, AnyRef] = indexMapping.getSourceAsMap.asScala.toMap
+
+    // TODO: find a better way than the asInstanceOf in here
+    def wigglyMapLookup(source: Map[String, AnyRef], key: String): Map[String, AnyRef] = {
+      if (!source.contains(key))
+        throw new Exception(s"source map does not contain key $key")
+      source(key) match {
+        case javamap:java.util.LinkedHashMap[_,_] => javamap.asScala.toMap.asInstanceOf[Map[String, AnyRef]]
+        case x =>
+          throw new Exception(s"'$key' lookup returned ${x.getClass.getSimpleName}, not another map")
+      }
+    }
+
+    case class TypeAndAttributeName(entityType: String, attributeName: String)
+
+    // props will be a flat list of "entityType/attributeName" values, plus any other fields like sys_entity_type
+    val fieldNames: Set[TypeAndAttributeName] = wigglyMapLookup(mapping, "properties") // get the properties from the mappings response
+      .keySet                // get just the keys, i.e. the field names
+      .map(_.split('/'))     // un-delimit the "entityType/attributeName" field names
+      .filter(_.length == 2) // omit "sys_entity_type" or other non-delimited field names (or those with multiple delimiters)
+      .map(arr => TypeAndAttributeName(arr.head, arr.last)) // use handy case class instead of raw array
+
+    // another request to get the entityType->document count aggregation
     val req = new SearchRequest(workspaceIndex)
 
-    val entityTypeAgg = AggregationBuilders.terms(TYPE_FIELD).field(s"$TYPE_FIELD")
+    // by default, terms aggregation will only return 10 buckets. We want to return all types, so we need to know
+    // how many types there are in this index. We can get this from the mappings query.
+    val distinctTypes = fieldNames.map(_.entityType)
+
+    val entityTypeAgg = AggregationBuilders
+      .terms(TYPE_FIELD)
+      .field(s"$TYPE_FIELD")
+      .size(distinctTypes.size)
 
     val searchSourceBuilder = new SearchSourceBuilder()
     searchSourceBuilder
@@ -81,33 +111,12 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
         throw new Exception(s"found unexpected aggregation type: ${x.getClass.getName}")
     }
 
-    // another request to get the field mappings for this index
-    val mappingsRequest = new GetMappingsRequest()
-    mappingsRequest.indices(workspaceIndex)
-    val mappingsResponse = client.indices().getMapping(mappingsRequest, RequestOptions.DEFAULT)
-
-    // TODO: find a better way than the asInstanceOfs in here
-    val indexMapping = mappingsResponse.mappings().get(workspaceIndex)
-    val mapping: Map[String, AnyRef] = indexMapping.getSourceAsMap.asScala.toMap
-
-    def wigglyMapLookup(source: Map[String, AnyRef], key: String): Map[String, AnyRef] = {
-      if (!source.contains(key))
-        throw new Exception(s"source map does not contain key $key")
-      source(key) match {
-        case javamap:java.util.LinkedHashMap[_,_] => javamap.asScala.toMap.asInstanceOf[Map[String, AnyRef]]
-        case x =>
-          throw new Exception(s"'$key' lookup returned ${x.getClass.getSimpleName}, not another map")
-      }
-    }
-
-    val props: Map[String, AnyRef] = wigglyMapLookup(mapping, "properties")
+    assert(typesAndCounts.size == distinctTypes.size, s"typesAndCounts.size of ${typesAndCounts.size} != distinctTypes.size of ${distinctTypes.size}")
 
     val typesAndMetadata = typesAndCounts.sortBy(_._1).map {
       case (entityType, count) =>
         // find the attribute names associated with this entityType
-        val thisTypeMappings: Map[String, AnyRef] = wigglyMapLookup(props, entityType)
-        val thisTypeAttributes = wigglyMapLookup(thisTypeMappings, "properties").keySet.toSeq.sorted
-
+        val thisTypeAttributes = fieldNames.filter(_.entityType == entityType).map(_.attributeName).toSeq.sorted
         entityType -> EntityTypeMetadata(count.toInt, s"${entityType}_id", thisTypeAttributes)
     }.toMap
 
@@ -115,6 +124,7 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
   }
 
+  /** createEntity - easy, the tricky logic is in indexableDocument */
   override def createEntity(entity: Entity): Future[Entity] = {
     // TODO OpenSearch: should reuse indexEntity() instead
     val indexRequest = indexableDocument(requestArguments.workspace, entity)
@@ -146,6 +156,7 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     }
   }
 
+  /** delete entities - easy, but needs some logic to poke a mappings purge in case attributes no longer exist */
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = {
     val bulkRequest = new BulkRequest(workspaceIndex)
     // val brb = new BulkRequestBuilder(client.getLowLevelClient, BulkAction.INSTANCE)
@@ -168,6 +179,8 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     }
   }
 
+  /** delete entity attrs - needs scale testing, since this touches all documents of a given type.
+    * also needs logic to poke a mappings purge. */
   override def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]): Future[Unit] = {
     if (attributeNames.isEmpty)
       throw new Exception("must remove at least one attribute")
@@ -195,10 +208,13 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
     logger.info(s"deleteEntityAttributes ${updateResponse.getStatus} in ${updateResponse.getTook.toString}: updated ${updateResponse.getUpdated} documents")
 
+    // purgeMappings(requestArguments.workspace, entityType, attributeNames)
+
     Future(())
 
   }
 
+  /** Get entity - easy */
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     //Getting back the document
     val getRequest = new GetRequest(workspaceIndex, s"${entityType}/${entityName}")
@@ -216,6 +232,12 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     }
   }
 
+  /** query entities:
+    * need to handle sorting by non-.keyword fields
+    * need to handle error messaging for requested sorts that don't exist
+    * need to support field selection
+    * need to validate correctness of filterTerms
+    * */
   override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
     val req = new SearchRequest(workspaceIndex)
 
@@ -280,6 +302,7 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
   }
 
+  // TODO: implement
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
     throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
   }
@@ -342,131 +365,60 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     statusResponses.toList
   }
 
-  // ================================================================================================
-  // utilities for translating from Terra to OpenSearch
+  def purgeMappings(workspace: Workspace, entityType: String, attributeNames: Set[AttributeName]): List[String] = {
+    // consider only the specified fields to be purged
+    val fieldsToPurge = attributeNames.map(attr => fieldName(entityType, attr))
 
-  /** generate the document id for a given entity */
-  private def documentId(entity: Entity): String = documentId(entity.entityType, entity.name)
-  private def documentId(entityType: String, entityName: String): String = s"$entityType$ID_DELIMITER$entityName"
+    // TODO OpenSearch: extract a common "get buckets for specified fields" method
+    // another request to get the entityType->document count aggregation
+    val req = new SearchRequest(workspaceIndex)
 
-  /** generate a field name from an attribute name */
-  private def fieldName(entityType: String, attrName: AttributeName): String =
-    s"$entityType$FIELD_DELIMITER${AttributeName.toDelimitedName(attrName)}"
+    val searchSourceBuilder = new SearchSourceBuilder()
+    searchSourceBuilder
+      .size(0)
 
-  /** generate the OpenSearch request to index a single entity */
-  private def indexableDocument(workspace: Workspace, entity: Entity): IndexRequest = {
-    val request = new IndexRequest(workspaceIndex) // Use the workspace-specific index
-    request.id(documentId(entity)) // Unique id for this document in the index
-
-    // prepend the entityType to each attribute name, to ensure that same-named
-    // attributes within different entity types can have different OpenSearch datatypes
-    val entityAttrs = entity.attributes.map {
-      case (k, v) => (fieldName(entity.entityType, k), v)
+    fieldsToPurge.foreach { fld =>
+      val fieldAgg = AggregationBuilders
+        .terms(fld)
+        .field(s"$fld.keyword")
+        .size(1) // we only care if it has ANY values, not what those values are
+      searchSourceBuilder.aggregation(fieldAgg)
     }
 
-    // append the "_type" attribute so OpenSearch can distinguish between types
-    // the first-class "type" still exists in OpenSearch but it is deprecated:
-    // "Types are in the process of being removed"
-    val indexableAttrs = entityAttrs + (TYPE_FIELD -> AttributeString(entity.entityType))
+    req.source(searchSourceBuilder)
 
-    // add the attributes to the document's source
-    // TODO: are we content to rely on JSON-ification here? Will have problems with entity references
-    request.source(indexableAttrs.toJson.prettyPrint, XContentType.JSON)
+    val resp = client.search(req, RequestOptions.DEFAULT)
 
-    request
-  }
+    val aggResults = resp.getAggregations
 
-  /** generate the OpenSearch index name for a given workspace */
-  private def indexName(workspace: Workspace): String = workspace.workspaceId
-
-  // ================================================================================================
-  // utilities for translating from OpenSearch to Terra
-
-  /** generate an entityName from an OpenSearch document id */
-  private def entityName(documentId: String): String = documentId.split(ID_DELIMITER).tail.mkString
-
-  /** generate an AttributeName from an OpenSearch field name */
-  private def attributeName(entityType: String, fieldName: String) =
-    AttributeName.fromDelimitedName(fieldName.replaceFirst(s"$entityType$FIELD_DELIMITER", ""))
-
-  /** generate a Terra entity from an OpenSearch result */
-  private def entity(hit: SearchHit): Entity = {
-
-    val fields = hit.getSourceAsMap.asScala.toMap
-
-    entity(hit.getId, fields)
-  }
-
-  private def entity(id: String, fields: Map[String, AnyRef]): Entity = {
-    val name = entityName(id)
-
-    if (!fields.contains(TYPE_FIELD)) {
-      logger.error(s"[document $id]: $TYPE_FIELD not found in ${fields.keys.toList.sorted}")
+    val purgeableFields = aggResults.asScala.collect {
+      case pst:ParsedStringTerms if pst.getBuckets.isEmpty => pst.getName
     }
 
-    val entityType = fields(TYPE_FIELD).toString
+    logger.info(s"********** we should purge: $purgeableFields")
 
-    // parse all document fields - except _type - into an AttributeMap
-    val attributeMap: Map[AttributeName, Attribute] = (fields - TYPE_FIELD).map {
-      case (fieldName, fieldValue) =>
-        attributeName(entityType, fieldName) -> valueToAttribute(fieldValue)
-    }
+    val deleteMappingsRequest = new PutMappingRequest()
 
-    Entity(name, entityType, attributeMap)
+    purgeableFields.toList
+
   }
 
-  private def valueToAttribute(v: Any): Attribute = v match {
-    // simple scalars
-    case s:String => AttributeString(s)
-    case i:Int => AttributeNumber(i)
-    case d:Double => AttributeNumber(d) // I don't think we need float, Double should cover it
-    case b:Boolean => AttributeBoolean(b)
-    // arrays
-    case al:util.ArrayList[_] =>
-      val items:Seq[AttributeValue] = al.asScala.map(item =>
-        valueToAttribute(item) match {
-          case av:AttributeValue => av
-          case x => throw new Exception(s"found ${x.getClass.getSimpleName} in value list!")
-        })
-      AttributeValueList(items)
+  def purgeMappings(workspace: Workspace) = {
+    // retrieve mappings for this workspace's index
+    val mappingsRequest = new GetMappingsRequest()
+    mappingsRequest.indices(workspaceIndex)
+    val mappingsResponse = client.indices().getMapping(mappingsRequest, RequestOptions.DEFAULT)
 
-    // OpenSearch objects - aka json - are returned as HashMaps
-    case hm: util.HashMap[_, _] =>
-      val obj = hm.asScala.toMap
-      // is this a reference?
-      if (obj.keySet == Set("entityName", "entityType") && obj.values.forall(_.isInstanceOf[String])) {
-        val stringMap: Map[String, String] = obj.map {
-          case (k, v) => (k.toString, v.toString)
-        }
-        val entityType = stringMap.getOrElse("entityType", "")
-        val entityName = stringMap.getOrElse("entityName", "")
 
-        AttributeEntityReference(entityType, entityName)
-      } else {
-        // not a reference, create this as raw json ... how?
-        logger.warn(s"found unhandled OpenSearch HashMap: ${hm.toString}")
-        AttributeString(hm.toString)
-      }
 
-    // neither a simple scalar nor an array ...
-    case x =>
-      // try to parse this as json
-      Try(x.toString.parseJson) match {
-        case Success(jsv) => AttributeValueRawJson(jsv)
-        case Failure(_) =>
-          // we don't know what this is, just toString it
-          logger.warn(s"found unhandled OpenSearch field type: ${x.getClass.getSimpleName}")
-          AttributeString(x.toString)
-      }
+    // for each type:
+      // perform aggregation query, including an agg for each mapping field. only need size=1 for each aggregation.
+      // any aggregation that returned a doc count means this field is populated.
+
+
   }
 
-  private def toEntityReference(jsv:JsValue): Try[AttributeEntityReference] = {
-    Try {
-      val jso = jsv.asJsObject
-      assert (jso.fields.size == 2) // no extra fields
-      jso.convertTo[AttributeEntityReference]
-    }
-  }
+
 
 
 }
