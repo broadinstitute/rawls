@@ -36,6 +36,15 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   private val workspaceContext = workspace
 
+  override def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]) = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.entityQuery.deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
+        case Vector(0) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names."))
+        case _ => DBIO.successful(())
+      }
+    }
+  }
+
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     trace("LocalEntityProvider.entityTypeMetadata") { rootSpan =>
       rootSpan.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspace.toWorkspaceName.toString))

@@ -78,7 +78,7 @@ trait EntityApiService extends UserInfoDirectives {
             entity(as[Entity]) { entity =>
               addLocationHeader(entity.path(WorkspaceName(workspaceNamespace, workspaceName))) {
                 complete {
-                  entityServiceConstructor(userInfo).createEntity(WorkspaceName(workspaceNamespace, workspaceName), entity).map(StatusCodes.Created -> _)
+                  entityServiceConstructor(userInfo).createEntity(WorkspaceName(workspaceNamespace, workspaceName), entity, dataReference, billingProject).map(StatusCodes.Created -> _)
                 }
               }
             }
@@ -160,7 +160,7 @@ trait EntityApiService extends UserInfoDirectives {
                 }
               }
               complete {
-                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames()).map(_ => StatusCodes.NoContent)
+                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames(), dataReference, billingProject).map(_ => StatusCodes.NoContent)
               }
             }
           } ~

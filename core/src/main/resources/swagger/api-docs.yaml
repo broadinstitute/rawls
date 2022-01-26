@@ -1831,6 +1831,8 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: '#/components/parameters/dataReferenceQueryParam'
+        - $ref: '#/components/parameters/billingProjectQueryParam'
       requestBody:
         description: Entity data
         content:

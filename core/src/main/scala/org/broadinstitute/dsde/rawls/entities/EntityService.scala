@@ -37,11 +37,11 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   import dataSource.dataAccess.driver.api._
 
-  def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] = {
+  def createEntity(workspaceName: WorkspaceName, entity: Entity, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Entity] = {
     withAttributeNamespaceCheck(entity) {
       for {
         workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false)))
-        entityManager <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, userInfo))
+        entityManager <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject))
         result <- entityManager.createEntity(entity)
       } yield result
     }
@@ -103,13 +103,15 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }.recover(bigQueryRecover)
     }
 
-  def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName]): Future[Unit] =
+  def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Unit] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.entityQuery.deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
-          case Vector(0) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names."))
-          case _ => DBIO.successful(())
-        }
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+
+      for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        _ <- entityProvider.deleteEntityAttributes(entityType, attributeNames)
+      } yield {
+        ()
       }
     }
 

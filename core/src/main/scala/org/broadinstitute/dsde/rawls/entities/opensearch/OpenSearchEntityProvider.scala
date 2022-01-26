@@ -22,6 +22,7 @@ import spray.json._
 import spray.json.DefaultJsonProtocol._
 import org.opensearch.common.xcontent.XContentType
 import org.opensearch.index.query.{BoolQueryBuilder, QueryStringQueryBuilder, TermsQueryBuilder}
+import org.opensearch.rest.RestStatus
 import org.opensearch.search.SearchHit
 import org.opensearch.search.aggregations.bucket.terms.ParsedStringTerms
 import org.opensearch.search.aggregations.{Aggregation, AggregationBuilders}
@@ -37,10 +38,12 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
                               (implicit protected val executionContext: ExecutionContext)
   extends WorkspaceJsonSupport with EntityProvider with LazyLogging with ExpressionEvaluationSupport {
 
-  override implicit val attributeFormat: AttributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
-
   override val entityStoreId: Option[String] = Option("OpenSearch")
 
+  // list attributes should serialize as ["foo", "bar"], not as {itemsType: "AttributeValue", items: ["45", "46", "47", "48"]}
+  override implicit val attributeFormat: AttributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
+
+  // constants used when talking to OpenSearch
   final val ID_DELIMITER = "/"
   final val FIELD_DELIMITER = "."
   final val TYPE_FIELD = "sys_entity_type"
@@ -77,7 +80,7 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
     // another request to get the field mappings for this index
     val mappingsRequest = new GetMappingsRequest()
-      mappingsRequest.indices(workspaceIndex)
+    mappingsRequest.indices(workspaceIndex)
     val mappingsResponse = client.indices().getMapping(mappingsRequest, RequestOptions.DEFAULT)
 
     // TODO: find a better way than the asInstanceOfs in here
@@ -108,6 +111,44 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     Future(typesAndMetadata)
 
   }
+
+  override def createEntity(entity: Entity): Future[Entity] = {
+    // TODO: should reuse indexEntity() instead
+    val indexRequest = indexableDocument(requestArguments.workspace, entity)
+    indexRequest.create(true) // set as create-only
+    val indexResponse = client.index(indexRequest, RequestOptions.DEFAULT)
+    if (indexResponse.status() == RestStatus.CREATED) {
+      Future(entity)
+    } else {
+      // TODO: better error messaging
+      throw new Exception(s"failed to index document: ${indexResponse.getResult.toString}")
+    }
+  }
+
+  override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = {
+    val bulkRequest = new BulkRequest(workspaceIndex)
+    // val brb = new BulkRequestBuilder(client.getLowLevelClient, BulkAction.INSTANCE)
+
+    entityRefs.foreach { ref =>
+      val docid = documentId(ref.entityType, ref.entityName)
+      val deleteRequest = new DeleteRequest(workspaceIndex, docid)
+      bulkRequest.add(deleteRequest)
+    }
+
+    val bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT)
+    val successes = bulkResponse.getItems.collect {
+      case item if !item.isFailed => item
+    }
+
+    if (successes.length == entityRefs.length) {
+      Future.successful(successes.length)
+    } else {
+      Future.failed(new Exception(s"Expected to delete ${entityRefs.length}; only deleted ${successes.length}"))
+    }
+  }
+
+  override def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]) =
+    throw new UnsupportedEntityOperationException("delete-attributes not supported by this provider.")
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     //Getting back the document
@@ -190,35 +231,12 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
 
   }
 
-  override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = {
-    val bulkRequest = new BulkRequest(workspaceIndex)
-    // val brb = new BulkRequestBuilder(client.getLowLevelClient, BulkAction.INSTANCE)
-
-    entityRefs.foreach { ref =>
-      val docid = documentId(ref.entityType, ref.entityName)
-      val deleteRequest = new DeleteRequest(workspaceIndex, docid)
-      bulkRequest.add(deleteRequest)
-    }
-
-    val bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT)
-    val successes = bulkResponse.getItems.collect {
-      case item if !item.isFailed => item
-    }
-
-    if (successes.length == entityRefs.length) {
-      Future.successful(successes.length)
-    } else {
-      Future.failed(new Exception(s"Expected to delete ${entityRefs.length}; only deleted ${successes.length}"))
-    }
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
+    throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
   }
 
   // ================================================================================================
   // API methods we haven't implemented
-
-  override def createEntity(entity: Entity): Future[Entity] =
-    throw new UnsupportedEntityOperationException("create entity not supported by this provider.")
-
-
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] =
     throw new UnsupportedEntityOperationException("evaluateExpressions not supported by this provider.")
@@ -229,9 +247,6 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
   override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
-    throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
-  }
   // ================================================================================================
   // class-specific methods
   def createWorkspaceIndex(workspace: Workspace) = {
