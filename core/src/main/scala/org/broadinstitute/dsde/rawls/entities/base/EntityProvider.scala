@@ -4,7 +4,7 @@ import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, SubmissionValidationEntityInputs, WorkspaceName}
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -20,6 +20,8 @@ trait EntityProvider {
   def createEntity(entity: Entity): Future[Entity]
 
   def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
+
+  def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]): Future[Unit]
 
   /**
   The overall approach is:

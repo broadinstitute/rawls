@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.opensearch
 
-import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model._
 import org.opensearch.action.bulk.BulkRequest
@@ -21,8 +22,10 @@ import org.opensearch.client.indices.{CreateIndexRequest, GetIndexRequest, GetMa
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import org.opensearch.common.xcontent.XContentType
-import org.opensearch.index.query.{BoolQueryBuilder, QueryStringQueryBuilder, TermsQueryBuilder}
+import org.opensearch.index.query.{BoolQueryBuilder, QueryShardContext, QueryStringQueryBuilder, ScriptQueryBuilder, TermsQueryBuilder}
+import org.opensearch.index.reindex.UpdateByQueryRequest
 import org.opensearch.rest.RestStatus
+import org.opensearch.script.Script
 import org.opensearch.search.SearchHit
 import org.opensearch.search.aggregations.bucket.terms.ParsedStringTerms
 import org.opensearch.search.aggregations.{Aggregation, AggregationBuilders}
@@ -113,15 +116,33 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
   }
 
   override def createEntity(entity: Entity): Future[Entity] = {
-    // TODO: should reuse indexEntity() instead
+    // TODO OpenSearch: should reuse indexEntity() instead
     val indexRequest = indexableDocument(requestArguments.workspace, entity)
     indexRequest.create(true) // set as create-only
-    val indexResponse = client.index(indexRequest, RequestOptions.DEFAULT)
-    if (indexResponse.status() == RestStatus.CREATED) {
-      Future(entity)
-    } else {
-      // TODO: better error messaging
-      throw new Exception(s"failed to index document: ${indexResponse.getResult.toString}")
+
+    val indexResponseAttempt = Try(client.index(indexRequest, RequestOptions.DEFAULT))
+    // TODO OpenSearch: better error messaging
+    indexResponseAttempt match {
+      case Success(indexResponse) =>
+        if (indexResponse.status() == RestStatus.CREATED) {
+          Future(entity)
+        } else {
+          throw new Exception(s"failed to index document: ${indexResponse.getResult.toString}")
+        }
+
+      case Failure (se: org.opensearch.OpenSearchStatusException) =>
+        val statusCode = se.status().getStatus
+        val errRpt = ErrorReport(StatusCode.int2StatusCode(statusCode), se.getRootCause.getMessage, se)
+        throw new RawlsExceptionWithErrorReport(errRpt)
+
+      case Failure(re: org.opensearch.client.ResponseException) =>
+        val statusCode = re.getResponse.getStatusLine.getStatusCode
+        val errRpt = ErrorReport(StatusCode.int2StatusCode(statusCode), re.getMessage, re)
+        throw new RawlsExceptionWithErrorReport(errRpt)
+
+      case Failure(ex) =>
+        logger.error(s"caught a ${ex.getClass.getName}")
+        throw ex
     }
   }
 
@@ -147,8 +168,36 @@ class OpenSearchEntityProvider(requestArguments: EntityRequestArguments, client:
     }
   }
 
-  override def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]) =
-    throw new UnsupportedEntityOperationException("delete-attributes not supported by this provider.")
+  override def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]): Future[Unit] = {
+    if (attributeNames.isEmpty)
+      throw new Exception("must remove at least one attribute")
+
+    // query to target all entities of the given type
+    val typeQuery = new TermsQueryBuilder(TYPE_FIELD, entityType)
+
+    // translate entity attribute names to OpenSearch field names
+    val fieldsToRemove = attributeNames.map(attr => fieldName(entityType, attr))
+
+    // generate the script to remove the field from all documents of this type.
+    // optimize for the case of removing a single column.
+    val scriptContent = fieldsToRemove.map { field =>
+      s"""ctx._source.remove("$field");"""
+    }
+    val script = new Script(scriptContent.mkString("\n"))
+
+    val updateRequest = new UpdateByQueryRequest(workspaceIndex)
+    updateRequest.setConflicts("abort") // (Default) error if another thread updated one of the documents before we get to it
+    // updateRequest.setScroll() // (Optional) timeout for the underlying scroll-search context
+    updateRequest.setQuery(typeQuery) // which documents to target for updates
+    updateRequest.setScript(script) // the updates to perform via script
+
+    val updateResponse = client.updateByQuery(updateRequest, RequestOptions.DEFAULT)
+
+    logger.info(s"deleteEntityAttributes ${updateResponse.getStatus} in ${updateResponse.getTook.toString}: updated ${updateResponse.getUpdated} documents")
+
+    Future(())
+
+  }
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     //Getting back the document

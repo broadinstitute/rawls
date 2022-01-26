@@ -36,7 +36,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   private val workspaceContext = workspace
 
-  override def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]) = {
+  override def deleteEntityAttributes(entityType: String, attributeNames: Set[AttributeName]): Future[Unit] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.entityQuery.deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
         case Vector(0) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names."))
