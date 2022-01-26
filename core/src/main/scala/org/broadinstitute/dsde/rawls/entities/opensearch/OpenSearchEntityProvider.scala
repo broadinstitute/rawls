@@ -39,6 +39,13 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   override val entityStoreId: Option[String] = Option("OpenSearch")
 
+  // TODO: need to set index.mapping.total_fields.limit on the index; default limit is 1000
+  // TODO: set up dynamic templates (https://www.elastic.co/guide/en/elasticsearch/reference/7.10/dynamic-templates.html)
+  //          to control mappings for new fields
+
+  // Entity references are stored as URIs, in the form:
+  // terra-entity-ref://terra-instance/workspaceId/entityRepo/entityType/entityName
+
   // ================================================================================================
   // API methods we support
 
@@ -233,8 +240,9 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   }
 
   /** query entities:
-    * need to handle sorting by non-.keyword fields
+    * need to handle sorting by non-.raw fields
     * need to handle error messaging for requested sorts that don't exist
+    * need to support sorting by "name"
     * need to support field selection
     * need to validate correctness of filterTerms
     * */
@@ -267,8 +275,8 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     else {
       SortOrder.ASC
     }
-    // TODO OpenSearch: better handling when the sort field does not exist or does not have a .keyword mapping
-    val sortField = fieldName(entityType, AttributeName.fromDelimitedName(incomingQuery.sortField)) + ".keyword"
+    // TODO OpenSearch: better handling when the sort field does not exist or does not have a .raw mapping
+    val sortField = fieldName(entityType, AttributeName.fromDelimitedName(incomingQuery.sortField)) + ".raw"
     searchSourceBuilder.sort(sortField, sortOrder)
 
     req.source(searchSourceBuilder)
@@ -322,6 +330,8 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   // ================================================================================================
   // class-specific methods
   def createWorkspaceIndex(workspace: Workspace) = {
+    // TODO: how to init the cluster with the index template in src/main/resources/opensearch?
+    // that needs to go in before any index is created.
     val getIndexRequest = new GetIndexRequest(workspaceIndex)
     val getIndexResponse = client.indices().exists(getIndexRequest, RequestOptions.DEFAULT)
     if (!getIndexResponse) {
@@ -339,7 +349,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
         """
       createIndexRequest.mapping(mappings, XContentType.JSON)
 
-      // TODO: explicit mappings for other fields
+      // TODO: explicit mappings for any other fields?
 
       val createIndexResponse = client.indices.create(createIndexRequest, RequestOptions.DEFAULT)
       logger.info(s"OpenSearch index for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} created: ${createIndexResponse.index()}")
@@ -380,7 +390,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     fieldsToPurge.foreach { fld =>
       val fieldAgg = AggregationBuilders
         .terms(fld)
-        .field(s"$fld.keyword")
+        .field(s"$fld.raw")
         .size(1) // we only care if it has ANY values, not what those values are
       searchSourceBuilder.aggregation(fieldAgg)
     }

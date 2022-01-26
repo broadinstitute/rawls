@@ -1,0 +1,95 @@
+{
+
+
+  "index_patterns": ["workspace-*"],
+  "template": {
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "longs_as_double": {
+            "match_mapping_type": "long",
+            "mapping": {
+              "type": "double",
+              "fields": {
+                "raw": {
+                  "type": "double"
+                }
+              }
+            }
+          }
+        },
+        {
+          "doubles": {
+            "match_mapping_type": "double",
+            "mapping": {
+              "type": "double",
+              "fields": {
+                "raw": {
+                  "type": "double"
+                }
+              }
+            }
+          }
+        },
+        {
+          "dates": {
+            "match_mapping_type": "date",
+            "mapping": {
+              "type": "date",
+              "fields": {
+                "raw": {
+                  "type": "date"
+                }
+              }
+            }
+          }
+        },
+        {
+          "boolean": {
+            "match_mapping_type": "boolean",
+            "mapping": {
+              "type": "boolean",
+              "fields": {
+                "raw": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        {
+          "objects": {
+            "match_mapping_type": "object",
+            "mapping": {
+              "type": "object",
+              "fields": {
+                "raw": {
+                  "type": "flattened"
+                }
+              }
+            }
+          }
+        },
+        {
+          "strings": {
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "text",
+              "fields": {
+                "raw": {
+                  "type":  "keyword",
+                  "ignore_above": 256
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "priority": 200,
+  "version": 1,
+  "_meta": {
+    "description": "index template for workspace data"
+  }
+}

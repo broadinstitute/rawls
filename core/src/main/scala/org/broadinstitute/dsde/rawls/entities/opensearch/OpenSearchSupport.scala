@@ -69,7 +69,7 @@ trait OpenSearchSupport extends LazyLogging {
   }
 
   /** generate the OpenSearch index name for a given Terra workspace */
-  def indexName(workspace: Workspace): String = workspace.workspaceId
+  def indexName(workspace: Workspace): String = s"workspace-${workspace.workspaceId}"
 
   // ================================================================================================
   // utilities for translating from OpenSearch to Terra
