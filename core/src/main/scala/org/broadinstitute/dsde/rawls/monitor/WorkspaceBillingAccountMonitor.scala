@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSou
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsBillingAccountName}
 import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -22,6 +23,7 @@ object WorkspaceBillingAccountMonitor {
 
   sealed trait WorkspaceBillingAccountsMessage
   case object CheckAll extends WorkspaceBillingAccountsMessage
+  val BILLING_ACCOUNT_VALIDATION_ERROR_PREFIX = "Update Billing Account validation failed:"
 }
 
 class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext) extends Actor with LazyLogging {
@@ -72,30 +74,41 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
                                            oldBillingAccount: Option[RawlsBillingAccountName])(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
     logger.info(s"Attempting to update Billing Account from ${oldBillingAccount} to ${newBillingAccount} on all Workspaces in Google Project ${googleProjectId}")
     for {
-      projectBillingInfo <- gcsDAO.getBillingInfoForGoogleProject(googleProjectId)
+      projectBillingInfo <- getBillingInfoForGoogleProject(googleProjectId)
       currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
       _ = validateBillingAccountValuesOrThrow(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)
       _ <- if (shouldGoogleBeUpdated(oldBillingAccount, currentBillingAccountOnGoogle)) {
-        logger.warn("true google should be updated")
         setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount)
       } else {
         logger.warn(s"Not updating google oldBillingAccount:${oldBillingAccount} currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle}")
         Future.successful()
       }
       _ <- if (shouldRawlsBeUpdated(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)) {
-        logger.warn("true rawls should be updated")
         setBillingAccountOnWorkspacesInProject(googleProjectId, oldBillingAccount, newBillingAccount)
       } else {
         logger.warn(s"Not updating rawls newBillingAccount:${newBillingAccount} oldBillingAccount:${oldBillingAccount} currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle}")
-
         Future.successful()
       }
     } yield projectBillingInfo
   }
 
+  private def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo] = {
+    try {
+      gcsDAO.getBillingInfoForGoogleProject(googleProjectId)
+    } catch {
+      case e: Throwable =>
+        dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, e.getMessage)
+        }.map { _ =>
+          throw e
+        }
+    }
+  }
+
   /**
     * Explicitly sets the Billing Account value on the given Google Project.  Any logic or conditionals controlling
     * whether this update gets called should be written in the calling method(s).
+ *
     * @param googleProjectId
     * @param newBillingAccount
     */
@@ -194,15 +207,15 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
   private def validateBillingAccountValuesOrThrow(newBillingAccount: Option[RawlsBillingAccountName],
                                                   oldBillingAccount: Option[RawlsBillingAccountName],
                                                   currentBillingAccountOnGoogle: Option[RawlsBillingAccountName]): Unit = {
-    val validationErrors = List[String]()
+    val validationErrors = mutable.MutableList[String]()
 
     // This uses `shouldRawlsBeUpdated` for efficiency, but nothing needs to fundamentally tie this method to shouldRawlsBeUpdated in the future
     if (!shouldRawlsBeUpdated(newBillingAccount, oldBillingAccount, currentBillingAccountOnGoogle)) {
-      validationErrors + s"Billing Account on Google ${currentBillingAccountOnGoogle} does not match existing Billing Account in Rawls ${currentBillingAccountOnGoogle} or the desired new Billing Account ${newBillingAccount}"
+      validationErrors += s"Billing Account on Google ${currentBillingAccountOnGoogle} does not match existing Billing Account in Rawls ${currentBillingAccountOnGoogle} or the desired new Billing Account ${newBillingAccount}"
     }
 
     if (validationErrors.nonEmpty) {
-      val validationErrorMessage = s"Update Billing Account validation failed: ${validationErrors}"
+      val validationErrorMessage = s"${WorkspaceBillingAccountMonitor.BILLING_ACCOUNT_VALIDATION_ERROR_PREFIX} ${validationErrors}"
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.PreconditionFailed, validationErrorMessage))
     }
 
