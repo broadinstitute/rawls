@@ -157,14 +157,13 @@ object WorkspaceMigrationActor {
     withMigration(m => m.started.isDefined && m.newGoogleProjectConfigured.isEmpty) { migration =>
       for {
         workspace <- getWorkspace(migration.workspaceId)
-        errorDetails = Map(
-          ("migrationId" -> migration.id),
-          ("workspaceId" -> workspace.workspaceId)
-        )
+
+        errorContext = "The workspace migration failed while configuring a new Google Project"
+        errorDetails = Map(("migrationId" -> migration.id), ("workspaceId" -> workspace.workspaceId))
 
         _ <- MigrateAction.raiseWhen(workspace.billingAccountErrorMessage.isDefined) {
           WorkspaceMigrationException(
-            message = "Workspace migration failed: billing account error exists on workspace",
+            message = s"$errorContext: a billing account error exists on workspace",
             data = errorDetails + ("billingAccountErrorMessage" -> workspace.billingAccountErrorMessage.get)
           )
         }
@@ -172,22 +171,21 @@ object WorkspaceMigrationActor {
         workspaceBillingAccount <- MigrateAction.liftIO(IO {
           workspace.currentBillingAccountOnGoogleProject.getOrElse(
             throw WorkspaceMigrationException(
-              message = "Workspace migration failed: no billing account on workspace",
+              message = s"$errorContext: no billing account on workspace",
               data = errorDetails
             )
           )
         })
 
         // Safe to assume that this exists if the workspace exists
-        billingProject <- inTransactionT { _
-            .rawlsBillingProjectQuery
-            .load(RawlsBillingProjectName(workspace.namespace))
+        billingProject <- inTransactionT {
+          _.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspace.namespace))
         }
 
         billingProjectBillingAccount <- MigrateAction.liftIO(IO {
           billingProject.billingAccount.getOrElse(
             throw WorkspaceMigrationException(
-              message = "Workspace migration failed: no billing account on billing project",
+              message = s"$errorContext: no billing account on billing project",
               data = errorDetails + ("billingProject" -> billingProject.projectName)
             )
           )
@@ -195,7 +193,7 @@ object WorkspaceMigrationActor {
 
         _ <- MigrateAction.raiseWhen(billingProject.invalidBillingAccount) {
           WorkspaceMigrationException(
-            message = "The migration failed: invalid billing account on billing project",
+            message = s"$errorContext: invalid billing account on billing project",
             data = errorDetails ++ Map(
               ("billingProject" -> billingProject.projectName),
               ("billingProjectBillingAccount" -> billingProjectBillingAccount)
@@ -205,7 +203,7 @@ object WorkspaceMigrationActor {
 
         _ <- MigrateAction.raiseWhen(workspaceBillingAccount != billingProjectBillingAccount) {
           WorkspaceMigrationException(
-            message = "Workspace migration failed: billing account on workspace differs from billing account on billing project",
+            message = s"$errorContext: billing account on workspace differs from billing account on billing project",
             data = errorDetails ++ Map(
               ("workspaceBillingAccount" -> workspaceBillingAccount),
               ("billingProject" -> billingProject.projectName),
