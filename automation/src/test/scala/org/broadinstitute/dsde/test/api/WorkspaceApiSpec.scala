@@ -116,12 +116,12 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           "dataflow.serviceAgent",
           "dataproc.serviceAgent",
           "editor",
+          "owner",
           "genomics.serviceAgent",
           "lifesciences.serviceAgent",
-          "owner",
           "pubsub.serviceAgent"
         )
-        val realRoles: Set[String] = iamPermissions.getBindings().asScala.map(_.getRole).toSet
+        val realRoles: Set[String] = iamPermissions.getBindings().asScala.map(_.getRole.split("/").last).toSet
         realRoles shouldEqual expectedRoles
 
         iamPermissions.getBindings().forEach(binding => {
