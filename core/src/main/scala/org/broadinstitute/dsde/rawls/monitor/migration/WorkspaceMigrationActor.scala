@@ -11,7 +11,7 @@ import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName, RawlsBillingProjectName, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
@@ -158,22 +158,20 @@ object WorkspaceMigrationActor {
       for {
         workspace <- getWorkspace(migration.workspaceId)
 
-        errorContext = "The workspace migration failed while configuring a new Google Project"
-        errorDetails = Map(("migrationId" -> migration.id), ("workspaceId" -> workspace.workspaceId))
+        makeError = (message: String, data: Map[String, Any]) => WorkspaceMigrationException(
+          message = s"The workspace migration failed while configuring a new Google Project: $message.",
+          data = Map(("migrationId" -> migration.id), ("workspaceId" -> workspace.workspaceId)) ++ data
+        )
 
         _ <- MigrateAction.raiseWhen(workspace.billingAccountErrorMessage.isDefined) {
-          WorkspaceMigrationException(
-            message = s"$errorContext: a billing account error exists on workspace",
-            data = errorDetails + ("billingAccountErrorMessage" -> workspace.billingAccountErrorMessage.get)
-          )
+          makeError("a billing account error exists on workspace", Map(
+            "billingAccountErrorMessage" -> workspace.billingAccountErrorMessage.get
+          ))
         }
 
         workspaceBillingAccount <- MigrateAction.liftIO(IO {
           workspace.currentBillingAccountOnGoogleProject.getOrElse(
-            throw WorkspaceMigrationException(
-              message = s"$errorContext: no billing account on workspace",
-              data = errorDetails
-            )
+            throw makeError("no billing account on workspace", Map.empty)
           )
         })
 
@@ -184,32 +182,25 @@ object WorkspaceMigrationActor {
 
         billingProjectBillingAccount <- MigrateAction.liftIO(IO {
           billingProject.billingAccount.getOrElse(
-            throw WorkspaceMigrationException(
-              message = s"$errorContext: no billing account on billing project",
-              data = errorDetails + ("billingProject" -> billingProject.projectName)
-            )
+            throw makeError("no billing account on billing project", Map(
+              "billingProject" -> billingProject.projectName
+            ))
           )
         })
 
         _ <- MigrateAction.raiseWhen(billingProject.invalidBillingAccount) {
-          WorkspaceMigrationException(
-            message = s"$errorContext: invalid billing account on billing project",
-            data = errorDetails ++ Map(
-              ("billingProject" -> billingProject.projectName),
-              ("billingProjectBillingAccount" -> billingProjectBillingAccount)
-            )
-          )
+          makeError("invalid billing account on billing project", Map(
+            ("billingProject" -> billingProject.projectName),
+            ("billingProjectBillingAccount" -> billingProjectBillingAccount)
+          ))
         }
 
         _ <- MigrateAction.raiseWhen(workspaceBillingAccount != billingProjectBillingAccount) {
-          WorkspaceMigrationException(
-            message = s"$errorContext: billing account on workspace differs from billing account on billing project",
-            data = errorDetails ++ Map(
-              ("workspaceBillingAccount" -> workspaceBillingAccount),
-              ("billingProject" -> billingProject.projectName),
-              ("billingProjectBillingAccount" -> billingProjectBillingAccount)
-            )
-          )
+          makeError("billing account on workspace differs from billing account on billing project", Map(
+            ("workspaceBillingAccount" -> workspaceBillingAccount),
+            ("billingProject" -> billingProject.projectName),
+            ("billingProjectBillingAccount" -> billingProjectBillingAccount)
+          ))
         }
 
         workspaceService <- MigrateAction.asks(_.workspaceService)
