@@ -26,6 +26,7 @@ import java.util.UUID
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.collection.JavaConverters._
 
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation
@@ -105,14 +106,31 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
 
         val iamPermissions = googleIamDaoWithCloudCredentials.getProjectPolicy(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
-        // This is brittle. We know this is brittle and accept that risk because these permissions should change very rarely.
-        iamPermissions.getBindings.size() shouldEqual 12
+        val expectedRoles = Set(
+          "terra_billing_project_owner",
+          "terra_workspace_can_compute",
+          "compute.serviceAgent",
+          "container.serviceAgent",
+          "container.nodeServiceAgent",
+          "containerregistry.ServiceAgent",
+          "dataflow.serviceAgent",
+          "dataproc.serviceAgent",
+          "editor",
+          "genomics.serviceAgent",
+          "lifesciences.serviceAgent",
+          "owner",
+          "pubsub.serviceAgent"
+        )
+        val realRoles: Set[String] = iamPermissions.getBindings().asScala.map(_.getRole).toSet
+        realRoles shouldEqual expectedRoles
+
         iamPermissions.getBindings().forEach(binding => {
           binding.getRole() match {
             // We just check size here because the policy group names are generated on workspace creation
             case s if s.endsWith("terra_billing_project_owner") => binding.getMembers.size() shouldEqual 1
             case s if s.endsWith("terra_workspace_can_compute") => binding.getMembers.size() shouldEqual 3
             case s if s.endsWith("compute.serviceAgent") => binding.getMembers.size() shouldEqual 1
+            case s if s.endsWith("container.nodeServiceAgent") => binding.getMembers.size() shouldEqual 1
             case s if s.endsWith("container.serviceAgent") => binding.getMembers.size() shouldEqual 1
             case s if s.endsWith("containerregistry.ServiceAgent") => binding.getMembers.size() shouldEqual 1
             case s if s.endsWith("dataflow.serviceAgent") => binding.getMembers.size() shouldEqual 1
@@ -124,9 +142,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
               binding.getMembers.size() shouldEqual 1
               binding.getMembers.get(0) should endWith ("@terra-kernel-k8s.iam.gserviceaccount.com")
             case s if s.endsWith("pubsub.serviceAgent") => binding.getMembers.size() shouldEqual 1
-            case _ =>
-              logger.error("Extra permission on workspace google project found")
-              throw new Exception("Extra permission on workspace google project found")
+            case other =>
+              logger.error(s"Extra permission on workspace google project found: ${other}")
+              throw new Exception(s"Extra permission on workspace google project found: ${other}")
           }
         })
       }
