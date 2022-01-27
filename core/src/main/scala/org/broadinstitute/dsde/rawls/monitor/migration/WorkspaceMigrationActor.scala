@@ -255,7 +255,8 @@ object WorkspaceMigrationActor {
         tmpBucketName = migration.tmpBucketName.getOrElse(throw noGoogleProjectError(migration))
 
         _ <- startBucketTransferJob(
-          migration.id,
+          migration,
+          workspace,
           GcsBucketName(workspace.bucketName),
           tmpBucketName
         )
@@ -328,7 +329,8 @@ object WorkspaceMigrationActor {
         workspace <- getWorkspace(migration.workspaceId)
         tmpBucketName = migration.tmpBucketName.getOrElse(throw noGoogleProjectError(migration))
         _ <- startBucketTransferJob(
-          migration.id,
+          migration,
+          workspace,
           tmpBucketName,
           GcsBucketName(workspace.bucketName)
         )
@@ -426,7 +428,8 @@ object WorkspaceMigrationActor {
     } yield ()
 
 
-  final def startBucketTransferJob(migrationId: Long,
+  final def startBucketTransferJob(migration: WorkspaceMigration,
+                                   workspace: Workspace,
                                    originBucket: GcsBucketName,
                                    destBucket: GcsBucketName)
   : MigrateAction[TransferJob] =
@@ -456,7 +459,9 @@ object WorkspaceMigrationActor {
 
           transferJob <- storageTransferService.createTransferJob(
             jobName = GoogleStorageTransferService.JobName(jobName),
-            jobDescription = s"""Bucket transfer job from "${originBucket}" to "${destBucket}".""",
+            jobDescription =
+              s"""Terra workspace migration transferring workspace bucket contents from "${originBucket}" to "${destBucket}"
+                 |(workspace: "${workspace.toWorkspaceName}", "migration: ${migration.id}")"""".stripMargin,
             projectToBill = googleProject,
             originBucket,
             destBucket,
@@ -468,7 +473,7 @@ object WorkspaceMigrationActor {
       _ <- inTransaction { _ =>
         storageTransferJobs
           .map(job => (job.jobName, job.migrationId, job.destBucket, job.originBucket))
-          .insert((transferJob.getName, migrationId, destBucket.value, originBucket.value))
+          .insert((transferJob.getName, migration.id, destBucket.value, originBucket.value))
       }
 
     } yield transferJob

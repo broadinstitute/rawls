@@ -586,7 +586,7 @@ class WorkspaceMigrationActorSpec
 
         workspaceBucketName = GcsBucketName("workspace-bucket-name")
         tmpBucketName = GcsBucketName("tmp-bucket-name")
-        job <- startBucketTransferJob(migration.id, workspaceBucketName, tmpBucketName)
+        job <- startBucketTransferJob(migration, spec.testData.v1Workspace, workspaceBucketName, tmpBucketName)
         transferJob <- inTransactionT { _ =>
           storageTransferJobs
             .filter(_.jobName === job.getName)
@@ -611,7 +611,7 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        _ <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
+        _ <- startBucketTransferJob(migration, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
         job <- peekTransferJob
       } yield job.updated should be > job.created
     }
@@ -625,7 +625,7 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        job <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
+        job <- startBucketTransferJob(migration, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
         finished <- nowTimestamp
         _ <- inTransaction { _ =>
           storageTransferJobs
@@ -647,7 +647,7 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        _ <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
+        _ <- startBucketTransferJob(migration, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
         transferJob <- refreshTransferJobs
       } yield {
         transferJob.migrationId shouldBe migration.id
@@ -677,8 +677,8 @@ class WorkspaceMigrationActorSpec
               getAttempt(spec.testData.workspace.workspaceIdAsUUID)
           }
 
-          _ <- startBucketTransferJob(migration1.id, GcsBucketName("foo"), GcsBucketName("bar"))
-          _ <- startBucketTransferJob(migration2.id, GcsBucketName("foo"), GcsBucketName("bar"))
+          _ <- startBucketTransferJob(migration1, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
+          _ <- startBucketTransferJob(migration2, spec.testData.workspace, GcsBucketName("foo"), GcsBucketName("bar"))
 
           getTransferJobs = inTransaction { _ =>
             storageTransferJobs
