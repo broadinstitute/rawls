@@ -93,7 +93,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       val exceptionMessage = "oh what a shame!  It went kerplooey!"
       val failingGcsDAO = spy(new MockGoogleServicesDAO("") {
         override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] =
-          throw new RawlsExceptionWithErrorReport(ErrorReport(exceptionMessage))
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(exceptionMessage)))
       })
       val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDAO)
 
@@ -152,7 +152,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       val failingGcsDao = new MockGoogleServicesDAO("") {
         override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
           if (googleProjectId == badWorkspaceGoogleProjectId) {
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, exceptionMessage))
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, exceptionMessage)))
           } else {
             super.getBillingInfoForGoogleProject(googleProjectId)
           }
@@ -196,7 +196,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       val failingGcsDao = spy(new MockGoogleServicesDAO("") {
         override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] = {
           if (googleProjectId == v1GoogleProjectId) {
-            throw new RawlsException(exceptionMessage)
+            Future.failed(new RawlsException(exceptionMessage))
           } else {
             super.getBillingInfoForGoogleProject(googleProjectId)
           }
@@ -238,7 +238,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       val exceptionMessage = "Naughty naughty!  You ain't got no permissions!"
       val failingGcsDao = new MockGoogleServicesDAO("") {
         override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] = {
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, exceptionMessage))
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, exceptionMessage)))
         }
       }
 

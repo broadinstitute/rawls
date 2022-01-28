@@ -27,11 +27,8 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
 
   it should "be able to update the invalidBillingAccount field" in withDefaultTestDatabase {
     val project = testData.testProject1
-
     runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe false
-
-    runAndWait(rawlsBillingProjectQuery.updateBillingAccountValidity(testData.testProject1.billingAccount.getOrElse(fail("missing billing account")), false))
-
+    runAndWait(rawlsBillingProjectQuery.updateBillingAccountValidity(testData.testProject1.billingAccount.getOrElse(fail("missing billing account")), true))
     runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe true
   }
 }

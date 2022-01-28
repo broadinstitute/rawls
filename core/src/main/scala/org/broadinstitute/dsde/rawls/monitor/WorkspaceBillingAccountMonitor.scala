@@ -9,7 +9,7 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsBillingAccountName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsBillingAccountName, RawlsBillingProjectName}
 import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
 
 import scala.collection.mutable
@@ -94,10 +94,10 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
       case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
         val message = s"Rawls does not have permission to set the Billing Account on ${googleProjectId} to ${newBillingAccount.get}"
         dataSource.inTransaction({ dataAccess =>
-          dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(newBillingAccount.get, isInvalid = true)
+          dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(newBillingAccount.get, isInvalid = true) >>
           dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, s"${message} ${e.getMessage}")
-        }).flatMap { r =>
-          logger.warn(s"${r} + ${message}", e)
+        }).flatMap { _ =>
+          logger.warn(message, e)
           Future.failed(e)
         }
       case e: Throwable =>
