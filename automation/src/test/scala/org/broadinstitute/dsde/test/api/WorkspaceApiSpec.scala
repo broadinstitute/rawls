@@ -105,7 +105,6 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         createdWorkspaceResponse.workspace.name should be(workspaceName)
         val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
 
-        val iamPermissions = googleIamDaoWithCloudCredentials.getProjectPolicy(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
         val expectedRoles = Set(
           "terra_billing_project_owner",
           "terra_workspace_can_compute",
@@ -121,32 +120,38 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           "lifesciences.serviceAgent",
           "pubsub.serviceAgent"
         )
-        val realRoles: Set[String] = iamPermissions.getBindings().asScala.map(_.getRole.split("/").last).toSet
-        realRoles shouldEqual expectedRoles
 
-        iamPermissions.getBindings().forEach(binding => {
-          binding.getRole() match {
-            // We just check size here because the policy group names are generated on workspace creation
-            case s if s.endsWith("terra_billing_project_owner") => binding.getMembers.size() shouldEqual 1
-            case s if s.endsWith("terra_workspace_can_compute") => binding.getMembers.size() shouldEqual 3
-            case s if s.endsWith("compute.serviceAgent") => binding.getMembers.size() shouldEqual 1
-            case s if s.endsWith("container.nodeServiceAgent") => binding.getMembers.size() shouldEqual 1
-            case s if s.endsWith("container.serviceAgent") => binding.getMembers.size() shouldEqual 1
-            case s if s.endsWith("containerregistry.ServiceAgent") => binding.getMembers.size() shouldEqual 1
-            case s if s.endsWith("dataflow.serviceAgent") => binding.getMembers.size() shouldEqual 1
-            case s if s.endsWith("dataproc.serviceAgent") => binding.getMembers.size() shouldEqual 1
-            case s if s.endsWith("editor") => binding.getMembers.size() shouldEqual 2
-            case s if s.endsWith("genomics.serviceAgent") => binding.getMembers.size() shouldEqual 1
-            case s if s.endsWith("lifesciences.serviceAgent") => binding.getMembers.size() shouldEqual 1
-            case s if s.endsWith("owner") =>
-              binding.getMembers.size() shouldEqual 1
-              binding.getMembers.get(0) should endWith ("@terra-kernel-k8s.iam.gserviceaccount.com")
-            case s if s.endsWith("pubsub.serviceAgent") => binding.getMembers.size() shouldEqual 1
-            case other =>
-              logger.error(s"Extra permission on workspace google project found: ${other}")
-              throw new Exception(s"Extra permission on workspace google project found: ${other}")
-          }
-        })
+        implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+
+        eventually {
+          val iamPermissions = googleIamDaoWithCloudCredentials.getProjectPolicy(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
+          val realRoles: Set[String] = iamPermissions.getBindings().asScala.map(_.getRole.split("/").last).toSet
+          realRoles shouldEqual expectedRoles
+
+          iamPermissions.getBindings().forEach(binding => {
+            binding.getRole() match {
+              // We just check size here because the policy group names are generated on workspace creation
+              case s if s.endsWith("terra_billing_project_owner") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("terra_workspace_can_compute") => binding.getMembers.size() shouldEqual 3
+              case s if s.endsWith("compute.serviceAgent") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("container.nodeServiceAgent") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("container.serviceAgent") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("containerregistry.ServiceAgent") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("dataflow.serviceAgent") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("dataproc.serviceAgent") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("editor") => binding.getMembers.size() shouldEqual 2
+              case s if s.endsWith("genomics.serviceAgent") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("lifesciences.serviceAgent") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("owner") =>
+                binding.getMembers.size() shouldEqual 1
+                binding.getMembers.get(0) should endWith("@terra-kernel-k8s.iam.gserviceaccount.com")
+              case s if s.endsWith("pubsub.serviceAgent") => binding.getMembers.size() shouldEqual 1
+              case other =>
+                logger.error(s"Extra permission on workspace google project found: ${other}")
+                throw new Exception(s"Extra permission on workspace google project found: ${other}")
+            }
+          })
+        }
       }
     }
 
