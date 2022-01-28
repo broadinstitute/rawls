@@ -79,30 +79,32 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
   }
 
   private def updateBillingAccountOnGoogle(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[Unit] = {
-    try {
-      gcsDAO.getBillingInfoForGoogleProject(googleProjectId).map(projectBillingInfo => {
-        val currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
-        if (newBillingAccount != currentBillingAccountOnGoogle) {
-          setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount)
-        } else {
-          logger.info(s"Not updating Billing Account on Google Project ${googleProjectId} because currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle} is the same as the newBillingAccount:${newBillingAccount}")
-        }
-      })
-    } catch {
+    val updateGoogleResult = for {
+      projectBillingInfo <- gcsDAO.getBillingInfoForGoogleProject(googleProjectId)
+      currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
+      _ <- if (newBillingAccount != currentBillingAccountOnGoogle) {
+        setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount)
+      } else {
+        logger.info(s"Not updating Billing Account on Google Project ${googleProjectId} because currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle} is the same as the newBillingAccount:${newBillingAccount}")
+        Future.successful()
+      }
+    } yield ()
+
+    updateGoogleResult.recoverWith {
       case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
         val message = s"Rawls does not have permission to set the Billing Account on ${googleProjectId} to ${newBillingAccount.get}"
         dataSource.inTransaction({ dataAccess =>
           dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(newBillingAccount.get, isInvalid = true)
           dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, s"${message} ${e.getMessage}")
-        }).map { _ =>
-          logger.warn(message, e)
-          throw e
+        }).flatMap { r =>
+          logger.warn(s"${r} + ${message}", e)
+          Future.failed(e)
         }
       case e: Throwable =>
         dataSource.inTransaction { dataAccess =>
           dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, e.getMessage)
-        }.map { _ =>
-          throw e
+        }.flatMap { _ =>
+          Future.failed(e)
         }
     }
   }
