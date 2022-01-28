@@ -48,7 +48,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
     system.actorOf(WorkspaceBillingAccountMonitor.props(dataSource, mockGcsDAO, 1 second, 1 second))
   }
 
-  "WorkspaceBillingAccountMonitor" should "update the billing account on all workspaces in a billing project" in {
+  "WorkspaceBillingAccountMonitor" should "update the billing account on all v1 and v2 workspaces in a billing project" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val billingAccountName = defaultBillingAccountName
       val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, Option(billingAccountName), None, googleProjectNumber = Option(defaultGoogleProjectNumber))
@@ -137,7 +137,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
     }
   }
 
-  it should "continue even if one workspace google project fails to update" in {
+  it should "continue to update other workspace google projects even if one fails to update" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val originalBillingAccount = Option(defaultBillingAccountName)
       val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, originalBillingAccount, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
@@ -148,25 +148,16 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
 
-
-      // Going to set up some mocking.  In this case, we need to make sure that there is a mock that will catch each of
-      // the different param combinations we might pass to it.  Per Mockito docs, the last last match is the one that
-      // will be used which is why we have the "generic" case first.
-      val failingGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-
-      // "generic" matcher will catch all calls to this method that don't match the "exception" case below
-      when(failingGcsDAO.setBillingAccountName(
-        any[GoogleProjectId],
-        any[RawlsBillingAccountName]
-      )).thenReturn(Future.successful(new ProjectBillingInfo()))
-
-      val failureMessage = "because I feel like it"
-      val exception = new RawlsException(failureMessage)
-      // the "exception" case.  When method is called with these specific params, we want to Fail the Future.
-      when(failingGcsDAO.setBillingAccountName(
-        ArgumentMatchers.eq(badWorkspace.googleProjectId),
-        ArgumentMatchers.eq(newBillingAccount)))
-        .thenReturn(Future.failed(exception))
+      val exceptionMessage = "oh what a shame!  It went kerplooey!"
+      val failingGcsDao = new MockGoogleServicesDAO("") {
+        override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
+          if (googleProjectId == badWorkspaceGoogleProjectId) {
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, exceptionMessage))
+          } else {
+            super.getBillingInfoForGoogleProject(googleProjectId)
+          }
+        }
+      }
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(workspace1))
@@ -174,7 +165,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(workspaceQuery.createOrUpdate(badWorkspace))
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
 
-      val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDAO)
+      val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDao)
 
       eventually (timeout = timeout(Span(10, Seconds))) {
         runAndWait(workspaceQuery.findByName(workspace1.toWorkspaceName)).getOrElse(fail("workspace not found"))
@@ -182,7 +173,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
         runAndWait(workspaceQuery.findByName(workspace2.toWorkspaceName)).getOrElse(fail("workspace not found"))
           .currentBillingAccountOnGoogleProject shouldBe Option(newBillingAccount)
         runAndWait(workspaceQuery.findByName(badWorkspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
-          .billingAccountErrorMessage shouldBe Option(failureMessage)
+          .billingAccountErrorMessage.value should include(exceptionMessage)
       }
 
       system.stop(actor)

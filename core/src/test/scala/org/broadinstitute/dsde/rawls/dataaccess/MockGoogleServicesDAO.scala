@@ -257,7 +257,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(new ProjectBillingInfo().setBillingEnabled(false))
 
   override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] =
-    Future.failed(new RawlsExceptionWithErrorReport(ErrorReport("Implement this for your specific test")))
+    Future.successful(new ProjectBillingInfo().setBillingAccountName(accessibleBillingAccountName.value).setBillingEnabled(true))
 
   override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] = {
     Future.successful {
