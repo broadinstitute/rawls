@@ -25,6 +25,7 @@ trait OpenSearchSupport extends LazyLogging {
   final val ID_DELIMITER = "/"
   final val FIELD_DELIMITER = "/"
   final val TYPE_FIELD = "sys_entity_type"
+  final val NAME_FIELD = "sys_entity_name"
 
   // list attributes should serialize as ["foo", "bar"], not as {itemsType: "AttributeValue", items: ["45", "46", "47", "48"]}
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
@@ -55,10 +56,14 @@ trait OpenSearchSupport extends LazyLogging {
       case (k, v) => (fieldName(entity.entityType, k), v)
     }
 
+    // append the NAME_FIELD to hold the id, so we don't rely on the built-in "_id" field
     // append the TYPE_FIELD attribute so OpenSearch can distinguish between types
-    // the first-class "type" still exists in OpenSearch but it is deprecated:
+    // the first-class "_type" still exists in OpenSearch but it is deprecated:
     // "Types are in the process of being removed"
-    val indexableAttrs = entityAttrs + (TYPE_FIELD -> AttributeString(entity.entityType))
+    val indexableAttrs = entityAttrs ++ Map(
+      TYPE_FIELD -> AttributeString(entity.entityType),
+      NAME_FIELD -> AttributeString(entity.name)
+    )
 
     // add the attributes to the document's source
     // TODO: are we content to rely on JSON-ification here? Will this have problems with entity references?

@@ -164,6 +164,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   }
 
+  override def listEntities(entityType: String, parentSpan: Span) = ???
+
   def pkFromSnapshotTable(tableModel: TableModel): String = {
     // If data repo returns one and only one primary key, use it.
     // If data repo returns null or a compound PK, use the built-in rowid for pk instead.

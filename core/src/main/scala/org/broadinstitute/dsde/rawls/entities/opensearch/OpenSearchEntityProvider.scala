@@ -12,20 +12,25 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdat
 import org.broadinstitute.dsde.rawls.model._
 import org.opensearch.action.bulk.BulkRequest
 import org.opensearch.action.delete.DeleteRequest
-import org.opensearch.action.get.GetRequest
-import org.opensearch.action.search.SearchRequest
+import org.opensearch.action.get.{GetRequest, GetResponse}
+import org.opensearch.action.search.{SearchRequest, SearchResponse, SearchScrollRequest}
 import org.opensearch.client.{RequestOptions, RestHighLevelClient}
 import org.opensearch.client.indices.{CreateIndexRequest, GetIndexRequest, GetMappingsRequest, PutMappingRequest}
+import org.opensearch.common.StopWatch
+import org.opensearch.common.unit.TimeValue
 import org.opensearch.common.xcontent.XContentType
 import org.opensearch.index.query.{BoolQueryBuilder, QueryStringQueryBuilder, TermsQueryBuilder}
 import org.opensearch.index.reindex.UpdateByQueryRequest
 import org.opensearch.rest.RestStatus
 import org.opensearch.script.Script
+import org.opensearch.search.{Scroll, SearchHit}
 import org.opensearch.search.aggregations.bucket.terms.ParsedStringTerms
 import org.opensearch.search.aggregations.{Aggregation, AggregationBuilders}
-import org.opensearch.search.builder.SearchSourceBuilder
+import org.opensearch.search.builder.{PointInTimeBuilder, SearchSourceBuilder}
 import org.opensearch.search.sort.SortOrder
 
+import java.util.concurrent.TimeUnit
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -64,6 +69,8 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     val mappingsRequest = new GetMappingsRequest()
     mappingsRequest.indices(workspaceIndex)
     val mappingsResponse = client.indices().getMapping(mappingsRequest, RequestOptions.DEFAULT)
+
+    logQueryTiming(new TimeValue(-1), "mappings query (TODO: measure timing)")
 
     val indexMapping = mappingsResponse.mappings().get(workspaceIndex)
     val mapping: Map[String, AnyRef] = indexMapping.getSourceAsMap.asScala.toMap
@@ -109,6 +116,8 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
     val resp = client.search(req, RequestOptions.DEFAULT)
 
+    logQueryTiming(resp.getTook, "aggregation query for per-type counts")
+
     val aggResults = resp.getAggregations
     val typeCounts: Aggregation = aggResults.get(TYPE_FIELD)
     val typesAndCounts = typeCounts match {
@@ -141,6 +150,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     // TODO OpenSearch: better error messaging
     indexResponseAttempt match {
       case Success(indexResponse) =>
+        logQueryTiming(new TimeValue(-1), "index single doc query (TODO: measure timing)")
         if (indexResponse.status() == RestStatus.CREATED) {
           Future(entity)
         } else {
@@ -175,6 +185,9 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     }
 
     val bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT)
+
+    logQueryTiming(bulkResponse.getTook, s"bulk delete request, for ${entityRefs.size} docs")
+
     val successes = bulkResponse.getItems.collect {
       case item if !item.isFailed => item
     }
@@ -212,6 +225,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     updateRequest.setScript(script) // the updates to perform via script
 
     val updateResponse = client.updateByQuery(updateRequest, RequestOptions.DEFAULT)
+    logQueryTiming(updateResponse.getTook, s"update-by-query request, deleting ${attributeNames.size} fields from ${updateResponse.getTotal} docs")
 
     logger.info(s"deleteEntityAttributes ${updateResponse.getStatus} in ${updateResponse.getTook.toString}: updated ${updateResponse.getUpdated} documents")
 
@@ -225,7 +239,10 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     //Getting back the document
     val getRequest = new GetRequest(workspaceIndex, s"${entityType}/${entityName}")
-    val getResponse = client.get(getRequest, RequestOptions.DEFAULT)
+
+    val getResponse = timedQuery[GetResponse](Option("get single doc query (measured via stopwatch)")) {
+      client.get(getRequest, RequestOptions.DEFAULT)
+    }
 
     if (getResponse.isExists) {
       Try(entity(getResponse.getId, getResponse.getSource.asScala.toMap)) match {
@@ -275,13 +292,24 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     else {
       SortOrder.ASC
     }
-    // TODO OpenSearch: better handling when the sort field does not exist or does not have a .raw mapping
-    val sortField = fieldName(entityType, AttributeName.fromDelimitedName(incomingQuery.sortField)) + ".raw"
+    // TODO OpenSearch: better error messages when the sort field does not exist or does not have a .raw mapping
+    val sortField = incomingQuery.sortField match {
+      case "name" =>
+        // magic string "name" means sort by the entity name, which we store in NAME_FIELD
+        NAME_FIELD
+      case other =>
+        // sorting by something other than "name"; look for the .raw multifield, which is mapped for sorting:
+        // keyword for strings, else number/bool for those datatypes
+        fieldName(entityType, AttributeName.fromDelimitedName(other)) + ".raw"
+    }
+
     searchSourceBuilder.sort(sortField, sortOrder)
 
     req.source(searchSourceBuilder)
 
     val resp = client.search(req, RequestOptions.DEFAULT)
+
+    logQueryTiming(resp.getTook, s"search query, filtered to ${resp.getHits.getTotalHits.value} docs, returning ${resp.getHits.getHits.length} docs")
 
     val filteredCount = resp.getHits.getTotalHits.value
     val filteredPageCount = Math.max(Math.ceil(filteredCount.toFloat / incomingQuery.pageSize), 1)
@@ -307,6 +335,70 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     }
 
     Future(EntityQueryResponse(incomingQuery, resultMetadata, results.toSeq))
+
+  }
+
+
+  override def listEntities(entityType: String, parentSpan: Span): Future[Seq[Entity]] = {
+    val batchSize = 2 // 10000
+    val keepAlive = new TimeValue(3, TimeUnit.MINUTES)
+
+    // TODO: recommended way to do large pagination is via a Point-In-Time (PIT) context. This seems to only
+    // be available in X-Pack. So, we do a scroll search instead:
+    // https://opensearch.org/docs/latest/opensearch/rest-api/scroll/
+
+    // recursive scroll queries, may be used later
+    @tailrec
+    def doScroll(scrollId: String, hitsSoFar: List[SearchHit] = List.empty[SearchHit]): List[SearchHit] = {
+      val searchScrollRequest = new SearchScrollRequest()
+      searchScrollRequest.scrollId(scrollId)
+      searchScrollRequest.scroll(keepAlive)
+      val searchResponse = client.scroll(searchScrollRequest, RequestOptions.DEFAULT)
+
+      logQueryTiming(searchResponse.getTook, s"additional scroll query, using scroll: $scrollId")
+
+      val combinedHits = hitsSoFar ++ searchResponse.getHits.asScala.toList
+
+      if (searchResponse.getHits.getTotalHits.value > combinedHits.length) {
+        doScroll(searchResponse.getScrollId, combinedHits)
+      } else {
+        combinedHits
+      }
+    }
+
+
+    // initial search, sets filter criteria (entityType) and sort and gets the initial scroll id
+    val req = new SearchRequest(workspaceIndex)
+    req.scroll(keepAlive) // time for each batch
+    val typeQuery = new TermsQueryBuilder(TYPE_FIELD, entityType)
+    val searchSourceBuilder = new SearchSourceBuilder()
+    searchSourceBuilder.query(typeQuery)
+    searchSourceBuilder.size(batchSize) // sets batch size
+    searchSourceBuilder.sort(NAME_FIELD, SortOrder.ASC) // consistent sort
+    req.source(searchSourceBuilder)
+    val initialResponse = client.search(req, RequestOptions.DEFAULT)
+
+    logQueryTiming(initialResponse.getTook, "initial query for scroll-search")
+
+    // TODO: did we get all the results already?
+    val total = initialResponse.getHits.getTotalHits.value
+    val thisPage = initialResponse.getHits.getHits.length
+
+    val searchHits = if (total > thisPage) {
+      logger.info(s"*** need to keep scrolling")
+      doScroll(initialResponse.getScrollId, initialResponse.getHits.asScala.toList)
+    } else {
+      logger.info(s"*** got all results, can be done!")
+      initialResponse.getHits.asScala.toList
+    }
+
+    // TODO: delete scroll
+
+    val results = searchHits.map { hit =>
+      entity(hit)
+    }
+
+    Future(results)
 
   }
 
@@ -343,7 +435,8 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
         s"""
         {
             "properties": {
-                "$TYPE_FIELD": {"type": "keyword"}
+                "$TYPE_FIELD": {"type": "keyword"},
+                "$NAME_FIELD": {"type": "keyword"}
             }
         }
         """
@@ -371,6 +464,8 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
       bulkRequest.add(indexRequest)
     }
     val bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT)
+    if (bulkResponse.hasFailures)
+      logger.info(s"failure message: ${bulkResponse.buildFailureMessage()}")
     val statusResponses = bulkResponse.getItems map { bulkItemResponse => bulkItemResponse.status().toString }
     statusResponses.toList
   }
@@ -428,6 +523,34 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   }
 
+  def timedQuery[T](extra: Option[String] = None)(queryCode: => T): T = {
+    val stopwatch = new StopWatch()
+    stopwatch.start()
+
+    val response: T = queryCode
+
+    stopwatch.stop()
+    val took = stopwatch.lastTaskTime()
+
+    val msg = extra match {
+      case None => ""
+      case Some(s) => s": $s"
+    }
+    logger.info(s"OpenSearch query completed in ${took.toString}$msg")
+
+    response
+  }
+
+
+  def logQueryTiming(timeValue: TimeValue, extra: String): Unit = logQueryTiming(timeValue, Option(extra))
+
+  def logQueryTiming(timeValue: TimeValue, extra: Option[String] = None): Unit = {
+    val msg = extra match {
+      case None => ""
+      case Some(s) => s": $s"
+    }
+    logger.info(s"OpenSearch query completed in ${timeValue.toString}$msg")
+  }
 
 
 

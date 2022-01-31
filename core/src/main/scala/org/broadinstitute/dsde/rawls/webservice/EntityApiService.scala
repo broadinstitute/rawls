@@ -146,7 +146,7 @@ trait EntityApiService extends UserInfoDirectives {
           get {
             traceRequest { span =>
               complete {
-                entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, span)
+                entityServiceConstructor(userInfo).listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, dataReference, billingProject, span)
               }
             }
           } ~

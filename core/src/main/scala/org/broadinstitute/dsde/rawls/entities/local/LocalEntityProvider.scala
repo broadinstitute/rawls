@@ -213,6 +213,16 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
+  override def listEntities(entityType: String, parentSpan: Span): Future[Seq[Entity]] = {
+    dataSource.inTransaction { dataAccess =>
+      traceDBIOWithParent("listActiveEntitiesOfType", parentSpan) { _ =>
+        dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
+      }.map { r =>
+        r.toSeq
+      }
+    }
+  }
+
   def createEntityQueryResponse(query: EntityQuery, unfilteredCount: Int, filteredCount: Int, page: Seq[Entity]): EntityQueryResponse = {
     val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
     if (filteredCount > 0 && query.page > pageCount) {

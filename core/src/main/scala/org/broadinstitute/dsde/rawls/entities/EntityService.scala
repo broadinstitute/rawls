@@ -207,14 +207,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       metadataFuture.recover(bigQueryRecover)
     }
 
-  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] =
+  def listEntities(workspaceName: WorkspaceName, entityType: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[Seq[Entity]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("listActiveEntitiesOfType", parentSpan) { _ =>
-          dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
-        }.map { r =>
-          r.toSeq
-        }
+
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+
+      for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        entityList <- entityProvider.listEntities(entityType, parentSpan)
+      } yield {
+        entityList
       }
     }
 
