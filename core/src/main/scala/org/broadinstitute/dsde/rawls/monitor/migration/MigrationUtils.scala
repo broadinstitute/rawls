@@ -73,6 +73,13 @@ object MigrationUtils {
           .getBindings
           .foldLeft(Map.newBuilder[StorageRole, NonEmptyList[Identity]]) { (builder, binding) =>
             NonEmptyList.fromList(binding._2.toList).map { identities =>
+              // `StorageRole`s are just wrappers around a `roleId: String`. The `StorageRole`
+              // object contains some pre-defined wrappers (like `ObjectViewer`) as well as a
+              // `CustomStorageRole` constructor that's effectively "whatever's not listed here".
+              // Instead of matching on the `String` and returning the relevant wrapper, I'm just
+              // creating a `CustomStorageRole` because this is being unpacked straightaway in the
+              // `GoogleStorageService` implementation. Obviously when this gets moved into
+              // workbench-libs, don't do this.
               builder += (StorageRole.CustomStorageRole(binding._1.getValue).asInstanceOf[StorageRole] -> identities)
             }.getOrElse(builder)
           }
