@@ -113,6 +113,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           "containerregistry.ServiceAgent",
           "dataflow.serviceAgent",
           "dataproc.serviceAgent",
+          "owner",
           "editor",
           "genomics.serviceAgent",
           "lifesciences.serviceAgent",
