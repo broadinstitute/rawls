@@ -273,6 +273,22 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  "WorkspaceApi" should "return 201 for post to MC workspaces" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      Map.empty
+    )
+
+    Post(s"/workspaces/mc", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check{
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+      }
+  }
+
   "WorkspaceApi" should "return 201 for post to workspaces" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,

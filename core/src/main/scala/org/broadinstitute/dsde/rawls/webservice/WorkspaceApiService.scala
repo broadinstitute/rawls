@@ -48,6 +48,15 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
     } ~
+      path("workspaces" / "mc") {
+        post {
+          entity(as[WorkspaceRequest]) { workspace =>
+            complete {
+              throw new UnsupportedOperationException("MC workspace endpoint not implemented")
+            }
+          }
+        }
+      } ~
       path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
