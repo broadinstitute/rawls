@@ -110,12 +110,11 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           "terra_workspace_can_compute",
           "compute.serviceAgent",
           "container.serviceAgent",
-          "container.nodeServiceAgent",
           "containerregistry.ServiceAgent",
           "dataflow.serviceAgent",
           "dataproc.serviceAgent",
-          "editor",
           "owner",
+          "editor",
           "genomics.serviceAgent",
           "lifesciences.serviceAgent",
           "pubsub.serviceAgent"
@@ -126,7 +125,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         eventually {
           val iamPermissions = googleIamDaoWithCloudCredentials.getProjectPolicy(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
           val realRoles: Set[String] = iamPermissions.getBindings().asScala.map(_.getRole.split("/").last).toSet
-          realRoles shouldEqual expectedRoles
+
+          // set diff here to filter for only those role bindings we know are expected
+          realRoles.diff(expectedRoles) shouldEqual Set.empty
 
           iamPermissions.getBindings().forEach(binding => {
             binding.getRole() match {
