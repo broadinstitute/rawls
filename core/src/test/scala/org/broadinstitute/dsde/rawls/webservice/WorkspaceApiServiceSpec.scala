@@ -1250,7 +1250,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     // mock(ito) out the workspace creation
     when(services.gcsDAO.testDMBillingAccountAccess(any[RawlsBillingAccountName])).thenReturn(Future.successful(true))
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), any[Some[RawlsBillingAccountName]], any[Option[RawlsBillingAccountName]], any[Boolean]))
+    when(services.gcsDAO.setBillingAccountName(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), any[RawlsBillingAccountName]))
       .thenReturn(Future.successful(new ProjectBillingInfo().setBillingAccountName(testData.workspace.currentBillingAccountOnGoogleProject.map(_.value).getOrElse("")).setProjectId(testData.workspace.googleProjectId.value)))
     when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
     when(services.gcsDAO.labelSafeMap(any[Map[String, String]], any[String])).thenReturn(Map.empty[String, String])
