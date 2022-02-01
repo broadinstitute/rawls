@@ -171,6 +171,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
           val workspaceId = UUID.randomUUID
 
           for {
+            _ <- DBIO.from(
+              Future(workspaceManagerDAO.createWorkspace(workspaceId, userInfo.accessToken))
+            )
             savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(_ =>
               createWorkspaceInDatabase(workspaceId.toString, workspaceRequest, "", WorkbenchEmail("fake@fake.com"), GoogleProjectId("fake"), None, None, dataAccess, span, "mc"))
             response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
