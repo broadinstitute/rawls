@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsGzipInstrumented}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import java.util.UUID
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
@@ -49,9 +50,15 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
       case wdl: WdlSource => Multipart.FormData.BodyPart("workflowSource", wdl.source)
     }
 
+    val inputsJsonArray = inputs.mkString("[", ",", "]")
+
+    // We only map over inputs to make this list the same size. The input values themselves is ignored.
+    val requestedWorkflowIdsJsonArray = inputs.map(_ => s""""${UUID.randomUUID().toString}""""  ).mkString("[", ",", "]")
+
     val bodyParts = Seq(
       wdlSourceOrUrl,
-      Multipart.FormData.BodyPart("workflowInputs", inputs.mkString("[", ",", "]"))
+      Multipart.FormData.BodyPart("workflowInputs", inputsJsonArray),
+      Multipart.FormData.BodyPart("requestedWorkflowId", requestedWorkflowIdsJsonArray)
     ) ++ options.map(Multipart.FormData.BodyPart("workflowOptions", _)) ++ labelsBodyPart ++ wfc
 
     val formData = Multipart.FormData(bodyParts:_*)
