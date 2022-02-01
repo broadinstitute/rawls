@@ -283,8 +283,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/mc", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check{
-        assertResult(StatusCodes.OK, responseAs[String]) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
+        }
+        assertResult(newWorkspace) {
+          val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
         }
       }
   }

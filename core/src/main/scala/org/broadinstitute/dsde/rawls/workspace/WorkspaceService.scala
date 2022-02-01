@@ -162,6 +162,36 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
+  def withNewMcWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(span => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, span) {
+      traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all= false, List.empty[AttributeName])))) flatMap {
+        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
+        case None => {
+          val workspaceId = UUID.randomUUID.toString
+
+          for {
+            savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(_ =>
+              createWorkspaceInDatabase(workspaceId, workspaceRequest, "", WorkbenchEmail("fake@fake.com"), GoogleProjectId("fake"), None, None, dataAccess, span ))
+            response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
+          } yield {
+            println(s"Created ${workspaceId}")
+            response
+          }
+        }
+      }
+    })
+  }
+
+  def createMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+    for {
+      workspace <- traceWithParent("withNewMcWorkspaceContext", parentSpan) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
+        withNewMcWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
+          DBIO.successful(workspaceContext)
+        }
+      }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
+    } yield workspace
+  }
+
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
@@ -2224,7 +2254,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                          googleProjectNumber: Option[GoogleProjectNumber],
                                          currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
                                          dataAccess: DataAccess,
-                                         parentSpan: Span = null): ReadWriteAction[Workspace] = {
+                                         parentSpan: Span = null
+                                       ): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
     val completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix match {
       case Some(_) => None

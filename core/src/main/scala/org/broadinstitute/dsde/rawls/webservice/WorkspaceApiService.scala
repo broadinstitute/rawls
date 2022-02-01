@@ -51,8 +51,10 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / "mc") {
         post {
           entity(as[WorkspaceRequest]) { workspace =>
-            complete {
-              throw new UnsupportedOperationException("MC workspace endpoint not implemented")
+            traceRequest { span =>
+              complete {
+                workspaceServiceConstructor(userInfo).createMcWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+              }
             }
           }
         }
