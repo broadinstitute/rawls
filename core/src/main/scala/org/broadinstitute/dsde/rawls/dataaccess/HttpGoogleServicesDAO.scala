@@ -704,7 +704,7 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Billing
     val billingSvcCred = getBillingServiceAccountCredential
     val cloudBillingProjectsApi = getCloudBillingManager(billingSvcCred).projects()
-    val updater = cloudBillingProjectsApi.updateBillingInfo(googleProjectId.value, projectBillingInfo)
+    val updater = cloudBillingProjectsApi.updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo)
     retryWithRecoverWhen500orGoogleError(() => {
       blocking {
         executeGoogleRequest(updater)
