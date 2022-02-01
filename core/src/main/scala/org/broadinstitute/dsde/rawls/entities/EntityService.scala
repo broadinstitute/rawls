@@ -134,9 +134,11 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
               logger.info(s"attempting to index ${listents.size} entities ... ")
               responseString.appendAll(s"attempting to index ${listents.size} entities ... \n")
 
-              val indexStatuses = searchprovider.indexEntities(workspaceContext, listents)
+              val bulkResponse = searchprovider.indexEntities(listents)
+              val indexStatuses = bulkResponse.getItems.map(_.status().toString)
 
-              val statusesByCount = indexStatuses.groupBy(identity).mapValues(_.size)
+
+              val statusesByCount = indexStatuses.groupBy(identity).mapValues(_.length)
               statusesByCount foreach {
                 case (status, count) =>
                   logger.info(s"$status: $count")

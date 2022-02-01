@@ -46,7 +46,7 @@ trait OpenSearchSupport extends LazyLogging {
     s"$entityType$FIELD_DELIMITER${AttributeName.toDelimitedName(attrName)}"
 
   /** generate the OpenSearch request to index a single Terra entity */
-  def indexableDocument(workspace: Workspace, entity: Entity): IndexRequest = {
+  def indexableDocument(entity: Entity): IndexRequest = {
     val request = new IndexRequest(workspaceIndex) // Use the workspace-specific index
     request.id(documentId(entity)) // Unique id for this document in the index
 

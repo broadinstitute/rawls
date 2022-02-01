@@ -8,12 +8,15 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddListMember, AddUpdateAttribute, CreateAttributeEntityReferenceList, CreateAttributeValueList, EntityUpdateDefinition, RemoveAttribute, RemoveListMember}
 import org.broadinstitute.dsde.rawls.model._
-import org.opensearch.action.bulk.BulkRequest
+import org.broadinstitute.dsde.rawls.util.AttributeSupport
+import org.opensearch.action.ActionListener
+import org.opensearch.action.bulk.{BulkRequest, BulkResponse}
 import org.opensearch.action.delete.DeleteRequest
-import org.opensearch.action.get.{GetRequest, GetResponse}
-import org.opensearch.action.search.{SearchRequest, SearchResponse, SearchScrollRequest}
+import org.opensearch.action.get.{GetRequest, GetResponse, MultiGetRequest}
+import org.opensearch.action.index.IndexRequest
+import org.opensearch.action.search.{ClearScrollRequest, ClearScrollResponse, SearchRequest, SearchResponse, SearchScrollRequest}
 import org.opensearch.client.{RequestOptions, RestHighLevelClient}
 import org.opensearch.client.indices.{CreateIndexRequest, GetIndexRequest, GetMappingsRequest, PutMappingRequest}
 import org.opensearch.common.StopWatch
@@ -40,6 +43,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
                               (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider
     with OpenSearchSupport
+    with AttributeSupport
     with ExpressionEvaluationSupport {
 
   override val entityStoreId: Option[String] = Option("OpenSearch")
@@ -143,7 +147,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   /** createEntity - easy, the tricky logic is in indexableDocument */
   override def createEntity(entity: Entity): Future[Entity] = {
     // TODO OpenSearch: should reuse indexEntity() instead
-    val indexRequest = indexableDocument(requestArguments.workspace, entity)
+    val indexRequest = indexableDocument(entity)
     indexRequest.create(true) // set as create-only
 
     val indexResponseAttempt = Try(client.index(indexRequest, RequestOptions.DEFAULT))
@@ -338,9 +342,11 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   }
 
-
+  /** list entities: relatively straightforward to implement via a scroll-search. However, ES documentation
+    * suggests using a Point-In-Time context instead, but that is only availble in X-Pack. This may
+    * need some profiling to inspect actual memory usage and performance. */
   override def listEntities(entityType: String, parentSpan: Span): Future[Seq[Entity]] = {
-    val batchSize = 2 // 10000
+    val batchSize = 750 // 10000
     val keepAlive = new TimeValue(3, TimeUnit.MINUTES)
 
     // TODO: recommended way to do large pagination is via a Point-In-Time (PIT) context. This seems to only
@@ -355,13 +361,26 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
       searchScrollRequest.scroll(keepAlive)
       val searchResponse = client.scroll(searchScrollRequest, RequestOptions.DEFAULT)
 
-      logQueryTiming(searchResponse.getTook, s"additional scroll query, using scroll: $scrollId")
-
       val combinedHits = hitsSoFar ++ searchResponse.getHits.asScala.toList
+
+      logQueryTiming(searchResponse.getTook, s"additional scroll query (${combinedHits.length}/${searchResponse.getHits.getTotalHits.value}), using scroll: $scrollId")
 
       if (searchResponse.getHits.getTotalHits.value > combinedHits.length) {
         doScroll(searchResponse.getScrollId, combinedHits)
       } else {
+
+        // delete scroll to free up server memory. It would clear itself in ${keepAlive} anyway.
+        // we use the client.clearScrollAsync() method here, with a no-op listener, to fire-and-forget
+        // the delete-scroll request. This is an exercise in using the ES client's async methods.
+        // here in Scala, we could just as easily wrapped the synchronous client.clearScroll() method
+        // in a Future.
+        val clearScrollRequest = new ClearScrollRequest()
+        clearScrollRequest.addScrollId(searchResponse.getScrollId)
+        val clearScrollListener: ActionListener[ClearScrollResponse] = ActionListener.wrap(new Runnable {
+          override def run(): Unit = ()
+        })
+        client.clearScrollAsync(clearScrollRequest, RequestOptions.DEFAULT, clearScrollListener)
+
         combinedHits
       }
     }
@@ -374,25 +393,21 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     val searchSourceBuilder = new SearchSourceBuilder()
     searchSourceBuilder.query(typeQuery)
     searchSourceBuilder.size(batchSize) // sets batch size
-    searchSourceBuilder.sort(NAME_FIELD, SortOrder.ASC) // consistent sort
+    searchSourceBuilder.sort("_doc", SortOrder.ASC) // consistent sort, _doc is most efficient according to documentation
     req.source(searchSourceBuilder)
     val initialResponse = client.search(req, RequestOptions.DEFAULT)
 
-    logQueryTiming(initialResponse.getTook, "initial query for scroll-search")
-
-    // TODO: did we get all the results already?
+    // did we get all the results already?
     val total = initialResponse.getHits.getTotalHits.value
     val thisPage = initialResponse.getHits.getHits.length
 
+    logQueryTiming(initialResponse.getTook, s"initial query for scroll-search ($thisPage/$total)")
+
     val searchHits = if (total > thisPage) {
-      logger.info(s"*** need to keep scrolling")
       doScroll(initialResponse.getScrollId, initialResponse.getHits.asScala.toList)
     } else {
-      logger.info(s"*** got all results, can be done!")
       initialResponse.getHits.asScala.toList
     }
-
-    // TODO: delete scroll
 
     val results = searchHits.map { hit =>
       entity(hit)
@@ -402,9 +417,86 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   }
 
-  // TODO: implement
+
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
-    throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
+    // inspect incoming entityUpdates, identify unique entityType/name pairs
+    val docids: Set[String] = entityUpdates.map { eud => documentId(eud.entityType, eud.name) }.toSet
+
+    // TODO: batch this so we don't necessarily retrieve all at once
+
+    // retrieve documents from ES based on entityType/name pairs
+    val multiGetRequest = new MultiGetRequest()
+    docids.foreach { docid =>
+      multiGetRequest.add(workspaceIndex, docid)
+    }
+
+
+    val stopwatch = new StopWatch()
+    stopwatch.start()
+    val multiGetResponse = client.mget(multiGetRequest, RequestOptions.DEFAULT)
+    stopwatch.stop()
+    logQueryTiming(stopwatch.lastTaskTime(), s"batchUpsert lookup for existing documents (${multiGetResponse.getResponses.length} responses)")
+
+    // abort on any retrieval failure
+    val failures = multiGetResponse.getResponses collect {
+      case item if item.isFailed => item.getFailure
+    }
+    if (failures.nonEmpty) {
+      // TODO: the list of failures could be large, limit it so we don't create a huge response
+      throw new RawlsExceptionWithErrorReport(ErrorReport(s"Error retrieving documents: {${failures.map(_.getMessage).mkString("Array(", ", ", ")")}"))
+    }
+
+    // build map of docid -> document, based on the response
+    // since we already checked for failures, we are safe to assume
+    // none of these failed
+    val docs: Map[String, GetResponse] = multiGetResponse.getResponses.map { item =>
+      item.getId -> item.getResponse
+    }.toMap
+
+    // loop through entity updates
+    val entitiesToWrite = entityUpdates.flatMap { eud =>
+      val docid = documentId(eud.entityType, eud.name)
+      // what did we retrieve from the index?
+      val getResponse = docs.getOrElse(docid, throw new Exception(s"should not reach this point: docid $docid had no response"))
+
+      // is this a create or an update?
+      val existingEntity = if (getResponse.isExists) {
+        // update
+        entity(docid, getResponse.getSource.asScala.toMap)
+      } else {
+        // create, start with a blank entity
+        Entity(eud.name, eud.entityType, Map())
+      }
+
+      // rely heavily on existing code in applyOperationsToEntity() from AttributeSupport
+      val newEntity = applyOperationsToEntity(existingEntity, eud.operations)
+      if (newEntity != existingEntity) {
+        Option(newEntity)
+      } else {
+        logger.info(s"$docid has no changes; skipping indexing for this document.")
+        None
+      }
+    }
+
+    stopwatch.start()
+    val bulkResponse = indexEntities(entitiesToWrite.toList)
+    stopwatch.stop()
+    logQueryTiming(stopwatch.lastTaskTime(), s"batchUpsert bulk index (${entitiesToWrite.length} entities)")
+
+    // for logging only
+    val indexStatuses = bulkResponse.getItems.map(_.status().toString)
+    val statusesByCount = indexStatuses.groupBy(identity).mapValues(_.length)
+    statusesByCount foreach {
+      case (status, count) =>
+        logger.info(s"$status: $count")
+    }
+
+    // check for any errors
+    if (bulkResponse.hasFailures) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(bulkResponse.buildFailureMessage()))
+    } else {
+      Future(entitiesToWrite)
+    }
   }
 
   // ================================================================================================
@@ -452,22 +544,22 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   }
 
   def indexEntity(workspace: Workspace, entity: Entity) = {
-    val request = indexableDocument(workspace, entity)
+    val request = indexableDocument(entity)
     val indexResponse = client.index(request, RequestOptions.DEFAULT)
     indexResponse.status().toString
   }
 
-  def indexEntities(workspace: Workspace, entities: List[Entity]): List[String] = {
+  def indexEntities(entities: List[Entity]): BulkResponse = {
     val bulkRequest = new BulkRequest()
     entities.foreach { entity =>
-      val indexRequest = indexableDocument(workspace, entity)
+      val indexRequest = indexableDocument(entity)
       bulkRequest.add(indexRequest)
     }
     val bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT)
     if (bulkResponse.hasFailures)
       logger.info(s"failure message: ${bulkResponse.buildFailureMessage()}")
-    val statusResponses = bulkResponse.getItems map { bulkItemResponse => bulkItemResponse.status().toString }
-    statusResponses.toList
+
+    bulkResponse
   }
 
   def purgeMappings(workspace: Workspace, entityType: String, attributeNames: Set[AttributeName]): List[String] = {
