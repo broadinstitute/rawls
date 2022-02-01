@@ -67,7 +67,8 @@ object WorkspaceService {
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
                   entityManager: EntityManager, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String,
                   servicePerimeterService: ServicePerimeterService,
-                  googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String)
+                  googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String
+                 )
                  (userInfo: UserInfo)
                  (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
@@ -167,14 +168,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
       traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all= false, List.empty[AttributeName])))) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None => {
-          val workspaceId = UUID.randomUUID.toString
+          val workspaceId = UUID.randomUUID
 
           for {
             savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(_ =>
-              createWorkspaceInDatabase(workspaceId, workspaceRequest, "", WorkbenchEmail("fake@fake.com"), GoogleProjectId("fake"), None, None, dataAccess, span ))
+              createWorkspaceInDatabase(workspaceId.toString, workspaceRequest, "", WorkbenchEmail("fake@fake.com"), GoogleProjectId("fake"), None, None, dataAccess, span, "mc"))
             response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
           } yield {
-            println(s"Created ${workspaceId}")
             response
           }
         }
@@ -2254,7 +2254,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                          googleProjectNumber: Option[GoogleProjectNumber],
                                          currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
                                          dataAccess: DataAccess,
-                                         parentSpan: Span = null
+                                         parentSpan: Span = null,
+                                         workspaceType: String = "rawls"
                                        ): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
     val completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix match {
@@ -2279,7 +2280,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
       currentBillingAccountOnWorkspace,
       billingAccountErrorMessage = None,
       completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
-      shardState = WorkspaceShardStates.Sharded
+      shardState = WorkspaceShardStates.Sharded,
+      workspaceType
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)
@@ -2316,7 +2318,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
             for {
               billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentSpan)(_ => DBIO.from(
                   samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email)))
-              resource <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
+              resource: SamCreateResourceResponse <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
               policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
               _ <- DBIO.from({
                 // declare these next two Futures so they start in parallel

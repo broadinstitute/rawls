@@ -26,7 +26,8 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       None,
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded
+      WorkspaceShardStates.Sharded,
+      "rawls"
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
