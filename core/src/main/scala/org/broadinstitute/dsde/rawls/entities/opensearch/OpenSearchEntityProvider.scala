@@ -106,41 +106,48 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     // how many types there are in this index. We can get this from the mappings query.
     val distinctTypes = fieldNames.map(_.entityType)
 
-    val entityTypeAgg = AggregationBuilders
-      .terms(TYPE_FIELD)
-      .field(s"$TYPE_FIELD")
-      .size(distinctTypes.size)
+    if (distinctTypes.isEmpty) {
+      // if there are no types yet, don't bother with any other queries
+      Future(Map())
+    } else {
+      val entityTypeAgg = AggregationBuilders
+        .terms(TYPE_FIELD)
+        .field(s"$TYPE_FIELD")
+        .size(distinctTypes.size)
 
-    val searchSourceBuilder = new SearchSourceBuilder()
-    searchSourceBuilder
-      .size(0)
-      .aggregation(entityTypeAgg)
+      val searchSourceBuilder = new SearchSourceBuilder()
+      searchSourceBuilder
+        .size(0)
+        .aggregation(entityTypeAgg)
 
-    req.source(searchSourceBuilder)
+      req.source(searchSourceBuilder)
 
-    val resp = client.search(req, RequestOptions.DEFAULT)
+      val resp = client.search(req, RequestOptions.DEFAULT)
 
-    logQueryTiming(resp.getTook, "aggregation query for per-type counts")
+      logQueryTiming(resp.getTook, "aggregation query for per-type counts")
 
-    val aggResults = resp.getAggregations
-    val typeCounts: Aggregation = aggResults.get(TYPE_FIELD)
-    val typesAndCounts = typeCounts match {
-      case pst:ParsedStringTerms =>
-        pst.getBuckets.asScala.toList.map(bucket => (bucket.getKeyAsString, bucket.getDocCount))
-      case x =>
-        throw new Exception(s"found unexpected aggregation type: ${x.getClass.getName}")
+      val aggResults = resp.getAggregations
+      val typeCounts: Aggregation = aggResults.get(TYPE_FIELD)
+      val typesAndCounts = typeCounts match {
+        case pst:ParsedStringTerms =>
+          pst.getBuckets.asScala.toList.map(bucket => (bucket.getKeyAsString, bucket.getDocCount))
+        case x =>
+          throw new Exception(s"found unexpected aggregation type: ${x.getClass.getName}")
+      }
+
+      assert(typesAndCounts.size == distinctTypes.size, s"typesAndCounts.size of ${typesAndCounts.size} != distinctTypes.size of ${distinctTypes.size}")
+
+      val typesAndMetadata = typesAndCounts.sortBy(_._1).map {
+        case (entityType, count) =>
+          // find the attribute names associated with this entityType
+          val thisTypeAttributes = fieldNames.filter(_.entityType == entityType).map(_.attributeName).toSeq.sorted
+          entityType -> EntityTypeMetadata(count.toInt, s"${entityType}_id", thisTypeAttributes)
+      }.toMap
+
+      Future(typesAndMetadata)
     }
 
-    assert(typesAndCounts.size == distinctTypes.size, s"typesAndCounts.size of ${typesAndCounts.size} != distinctTypes.size of ${distinctTypes.size}")
 
-    val typesAndMetadata = typesAndCounts.sortBy(_._1).map {
-      case (entityType, count) =>
-        // find the attribute names associated with this entityType
-        val thisTypeAttributes = fieldNames.filter(_.entityType == entityType).map(_.attributeName).toSeq.sorted
-        entityType -> EntityTypeMetadata(count.toInt, s"${entityType}_id", thisTypeAttributes)
-    }.toMap
-
-    Future(typesAndMetadata)
 
   }
 
@@ -242,7 +249,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   /** Get entity - easy */
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     //Getting back the document
-    val getRequest = new GetRequest(workspaceIndex, s"${entityType}/${entityName}")
+    val getRequest = new GetRequest(workspaceIndex, s"$entityType/$entityName")
 
     val getResponse = timedQuery[GetResponse](Option("get single doc query (measured via stopwatch)")) {
       client.get(getRequest, RequestOptions.DEFAULT)
@@ -418,7 +425,18 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   }
 
 
+  /** batch upsert: can incur large reads and writes, probably should batch these;
+    * otherwise relatively easy by reusing applyOperationsToEntity and relying
+    * on round-tripping between Entity and Document */
   override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
+    batchUpdateEntitiesImpl(entityUpdates, upsert = true)
+  }
+
+  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
+    batchUpdateEntitiesImpl(entityUpdates, upsert = false)
+  }
+
+  def batchUpdateEntitiesImpl(entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean): Future[Traversable[Entity]] = {
     // inspect incoming entityUpdates, identify unique entityType/name pairs
     val docids: Set[String] = entityUpdates.map { eud => documentId(eud.entityType, eud.name) }.toSet
 
@@ -452,6 +470,16 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     val docs: Map[String, GetResponse] = multiGetResponse.getResponses.map { item =>
       item.getId -> item.getResponse
     }.toMap
+
+    // validate update-only
+    if (!upsert) {
+      // do any document not exist already?
+      val nonExistent = multiGetResponse.getResponses.collect {
+        case item if !item.getResponse.isExists => item.getId
+      }
+      if (nonExistent.nonEmpty)
+        throw new RuntimeException(s"Some entities do not exist: ${nonExistent.mkString(", ")}")
+    }
 
     // loop through entity updates
     val entitiesToWrite = entityUpdates.flatMap { eud =>
@@ -493,6 +521,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
     // check for any errors
     if (bulkResponse.hasFailures) {
+      // DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
       throw new RawlsExceptionWithErrorReport(ErrorReport(bulkResponse.buildFailureMessage()))
     } else {
       Future(entitiesToWrite)
@@ -507,9 +536,6 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   override def expressionValidator: ExpressionValidator =
     throw new UnsupportedEntityOperationException("expressionValidator not supported by this provider.")
-
-  override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
-    throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
   // ================================================================================================
   // class-specific methods
