@@ -127,7 +127,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           val realRoles: Set[String] = iamPermissions.getBindings().asScala.map(_.getRole.split("/").last).toSet
 
           // set diff here to filter for only those role bindings we know are expected
-          realRoles.diff(expectedRoles) shouldEqual Set.empty
+          expectedRoles.diff(realRoles) shouldEqual Set.empty
 
           iamPermissions.getBindings().forEach(binding => {
             binding.getRole() match {
