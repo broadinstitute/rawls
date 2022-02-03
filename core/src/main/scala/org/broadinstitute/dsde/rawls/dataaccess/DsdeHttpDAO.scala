@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.util.HttpClientUtils
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
- * Created by dvoet on 9/2/15.
+ * Wraps HTTP methods utility in a DAO-like wrapper. Helps interactions with HTTP endpoints within Terra (DSDE being the old name for DSP)
  */
 trait DsdeHttpDAO extends LazyLogging {
   protected implicit val system: ActorSystem

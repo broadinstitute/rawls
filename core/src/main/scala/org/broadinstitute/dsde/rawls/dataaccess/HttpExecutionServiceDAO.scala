@@ -52,7 +52,7 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
 
     val inputsJsonArray = inputs.mkString("[", ",", "]")
 
-    // Map over inputs to make this list the same size, but ihe inputs themselves are ignored.
+    // Map over inputs to make this list the same size, but the inputs themselves are ignored.
     val requestedWorkflowIdsJsonArray = inputs.map(_ => s""""${UUID.randomUUID().toString}""""  ).mkString("[", ",", "]")
 
     val bodyParts = Seq(

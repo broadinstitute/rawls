@@ -9,13 +9,19 @@ import org.broadinstitute.dsde.rawls.model.ErrorReport
 class DsdeHttpDAOSpec extends AnyFlatSpecLike with Matchers {
   behavior of "when5xx"
 
-  it should "match 500" in {
-    val e = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ""))
-    DsdeHttpDAO.when5xx(e) should be(true)
-  }
+  val matches5xxAnswers = Map(
+    StatusCodes.InternalServerError -> true, // 500
+    StatusCodes.ServiceUnavailable -> true, // 503
+    StatusCodes.BadRequest -> false, // 400
+    StatusCodes.Unauthorized -> false, // 400
+    StatusCodes.OK -> false, // 200
+  )
 
-  it should "match 503" in {
-    val e = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.ServiceUnavailable, ""))
-    DsdeHttpDAO.when5xx(e) should be(true)
+  matches5xxAnswers foreach { case (code, answer) =>
+    val assertionMessage = s"${if (answer) "" else "not "}match status code ${code.reason}"
+    it should assertionMessage in {
+      val e = new RawlsExceptionWithErrorReport(ErrorReport(code, ""))
+      DsdeHttpDAO.when5xx(e) should be(answer)
+    }
   }
 }
