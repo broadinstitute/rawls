@@ -6,6 +6,7 @@ import cats.implicits._
 import cats.kernel.Semigroup
 import com.google.cloud.{Identity, Policy, Role}
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates.standardGoogleRetryConfig
@@ -13,7 +14,8 @@ import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageR
 import org.broadinstitute.dsde.workbench.model.TraceId
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import slick.dbio.{DBIOAction, Effect, NoStream}
-import spray.json.{JsObject, JsString}
+import slick.lifted.Query
+import spray.json.{JsObject, JsString, JsValue}
 
 import scala.collection.JavaConversions._
 import scala.concurrent.Future
@@ -55,8 +57,8 @@ object MigrationUtils {
     }
 
 
-    import slick.jdbc.MySQLProfile.api._
     implicit class InsertExtensionMethod[E, A, C[_]](query: Query[E, A, C]) {
+      import slick.jdbc.MySQLProfile.api._
       /** alias for `+=` supporting dot syntax */
       def insert(value: A) = query += value
     }
@@ -85,7 +87,6 @@ object MigrationUtils {
           }
           .result
 
-
       def removeIamPolicy(bucketName: GcsBucketName,
                           roles: Map[StorageRole, NonEmptyList[Identity]],
                           traceId: Option[TraceId] = None,
@@ -103,6 +104,11 @@ object MigrationUtils {
           _ <- storageService.overrideIamPolicy(bucketName, newStorageRoles, traceId, retryConfig)
         } yield ()
     }
+
+
+    implicit class ToJsonOps(data: Map[String, Any]) {
+      def toJson: JsValue = JsObject(data.mapValues(s => new JsString(s.toString)))
+    }
   }
 
 
@@ -111,12 +117,11 @@ object MigrationUtils {
     case Left(msg) => throw new RawlsException(msg)
   }
 
-
   final case class WorkspaceMigrationException(message: String,
                                                data: Map[String, Any] = Map.empty,
                                                cause: Throwable = null)
     extends RawlsException(
-      message = JsObject((Map("message" -> message) ++ data).mapValues(s => new JsString(s.toString))).toString,
+      message = (Map("message" -> message) ++ data).toJson.toString,
       cause = cause
     ) {}
 
