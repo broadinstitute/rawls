@@ -278,28 +278,28 @@ object WorkspaceMigrationActor {
   final def deleteWorkspaceBucket: MigrateAction[Unit] =
     withMigration(m => m.workspaceBucketTransferred.isDefined && m.workspaceBucketDeleted.isEmpty) {
       (migration, workspace) =>
-      for {
-        storageService <- MigrateAction.asks(_.storageService)
-        successOpt <- MigrateAction.liftIO {
-          storageService.deleteBucket(
-            GoogleProject(workspace.googleProjectId.value),
-            GcsBucketName(workspace.bucketName),
-            isRecursive = true
-          ).compile.last
-        }
+        for {
+          storageService <- MigrateAction.asks(_.storageService)
+          successOpt <- MigrateAction.liftIO {
+            storageService.deleteBucket(
+              GoogleProject(workspace.googleProjectId.value),
+              GcsBucketName(workspace.bucketName),
+              isRecursive = true
+            ).compile.last
+          }
 
-        _ <- MigrateAction.raiseWhen(!successOpt.contains(true)) {
-          noWorkspaceBucketError(migration, workspace)
-        }
+          _ <- MigrateAction.raiseWhen(!successOpt.contains(true)) {
+            noWorkspaceBucketError(migration, workspace)
+          }
 
-        deleted <- nowTimestamp
-        _ <- inTransaction { _ =>
-          workspaceMigrations
-            .filter(_.id === migration.id)
-            .map(_.workspaceBucketDeleted)
-            .update(deleted.some)
-        }
-      } yield ()
+          deleted <- nowTimestamp
+          _ <- inTransaction { _ =>
+            workspaceMigrations
+              .filter(_.id === migration.id)
+              .map(_.workspaceBucketDeleted)
+              .update(deleted.some)
+          }
+        } yield ()
     }
 
 
