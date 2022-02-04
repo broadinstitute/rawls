@@ -728,25 +728,23 @@ object WorkspaceMigrationActor {
   : Behavior[Message] =
     Behaviors.setup { context =>
 
-      def unsafeStartMigrateAction[A](action: MigrateAction[A]): Behavior[Message] = {
-        context.executionContext.execute { () =>
-          try {
-            action
-              .run(
-                MigrationDeps(
-                  dataSource,
-                  googleProjectToBill,
-                  workspaceService,
-                  storageService,
-                  storageTransferService
-                )
+      def unsafeRunMigrateAction[A](action: MigrateAction[A]): Behavior[Message] = {
+        try {
+          action
+            .run(
+              MigrationDeps(
+                dataSource,
+                googleProjectToBill,
+                workspaceService,
+                storageService,
+                storageTransferService
               )
-              .value
-              .void
-              .unsafeRunSync
-          } catch {
-            case failure: Throwable => context.executionContext.reportFailure(failure)
-          }
+            )
+            .value
+            .void
+            .unsafeRunSync
+        } catch {
+          case failure: Throwable => context.executionContext.reportFailure(failure)
         }
         Behaviors.same
       }
@@ -757,7 +755,7 @@ object WorkspaceMigrationActor {
         scheduler.startTimerAtFixedRate(RefreshTransferJobs, pollingInterval / 2)
 
         Behaviors.receiveMessage { message =>
-          unsafeStartMigrateAction {
+          unsafeRunMigrateAction {
             message match {
               case Schedule(workspace) =>
                 inTransaction(_ => schedule(workspace))
