@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import cats.data.{NonEmptyList, OptionT, ReaderT}
+import cats.effect.unsafe.implicits.{global => ioruntime}
 import cats.effect.IO
 import cats.implicits._
 import com.google.cloud.Identity
@@ -730,7 +731,6 @@ object WorkspaceMigrationActor {
       def unsafeStartMigrateAction[A](action: MigrateAction[A]): Behavior[Message] = {
         context.executionContext.execute { () =>
           try {
-            implicit val ioRuntime = cats.effect.unsafe.IORuntime.global
             action
               .run(
                 MigrationDeps(

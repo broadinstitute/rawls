@@ -90,7 +90,7 @@ object Dependencies {
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
-  val workbenchLibsHash = "7ddf186"
+  val workbenchLibsHash = "95fdde6"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
