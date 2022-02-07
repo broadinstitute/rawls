@@ -502,7 +502,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
         for {
           _ <- deletePetsInProject(googleProjectId, userInfoForSam)
           _ <- gcsDAO.deleteGoogleProject(googleProjectId)
-          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam)
+          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam).recover {
+            case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+              logger.info(s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion")
+          }
         } yield ()
   }
 
