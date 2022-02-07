@@ -38,7 +38,25 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
   }
 
   override def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace = {
-    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
+    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).displayName("arh-testing").description("arh-testing").spendProfile("wm-default-spend-profile").stage(WorkspaceStageModel.MC_WORKSPACE))
+  }
+
+  override def createWorkspaceCloudContext(workspaceId: UUID,
+                                           jobControlId: String,
+                                           azureTenantId: String,
+                                           azureResourceGroupId: String,
+                                           azureSubscriptionId: String,
+                                           accessToken: OAuth2BearerToken): CreateCloudContextResult = {
+    val azureContext = new AzureContext().tenantId(azureTenantId).subscriptionId(azureSubscriptionId).resourceGroupId(azureResourceGroupId)
+    getWorkspaceApi(accessToken).createCloudContext(
+      new CreateCloudContextRequest()
+        .cloudPlatform(CloudPlatform.AZURE)
+        .jobControl(new JobControl().id(jobControlId))
+        .azureContext(azureContext), workspaceId)
+  }
+
+  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateCloudContextResult = {
+    getWorkspaceApi(accessToken).getCreateCloudContextResult(workspaceId, jobControlId)
   }
 
   override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = {

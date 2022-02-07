@@ -5,6 +5,8 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.CreateCloudContextResult
+import bio.terra.workspace.model.JobReport.StatusEnum
 import cats.implicits._
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.StorageObject
@@ -32,6 +34,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.Retry._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -47,6 +50,7 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
+import scala.concurrent.duration.{Duration, FiniteDuration, MINUTES}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.{mapAsJavaMapConverter, mapAsScalaMapConverter}
 import scala.language.postfixOps
@@ -142,7 +146,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        googleIamDao: GoogleIamDAO,
                        terraBillingProjectOwnerRole: String,
                        terraWorkspaceCanComputeRole: String)
-                      (implicit protected val executionContext: ExecutionContext) extends RoleSupport
+                      (implicit protected val executionContext: ExecutionContext, implicit val system: ActorSystem) extends RoleSupport with Retry
   with LibraryPermissionsSupport
   with FutureSupport
   with MethodWiths
@@ -163,29 +167,50 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
+
+
   def withNewMcWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(span => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, span) {
+  //  traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(span => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, span) {
+    // TODO unhardcode
+    val azureTenantId = "0cb7a640-45a2-4ed6-be9f-63519f86e04b"
+    val azureSubscriptionId = "3efc5bdf-be0e-44e7-b1d7-c08931e3c16c"
+    val azureResourceGroupId = "mrg-terra-workspace-20220106140404"
+    val cloudContextJobControlId = UUID.randomUUID
       traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all= false, List.empty[AttributeName])))) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None => {
           val workspaceId = UUID.randomUUID
-
           for {
             _ <- DBIO.from(
               Future(workspaceManagerDAO.createWorkspace(workspaceId, userInfo.accessToken))
             )
+            _<- DBIO.from(
+              Future(workspaceManagerDAO.createWorkspaceCloudContext(workspaceId, cloudContextJobControlId.toString, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
+            )
+            _ <-  DBIO.from(retryUntilSuccessOrTimeout(failureLogMessage = s"Cloud context creation was not successful")(
+               FiniteDuration(Duration("2 seconds").toMinutes, MINUTES),
+               FiniteDuration(Duration("2 minutes").toMinutes, MINUTES)) { () =>
+              workspaceManagerDAO.getWorkspaceCreateCloudContextResult(workspaceId, cloudContextJobControlId.toString, userInfo.accessToken).getJobReport.getStatus match {
+                  case StatusEnum.FAILED => Future.failed(new RawlsException("Cloud context creation failed"))
+                case StatusEnum.RUNNING => Future.failed(new RawlsException("Cloud context creation still in progress"))
+                case StatusEnum.SUCCEEDED => Future.successful()
+              }
+             }
+            )
             savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(_ =>
-              createWorkspaceInDatabase(workspaceId.toString, workspaceRequest, "", WorkbenchEmail("fake@fake.com"), GoogleProjectId("fake"), None, None, dataAccess, span, "mc"))
+              createWorkspaceInDatabase(workspaceId.toString, workspaceRequest, "", WorkbenchEmail("fake@fake.com"), GoogleProjectId("fake"), None, None, dataAccess, parentSpan, "mc"))
             response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
           } yield {
             response
           }
         }
       }
-    })
+   // }
+
   }
 
   def createMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+    println("HEREHEREHEHRERHERHERHE")
     for {
       workspace <- traceWithParent("withNewMcWorkspaceContext", parentSpan) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
         withNewMcWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
@@ -194,6 +219,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
     } yield workspace
   }
+
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {

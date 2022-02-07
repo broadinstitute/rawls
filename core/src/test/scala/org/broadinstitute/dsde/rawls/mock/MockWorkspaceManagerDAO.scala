@@ -83,4 +83,8 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
     if (references.contains(workspaceId, referenceId))
       references -= ((workspaceId, referenceId))
   }
+
+  override def createWorkspaceCloudContext(workspaceId: UUID, jobControlId: String, azureTenantId: String, azureResourceGroupId: String, azureSubscriptionId: String, accessToken: OAuth2BearerToken): CreateCloudContextResult = ???
+
+  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateCloudContextResult = ???
 }

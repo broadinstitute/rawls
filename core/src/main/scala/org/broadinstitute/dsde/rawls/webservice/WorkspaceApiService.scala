@@ -32,7 +32,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
           addLocationHeader(workspace.path) {
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).createWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                if (workspace.isMcWorkspace.getOrElse(false)) {
+                  workspaceServiceConstructor(userInfo).createMcWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                } else {
+                  workspaceServiceConstructor(userInfo).createWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                }
               }
             }
           }
@@ -48,17 +52,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
     } ~
-      path("workspaces" / "mc") {
-        post {
-          entity(as[WorkspaceRequest]) { workspace =>
-            traceRequest { span =>
-              complete {
-                workspaceServiceConstructor(userInfo).createMcWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
-              }
-            }
-          }
-        }
-      } ~
       path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
