@@ -210,7 +210,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   def createMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
-    println("HEREHEREHEHRERHERHERHE")
     for {
       workspace <- traceWithParent("withNewMcWorkspaceContext", parentSpan) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
         withNewMcWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
