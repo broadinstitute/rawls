@@ -386,16 +386,19 @@ object WorkspaceMigrationActor {
   final def updateWorkspaceRecord: MigrateAction[Unit] =
     withMigration(_.tmpBucketDeleted.isDefined) { (migration, workspace) =>
       for {
-        _ <- MigrateAction.raiseWhen(migration.newGoogleProjectId.isEmpty || migration.newGoogleProjectNumber.isEmpty) {
-          noGoogleProjectError(migration, workspace)
-        }
+        // note that the google project number may not exist so we'll only parse out the project id
+        googleProjectId <- MigrateAction.liftIO(IO {
+          migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration, workspace))
+        })
+
         _ <- inTransaction(dataAccess =>
           dataAccess
             .workspaceQuery
             .filter(_.id === workspace.workspaceIdAsUUID)
             .map(w => (w.googleProjectId, w.googleProjectNumber))
-            .update((migration.newGoogleProjectId.get.toString, migration.newGoogleProjectNumber.map(_.toString)))
+            .update((googleProjectId.value, migration.newGoogleProjectNumber.map(_.toString)))
         )
+
         _ <- migrationFinished(migration.id, Success)
       } yield ()
     }
@@ -715,10 +718,7 @@ object WorkspaceMigrationActor {
   case object RunMigration extends Message
   case object RefreshTransferJobs extends Message
 
-  // ehigham: I've included this actor implementation as it's helped inform how to refresh
-  // the status of storage transfer jobs. While it's as yet untested, this can be plumbed-in
-  // and integration tested as part of CA-1132.
-  // todo: finalise design and test in CA-1132
+
   def apply(pollingInterval: FiniteDuration,
             dataSource: SlickDataSource,
             googleProjectToBill: GoogleProject,
