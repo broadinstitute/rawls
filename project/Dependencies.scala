@@ -76,6 +76,7 @@ object Dependencies {
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
+  val jerseyCommon: ModuleID =    "org.glassfish.jersey.core"     % "jersey-common"         % "2.35"   // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
@@ -205,6 +206,7 @@ object Dependencies {
     googleApiClient,
     scalaUri,
     workspaceManager,
+    jerseyCommon,
     scalatest
   )
 
@@ -242,6 +244,7 @@ object Dependencies {
     scalaCache,
     apacheCommonsIO,
     workspaceManager,
+    jerseyCommon,
     dataRepo,
     dataRepoJersey,
     antlrParser,
