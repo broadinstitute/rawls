@@ -8,17 +8,17 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{EntityNotFoundException, UnsupportedEntityOperationException}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddListMember, AddUpdateAttribute, CreateAttributeEntityReferenceList, CreateAttributeValueList, EntityUpdateDefinition, RemoveAttribute, RemoveListMember}
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import org.opensearch.action.ActionListener
 import org.opensearch.action.bulk.{BulkRequest, BulkResponse}
 import org.opensearch.action.delete.DeleteRequest
 import org.opensearch.action.get.{GetRequest, GetResponse, MultiGetRequest}
-import org.opensearch.action.index.IndexRequest
-import org.opensearch.action.search.{ClearScrollRequest, ClearScrollResponse, SearchRequest, SearchResponse, SearchScrollRequest}
+import org.opensearch.action.index.IndexResponse
+import org.opensearch.action.search.{ClearScrollRequest, ClearScrollResponse, SearchRequest, SearchScrollRequest}
 import org.opensearch.client.{RequestOptions, RestHighLevelClient}
-import org.opensearch.client.indices.{CreateIndexRequest, GetIndexRequest, GetMappingsRequest, PutMappingRequest}
+import org.opensearch.client.indices.{CreateIndexRequest, GetIndexRequest, GetMappingsRequest}
 import org.opensearch.common.StopWatch
 import org.opensearch.common.unit.TimeValue
 import org.opensearch.common.xcontent.XContentType
@@ -26,10 +26,10 @@ import org.opensearch.index.query.{BoolQueryBuilder, QueryStringQueryBuilder, Te
 import org.opensearch.index.reindex.UpdateByQueryRequest
 import org.opensearch.rest.RestStatus
 import org.opensearch.script.Script
-import org.opensearch.search.{Scroll, SearchHit}
+import org.opensearch.search.SearchHit
 import org.opensearch.search.aggregations.bucket.terms.ParsedStringTerms
 import org.opensearch.search.aggregations.{Aggregation, AggregationBuilders}
-import org.opensearch.search.builder.{PointInTimeBuilder, SearchSourceBuilder}
+import org.opensearch.search.builder.SearchSourceBuilder
 import org.opensearch.search.sort.SortOrder
 
 import java.util.concurrent.TimeUnit
@@ -49,18 +49,18 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   override val entityStoreId: Option[String] = Option("OpenSearch")
 
   // TODO: need to set index.mapping.total_fields.limit on the index; default limit is 1000
-  // TODO: set up dynamic templates (https://www.elastic.co/guide/en/elasticsearch/reference/7.10/dynamic-templates.html)
-  //          to control mappings for new fields
 
-  // Entity references are stored as URIs, in the form:
-  // terra-entity-ref://terra-instance/workspaceId/entityRepo/entityType/entityName
+  // TODO: Entity references are stored as URIs, in the form:
+  // terra-data-entity://workspaceId/URLEncoded(entityType)/URLEncoded(subject_HCC1143)
+  // for example:
+  // terra-data-entity://9a8a946b-445a-40b8-8704-7ba6e1ff0d42/participant/subject_HCC1143
 
   // ================================================================================================
   // API methods we support
 
   /** entity type metadata - in good shape except for unused mappings */
   override def entityTypeMetadata(useCache: Boolean = false): Future[Map[String, EntityTypeMetadata]] = {
-    // TODO Opensearch: need a way to detect unused mappings.
+    // TODO OpenSearch: need a way to detect unused mappings.
     /* To handle deletes and prune unused mappings:
         - reindex into a temp index, which recreate mappings. Compare mappings with the temp index. (yuck)
         - scroll-query all documents, collect field names in middleware (yuck)
@@ -153,11 +153,8 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   /** createEntity - easy, the tricky logic is in indexableDocument */
   override def createEntity(entity: Entity): Future[Entity] = {
-    // TODO OpenSearch: should reuse indexEntity() instead
-    val indexRequest = indexableDocument(entity)
-    indexRequest.create(true) // set as create-only
+    val indexResponseAttempt = Try(indexEntity(entity))
 
-    val indexResponseAttempt = Try(client.index(indexRequest, RequestOptions.DEFAULT))
     // TODO OpenSearch: better error messaging
     indexResponseAttempt match {
       case Success(indexResponse) =>
@@ -350,7 +347,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   }
 
   /** list entities: relatively straightforward to implement via a scroll-search. However, ES documentation
-    * suggests using a Point-In-Time context instead, but that is only availble in X-Pack. This may
+    * suggests using a Point-In-Time context instead, but that is only available in X-Pack. This may
     * need some profiling to inspect actual memory usage and performance. */
   override def listEntities(entityType: String, parentSpan: Span): Future[Seq[Entity]] = {
     val batchSize = 750 // 10000
@@ -383,9 +380,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
         // in a Future.
         val clearScrollRequest = new ClearScrollRequest()
         clearScrollRequest.addScrollId(searchResponse.getScrollId)
-        val clearScrollListener: ActionListener[ClearScrollResponse] = ActionListener.wrap(new Runnable {
-          override def run(): Unit = ()
-        })
+        val clearScrollListener: ActionListener[ClearScrollResponse] = ActionListener.wrap(() => ())
         client.clearScrollAsync(clearScrollRequest, RequestOptions.DEFAULT, clearScrollListener)
 
         combinedHits
@@ -539,9 +534,10 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   // ================================================================================================
   // class-specific methods
-  def createWorkspaceIndex(workspace: Workspace) = {
+  def createWorkspaceIndex(workspace: Workspace): Unit = {
     // TODO: how to init the cluster with the index template in src/main/resources/opensearch?
-    // that needs to go in before any index is created.
+    // that needs to go in before any index is created. We could do it when the middleware service
+    // is booted; better to do it upon cluster creation.
     val getIndexRequest = new GetIndexRequest(workspaceIndex)
     val getIndexResponse = client.indices().exists(getIndexRequest, RequestOptions.DEFAULT)
     if (!getIndexResponse) {
@@ -569,10 +565,12 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     }
   }
 
-  def indexEntity(workspace: Workspace, entity: Entity) = {
+  def indexEntity(entity: Entity): IndexResponse = {
+    // we could just call indexEntities(List(entity)),
+    // but this code path for indexing one and only one
+    // entity is optimized
     val request = indexableDocument(entity)
-    val indexResponse = client.index(request, RequestOptions.DEFAULT)
-    indexResponse.status().toString
+    client.index(request, RequestOptions.DEFAULT)
   }
 
   def indexEntities(entities: List[Entity]): BulkResponse = {
@@ -588,6 +586,8 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     bulkResponse
   }
 
+  // unused:
+  /*
   def purgeMappings(workspace: Workspace, entityType: String, attributeNames: Set[AttributeName]): List[String] = {
     // consider only the specified fields to be purged
     val fieldsToPurge = attributeNames.map(attr => fieldName(entityType, attr))
@@ -626,20 +626,17 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   }
 
-  def purgeMappings(workspace: Workspace) = {
+  def purgeMappings(workspace: Workspace): Unit = {
     // retrieve mappings for this workspace's index
     val mappingsRequest = new GetMappingsRequest()
     mappingsRequest.indices(workspaceIndex)
     val mappingsResponse = client.indices().getMapping(mappingsRequest, RequestOptions.DEFAULT)
 
-
-
     // for each type:
       // perform aggregation query, including an agg for each mapping field. only need size=1 for each aggregation.
       // any aggregation that returned a doc count means this field is populated.
-
-
   }
+  */
 
   def timedQuery[T](extra: Option[String] = None)(queryCode: => T): T = {
     val stopwatch = new StopWatch()

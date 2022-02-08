@@ -49,7 +49,9 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
       // this is a hack: if the data reference name is the magic string "opensearch", use opensearch
       case Some(x) if x.value.toLowerCase == "opensearch" => typeTag[OpenSearchEntityProvider]
       case Some(_) => typeTag[DataRepoEntityProvider]
-      case _ => typeTag[LocalEntityProvider]
+      case _ =>
+//        typeTag[OpenSearchEntityProvider]
+         typeTag[LocalEntityProvider]
     }
 
     providerBuilders.find(_.builds == targetTag) match {
