@@ -79,7 +79,7 @@ object Dependencies {
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.10"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-3-4"          % "3.2.10.0" % Test
