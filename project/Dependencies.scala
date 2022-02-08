@@ -74,6 +74,7 @@ object Dependencies {
   val swaggerUI: ModuleID =       "org.webjars.npm"               % "swagger-ui-dist"       % "3.37.2"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
+  val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
@@ -199,6 +200,7 @@ object Dependencies {
     jodaTime,
     jodaConvert,
     scalaLogging,
+    commonsCodec,
     httpClient,
     googleApiClient,
     scalaUri,
@@ -217,6 +219,7 @@ object Dependencies {
     swaggerUI,
     webjarsLocator,
     circeYAML,
+    commonsCodec,
     commonsJEXL,
     cromwellClient,
     cats,
