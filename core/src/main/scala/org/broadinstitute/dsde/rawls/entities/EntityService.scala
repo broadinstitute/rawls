@@ -125,7 +125,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
           val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, Option(DataReferenceName("opensearch")), None)
           new OpenSearchEntityProviderBuilder().build(entityRequestArguments) match {
             case Success(searchprovider:OpenSearchEntityProvider) =>
-              // reate per-workspace index, if it does not exist
+
+              // create per-workspace index, if it does not exist
               searchprovider.createWorkspaceIndex(workspaceContext)
 
               val listents = ents.toList
@@ -151,6 +152,20 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
               ex.toString
           }
         }
+      }
+    }
+  }
+
+  def reindexOpenSearch(workspaceName: WorkspaceName): Future[String] = {
+    for {
+      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false)))
+      provider <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, userInfo, Option(DataReferenceName("opensearch")), None))
+    } yield {
+      provider match {
+        case o:OpenSearchEntityProvider =>
+          o.reindexWorkspace()
+          "done"
+        case x => throw new Exception(s"found unexpected provider ${x.getClass.getSimpleName}")
       }
     }
   }

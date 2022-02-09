@@ -12,18 +12,25 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import org.opensearch.action.ActionListener
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest.AliasActions
+import org.opensearch.action.admin.indices.alias.{Alias, IndicesAliasesRequest}
+import org.opensearch.action.admin.indices.alias.get.GetAliasesRequest
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest
 import org.opensearch.action.bulk.{BulkRequest, BulkResponse}
 import org.opensearch.action.delete.DeleteRequest
 import org.opensearch.action.get.{GetRequest, GetResponse, MultiGetRequest}
 import org.opensearch.action.index.IndexResponse
 import org.opensearch.action.search.{ClearScrollRequest, ClearScrollResponse, SearchRequest, SearchScrollRequest}
+import org.opensearch.action.support.IndicesOptions
+import org.opensearch.action.support.IndicesOptions.WildcardStates
 import org.opensearch.client.{RequestOptions, RestHighLevelClient}
-import org.opensearch.client.indices.{CreateIndexRequest, GetIndexRequest, GetMappingsRequest}
+import org.opensearch.client.indices.{CreateIndexRequest, DeleteAliasRequest, GetIndexRequest, GetMappingsRequest}
 import org.opensearch.common.StopWatch
 import org.opensearch.common.unit.TimeValue
 import org.opensearch.common.xcontent.XContentType
+import org.opensearch.index.VersionType
 import org.opensearch.index.query.{BoolQueryBuilder, QueryStringQueryBuilder, TermsQueryBuilder}
-import org.opensearch.index.reindex.UpdateByQueryRequest
+import org.opensearch.index.reindex.{ReindexRequest, UpdateByQueryRequest}
 import org.opensearch.rest.RestStatus
 import org.opensearch.script.Script
 import org.opensearch.search.SearchHit
@@ -32,6 +39,8 @@ import org.opensearch.search.aggregations.{Aggregation, AggregationBuilders}
 import org.opensearch.search.builder.SearchSourceBuilder
 import org.opensearch.search.sort.SortOrder
 
+import java.util
+import java.util.EnumSet
 import java.util.concurrent.TimeUnit
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -71,12 +80,16 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
     // one request to get the field mappings for this index
     val mappingsRequest = new GetMappingsRequest()
-    mappingsRequest.indices(workspaceIndex)
+    mappingsRequest.indices(workspaceIndexAlias)
     val mappingsResponse = client.indices().getMapping(mappingsRequest, RequestOptions.DEFAULT)
+
+    logger.info(s"mappingsResponse: ${mappingsResponse.mappings().keySet()}")
 
     logQueryTiming(new TimeValue(-1), "mappings query (TODO: measure timing)")
 
-    val indexMapping = mappingsResponse.mappings().get(workspaceIndex)
+    assert(mappingsResponse.mappings().size() == 1, "found mappings for more than one index!")
+
+    val indexMapping = mappingsResponse.mappings().asScala.head._2
     val mapping: Map[String, AnyRef] = indexMapping.getSourceAsMap.asScala.toMap
 
     // TODO: find a better way than the asInstanceOf in here
@@ -100,7 +113,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
       .map(arr => TypeAndAttributeName(arr.head, arr.last)) // use handy case class instead of raw array
 
     // another request to get the entityType->document count aggregation
-    val req = new SearchRequest(workspaceIndex)
+    val req = new SearchRequest(workspaceIndexAlias)
 
     // by default, terms aggregation will only return 10 buckets. We want to return all types, so we need to know
     // how many types there are in this index. We can get this from the mappings query.
@@ -183,12 +196,12 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   /** delete entities - easy, but needs some logic to poke a mappings purge in case attributes no longer exist */
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] = {
-    val bulkRequest = new BulkRequest(workspaceIndex)
+    val bulkRequest = new BulkRequest(workspaceIndexAlias)
     // val brb = new BulkRequestBuilder(client.getLowLevelClient, BulkAction.INSTANCE)
 
     entityRefs.foreach { ref =>
       val docid = documentId(ref.entityType, ref.entityName)
-      val deleteRequest = new DeleteRequest(workspaceIndex, docid)
+      val deleteRequest = new DeleteRequest(workspaceIndexAlias, docid)
       bulkRequest.add(deleteRequest)
     }
 
@@ -226,7 +239,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     }
     val script = new Script(scriptContent.mkString("\n"))
 
-    val updateRequest = new UpdateByQueryRequest(workspaceIndex)
+    val updateRequest = new UpdateByQueryRequest(workspaceIndexAlias)
     updateRequest.setConflicts("abort") // (Default) error if another thread updated one of the documents before we get to it
     // updateRequest.setScroll() // (Optional) timeout for the underlying scroll-search context
     updateRequest.setQuery(typeQuery) // which documents to target for updates
@@ -246,7 +259,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   /** Get entity - easy */
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     //Getting back the document
-    val getRequest = new GetRequest(workspaceIndex, s"$entityType/$entityName")
+    val getRequest = new GetRequest(workspaceIndexAlias, s"$entityType/$entityName")
 
     val getResponse = timedQuery[GetResponse](Option("get single doc query (measured via stopwatch)")) {
       client.get(getRequest, RequestOptions.DEFAULT)
@@ -272,7 +285,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     * need to validate correctness of filterTerms
     * */
   override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
-    val req = new SearchRequest(workspaceIndex)
+    val req = new SearchRequest(workspaceIndexAlias)
 
     val typeQuery = new TermsQueryBuilder(TYPE_FIELD, entityType)
 
@@ -389,7 +402,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
 
     // initial search, sets filter criteria (entityType) and sort and gets the initial scroll id
-    val req = new SearchRequest(workspaceIndex)
+    val req = new SearchRequest(workspaceIndexAlias)
     req.scroll(keepAlive) // time for each batch
     val typeQuery = new TermsQueryBuilder(TYPE_FIELD, entityType)
     val searchSourceBuilder = new SearchSourceBuilder()
@@ -440,7 +453,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     // retrieve documents from ES based on entityType/name pairs
     val multiGetRequest = new MultiGetRequest()
     docids.foreach { docid =>
-      multiGetRequest.add(workspaceIndex, docid)
+      multiGetRequest.add(workspaceIndexAlias, docid)
     }
 
 
@@ -534,15 +547,37 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
   // ================================================================================================
   // class-specific methods
-  def createWorkspaceIndex(workspace: Workspace): Unit = {
+
+  def createWorkspaceIndex(workspace: Workspace): String = {
+    val aliasName = workspaceIndexAlias
+    // does alias exist?
+    // in production code, there exists a race condition where checking existence of the alias would fail during a swap.
+    // that's not handled here in demo code.
+    val getAliasRequest = new GetAliasesRequest(aliasName)
+    val getAliasResponse = client.indices().existsAlias(getAliasRequest, RequestOptions.DEFAULT)
+    if (!getAliasResponse) {
+      logger.info(s"OpenSearch index alias $workspaceIndexAlias for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} does not exist; creating it and its underlying index ... ")
+      createWorkspaceUnderlyingIndex(workspace, alias = Option(aliasName))
+    } else {
+      logger.info(s"OpenSearch index alias $workspaceIndexAlias for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} exists already; no action needed.")
+    }
+    aliasName
+  }
+
+  def createWorkspaceUnderlyingIndex(workspace: Workspace, alias: Option[String]): String = {
     // TODO: how to init the cluster with the index template in src/main/resources/opensearch?
     // that needs to go in before any index is created. We could do it when the middleware service
     // is booted; better to do it upon cluster creation.
-    val getIndexRequest = new GetIndexRequest(workspaceIndex)
+    val underlyingIndexName = s"$workspaceIndexAlias.${System.currentTimeMillis()}"
+
+    val getIndexRequest = new GetIndexRequest(underlyingIndexName)
+    getIndexRequest.indicesOptions(new IndicesOptions(util.EnumSet.of(IndicesOptions.Option.IGNORE_ALIASES), util.EnumSet.of(WildcardStates.OPEN)))
+
     val getIndexResponse = client.indices().exists(getIndexRequest, RequestOptions.DEFAULT)
     if (!getIndexResponse) {
-      logger.info(s"OpenSearch index for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} does not exist; creating ... ")
-      val createIndexRequest = new CreateIndexRequest(workspaceIndex)
+      logger.info(s"OpenSearch underlying index $underlyingIndexName for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} does not exist; creating ... ")
+      val createIndexRequest = new CreateIndexRequest(underlyingIndexName)
+      alias.map(aliasName => createIndexRequest.alias(new Alias(aliasName)))
 
       // easiest way to create mappings
       val mappings =
@@ -559,11 +594,41 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
       // TODO: explicit mappings for any other fields?
 
       val createIndexResponse = client.indices.create(createIndexRequest, RequestOptions.DEFAULT)
-      logger.info(s"OpenSearch index for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} created: ${createIndexResponse.index()}")
+      logger.info(s"OpenSearch underlying index $underlyingIndexName for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} created: ${createIndexResponse.index()}")
     } else {
-      logger.info(s"OpenSearch index for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} exists already; no action needed.")
+      logger.info(s"OpenSearch underlying index $underlyingIndexName for workspace ${workspace.workspaceId} (${workspace.toWorkspaceName.toString} exists already; no action needed.")
+    }
+    underlyingIndexName
+  }
+
+  def removeWorkspaceUnderlyingIndex(indexName: String): Boolean = {
+    val deleteIndexRequest = new DeleteIndexRequest(indexName)
+    val deleteIndexResponse = client.indices().delete(deleteIndexRequest, RequestOptions.DEFAULT)
+    deleteIndexResponse.isAcknowledged
+  }
+
+  def removeAlias(concreteIndexName: String): Boolean = {
+    val deleteAliasRequest = new DeleteAliasRequest(concreteIndexName, workspaceIndexAlias)
+    val deleteAliasResponse = client.indices().deleteAlias(deleteAliasRequest, RequestOptions.DEFAULT)
+    timedQuery(s"delete alias from $concreteIndexName") {
+      deleteAliasResponse.isAcknowledged
     }
   }
+
+  def addAlias(concreteIndexName: String): Boolean = {
+    val addAliasRequest = new IndicesAliasesRequest()
+    val addAliasAction = new AliasActions(AliasActions.Type.ADD)
+      .index(concreteIndexName)
+      .alias(workspaceIndexAlias)
+    addAliasRequest.addAliasAction(addAliasAction)
+    val addAliasResponse = client.indices().updateAliases(addAliasRequest, RequestOptions.DEFAULT)
+    addAliasResponse.isAcknowledged
+  }
+
+  def swapAlias(oldConcreteIndexName: String, newConcreteIndexName: String): Boolean= {
+    removeAlias(oldConcreteIndexName) && addAlias(newConcreteIndexName)
+  }
+
 
   def indexEntity(entity: Entity): IndexResponse = {
     // we could just call indexEntities(List(entity)),
@@ -579,11 +644,59 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
       val indexRequest = indexableDocument(entity)
       bulkRequest.add(indexRequest)
     }
+
+    val stopWatch = new StopWatch()
+    stopWatch.start()
     val bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT)
     if (bulkResponse.hasFailures)
       logger.info(s"failure message: ${bulkResponse.buildFailureMessage()}")
+    stopWatch.stop()
+    val stopWatchTook = stopWatch.lastTaskTime()
+
+    logQueryTiming(bulkResponse.getTook, s"bulk index of ${entities.length} documents (measured by client internal clock)")
+    logQueryTiming(stopWatchTook, s"bulk index of ${entities.length} documents (measured by stopwatch)")
 
     bulkResponse
+  }
+
+  def reindexWorkspace(): Unit = {
+    val stopWatch = new StopWatch()
+    stopWatch.start()
+
+    //      1. find name of concrete index underneath the current alias
+    val getIndexRequest = new GetIndexRequest(workspaceIndexAlias)
+    val getIndexResponse = client.indices().get(getIndexRequest, RequestOptions.DEFAULT)
+    assert(getIndexResponse.getIndices.length == 1, s"found ${getIndexResponse.getIndices.length} index names in get-alias response")
+    val oldUnderlyingIndexName = getIndexResponse.getIndices.head
+//    val getAliasRequest = new GetAliasesRequest(workspaceIndexAlias)
+//    val getAliasResponse = client.indices().getAlias(getAliasRequest, RequestOptions.DEFAULT)
+//    val aliasMetadataSet = getAliasResponse.getAliases.get(workspaceIndexAlias)
+//    assert(aliasMetadataSet.size() == 1)
+//    val aliasMetadata = aliasMetadataSet.asScala.head
+//    val oldUnderlyingIndexName = aliasMetadata.getSearchRouting // should be the same as indexRouting
+    logger.info(s"current underlying concrete index is $oldUnderlyingIndexName")
+
+    //      2. create new concrete index
+    val newUnderlyingIndexName = createWorkspaceUnderlyingIndex(requestArguments.workspace, None) // no alias yet
+    logger.info(s"new target underlying concrete index is $oldUnderlyingIndexName")
+
+    //      3. reindex from current to new
+    val reindexRequest = new ReindexRequest()
+    reindexRequest.setSourceIndices(oldUnderlyingIndexName)
+    reindexRequest.setDestIndex(newUnderlyingIndexName)
+    // reindexRequest.setDestVersionType(VersionType.EXTERNAL) // only if we care to preserve document version numbers
+    val reindexResponse = client.reindex(reindexRequest, RequestOptions.DEFAULT)
+
+    //      4. swap alias to new index
+    swapAlias(oldUnderlyingIndexName, newUnderlyingIndexName)
+
+    //      5. delete old index
+    removeWorkspaceUnderlyingIndex(oldUnderlyingIndexName)
+
+    stopWatch.stop()
+    val took = stopWatch.lastTaskTime()
+
+    logQueryTiming(took, s"the entire getUnderlying-createUnderlying-reindex-swapAlias-deleteUnderlying cycle (measured via stopwatch)")
   }
 
   // unused:
@@ -638,6 +751,9 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
   }
   */
 
+  // convenience/sugar
+  def timedQuery[T](extra: String)(queryCode: => T): T = timedQuery[T](Option(extra))(queryCode)
+
   def timedQuery[T](extra: Option[String] = None)(queryCode: => T): T = {
     val stopwatch = new StopWatch()
     stopwatch.start()
@@ -655,7 +771,6 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
 
     response
   }
-
 
   def logQueryTiming(timeValue: TimeValue, extra: String): Unit = logQueryTiming(timeValue, Option(extra))
 

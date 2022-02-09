@@ -53,7 +53,7 @@ trait OpenSearchSupport extends LazyLogging {
 
   // OpenSearch index name for this workspace
   // TODO: should we use an alias so we can reindex easily?
-  val workspaceIndex = indexName(requestArguments.workspace)
+  val workspaceIndexAlias = indexName(requestArguments.workspace)
 
   // ================================================================================================
   // utilities for translating from Terra to OpenSearch
@@ -68,7 +68,7 @@ trait OpenSearchSupport extends LazyLogging {
 
   /** generate the OpenSearch request to index a single Terra entity */
   def indexableDocument(entity: Entity): IndexRequest = {
-    val request = new IndexRequest(workspaceIndex) // Use the workspace-specific index
+    val request = new IndexRequest(workspaceIndexAlias) // Use the workspace-specific index
     request.id(documentId(entity)) // Unique id for this document in the index
 
     // prepend the entityType to each attribute name, to ensure that same-named

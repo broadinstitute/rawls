@@ -71,6 +71,11 @@ trait EntityApiService extends UserInfoDirectives {
                 entityServiceConstructor(userInfo).entityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName), dataReference, None, useCacheBool)
               }
             }
+          } ~
+          head {
+            complete {
+              entityServiceConstructor(userInfo).reindexOpenSearch(WorkspaceName(workspaceNamespace, workspaceName))
+            }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
