@@ -143,7 +143,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
               case s if s.endsWith("editor") => binding.getMembers.size() shouldEqual 2
               case s if s.endsWith("genomics.serviceAgent") => binding.getMembers.size() shouldEqual 1
               case s if s.endsWith("lifesciences.serviceAgent") => binding.getMembers.size() shouldEqual 1
-              case s if s.endsWith("logging.logWriter") => binding.getMembers() shouldEqual 1
+              case s if s.endsWith("logging.logWriter") => binding.getMembers().size() shouldEqual 1
               case s if s.endsWith("owner") =>
                 binding.getMembers.size() shouldEqual 1
                 binding.getMembers.get(0) should endWith("@terra-kernel-k8s.iam.gserviceaccount.com")
