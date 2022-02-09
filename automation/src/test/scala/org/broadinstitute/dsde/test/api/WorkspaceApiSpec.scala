@@ -147,6 +147,10 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
                 binding.getMembers.size() shouldEqual 1
                 binding.getMembers.get(0) should endWith("@terra-kernel-k8s.iam.gserviceaccount.com")
               case s if s.endsWith("pubsub.serviceAgent") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("logging.logWriter") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("monitoring.metricWriter") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("monitoring.viewer") => binding.getMembers.size() shouldEqual 1
+              case s if s.endsWith("stackdriver.resourceMetadata.writer") => binding.getMembers.size() shouldEqual 1
               case other =>
                 logger.error(s"Extra permission on workspace google project found: ${other}")
                 throw new Exception(s"Extra permission on workspace google project found: ${other}")
