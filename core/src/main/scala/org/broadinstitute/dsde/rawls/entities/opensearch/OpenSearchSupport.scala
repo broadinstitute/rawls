@@ -123,7 +123,20 @@ trait OpenSearchSupport extends LazyLogging {
 
   /** generate a Terra entity from an OpenSearch search hit */
   def entity(hit: SearchHit): Entity = {
-    val fields = hit.getSourceAsMap.asScala.toMap
+
+    val fields: Map[String, AnyRef] = if (hit.hasSource) {
+      hit.getSourceAsMap.asScala.toMap
+    } else {
+      // else, user specified individual fields, so go get those
+      hit.getFields.asScala.map {
+        case (name, docfield) =>
+          if (docfield.getValues.size() == 1)
+            (name, docfield.getValues.asScala.head)
+          else
+            (name, docfield.asScala)
+      }.toMap
+    }
+
     entity(hit.getId, fields)
   }
 

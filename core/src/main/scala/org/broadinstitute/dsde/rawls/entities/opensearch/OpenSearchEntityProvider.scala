@@ -308,6 +308,18 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     searchSourceBuilder.size(incomingQuery.pageSize)
     searchSourceBuilder.from((incomingQuery.page-1)*incomingQuery.pageSize)
     searchSourceBuilder.query(finalQuery)
+
+    // set the fields to return
+    incomingQuery.fields.fields.foreach { fieldNames =>
+      searchSourceBuilder.fetchSource(false)
+      searchSourceBuilder.docValueField(NAME_FIELD)
+      searchSourceBuilder.docValueField(TYPE_FIELD)
+      fieldNames.foreach { fld =>
+        val esname = fieldName(entityType, AttributeName.fromDelimitedName(fld)) + ".raw"
+        searchSourceBuilder.docValueField(esname)
+      }
+    }
+
     val sortOrder = if (incomingQuery.sortDirection == SortDirections.Descending)
       SortOrder.DESC
     else {
@@ -483,7 +495,7 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
       resp.getResponse.getId ->
         (resp.getResponse.getSeqNo, resp.getResponse.getPrimaryTerm)
     }.toMap
-    logger.info(s"concurrency info for documents being updated: $concurrencyInfo")
+//    logger.info(s"concurrency info for documents being updated: $concurrencyInfo")
 
     // validate update-only
     if (!upsert) {
