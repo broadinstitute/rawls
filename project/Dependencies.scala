@@ -110,12 +110,15 @@ object Dependencies {
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1-rev20210319-1.31.0"
 
-  def excludeJakartaActivationApi(m: ModuleID): ModuleID = m.exclude("jakarta.activation", "jakarta.activation-api")
+  // should we prefer jakarta over javax.xml?
+  def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
+  def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
+  def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
 
-  val workspaceManager = excludeJakartaActivationApi("bio.terra" % "workspace-manager-client" % "0.254.5-SNAPSHOT")
-  val dataRepo = excludeJakartaActivationApi("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.5-SNAPSHOT")
+  val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
   val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
-  val resourceBufferService = excludeJakartaActivationApi("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
+  val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
