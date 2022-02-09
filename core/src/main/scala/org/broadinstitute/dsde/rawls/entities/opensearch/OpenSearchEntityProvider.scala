@@ -456,7 +456,6 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
       multiGetRequest.add(workspaceIndexAlias, docid)
     }
 
-
     val stopwatch = new StopWatch()
     stopwatch.start()
     val multiGetResponse = client.mget(multiGetRequest, RequestOptions.DEFAULT)
@@ -478,6 +477,13 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
     val docs: Map[String, GetResponse] = multiGetResponse.getResponses.map { item =>
       item.getId -> item.getResponse
     }.toMap
+
+    // here are the ES seq number and primary terms for the documents - ensure these get passed back on writes!
+    val concurrencyInfo = multiGetResponse.getResponses.map { resp =>
+      resp.getResponse.getId ->
+        (resp.getResponse.getSeqNo, resp.getResponse.getPrimaryTerm)
+    }.toMap
+    logger.info(s"concurrency info for documents being updated: $concurrencyInfo")
 
     // validate update-only
     if (!upsert) {
@@ -514,26 +520,32 @@ class OpenSearchEntityProvider(override val requestArguments: EntityRequestArgum
       }
     }
 
-    stopwatch.start()
-    val bulkResponse = indexEntities(entitiesToWrite.toList)
-    stopwatch.stop()
-    logQueryTiming(stopwatch.lastTaskTime(), s"batchUpsert bulk index (${entitiesToWrite.length} entities)")
-
-    // for logging only
-    val indexStatuses = bulkResponse.getItems.map(_.status().toString)
-    val statusesByCount = indexStatuses.groupBy(identity).mapValues(_.length)
-    statusesByCount foreach {
-      case (status, count) =>
-        logger.info(s"$status: $count")
-    }
-
-    // check for any errors
-    if (bulkResponse.hasFailures) {
-      // DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
-      throw new RawlsExceptionWithErrorReport(ErrorReport(bulkResponse.buildFailureMessage()))
+    if (entitiesToWrite.isEmpty) {
+      logger.info("no changes at all; skipping request to OpenSearch.")
+      Future(Seq())
     } else {
-      Future(entitiesToWrite)
+      stopwatch.start()
+      val bulkResponse = indexEntities(entitiesToWrite.toList)
+      stopwatch.stop()
+      logQueryTiming(stopwatch.lastTaskTime(), s"batchUpsert bulk index (${entitiesToWrite.length} entities)")
+
+      // for logging only
+      val indexStatuses = bulkResponse.getItems.map(_.status().toString)
+      val statusesByCount = indexStatuses.groupBy(identity).mapValues(_.length)
+      statusesByCount foreach {
+        case (status, count) =>
+          logger.info(s"$status: $count")
+      }
+
+      // check for any errors
+      if (bulkResponse.hasFailures) {
+        // DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
+        throw new RawlsExceptionWithErrorReport(ErrorReport(bulkResponse.buildFailureMessage()))
+      } else {
+        Future(entitiesToWrite)
+      }
     }
+
   }
 
   // ================================================================================================
