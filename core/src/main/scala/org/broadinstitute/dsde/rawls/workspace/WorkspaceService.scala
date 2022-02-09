@@ -182,20 +182,38 @@ class WorkspaceService(protected val userInfo: UserInfo,
           val workspaceId = UUID.randomUUID
           for {
             _ <- DBIO.from(
+              Future(println(s"CREATING WORKSPACE IN WSM ${workspaceId}"))
+            )
+            _ <- DBIO.from(
               Future(workspaceManagerDAO.createWorkspace(workspaceId, userInfo.accessToken))
+            )
+            _ <- DBIO.from(
+              Future(println(s"CREATING WORKSPACE CLOUD CONTEXT job control ID = ${cloudContextJobControlId.toString}"))
             )
             _<- DBIO.from(
               Future(workspaceManagerDAO.createWorkspaceCloudContext(workspaceId, cloudContextJobControlId.toString, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
+            )
+            _ <- DBIO.from(
+              Future(println("POLLING FOR WORKSPACE CLOUD CONTEXT"))
             )
             _ <-  DBIO.from(retryUntilSuccessOrTimeout(failureLogMessage = s"Cloud context creation was not successful")(
                FiniteDuration(Duration("2 seconds").toMinutes, MINUTES),
                FiniteDuration(Duration("2 minutes").toMinutes, MINUTES)) { () =>
               workspaceManagerDAO.getWorkspaceCreateCloudContextResult(workspaceId, cloudContextJobControlId.toString, userInfo.accessToken).getJobReport.getStatus match {
-                  case StatusEnum.FAILED => Future.failed(new RawlsException("Cloud context creation failed"))
-                case StatusEnum.RUNNING => Future.failed(new RawlsException("Cloud context creation still in progress"))
-                case StatusEnum.SUCCEEDED => Future.successful()
+                case StatusEnum.FAILED => Future.failed(new RawlsException("Cloud context creation failed"))
+                case StatusEnum.RUNNING => {
+                  println("STILL POLLING")
+                  Future.failed(new RawlsException("Cloud context creation still in progress"))
+                }
+                case StatusEnum.SUCCEEDED => {
+                  println("CLOUD CONTEXT CREATED")
+                  Future.successful()
+                }
               }
              }
+            )
+            _ <- DBIO.from(
+              Future(println("SAVING WORKSPACE IN DB"))
             )
             savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(_ =>
               createWorkspaceInDatabase(workspaceId.toString, workspaceRequest, "", WorkbenchEmail("fake@fake.com"), GoogleProjectId("fake"), None, None, dataAccess, parentSpan, "mc"))
