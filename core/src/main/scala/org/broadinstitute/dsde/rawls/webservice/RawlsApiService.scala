@@ -13,7 +13,6 @@ import akka.http.scaladsl.server.{Directive0, ExceptionHandler, RejectionHandler
 import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
 import bio.terra.workspace.client.ApiException
-import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
@@ -28,6 +27,7 @@ import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 
+import java.sql.SQLTransactionRollbackException
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -38,7 +38,7 @@ object RawlsApiService extends LazyLogging {
     ExceptionHandler {
       case withErrorReport: RawlsExceptionWithErrorReport =>
         complete(withErrorReport.errorReport.statusCode.getOrElse(StatusCodes.InternalServerError) -> withErrorReport.errorReport)
-      case rollback:MySQLTransactionRollbackException =>
+      case rollback:SQLTransactionRollbackException =>
         logger.error(s"ROLLBACK EXCEPTION, PROBABLE DEADLOCK: ${rollback.getMessage} [${rollback.getErrorCode} ${rollback.getSQLState}] ${rollback.getNextException}", rollback)
         complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
       case wsmApiException: ApiException =>
