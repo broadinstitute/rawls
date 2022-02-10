@@ -2,12 +2,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import _root_.slick.dbio.DBIOAction
+import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
 import slick.jdbc.TransactionIsolation
 
-import java.sql.SQLTransactionRollbackException
 import java.util.UUID
 
 /**
@@ -394,7 +394,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       // now attempt to calculate attr names and types, with a timeout of 1 second
       withClue("This test is potentially flaky, failures should be reviewed: ") {
-        intercept[SQLTransactionRollbackException] {
+        intercept[MySQLTimeoutException] {
           runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded, 1))
         }
       }
