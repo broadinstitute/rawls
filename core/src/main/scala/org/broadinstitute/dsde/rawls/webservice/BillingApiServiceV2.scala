@@ -47,17 +47,12 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             }
         } ~
         pathPrefix("spendReport") {
-          pathEnd {
+          pathEndOrSingleSlash {
             get {
-              // TODO setup validation (startDate < endDate, etc.)
               parameters("startDate".as[String], "endDate".as[String]) { (startDate, endDate) =>
                 complete {
-                  // TODO pull in dataset + table from the DB, don't hardcode
-                  spendReportingConstructor(userInfo).getSpendForBillingAccount(
-                    GoogleProjectId("FAKE_PROJ"),
-                    "fake_dataset",
-                    "fake_table",
-                    "fake_baid",
+                  spendReportingConstructor(userInfo).getSpendForBillingProject(
+                    RawlsBillingProjectName(projectId),
                     DateTime.parse(startDate),
                     DateTime.parse(endDate)
                   )

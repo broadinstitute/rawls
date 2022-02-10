@@ -428,7 +428,9 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
-        bigQueryDAO
+        slickDataSource,
+        bigQueryDAO,
+        samDAO
       )
 
       val service = new RawlsApiServiceImpl(
