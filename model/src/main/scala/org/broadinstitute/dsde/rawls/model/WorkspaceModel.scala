@@ -349,6 +349,23 @@ object WorkspaceCloudPlatform {
   case object Gcp extends WorkspaceCloudPlatform
 }
 
+
+object WorkspaceStage {
+  sealed trait WorkspaceStage extends RawlsEnumeration[WorkspaceStage] {
+    override def toString: String = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): WorkspaceStage = WorkspaceStage.withName(name)
+  }
+
+  def withName(name: String): WorkspaceStage = name.toLowerCase match {
+    case "rawls" => RawlsWorkspace
+    case "mc" => McWorkspace
+  }
+
+  case object RawlsWorkspace extends WorkspaceStage
+  case object McWorkspace extends WorkspaceStage
+}
+
+
 sealed trait MethodRepoMethod {
 
   def methodUri: String

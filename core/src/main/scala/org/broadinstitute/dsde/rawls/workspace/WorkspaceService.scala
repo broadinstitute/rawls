@@ -569,13 +569,20 @@ class WorkspaceService(protected val userInfo: UserInfo,
         for {
           _ <- deletePetsInProject(googleProjectId, userInfoForSam)
           _ <- gcsDAO.deleteGoogleProject(googleProjectId)
-          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam)
+          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam).recover {
+            case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+              logger.info(s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion")
+          }
         } yield ()
   }
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] = {
     for {
-      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, userInfo)
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, userInfo).recover {
+        case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+          logger.info(s"google-project resource ${projectName.value} not found in Sam. Continuing with workspace deletion")
+          Set[UserIdInfo]()
+      }
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
     } yield ()
   }
