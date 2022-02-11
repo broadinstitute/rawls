@@ -426,25 +426,25 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
+  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Either[String, Bucket]] = {
     implicit val service = GoogleInstrumentedService.Storage
-    retryWithRecoverWhen500orGoogleError(() => {
+    retryWithRecoverWhen500orGoogleError[Either[String, Bucket]](() => {
       val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
       userProject.map( p => getter.setUserProject(p.value) )
 
-      Option(executeGoogleRequest(getter))
+      Right(executeGoogleRequest(getter))
     }) {
-      case _: HttpResponseException => None
+      case e: HttpResponseException => Left(s"HTTP ${e.getStatusCode}: ${e.getStatusMessage} (${e.getMessage})")
     }
   }
 
   override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] = {
     getBucket(bucketName, userProject) map {
-      case Some(bucket) => bucket.getLocationType match {
+      case Right(bucket) => bucket.getLocationType match {
         case SingleRegionLocationType => Option(bucket.getLocation)
         case _ => None
       }
-      case None => throw new RawlsException(s"Failed to retrieve bucket `$bucketName`")
+      case Left(message) => throw new RawlsException(s"Failed to retrieve bucket `$bucketName`. $message")
     }
   }
 
@@ -680,26 +680,43 @@ class HttpGoogleServicesDAO(
   }
 
   /**
-    * This should only perform the update if the current Billing Account value for the Google Project on Google matches
-    * what Terra thinks it should be.  If it is some other value, then we should _not_ update the Billing Account because
-    * a user most likely changed the Billing Account directly on Google and we don't want to mess things up. This check
-    * can be bypassed if caller sets `force` to true.
-    *
-    * Terra users should not have IAM permissions to change the Billing Account on their Terra managed Google Projects
-    * directly on Google.  However, Billing Account Admins (who may know nothing about Terra) _can_ at least remove
-    * their Billing Account from Terra managed Google Projects as a means of disabling billing.  See https://broadworkbench.atlassian.net/browse/CA-1585
-    * TODO: Refactor method: https://broadworkbench.atlassian.net/browse/CA-1673.  A decent amount of business logic has crept into this method and is currently untested as a result.
-    *
-    * @param googleProjectId - Google Project ID that the Billing Account will be changed on
-    * @param newBillingAccount - The new value we want to set on the project
-    * @param oldBillingAccount - The value Rawls expect to see set on the project on Google prior executing this update
-    * @param force - If TRUE, bypass the check to confirm that that the oldBillingAccount value is correct.  USE WITH CAUTION.
+    * Explicitly sets the Billing Account on a Google Project to the value given, even if it is empty.  Callers should
+    * ensure that the new Billing Account value is valid and non-empty as this method will not perform any input
+    * validations.
+    * @param googleProjectId
+    * @param billingAccountName
     * @return
     */
-  override def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId,
-                                                 newBillingAccount: Option[RawlsBillingAccountName],
-                                                 oldBillingAccount: Option[RawlsBillingAccountName],
-                                                 force: Boolean = false): Future[ProjectBillingInfo] = {
+  override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] = {
+    // Since this method should only be called with a non-empty Billing Account Name, then Rawls should also make sure
+    // that Billing is enabled for the Google Project, otherwise users' projects could get "stuck" in a Disabled Billing
+    // state with no way to reenable because they do not have permissions to do this directly on the Google Project.
+    val newProjectBillingInfo = new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(true)
+    updateBillingInfo(googleProjectId, newProjectBillingInfo)
+  }
+
+  override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo] = {
+    val newProjectBillingInfo = new ProjectBillingInfo().setBillingEnabled(false)
+    updateBillingInfo(googleProjectId, newProjectBillingInfo)
+  }
+
+  private def updateBillingInfo(googleProjectId: GoogleProjectId, projectBillingInfo: ProjectBillingInfo): Future[ProjectBillingInfo] = {
+    implicit val service = GoogleInstrumentedService.Billing
+    val billingSvcCred = getBillingServiceAccountCredential
+    val cloudBillingProjectsApi = getCloudBillingManager(billingSvcCred).projects()
+    val updater = cloudBillingProjectsApi.updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo)
+    retryWithRecoverWhen500orGoogleError(() => {
+      blocking {
+        executeGoogleRequest(updater)
+      }
+    }) {
+      case e: GoogleJsonResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
+          s"Rawls service account does not have access to Billing Account on Google Project ${googleProjectId}: ${projectBillingInfo}", e))
+    }
+  }
+
+  override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
     val billingSvcCred = getBillingServiceAccountCredential
     implicit val service = GoogleInstrumentedService.Billing
     val googleProjectName = s"projects/${googleProjectId.value}"
@@ -707,50 +724,15 @@ class HttpGoogleServicesDAO(
 
     val fetcher = cloudBillingProjectsApi.getBillingInfo(googleProjectName)
 
-    val updater = newBillingAccount match {
-      case Some(RawlsBillingAccountName(billingAccountName)) =>
-        cloudBillingProjectsApi.updateBillingInfo(googleProjectName,
-          new ProjectBillingInfo().setBillingAccountName(billingAccountName).setBillingEnabled(true))
-      case None =>
-        cloudBillingProjectsApi.updateBillingInfo(googleProjectName,
-          new ProjectBillingInfo().setBillingEnabled(false))
-    }
     retryWithRecoverWhen500orGoogleError(() => {
       blocking {
-        val projectBillingInfo = executeGoogleRequest(fetcher)
-
-        val currentBillingAccountFromGoogle = if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
-          None
-        else
-          Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
-
-        // Check actual Billing Account value from google against the value that Rawls thinks it should be before the update
-        if (!force && (oldBillingAccount != currentBillingAccountFromGoogle)) {
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.PreconditionFailed,
-            s"Could not update Billing Account on Google Project ID ${googleProjectId} to Billing Account ${newBillingAccount} because Billing Account in Rawls ${oldBillingAccount} did not equal current Billing Account in Google ${projectBillingInfo.getBillingAccountName}"))
-        }
-
-        val shouldUpdate = newBillingAccount match {
-          // The new billing account name is different than the existing billing account OR billing is disable and we are
-          // trying to enable
-          case Some(RawlsBillingAccountName(billingAccountName)) =>
-            projectBillingInfo.getBillingAccountName != billingAccountName || projectBillingInfo.getBillingEnabled == false
-          // Billing is enabled and we are trying to disable
-          case None =>
-            projectBillingInfo.getBillingEnabled == true
-        }
-        if (shouldUpdate) {
-          logger.info(s"Updating Billing Account on Google Project ID '${googleProjectId}' from '${projectBillingInfo.getBillingAccountName}' to '${newBillingAccount}'")
-          executeGoogleRequest(updater)
-        } else {
-          projectBillingInfo
-        }
+        executeGoogleRequest(fetcher)
       }
     }) {
-      case gjre: GoogleJsonResponseException
-        if gjre.getStatusCode == StatusCodes.Forbidden.intValue =>
+      case e: GoogleJsonResponseException
+        if e.getStatusCode == StatusCodes.Forbidden.intValue =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
-          s"Rawls service account does not have access to billing account [${newBillingAccount.map(_.value)}]", gjre))
+          s"Rawls service account does not have access to Billing Info for project: ${googleProjectId.value}", e))
     }
   }
 
@@ -769,25 +751,6 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(fetcher)
       }
     }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
-  }
-
-  override def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Billing
-
-    val projectNameFormatted = s"projects/${googleProjectName.value}"
-
-    val credential = getUserCredential(userInfo)
-    val billingAccountInfo = new ProjectBillingInfo()
-
-    billingAccountName.foreach(name => billingAccountInfo.setBillingAccountName(name.value))
-
-    val setter = getCloudBillingManager(credential).projects().updateBillingInfo(projectNameFormatted, billingAccountInfo)
-
-    retryWhen500orGoogleError(() => {
-      blocking {
-        executeGoogleRequest(setter)
-      }
-    })
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {

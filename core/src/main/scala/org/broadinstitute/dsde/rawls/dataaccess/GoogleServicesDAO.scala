@@ -100,7 +100,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param userProject the project to be billed - optional. If None, defaults to the bucket's project
     * @return optional Google bucket
     */
-  def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]]
+  def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Either[String, Bucket]]
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
@@ -130,14 +130,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
 
-  def updateGoogleProjectBillingAccount(googleProjectId: GoogleProjectId,
-                                        newBillingAccount: Option[RawlsBillingAccountName],
-                                        oldBillingAccount: Option[RawlsBillingAccountName],
-                                        force: Boolean = false): Future[ProjectBillingInfo]
+  def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo]
+
+  def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo]
+
+  def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo]
 
   def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
-
-  def setGoogleProjectBillingAccount(googleProjectName: GoogleProject, billingAccountName: Option[RawlsBillingAccountName], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
 

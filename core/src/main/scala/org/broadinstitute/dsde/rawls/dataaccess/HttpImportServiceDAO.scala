@@ -31,7 +31,7 @@ class HttpImportServiceDAO(url: String)(implicit val system: ActorSystem, val ma
 
     val requestUrl = Uri(url).withPath(Path(s"/${workspaceName.namespace}/${workspaceName.name}/imports/$importId"))
 
-    val importStatusResponse: Future[Option[ImportServiceResponse]] =  retry[Option[ImportServiceResponse]](when500) { () =>
+    val importStatusResponse: Future[Option[ImportServiceResponse]] =  retry[Option[ImportServiceResponse]](when5xx) { () =>
         executeRequestWithToken[Option[ImportServiceResponse]](userInfo.accessToken)(Get(requestUrl)) recover {
           case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
         }

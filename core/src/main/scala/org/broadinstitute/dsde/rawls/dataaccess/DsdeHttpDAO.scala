@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import akka.http.scaladsl.HttpExt
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
-import akka.http.scaladsl.model.{HttpHeader, HttpRequest, ResponseEntity}
+import akka.http.scaladsl.model.{HttpHeader, HttpRequest, ResponseEntity, StatusCode}
 import akka.http.scaladsl.unmarshalling.Unmarshaller
 import akka.stream.Materializer
 import com.typesafe.scalalogging.LazyLogging
@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.util.HttpClientUtils
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
- * Created by dvoet on 9/2/15.
+ * Wraps HTTP methods utility in a DAO-like wrapper. Helps interactions with HTTP endpoints within Terra (DSDE being the old name for DSP)
  */
 trait DsdeHttpDAO extends LazyLogging {
   protected implicit val system: ActorSystem
@@ -43,11 +43,18 @@ trait DsdeHttpDAO extends LazyLogging {
 
   protected def pipeline[A](implicit um: Unmarshaller[ResponseEntity, A]) = executeRequest[A] _
 
-  protected def when500(throwable: Throwable ): Boolean = {
-    throwable match {
-      case t: RawlsExceptionWithErrorReport => t.errorReport.statusCode.exists(_.intValue/100 == 5)
-      case _ => false
-    }
+  protected def when5xx(throwable: Throwable ): Boolean = DsdeHttpDAO.when5xx(throwable)
+
+
+}
+
+object DsdeHttpDAO {
+
+  private def statusCodePredicate(check: StatusCode => Boolean): Throwable => Boolean = {
+    case t: RawlsExceptionWithErrorReport => t.errorReport.statusCode.exists(check)
+    case _ => false
   }
 
+  def when5xx: Throwable => Boolean = statusCodePredicate(_.intValue/100 == 5)
+  def whenUnauthorized: Throwable => Boolean = statusCodePredicate(_.intValue == 401)
 }
