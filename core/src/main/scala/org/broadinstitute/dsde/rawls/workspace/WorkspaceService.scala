@@ -30,7 +30,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureM
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceStage.WorkspaceStage
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
@@ -2232,7 +2232,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                          googleProjectNumber: Option[GoogleProjectNumber],
                                          currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
                                          dataAccess: DataAccess,
-                                         parentSpan: Span = null, workspaceType: WorkspaceStage = WorkspaceStage.RawlsWorkspace): ReadWriteAction[Workspace] = {
+                                         parentSpan: Span = null, workspaceType: WorkspaceType = WorkspaceType.RawlsWorkspace): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
     val completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix match {
       case Some(_) => None

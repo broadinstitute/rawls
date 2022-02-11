@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, GoogleProjectId, Workspace, WorkspaceShardStates, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, GoogleProjectId, Workspace, WorkspaceShardStates, WorkspaceType, WorkspaceVersions}
 
 import java.util.UUID
 
@@ -30,7 +30,8 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
       None,
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded
+      WorkspaceShardStates.Sharded,
+      WorkspaceType.RawlsWorkspace
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
@@ -73,7 +74,8 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
       None,
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded
+      WorkspaceShardStates.Sharded,
+      WorkspaceType.RawlsWorkspace
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))

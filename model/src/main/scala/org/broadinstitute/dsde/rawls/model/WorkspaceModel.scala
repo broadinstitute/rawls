@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.WorkspaceShardState
-import org.broadinstitute.dsde.rawls.model.WorkspaceStage.WorkspaceStage
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
@@ -175,7 +175,7 @@ case class Workspace(
                       billingAccountErrorMessage: Option[String],
                       completedCloneWorkspaceFileTransfer: Option[DateTime],
                       shardState: WorkspaceShardState,
-                      workspaceType: WorkspaceStage
+                      workspaceType: WorkspaceType
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -202,7 +202,7 @@ object Workspace {
     val randomString = java.util.UUID.randomUUID().toString
     val googleProjectId = GoogleProjectId(randomString)
     val googleProjectNumber = GoogleProjectNumber(randomString)
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate), shardState = WorkspaceShardStates.Sharded, workspaceType = WorkspaceStage.RawlsWorkspace)
+    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate), shardState = WorkspaceShardStates.Sharded, workspaceType = WorkspaceType.RawlsWorkspace)
   }
 }
 
@@ -331,19 +331,24 @@ object WorkspaceShardStates {
   case object Unknown extends WorkspaceShardState
 }
 
-object WorkspaceStage {
-  sealed trait WorkspaceStage extends RawlsEnumeration[WorkspaceStage] {
+object WorkspaceType {
+  /**
+    * Represents the system-of-record for a workspace
+    * rawls workspaces are owned and managed by rawls
+    * mc workspaces are owned and managed by workspace manager
+    */
+  sealed trait WorkspaceType extends RawlsEnumeration[WorkspaceType] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
-    override def withName(name: String): WorkspaceStage = WorkspaceStage.withName(name)
+    override def withName(name: String): WorkspaceType = WorkspaceType.withName(name)
   }
 
-  def withName(name: String): WorkspaceStage = name.toLowerCase match {
+  def withName(name: String): WorkspaceType = name.toLowerCase match {
     case "rawls" => RawlsWorkspace
     case "mc" => McWorkspace
   }
 
-  case object RawlsWorkspace extends WorkspaceStage
-  case object McWorkspace extends WorkspaceStage
+  case object RawlsWorkspace extends WorkspaceType
+  case object McWorkspace extends WorkspaceType
 }
 
 sealed trait MethodRepoMethod {
@@ -628,8 +633,8 @@ case class WorkspaceDetails(namespace: String,
                             billingAccountErrorMessage: Option[String] = None,
                             completedCloneWorkspaceFileTransfer: Option[DateTime],
                             shardState: Option[WorkspaceShardState],
-                            workspaceType: Option[WorkspaceStage]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, shardState.getOrElse(WorkspaceShardStates.Unknown), workspaceType.getOrElse(WorkspaceStage.RawlsWorkspace))
+                            workspaceType: Option[WorkspaceType]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, shardState.getOrElse(WorkspaceShardStates.Unknown), workspaceType.getOrElse(WorkspaceType.RawlsWorkspace))
 }
 
 
@@ -704,7 +709,7 @@ object WorkspaceDetails {
                           billingAccountErrorMessage: Option[String] = None,
                           completedCloneWorkspaceFileTransfer: Option[DateTime],
                           shardState: Option[WorkspaceShardState] = None,
-                          workspaceType: Option[WorkspaceStage] = None) = {
+                          workspaceType: Option[WorkspaceType] = None) = {
     WorkspaceDetails(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, authorizationDomain, workspaceVersion, googleProject,googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, None, workspaceType)
   }
 
@@ -959,7 +964,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceShardStateFormat = rawlsEnumerationFormat(WorkspaceShardStates.withName)
 
-  implicit val WorkspaceStageFormat = rawlsEnumerationFormat(WorkspaceStage.withName)
+  implicit val WorkspaceStageFormat = rawlsEnumerationFormat(WorkspaceType.withName)
 
   implicit val WorkspaceDetailsFormat = jsonFormat19(WorkspaceDetails.applyOmitShardState)
 
