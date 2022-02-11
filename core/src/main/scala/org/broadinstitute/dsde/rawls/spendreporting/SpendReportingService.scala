@@ -74,12 +74,26 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
   def dateTimeToISODateString(dt: DateTime) =
     dt.toString(ISODateTimeFormat.date())
 
-  // todo: naming?
-  private def getSpendReportConfiguration(project: Option[RawlsBillingProject]): (RawlsBillingAccountName, GoogleProject, BigQueryDatasetName, BigQueryTableName) = {
-    project match {
-      case Some(RawlsBillingProject(_, _, Some(billingAccount), _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject))) => (billingAccount, spendReportDatasetGoogleProject, spendReportDataset, spendReportTable)
-      case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"project not found"))
-      case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"spend report configuration not set on billing project"))
+  case class BillingProjectSpendExport(billingProjectName: RawlsBillingProjectName, billingAccountId: RawlsBillingAccountName, spendExportGoogleProject: GoogleProject, spendExportDatasetName: BigQueryDatasetName, spendExportTableName: BigQueryTableName)
+
+  private def getSpendExportConfiguration(billingProjectName: RawlsBillingProjectName): Future[BillingProjectSpendExport] = {
+    dataSource.inTransaction { dataAccess =>
+       dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
+    }.map {
+      case Some(RawlsBillingProject(_, _, Some(billingAccount), _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject))) =>
+        BillingProjectSpendExport(billingProjectName, billingAccount, spendReportDatasetGoogleProject, spendReportDataset, spendReportTable)
+      case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"project ${billingProjectName.value} not found"))
+      case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"spend report configuration not set on billing project ${billingProjectName.value}"))
+    }
+  }
+
+  private def getWorkspaceGoogleProjects(billingProjectName: RawlsBillingProjectName): Future[Set[GoogleProject]] = {
+    dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
+    }.map { workspaces =>
+      workspaces.collect {
+        case Workspace(_, _, _, _, _, _, _, _, _, _, WorkspaceVersions.V2, googleProjectId, _, _, _, _, _) => GoogleProject(googleProjectId.value)
+      }.toSet
     }
   }
 
@@ -87,17 +101,13 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     if (startDate.isAfter(endDate)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "start date must be before end date"))
   }
 
-  def getSpendForBillingProject(billingProject: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[SpendReportingResults] = {
+  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[SpendReportingResults] = {
     validateReportParameters(startDate, endDate)
-    requireProjectAction(billingProject, SamBillingProjectActions.alterSpendReportConfiguration) { // todo: new action here? this is an okay approx. but could add a specific one
+    requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) { // todo: new action here? this is an okay approx. but could add a specific one
       for {
-        projectOpt <- dataSource.inTransaction { dataAccess => // todo: maybe this should get pulled into getSpendReportConfiguration too
-          dataAccess.rawlsBillingProjectQuery.load(billingProject)
-        }
+        spendExportConf <- getSpendExportConfiguration(billingProjectName)
+        workspaceProjects <- getWorkspaceGoogleProjects(billingProjectName)
 
-        (billingAccountId, spendReportingGoogleProject, spendReportingDataset, spendReportingTableName) = getSpendReportConfiguration(projectOpt)
-
-        // todo: by billing account or by project?
         query =
         s"""
            | SELECT
@@ -105,19 +115,21 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
            |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
            |  currency,
            |  DATE(_PARTITIONTIME) as date
-           | FROM `${spendReportingGoogleProject}.${spendReportingDataset}.${spendReportingTableName}`
+           | FROM `${spendExportConf.spendExportGoogleProject}.${spendExportConf.spendExportDatasetName}.${spendExportConf.spendExportTableName}`
            | WHERE billing_account_id = @billingAccountId
            | AND _PARTITIONDATE BETWEEN @startDate AND @endDate
+           | AND project.id in UNNEST(@projects)
            | GROUP BY currency, date
            |""".stripMargin
 
         queryParams = List(
-          new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("billingAccountId").setParameterValue(new QueryParameterValue().setValue(billingAccountId.value)),
+          new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("billingAccountId").setParameterValue(new QueryParameterValue().setValue(spendExportConf.billingAccountId.value)),
           new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("startDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(startDate))),
           new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("endDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(endDate))),
+          new QueryParameter().setParameterType(new QueryParameterType().setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))f
         )
 
-        jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(spendReportingGoogleProject.value), query, queryParams, "NAMED")
+        jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(spendExportConf.spendExportGoogleProject.value), query, queryParams, "NAMED")
         jobStatus <- bigQueryDAO.getQueryStatus(jobRef)
         result: GetQueryResultsResponse <- bigQueryDAO.getQueryResult(jobStatus)
       } yield {
