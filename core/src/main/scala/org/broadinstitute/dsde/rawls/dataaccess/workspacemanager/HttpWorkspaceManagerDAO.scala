@@ -38,7 +38,15 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
   }
 
   override def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace = {
-    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).displayName("arh-testing").description("arh-testing").spendProfile("wm-default-spend-profile").stage(WorkspaceStageModel.MC_WORKSPACE))
+    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
+  }
+
+  override def createWorkspaceWithSpendProfile(workspaceId: UUID, displayName: String, spendProfileId: String, accessToken: OAuth2BearerToken): CreatedWorkspace = {
+    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody()
+      .id(workspaceId)
+      .displayName(displayName)
+      .spendProfile(spendProfileId)
+      .stage(WorkspaceStageModel.MC_WORKSPACE))
   }
 
   override def createAzureWorkspaceCloudContext(workspaceId: UUID,

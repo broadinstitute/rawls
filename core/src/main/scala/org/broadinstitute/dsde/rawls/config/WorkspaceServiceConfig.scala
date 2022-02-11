@@ -2,23 +2,24 @@ package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.Config
 
-final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String, spendProfileConfig: SpendProfileConfig, mcWorkspaceEnabled: Boolean)
-final case class SpendProfileConfig(tenantId: String, subscriptionId: String, resourceGroupId: String)
+final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String, spendProfileId: String, azureConfig: AzureConfig, multiCloudWorkspacesEnabled: Boolean)
+final case class AzureConfig(tenantId: String, subscriptionId: String, resourceGroupId: String)
 
 case object WorkspaceServiceConfig {
   def apply[T <: WorkspaceServiceConfig](conf: Config): WorkspaceServiceConfig = {
     val gcsConfig = conf.getConfig("gcs")
-    val spendProfileConfig = conf.getConfig("mcWorkspaces.spendProfile")
+    val azureConfig = conf.getConfig("multiCloudWorkspaces.azureConfig")
 
     new WorkspaceServiceConfig(
       conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
       gcsConfig.getString("groupsPrefix"),
-      SpendProfileConfig(
-        spendProfileConfig.getString("tenantId"),
-        spendProfileConfig.getString("subscriptionId"),
-        spendProfileConfig.getString("resourceGroupId")
+      conf.getString("multiCloudWorkspaces.spendProfileId"),
+      AzureConfig(
+        azureConfig.getString("tenantId"),
+        azureConfig.getString("subscriptionId"),
+        azureConfig.getString("resourceGroupId")
       ),
-      conf.getBoolean("mcWorkspaces.mcWorkspacesEnabled")
+      conf.getBoolean("multiCloudWorkspaces.enabled")
     )
   }
 }

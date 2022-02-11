@@ -5,8 +5,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.CreateCloudContextResult
-import bio.terra.workspace.model.JobReport.StatusEnum
 import cats.implicits._
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.StorageObject
@@ -34,7 +32,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.Retry._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -50,7 +47,6 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
-import scala.concurrent.duration.{Duration, FiniteDuration, MINUTES}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.{mapAsJavaMapConverter, mapAsScalaMapConverter}
 import scala.language.postfixOps
@@ -146,7 +142,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        googleIamDao: GoogleIamDAO,
                        terraBillingProjectOwnerRole: String,
                        terraWorkspaceCanComputeRole: String)
-                      (implicit protected val executionContext: ExecutionContext, implicit val system: ActorSystem) extends RoleSupport with Retry
+                      (implicit protected val executionContext: ExecutionContext) extends RoleSupport
   with LibraryPermissionsSupport
   with FutureSupport
   with MethodWiths
@@ -167,8 +163,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
-
-  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
         traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
@@ -182,19 +177,19 @@ class WorkspaceService(protected val userInfo: UserInfo,
         })
       })
     })
-  }
 
-
-  def withNewMcWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def withNewMultiCloudWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
     val cloudPlatform = workspaceRequest.cloudPlatform match {
       case Some(WorkspaceCloudPlatform.Azure) => WorkspaceCloudPlatform.Azure
       case Some(other) => throw new RawlsException(s"Cloud platform ${other} not supported for MC workspaces")
       case _ => throw new RawlsException("Cloud platform required for MC workspaces")
     }
 
-    val azureTenantId =  config.spendProfileConfig.tenantId
-    val azureSubscriptionId = config.spendProfileConfig.subscriptionId
-    val azureResourceGroupId = config.spendProfileConfig.resourceGroupId
+    // todo unhardcode from config and pull from spend profile service
+    val spendProfileId = config.spendProfileId
+    val azureTenantId =  config.azureConfig.tenantId
+    val azureSubscriptionId = config.azureConfig.subscriptionId
+    val azureResourceGroupId = config.azureConfig.resourceGroupId
 
     traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
       case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
@@ -202,12 +197,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
         val workspaceId = UUID.randomUUID
         for {
           _ <- traceDBIOWithParent("createWorkspaceInWSM", parentSpan)(_ => DBIO.from(
-            Future(workspaceManagerDAO.createWorkspace(workspaceId, userInfo.accessToken)))
-          )
+            Future(workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId, workspaceRequest.name, spendProfileId, userInfo.accessToken))
+          ))
           cloudContextCreateResult <- traceDBIOWithParent("createCloudContext", parentSpan)( _ => DBIO.from(
             Future(workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
           ))
-          savedWorkspace <- traceDBIOWithParent("saveNewWorkspaceToRwalsDB", parentSpan)(_ =>
+          savedWorkspace <- traceDBIOWithParent("saveNewWorkspaceToRawlsDB", parentSpan)(_ =>
             createWorkspaceInDatabase(
               workspaceId.toString,
               workspaceRequest, "",
@@ -226,10 +221,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def createMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+  def createMultiCloudWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
     for {
       workspace <- traceWithParent("withNewMcWorkspaceContext", parentSpan) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
-        withNewMcWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
+        withNewMultiCloudWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
           DBIO.successful(workspaceContext)
         }
       }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
@@ -238,9 +233,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
 
   def createRawlsOrMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
-    workspaceRequest.cloudPlatform match {
-      case Some(platform) => createMcWorkspace(workspaceRequest, parentSpan)
-      case _ => createWorkspace(workspaceRequest, parentSpan)
+    if (!config.multiCloudWorkspacesEnabled) {
+      createWorkspace(workspaceRequest, parentSpan)
+    } else {
+      workspaceRequest.cloudPlatform match {
+        case Some(platform) => createMultiCloudWorkspace(workspaceRequest, parentSpan)
+        case _ => createWorkspace(workspaceRequest, parentSpan)
+      }
     }
   }
 
@@ -2362,7 +2361,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
             for {
               billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentSpan)(_ => DBIO.from(
                   samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email)))
-              resource: SamCreateResourceResponse <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
+              resource <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
               policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
               _ <- DBIO.from({
                 // declare these next two Futures so they start in parallel
