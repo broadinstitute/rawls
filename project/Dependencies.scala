@@ -74,12 +74,13 @@ object Dependencies {
   val swaggerUI: ModuleID =       "org.webjars.npm"               % "swagger-ui-dist"       % "3.37.2"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
-  val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
+  val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
+  val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.13" // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.10"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-3-4"          % "3.2.10.0" % Test
@@ -109,12 +110,15 @@ object Dependencies {
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1-rev20210319-1.31.0"
 
-  def excludeJakartaActivationApi(m: ModuleID): ModuleID = m.exclude("jakarta.activation", "jakarta.activation-api")
+  // should we prefer jakarta over javax.xml?
+  def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
+  def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
+  def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
 
-  val workspaceManager = excludeJakartaActivationApi("bio.terra" % "workspace-manager-client" % "0.254.5-SNAPSHOT")
-  val dataRepo = excludeJakartaActivationApi("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.5-SNAPSHOT")
+  val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
   val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
-  val resourceBufferService = excludeJakartaActivationApi("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
+  val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
@@ -199,6 +203,7 @@ object Dependencies {
     jodaTime,
     jodaConvert,
     scalaLogging,
+    commonsCodec,
     httpClient,
     googleApiClient,
     scalaUri,
@@ -217,6 +222,7 @@ object Dependencies {
     swaggerUI,
     webjarsLocator,
     circeYAML,
+    commonsCodec,
     commonsJEXL,
     cromwellClient,
     cats,

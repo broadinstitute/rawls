@@ -25,8 +25,10 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsObject, enrichAny}
-
 import java.util.UUID
+
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -674,6 +676,55 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     verify(services.gcsDAO).deleteGoogleProject(ArgumentMatchers.eq(googleProjectId))
   }
 
+  it should "tolerate a missing google-project Sam resource when deleting a workspace" in withTestDataApiServicesMockitoSam { services =>
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      ArgumentMatchers.eq(SamWorkspaceActions.delete),
+      any[UserInfo]
+    )).thenReturn(Future.successful(true))
+
+    when(services.samDAO.deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      any[UserInfo]
+    )).thenReturn(Future.successful(()))
+
+    when(services.samDAO.deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
+      ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
+      any[UserInfo]
+    )).thenReturn(Future.successful(()))
+
+    // mocking for deleting a google project
+    val petSAJson = "petJson"
+    val googleProjectId = testData.workspace.googleProjectId
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
+    when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+    when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))))
+    when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(Future.successful()) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+    when(services.samDAO.deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+      ArgumentMatchers.eq(googleProjectId.value),
+      any[UserInfo]
+    )).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"resource not found"))))
+
+    Delete(testData.workspace.path) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, responseAs[String]) {
+          status
+        }
+      }
+
+    verify(services.samDAO).deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+      ArgumentMatchers.eq(googleProjectId.value),
+      any[UserInfo]
+    )
+    verify(services.gcsDAO).deleteGoogleProject(ArgumentMatchers.eq(googleProjectId))
+  }
+
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   it should "delete a v1 workspace" in withEmptyDatabaseAndApiServices { services =>
 
@@ -1250,7 +1301,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     // mock(ito) out the workspace creation
     when(services.gcsDAO.testDMBillingAccountAccess(any[RawlsBillingAccountName])).thenReturn(Future.successful(true))
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), any[Some[RawlsBillingAccountName]], any[Option[RawlsBillingAccountName]], any[Boolean]))
+    when(services.gcsDAO.setBillingAccountName(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), any[RawlsBillingAccountName]))
       .thenReturn(Future.successful(new ProjectBillingInfo().setBillingAccountName(testData.workspace.currentBillingAccountOnGoogleProject.map(_.value).getOrElse("")).setProjectId(testData.workspace.googleProjectId.value)))
     when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
     when(services.gcsDAO.labelSafeMap(any[Map[String, String]], any[String])).thenReturn(Map.empty[String, String])

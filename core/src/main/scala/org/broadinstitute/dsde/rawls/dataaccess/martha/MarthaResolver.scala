@@ -27,7 +27,7 @@ class MarthaResolver(marthaUrl: String)(implicit val system: ActorSystem, val ma
     // Have Rawls call an "SA-only" endpoint in Martha because it doesn't need any URI info (calls Bond but not overloaded DRS servers)
     val requestObj = MarthaRequest(drsUrl, MarthaRequestFieldsKey)
     Marshal(requestObj).to[RequestEntity] flatMap { entity =>
-      retry[MarthaMinimalResponse](when500) { () =>
+      retry[MarthaMinimalResponse](when5xx) { () =>
         executeRequestWithToken[MarthaMinimalResponse](userInfo.accessToken)(Post(marthaUrl, entity))
       }
     }

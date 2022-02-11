@@ -43,7 +43,7 @@ trait DataAccess
       val second = secondLong.toHexString
       determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000"), shardState = WorkspaceShardStates.Sharded).toString
     }
-  }).toSet + determineShard(java.util.UUID.fromString(s"00000000-0000-0000-0000-000000000000"), shardState = WorkspaceShardStates.Unsharded).toString
+  }).toSet
 
   // only called from TestDriverComponent
   def truncateAll: WriteAction[Int] = {

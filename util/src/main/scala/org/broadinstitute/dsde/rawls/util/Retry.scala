@@ -32,6 +32,7 @@ trait Retry {
   type RetryableFuture[A] = Future[Either[NonEmptyList[Throwable], (List[Throwable], A)]]
 
   def always[A]: Predicate[A] = _ => true
+  def anyOf[A](predicates: Predicate[A]*): Predicate[A] = a => predicates.exists(_.apply(a))
 
   val defaultErrorMessage = "retry-able operation failed"
 

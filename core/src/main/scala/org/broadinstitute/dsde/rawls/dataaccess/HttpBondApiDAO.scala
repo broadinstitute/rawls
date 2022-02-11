@@ -48,7 +48,7 @@ class HttpBondApiDAO(bondBaseUrl: String)(implicit val system: ActorSystem, val 
 
   def getServiceAccountKey(provider: String, userInfo: UserInfo): Future[Option[BondResponseData]] = {
     val providerUrl = s"$bondBaseUrl/api/link/v1/$provider/serviceaccount/key"
-      retry(when500) { () =>
+      retry(when5xx) { () =>
         executeRequestWithToken[BondResponseData](userInfo.accessToken)(Get(providerUrl)).map(Option(_)).recover {
           case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) => None
         }
