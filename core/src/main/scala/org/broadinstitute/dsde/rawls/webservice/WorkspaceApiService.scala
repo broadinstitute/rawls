@@ -32,7 +32,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           addLocationHeader(workspace.path) {
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).createWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                workspaceServiceConstructor(userInfo).createRawlsOrMcWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
               }
             }
           }

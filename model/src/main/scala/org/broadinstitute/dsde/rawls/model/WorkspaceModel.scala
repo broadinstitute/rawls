@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
 import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.WorkspaceShardState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
@@ -146,7 +147,9 @@ case class WorkspaceRequest(namespace: String,
                             authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
                             copyFilesWithPrefix: Option[String] = None,
                             noWorkspaceOwner: Option[Boolean] = None,
-                            bucketLocation: Option[String] = None) extends Attributable {
+                            bucketLocation: Option[String] = None,
+                            cloudPlatform: Option[WorkspaceCloudPlatform] = None
+                           ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
@@ -349,6 +352,22 @@ object WorkspaceType {
 
   case object RawlsWorkspace extends WorkspaceType
   case object McWorkspace extends WorkspaceType
+}
+
+object WorkspaceCloudPlatform {
+  sealed trait WorkspaceCloudPlatform extends RawlsEnumeration[WorkspaceCloudPlatform] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): WorkspaceCloudPlatform = WorkspaceCloudPlatform.withName(name)
+  }
+
+  def withName(name: String): WorkspaceCloudPlatform = name.toLowerCase match {
+    case "azure" => Azure
+    case "gcp" => Gcp
+    case _ => throw new RawlsException(s"invalid cloud platform [${name}]")
+  }
+
+  case object Azure extends WorkspaceCloudPlatform
+  case object Gcp extends WorkspaceCloudPlatform
 }
 
 sealed trait MethodRepoMethod {
@@ -873,7 +892,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityFormat = jsonFormat3(Entity)
 
-  implicit val WorkspaceRequestFormat = jsonFormat7(WorkspaceRequest)
+  implicit val workspaceCloudPlatformFormat = rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
+
+  implicit val WorkspaceRequestFormat = jsonFormat8(WorkspaceRequest)
 
   implicit val workspaceFieldSpecsFormat = jsonFormat1(WorkspaceFieldSpecs.apply)
 
