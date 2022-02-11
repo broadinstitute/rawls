@@ -117,16 +117,16 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
            |  DATE(_PARTITIONTIME) as date
            | FROM `${spendExportConf.spendExportGoogleProject}.${spendExportConf.spendExportDatasetName}.${spendExportConf.spendExportTableName}`
            | WHERE billing_account_id = @billingAccountId
-           | AND _PARTITIONDATE BETWEEN @startDate AND @endDate
+           | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
            | AND project.id in UNNEST(@projects)
            | GROUP BY currency, date
            |""".stripMargin
 
         queryParams = List(
-          new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("billingAccountId").setParameterValue(new QueryParameterValue().setValue(spendExportConf.billingAccountId.value)),
+          new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("billingAccountId").setParameterValue(new QueryParameterValue().setValue(spendExportConf.billingAccountId.withoutPrefix())),
           new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("startDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(startDate))),
           new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("endDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(endDate))),
-          new QueryParameter().setParameterType(new QueryParameterType().setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))f
+          new QueryParameter().setParameterType(new QueryParameterType().setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))
         )
 
         jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(spendExportConf.spendExportGoogleProject.value), query, queryParams, "NAMED")
