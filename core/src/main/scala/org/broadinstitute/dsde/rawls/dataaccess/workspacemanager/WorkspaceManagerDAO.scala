@@ -12,8 +12,7 @@ trait WorkspaceManagerDAO {
 
   def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription
   def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace
-  def createWorkspaceCloudContext(workspaceId: UUID,
-                                           jobControlId: String,
+  def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                            azureTenantId: String,
                                            azureResourceGroupId: String,
                                            azureSubscriptionId: String,

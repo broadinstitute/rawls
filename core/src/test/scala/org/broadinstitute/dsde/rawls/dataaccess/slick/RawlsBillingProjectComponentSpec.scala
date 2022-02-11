@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.scalatest.OptionValues
 
 class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
 
@@ -22,5 +23,12 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     assertResult(None) {
       runAndWait(rawlsBillingProjectQuery.load(project.projectName))
     }
+  }
+
+  it should "be able to update the invalidBillingAccount field" in withDefaultTestDatabase {
+    val project = testData.testProject1
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe false
+    runAndWait(rawlsBillingProjectQuery.updateBillingAccountValidity(testData.testProject1.billingAccount.getOrElse(fail("missing billing account")), true))
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe true
   }
 }

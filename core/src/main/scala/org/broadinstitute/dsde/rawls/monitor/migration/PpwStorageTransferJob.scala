@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import java.sql.Timestamp
 
-private[migration]
 final case class PpwStorageTransferJob(id: Long,
                                        jobName: GoogleStorageTransferService.JobName,
                                        migrationId: Long,
@@ -19,7 +18,8 @@ final case class PpwStorageTransferJob(id: Long,
                                        outcome: Option[Outcome],
                                       )
 
-private[migration]
+
+private [migration]
 object PpwStorageTransferJob {
   type RecordType = (
     Long,                 // id

@@ -7,24 +7,27 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.cloud.storage.{Acl, Storage}
+import com.google.cloud.{Identity, Policy}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, WorkspaceMigrationException}
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigration
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
+import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigration}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
-import org.broadinstitute.dsde.workbench.model.TraceId
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
+import org.broadinstitute.dsde.workbench.model.google._
+import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
+import org.scalactic.source
 import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.Eventually
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Assertion, BeforeAndAfterAll, OptionValues}
@@ -47,9 +50,17 @@ class WorkspaceMigrationActorSpec
   implicit val timestampOrdering = new Ordering[Timestamp] {
     override def compare(x: Timestamp, y: Timestamp): Int = x.compareTo(y)
   }
+  implicit class FailureMessageOps(outcome: Outcome)(implicit pos: source.Position) {
+    def failureMessage: String = outcome match {
+      case Failure(message) => message
+      case _ => throw new TestFailedException(_ => Some(s"""Expected "Failure", instead got "${outcome}"."""), None, pos)
+    }
+  }
 
   // This is a horrible hack to avoid refactoring the tangled mess in the WorkspaceServiceSpec.
   val spec = new WorkspaceServiceSpec()
+
+  val fakeGoogleProjectUsedForMigrationExpenses = GoogleProject("fake-google-project")
 
 
   def runMigrationTest(test: MigrateAction[Assertion]): Assertion =
@@ -57,7 +68,7 @@ class WorkspaceMigrationActorSpec
       test.run {
         MigrationDeps(
           services.slickDataSource,
-          GoogleProject("fake-google-project"),
+          fakeGoogleProjectUsedForMigrationExpenses,
           services.workspaceService,
           MockStorageService(),
           MockStorageTransferService()
@@ -70,6 +81,15 @@ class WorkspaceMigrationActorSpec
 
 
   case class MockStorageTransferService() extends MockGoogleStorageTransferService[IO] {
+    override def getStsServiceAccount(project: GoogleProject): IO[ServiceAccount] =
+      IO.pure {
+        ServiceAccount(
+          ServiceAccountSubjectId("fake-storage-transfer-service"),
+          WorkbenchEmail(s"fake-storage-transfer-service@${project}.iam.gserviceaccount.com"),
+          ServiceAccountDisplayName("Fake Google Storage Transfer Service")
+        )
+      }
+
     override def createTransferJob(jobName: JobName, jobDescription: String, projectToBill: GoogleProject, originBucket: GcsBucketName, destinationBucket: GcsBucketName, schedule: JobTransferSchedule): IO[TransferJob] =
       IO.pure {
         TransferJob.newBuilder
@@ -91,7 +111,16 @@ class WorkspaceMigrationActorSpec
       fs2.Stream.emit(true)
 
     override def insertBucket(googleProject: GoogleProject, bucketName: GcsBucketName, acl: Option[NonEmptyList[Acl]], labels: Map[String, String], traceId: Option[TraceId], bucketPolicyOnlyEnabled: Boolean, logBucket: Option[GcsBucketName], retryConfig: RetryConfig, location: Option[String]): fs2.Stream[IO, Unit] =
-      fs2.Stream.emit(())
+      fs2.Stream.emit()
+
+    override def getIamPolicy(bucketName: GcsBucketName, traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Policy] =
+      fs2.Stream.emit(Policy.newBuilder.build)
+
+    override def setIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Unit] =
+      fs2.Stream.emit()
+
+    override def overrideIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Policy] =
+      fs2.Stream.emit(Policy.newBuilder.build)
   }
 
 
@@ -186,8 +215,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "error when there's an error on the workspace billing account" in
-    assertThrows[WorkspaceMigrationException] {
+  it should "fail the migration when there's an error on the workspace billing account" in
       runMigrationTest {
         for {
           now <- nowTimestamp
@@ -206,85 +234,103 @@ class WorkspaceMigrationActorSpec
 
           _ <- migrate
 
-        } yield fail("it did not fail")
+          migration <- inTransactionT { _ =>
+            getAttempt(workspace.workspaceIdAsUUID)
+          }
+        } yield {
+          migration.finished shouldBe defined
+          migration.outcome.value.failureMessage should include("billing account error exists on workspace")
+        }
+      }
+
+
+  it should "fail the migration when there's no billing account on the workspace" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        workspace = spec.testData.v1Workspace.copy(
+          currentBillingAccountOnGoogleProject = None,
+          name = UUID.randomUUID.toString,
+          workspaceId = UUID.randomUUID.toString
+        )
+
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(workspace) >> workspaceMigrations
+            .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+            .map(_.started)
+            .update(now.some)
+        }
+
+        _ <- migrate
+
+        migration <- inTransactionT { _ =>
+          getAttempt(workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.finished shouldBe defined
+        migration.outcome.value.failureMessage should include("no billing account on workspace")
       }
     }
 
 
-  it should "error when there's no billing account on the workspace" in
-    assertThrows[WorkspaceMigrationException] {
-      runMigrationTest {
-        for {
-          now <- nowTimestamp
-          workspace = spec.testData.v1Workspace.copy(
-            currentBillingAccountOnGoogleProject = None,
-            name = UUID.randomUUID.toString,
-            workspaceId = UUID.randomUUID.toString
-          )
-
-          _ <- inTransaction { _ =>
-            createAndScheduleWorkspace(workspace) >> workspaceMigrations
-              .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+  it should "fail the migration when the billing account on the billing project is invalid" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          DBIO.seq(
+            createAndScheduleWorkspace(spec.testData.v1Workspace),
+            workspaceMigrations
+              .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(_.started)
-              .update(now.some)
-          }
-
-          _ <- migrate
-
-        } yield fail("it did not fail")
-      }
-    }
-
-
-  it should "error when the billing account on the billing project is invalid" in
-    assertThrows[WorkspaceMigrationException] {
-      runMigrationTest {
-        for {
-          now <- nowTimestamp
-
-          _ <- inTransaction { dataAccess =>
-            DBIO.seq(
-              createAndScheduleWorkspace(spec.testData.v1Workspace),
-              workspaceMigrations
-                .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
-                .map(_.started)
-                .update(now.some),
-              dataAccess
-                .rawlsBillingProjectQuery
-                .filter(_.projectName === spec.testData.v1Workspace.namespace)
-                .map(_.invalidBillingAccount)
-                .update(true)
-            )
-          }
-
-          _ <- migrate
-
-        } yield fail("it did not fail")
-      }
-    }
-
-
-  it should "error when the billing account on the workspace does not match the billing account on the billing project" in
-    assertThrows[WorkspaceMigrationException] {
-      runMigrationTest {
-        for {
-          now <- nowTimestamp
-          workspace = spec.testData.v1Workspace.copy(
-            currentBillingAccountOnGoogleProject = RawlsBillingAccountName("greg").some,
-            name = UUID.randomUUID.toString,
-            workspaceId = UUID.randomUUID.toString
+              .update(now.some),
+            dataAccess
+              .rawlsBillingProjectQuery
+              .filter(_.projectName === spec.testData.v1Workspace.namespace)
+              .map(_.invalidBillingAccount)
+              .update(true)
           )
+        }
 
-          _ <- inTransaction { _ =>
-            createAndScheduleWorkspace(workspace) >> workspaceMigrations
-              .filter(_.workspaceId === workspace.workspaceIdAsUUID)
-              .map(_.started)
-              .update(now.some)
-          }
+        _ <- migrate
 
-          _ <- migrate
+        migration <- inTransactionT { _ =>
+          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.finished shouldBe defined
+        migration.outcome.value.failureMessage should include("invalid billing account on billing project")
+      }
+    }
 
-        } yield fail("it did not fail")
+
+  it should "fail the migration when the billing account on the workspace does not match the billing account on the billing project" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        workspace = spec.testData.v1Workspace.copy(
+          currentBillingAccountOnGoogleProject =
+            spec.testData.v1Workspace.currentBillingAccountOnGoogleProject.map { billingAccount =>
+              RawlsBillingAccountName(billingAccount.value ++ UUID.randomUUID.toString)
+            },
+          name = UUID.randomUUID.toString,
+          workspaceId = UUID.randomUUID.toString
+        )
+
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(workspace) >> workspaceMigrations
+            .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+            .map(_.started)
+            .update(now.some)
+        }
+
+        _ <- migrate
+        migration <- inTransactionT { _ =>
+          getAttempt(workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.finished shouldBe defined
+        migration.outcome.value.failureMessage should include("billing account on workspace differs from billing account on billing project")
       }
     }
 
@@ -501,7 +547,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "update the Workspace record when the temporary bucket has been deleted" in
+  it should "update the Workspace record after the temporary bucket has been deleted" in
     runMigrationTest {
       for {
         now <- nowTimestamp
@@ -526,7 +572,6 @@ class WorkspaceMigrationActorSpec
         workspace.googleProjectId shouldBe googleProjectId
         workspace.googleProjectNumber shouldBe googleProjectNumber.some
       }
-
     }
 
 
@@ -541,7 +586,7 @@ class WorkspaceMigrationActorSpec
 
         workspaceBucketName = GcsBucketName("workspace-bucket-name")
         tmpBucketName = GcsBucketName("tmp-bucket-name")
-        job <- startBucketTransferJob(migration.id, workspaceBucketName, tmpBucketName)
+        job <- startBucketTransferJob(migration, spec.testData.v1Workspace, workspaceBucketName, tmpBucketName)
         transferJob <- inTransactionT { _ =>
           storageTransferJobs
             .filter(_.jobName === job.getName)
@@ -558,7 +603,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  "peekTransferJob" should "return the first active job that ws updated last and touch it" in
+  "peekTransferJob" should "return the first active job that was updated last and touch it" in
     runMigrationTest {
       for {
         migration <- inTransactionT { _ =>
@@ -566,7 +611,7 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        _ <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
+        _ <- startBucketTransferJob(migration, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
         job <- peekTransferJob
       } yield job.updated should be > job.created
     }
@@ -580,7 +625,7 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        job <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
+        job <- startBucketTransferJob(migration, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
         finished <- nowTimestamp
         _ <- inTransaction { _ =>
           storageTransferJobs
@@ -602,11 +647,11 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        _ <- startBucketTransferJob(migration.id, GcsBucketName("foo"), GcsBucketName("bar"))
-        (migrationId, outcome) <- refreshTransferJobs
+        _ <- startBucketTransferJob(migration, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
+        transferJob <- refreshTransferJobs
       } yield {
-        migrationId shouldBe migration.id
-        outcome shouldBe Outcome.Success
+        transferJob.migrationId shouldBe migration.id
+        transferJob.outcome.value shouldBe Outcome.Success
       }
     }
 
@@ -614,6 +659,8 @@ class WorkspaceMigrationActorSpec
   it should "update the state of jobs in order of last updated" in
     runMigrationTest {
       val storageTransferService = new MockStorageTransferService {
+        // want to return no operations to make sure that the job does not complete and is
+        // updated continually
         override def listTransferOperations(jobName: JobName, project: GoogleProject): IO[Seq[Operation]] =
           IO.pure(Seq(Operation.newBuilder.build))
       }
@@ -630,8 +677,8 @@ class WorkspaceMigrationActorSpec
               getAttempt(spec.testData.workspace.workspaceIdAsUUID)
           }
 
-          _ <- startBucketTransferJob(migration1.id, GcsBucketName("foo"), GcsBucketName("bar"))
-          _ <- startBucketTransferJob(migration2.id, GcsBucketName("foo"), GcsBucketName("bar"))
+          _ <- startBucketTransferJob(migration1, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
+          _ <- startBucketTransferJob(migration2, spec.testData.workspace, GcsBucketName("foo"), GcsBucketName("bar"))
 
           getTransferJobs = inTransaction { _ =>
             storageTransferJobs
@@ -662,6 +709,19 @@ class WorkspaceMigrationActorSpec
     }
 
 
+  def storageTransferJobForTesting = new PpwStorageTransferJob(
+    id = -1,
+    jobName = null,
+    migrationId = -1,
+    created = null,
+    updated = null,
+    destBucket = null,
+    originBucket = null,
+    finished = null,
+    outcome = null
+  )
+
+
   "updateMigrationTransferJobStatus" should "update WORKSPACE_BUCKET_TRANSFERRED on job success" in
     runMigrationTest {
       for {
@@ -670,7 +730,14 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        _ <- updateMigrationTransferJobStatus(before.id, Success)
+        _ <- updateMigrationTransferJobStatus(
+          storageTransferJobForTesting.copy(
+            migrationId = before.id,
+            destBucket = GcsBucketName("tmp-bucket-name"),
+            originBucket = GcsBucketName("workspace-bucket"),
+            outcome = Success.some
+          )
+        )
 
         after <- inTransactionT { _ =>
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
@@ -695,7 +762,14 @@ class WorkspaceMigrationActorSpec
             getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        _ <- updateMigrationTransferJobStatus(before.id, Success)
+        _ <- updateMigrationTransferJobStatus(
+          storageTransferJobForTesting.copy(
+            migrationId = before.id,
+            originBucket = GcsBucketName("workspace-bucket"),
+            destBucket = GcsBucketName("tmp-bucket-name"),
+            outcome = Success.some
+          )
+        )
 
         after <- inTransactionT { _ =>
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
@@ -716,7 +790,9 @@ class WorkspaceMigrationActorSpec
         }
 
         failure = Failure("oh noes :(")
-        _ <- updateMigrationTransferJobStatus(before.id, failure)
+        _ <- updateMigrationTransferJobStatus(
+          storageTransferJobForTesting.copy(migrationId = before.id, outcome = failure.some)
+        )
 
         after <- inTransactionT { _ =>
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)

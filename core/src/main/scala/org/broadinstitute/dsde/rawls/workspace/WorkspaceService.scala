@@ -168,77 +168,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   private val UserCommentMaxLength: Int = 1000
 
 
-
-  def withNewMcWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
-  //  traceDBIOWithParent("requireCreateWorkspaceAccess", parentSpan)(span => requireCreateWorkspaceAccess(workspaceRequest, dataAccess, span) {
-    // TODO unhardcode
-    val azureTenantId = "0cb7a640-45a2-4ed6-be9f-63519f86e04b"
-    val azureSubscriptionId = "3efc5bdf-be0e-44e7-b1d7-c08931e3c16c"
-    val azureResourceGroupId = "mrg-terra-workspace-20220106140404"
-    val cloudContextJobControlId = UUID.randomUUID
-      traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all= false, List.empty[AttributeName])))) flatMap {
-        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
-        case None => {
-          val workspaceId = UUID.randomUUID
-          for {
-            _ <- DBIO.from(
-              Future(println(s"CREATING WORKSPACE IN WSM ${workspaceId}"))
-            )
-            _ <- DBIO.from(
-              Future(workspaceManagerDAO.createWorkspace(workspaceId, userInfo.accessToken))
-            )
-            _ <- DBIO.from(
-              Future(println(s"CREATING WORKSPACE CLOUD CONTEXT job control ID = ${cloudContextJobControlId.toString}"))
-            )
-            _<- DBIO.from(
-              Future(workspaceManagerDAO.createWorkspaceCloudContext(workspaceId, cloudContextJobControlId.toString, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
-            )
-            _ <- DBIO.from(
-              Future(println("POLLING FOR WORKSPACE CLOUD CONTEXT"))
-            )
-            _ <-  DBIO.from(retryUntilSuccessOrTimeout(failureLogMessage = s"Cloud context creation was not successful")(
-               FiniteDuration(Duration("2 seconds").toMinutes, MINUTES),
-               FiniteDuration(Duration("2 minutes").toMinutes, MINUTES)) { () =>
-              workspaceManagerDAO.getWorkspaceCreateCloudContextResult(workspaceId, cloudContextJobControlId.toString, userInfo.accessToken).getJobReport.getStatus match {
-                case StatusEnum.FAILED => Future.failed(new RawlsException("Cloud context creation failed"))
-                case StatusEnum.RUNNING => {
-                  println("STILL POLLING")
-                  Future.failed(new RawlsException("Cloud context creation still in progress"))
-                }
-                case StatusEnum.SUCCEEDED => {
-                  println("CLOUD CONTEXT CREATED")
-                  Future.successful()
-                }
-              }
-             }
-            )
-            _ <- DBIO.from(
-              Future(println("SAVING WORKSPACE IN DB"))
-            )
-            savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(_ =>
-              createWorkspaceInDatabase(workspaceId.toString, workspaceRequest, "", WorkbenchEmail("fake@fake.com"), GoogleProjectId("fake"), None, None, dataAccess, parentSpan, "mc"))
-            response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
-          } yield {
-            response
-          }
-        }
-      }
-   // }
-
-  }
-
-  def createMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
-    for {
-      workspace <- traceWithParent("withNewMcWorkspaceContext", parentSpan) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
-        withNewMcWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
-          DBIO.successful(workspaceContext)
-        }
-      }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
-    } yield workspace
-  }
-
-
-  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
+  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
     traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
         traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
@@ -252,6 +182,67 @@ class WorkspaceService(protected val userInfo: UserInfo,
         })
       })
     })
+  }
+
+
+  def withNewMcWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    val cloudPlatform = workspaceRequest.cloudPlatform match {
+      case Some(WorkspaceCloudPlatform.Azure) => WorkspaceCloudPlatform.Azure
+      case Some(other) => throw new RawlsException(s"Cloud platform ${other} not supported for MC workspaces")
+      case _ => throw new RawlsException("Cloud platform required for MC workspaces")
+    }
+
+    val azureTenantId =  config.spendProfileConfig.tenantId
+    val azureSubscriptionId = config.spendProfileConfig.subscriptionId
+    val azureResourceGroupId = config.spendProfileConfig.resourceGroupId
+
+    traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
+      case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
+      case None => {
+        val workspaceId = UUID.randomUUID
+        for {
+          _ <- traceDBIOWithParent("createWorkspaceInWSM", parentSpan)(_ => DBIO.from(
+            Future(workspaceManagerDAO.createWorkspace(workspaceId, userInfo.accessToken)))
+          )
+          cloudContextCreateResult <- traceDBIOWithParent("createCloudContext", parentSpan)( _ => DBIO.from(
+            Future(workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
+          ))
+          savedWorkspace <- traceDBIOWithParent("saveNewWorkspaceToRwalsDB", parentSpan)(_ =>
+            createWorkspaceInDatabase(
+              workspaceId.toString,
+              workspaceRequest, "",
+              WorkbenchEmail(userInfo.userEmail.value),
+              GoogleProjectId(""),
+              None,
+              None,
+              dataAccess,
+              parentSpan,
+              "mc"))
+          response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
+        } yield {
+          response
+        }
+      }
+    }
+  }
+
+  def createMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+    for {
+      workspace <- traceWithParent("withNewMcWorkspaceContext", parentSpan) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
+        withNewMcWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
+          DBIO.successful(workspaceContext)
+        }
+      }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
+    } yield workspace
+  }
+
+
+  def createRawlsOrMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+    workspaceRequest.cloudPlatform match {
+      case Some(platform) => createMcWorkspace(workspaceRequest, parentSpan)
+      case _ => createWorkspace(workspaceRequest, parentSpan)
+    }
+  }
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
@@ -2062,7 +2053,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { _ =>
         // Since we don't necessarily know what the RBS Billing Account is, we need to bypass the "oldBillingAccount"
         // check when updating the Billing Account on the project
-        gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount), None, force = true)
+        gcsDAO.setBillingAccountName(googleProjectId, billingAccount)
       }
 
       _ = logger.info(s"Creating labels for ${googleProjectId}.")

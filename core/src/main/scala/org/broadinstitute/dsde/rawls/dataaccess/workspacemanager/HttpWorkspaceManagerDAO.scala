@@ -41,12 +41,12 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).displayName("arh-testing").description("arh-testing").spendProfile("wm-default-spend-profile").stage(WorkspaceStageModel.MC_WORKSPACE))
   }
 
-  override def createWorkspaceCloudContext(workspaceId: UUID,
-                                           jobControlId: String,
+  override def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                            azureTenantId: String,
                                            azureResourceGroupId: String,
                                            azureSubscriptionId: String,
                                            accessToken: OAuth2BearerToken): CreateCloudContextResult = {
+    val jobControlId = UUID.randomUUID().toString
     val azureContext = new AzureContext().tenantId(azureTenantId).subscriptionId(azureSubscriptionId).resourceGroupId(azureResourceGroupId)
     getWorkspaceApi(accessToken).createCloudContext(
       new CreateCloudContextRequest()

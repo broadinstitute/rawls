@@ -8,7 +8,8 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
-import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.WorkspaceShardState
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
+import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.{Sharded, Unsharded, WorkspaceShardState}
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
@@ -146,7 +147,7 @@ case class WorkspaceRequest(namespace: String,
                             copyFilesWithPrefix: Option[String] = None,
                             noWorkspaceOwner: Option[Boolean] = None,
                             bucketLocation: Option[String] = None,
-                            isMcWorkspace: Option[Boolean] = None
+                            cloudPlatform: Option[WorkspaceCloudPlatform] = None
                            ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -330,6 +331,22 @@ object WorkspaceShardStates {
   case object Unsharded extends WorkspaceShardState
   case object Sharded extends WorkspaceShardState
   case object Unknown extends WorkspaceShardState
+}
+
+object WorkspaceCloudPlatform {
+  sealed trait WorkspaceCloudPlatform extends RawlsEnumeration[WorkspaceCloudPlatform] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): WorkspaceCloudPlatform = WorkspaceCloudPlatform.withName(name)
+  }
+
+  def withName(name: String): WorkspaceCloudPlatform = name.toLowerCase match {
+    case "azure" => Azure
+    case "gcp" => Gcp
+    case _ => throw new RawlsException(s"invalid cloud platform [${name}]")
+  }
+
+  case object Azure extends WorkspaceCloudPlatform
+  case object Gcp extends WorkspaceCloudPlatform
 }
 
 sealed trait MethodRepoMethod {
@@ -849,6 +866,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
+  implicit val workspaceCloudPlatformFormat = rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
 
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
 
@@ -889,6 +907,7 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
 
   implicit val DockstoreToolsMethodFormat = jsonFormat2(DockstoreToolsMethod.apply)
+
 
   implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
 
@@ -964,6 +983,7 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodInputsOutputsFormat = jsonFormat2(MethodInputsOutputs)
 
   implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
+
 
   implicit object StatusCodeFormat extends JsonFormat[StatusCode] {
     override def write(code: StatusCode): JsValue = JsNumber(code.intValue)

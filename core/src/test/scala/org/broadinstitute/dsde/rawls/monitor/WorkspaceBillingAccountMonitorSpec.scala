@@ -18,6 +18,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.scalatestplus.mockito.MockitoSugar
+import org.scalatest.OptionValues._
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -47,11 +48,12 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
     system.actorOf(WorkspaceBillingAccountMonitor.props(dataSource, mockGcsDAO, 1 second, 1 second))
   }
 
-  "WorkspaceBillingAccountMonitor" should "update the billing account on all workspaces in a billing project" in {
+  "WorkspaceBillingAccountMonitor" should "update the billing account on all v1 and v2 workspaces in a billing project" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, Option(defaultBillingAccountName), None, googleProjectNumber = Option(defaultGoogleProjectNumber))
-      val v1Workspace = Workspace(billingProject.projectName.value, "v1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, GoogleProjectId(billingProject.projectName.value), billingProject.googleProjectNumber, billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, "rawls")
-      val v2Workspace = Workspace(billingProject.projectName.value, "v2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("differentId"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, "rawls")
+      val billingAccountName = defaultBillingAccountName
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, Option(billingAccountName), None, googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val v1Workspace = Workspace(billingProject.projectName.value, "v1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, GoogleProjectId(billingProject.projectName.value), billingProject.googleProjectNumber, billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded)
+      val v2Workspace = Workspace(billingProject.projectName.value, "v2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("differentId"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded)
       val workspaceWithoutBillingAccount = v2Workspace.copy(
         name = UUID.randomUUID().toString,
         currentBillingAccountOnGoogleProject = None
@@ -65,7 +67,8 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(workspaceQuery.createOrUpdate(workspaceWithoutBillingAccount))
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
 
-      val actor = createWorkspaceBillingAccountMonitor(dataSource)
+      val mockGcsDao = new MockGoogleServicesDAO("test")
+      val actor = createWorkspaceBillingAccountMonitor(dataSource, mockGcsDao)
 
       eventually (timeout = timeout(Span(10, Seconds))) {
         runAndWait(workspaceQuery.listWithBillingProject(billingProject.projectName)).map(_.currentBillingAccountOnGoogleProject).toSet shouldBe Set(Option(newBillingAccount))
@@ -74,42 +77,91 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
     }
   }
 
-  it should "not endlessly retry when it fails to update a billing account" in {
+  it should "not endlessly retry when it fails to get billing info for the google project" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val originalBillingAccount = Option(defaultBillingAccountName)
       val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, originalBillingAccount, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
-      val badWorkspaceGoogleProjectId = GoogleProjectId("very bad")
-      val badWorkspace = Workspace(billingProject.projectName.value, "bad", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, badWorkspaceGoogleProjectId, Option(GoogleProjectNumber("44")), originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, "rawls")
-
-      val newBillingAccount = RawlsBillingAccountName("new-ba")
-
-      val failingGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      val failureMessage = "because I feel like it"
-      val exception = new RawlsException(failureMessage)
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
-        ArgumentMatchers.eq(badWorkspace.googleProjectId),
-        ArgumentMatchers.eq(Option(newBillingAccount)),
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]))
-        .thenReturn(Future.failed(exception))
+      val workspace = Workspace(billingProject.projectName.value, "whatever", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("any old project"), Option(GoogleProjectNumber("44")), originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
-      runAndWait(workspaceQuery.createOrUpdate(badWorkspace))
-      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
+      runAndWait(workspaceQuery.createOrUpdate(workspace))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(RawlsBillingAccountName("new-ba"))))
 
+      val exceptionMessage = "oh what a shame!  It went kerplooey!"
+      val failingGcsDAO = spy(new MockGoogleServicesDAO("") {
+        override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] =
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(exceptionMessage)))
+      })
       val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDAO)
 
       eventually (timeout = timeout(Span(10, Seconds))) {
-        runAndWait(workspaceQuery.findByName(badWorkspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
-          .billingAccountErrorMessage shouldBe Option(failureMessage)
+        runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
+          .billingAccountErrorMessage.value should include(exceptionMessage)
       }
-      verify(failingGcsDAO, times(1)).updateGoogleProjectBillingAccount(badWorkspace.googleProjectId, Option(newBillingAccount), originalBillingAccount)
+      verify(failingGcsDAO, times(1)).getBillingInfoForGoogleProject(workspace.googleProjectId)
 
       system.stop(actor)
     }
   }
 
-  it should "continue even if one workspace google project fails to update" in {
+  it should "not endlessly retry when it fails to set billing info for the google project" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val originalBillingAccount = Option(defaultBillingAccountName)
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, originalBillingAccount, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val workspace = Workspace(billingProject.projectName.value, "whatever", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("any old project"), Option(GoogleProjectNumber("44")), originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded)
+
+      runAndWait(rawlsBillingProjectQuery.create(billingProject))
+      runAndWait(workspaceQuery.createOrUpdate(workspace))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(RawlsBillingAccountName("new-ba"))))
+
+      val exceptionMessage = "oh what a shame!  It went kerplooey!"
+      val failingGcsDAO = spy(new MockGoogleServicesDAO("") {
+        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] =
+          Future.failed(new RawlsException(exceptionMessage))
+      })
+      val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDAO)
+
+      eventually (timeout = timeout(Span(10, Seconds))) {
+        runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
+          .billingAccountErrorMessage.value should include(exceptionMessage)
+      }
+      verify(failingGcsDAO, times(1)).getBillingInfoForGoogleProject(workspace.googleProjectId)
+
+      system.stop(actor)
+    }
+  }
+
+  it should "not try to update the billing account if the new value is the same as the old value" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val originalBillingAccountName = defaultBillingAccountName
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, Option(originalBillingAccountName), None, googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val workspace = Workspace(billingProject.projectName.value, "whatever", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("any old project"), Option(GoogleProjectNumber("44")), Option(originalBillingAccountName), None, Option(DateTime.now), WorkspaceShardStates.Sharded)
+
+      runAndWait(rawlsBillingProjectQuery.create(billingProject))
+      runAndWait(workspaceQuery.createOrUpdate(workspace))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(originalBillingAccountName)))
+
+      val mockGcsDAO = spy(new MockGoogleServicesDAO("") {
+        override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] =
+          Future.successful(new ProjectBillingInfo().setBillingAccountName(originalBillingAccountName.value).setBillingEnabled(true))
+      })
+
+      val actor = createWorkspaceBillingAccountMonitor(dataSource, mockGcsDAO)
+
+      // need to give the actor some time to run
+      val afterStaleMillis = 3000
+      Thread.sleep(afterStaleMillis)
+
+      runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
+          .currentBillingAccountOnGoogleProject.value shouldBe originalBillingAccountName
+
+      verify(mockGcsDAO, times(0)).setBillingAccountName(workspace.googleProjectId, originalBillingAccountName)
+
+      system.stop(actor)
+    }
+  }
+
+  it should "continue to update other workspace google projects even if one fails to update" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val originalBillingAccount = Option(defaultBillingAccountName)
       val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, originalBillingAccount, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
@@ -120,29 +172,16 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
 
-
-      // Going to set up some mocking.  In this case, we need to make sure that there is a mock that will catch each of
-      // the different param combinations we might pass to it.  Per Mockito docs, the last last match is the one that
-      // will be used which is why we have the "generic" case first.
-      val failingGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-
-      // "generic" matcher will catch all calls to this method that don't match the "exception" case below
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
-        any[GoogleProjectId],
-        any[Option[RawlsBillingAccountName]],
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]
-      )).thenReturn(Future.successful(new ProjectBillingInfo()))
-
-      val failureMessage = "because I feel like it"
-      val exception = new RawlsException(failureMessage)
-      // the "exception" case.  When method is called with these specific params, we want to Fail the Future.
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
-        ArgumentMatchers.eq(badWorkspace.googleProjectId),
-        ArgumentMatchers.eq(Option(newBillingAccount)),
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]))
-        .thenReturn(Future.failed(exception))
+      val exceptionMessage = "oh what a shame!  It went kerplooey!"
+      val failingGcsDao = new MockGoogleServicesDAO("") {
+        override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] = {
+          if (googleProjectId == badWorkspaceGoogleProjectId) {
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, exceptionMessage)))
+          } else {
+            super.getBillingInfoForGoogleProject(googleProjectId)
+          }
+        }
+      }
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(workspace1))
@@ -150,7 +189,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(workspaceQuery.createOrUpdate(badWorkspace))
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
 
-      val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDAO)
+      val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDao)
 
       eventually (timeout = timeout(Span(10, Seconds))) {
         runAndWait(workspaceQuery.findByName(workspace1.toWorkspaceName)).getOrElse(fail("workspace not found"))
@@ -158,7 +197,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
         runAndWait(workspaceQuery.findByName(workspace2.toWorkspaceName)).getOrElse(fail("workspace not found"))
           .currentBillingAccountOnGoogleProject shouldBe Option(newBillingAccount)
         runAndWait(workspaceQuery.findByName(badWorkspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
-          .billingAccountErrorMessage shouldBe Option(failureMessage)
+          .billingAccountErrorMessage.value should include(exceptionMessage)
       }
 
       system.stop(actor)
@@ -168,34 +207,25 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
   // TODO: CA-1235 Remove during cleanup once all workspaces have their own Google project
   it should "propagate error messages to all workspaces in a Google project" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val originalBillingAccount = Option(defaultBillingAccountName)
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, originalBillingAccount, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
-      val firstV1Workspace  = Workspace(billingProject.projectName.value, "first-v1-workspace",  UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, GoogleProjectId(billingProject.projectName.value), billingProject.googleProjectNumber, originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, "rawls")
-      val secondV1Workspace = Workspace(billingProject.projectName.value, "second-v1-workspace", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, GoogleProjectId(billingProject.projectName.value), billingProject.googleProjectNumber, originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, "rawls")
-      val v2Workspace = Workspace(billingProject.projectName.value, "v2 workspace", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("differentId"), Option(GoogleProjectNumber("43")), originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, "rawls")
+      val originalBillingAccount = Option(RawlsBillingAccountName("original-ba"))
+      val billingProject = RawlsBillingProject(RawlsBillingProjectName("v1-Billing-Project"), CreationStatuses.Ready, originalBillingAccount, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val v1GoogleProjectId = GoogleProjectId(billingProject.projectName.value)
+      val firstV1Workspace  = Workspace(billingProject.projectName.value, "first-v1-workspace",  UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, v1GoogleProjectId, billingProject.googleProjectNumber, originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded)
+      val secondV1Workspace = Workspace(billingProject.projectName.value, "second-v1-workspace", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, v1GoogleProjectId, billingProject.googleProjectNumber, originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded)
+      val v2Workspace = Workspace(billingProject.projectName.value, "v2 workspace", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("v2WorkspaceGoogleProject"), Option(GoogleProjectNumber("43")), originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded)
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
 
-      val failingGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-
-      // We are going to mock this method that will get called multiple times with different params.  Need to implement
-      // a "catch-all" mock first before implementing a specific param matcher that will change the behavior.  Last
-      // matching param list wins per Mockito docs
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
-        any[GoogleProjectId],
-        any[Option[RawlsBillingAccountName]],
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]
-      )).thenReturn(Future.successful(new ProjectBillingInfo()))
-
-      val failureMessage = "because I feel like it"
-      val exception = new RawlsException(failureMessage)
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
-        secondV1Workspace.googleProjectId,
-        Option(newBillingAccount),
-        originalBillingAccount,
-        false))
-        .thenReturn(Future.failed(exception))
+      val exceptionMessage = "oh what a shame!  It went kerplooey!"
+      val failingGcsDao = spy(new MockGoogleServicesDAO("") {
+        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] = {
+          if (googleProjectId == v1GoogleProjectId) {
+            Future.failed(new RawlsException(exceptionMessage))
+          } else {
+            super.getBillingInfoForGoogleProject(googleProjectId)
+          }
+        }
+      })
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(firstV1Workspace))
@@ -203,21 +233,18 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(workspaceQuery.createOrUpdate(secondV1Workspace))
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
 
-      val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDAO)
+      val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDao)
 
       eventually (timeout = timeout(Span(10, Seconds))) {
         runAndWait(workspaceQuery.findByName(secondV1Workspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
-          .billingAccountErrorMessage shouldBe Option(failureMessage)
+          .billingAccountErrorMessage.value should include(exceptionMessage)
         runAndWait(workspaceQuery.findByName(firstV1Workspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
-          .billingAccountErrorMessage shouldBe Option(failureMessage)
+          .billingAccountErrorMessage.value should include(exceptionMessage)
         runAndWait(workspaceQuery.findByName(v2Workspace.toWorkspaceName)).getOrElse(fail("workspace not found"))
           .billingAccountErrorMessage shouldBe None
       }
-      // Note the final boolean on this "verify".  That is important because during initial workspace creation, the
-      // "force" boolean will be true and we do not want to count those calls during this assertion.  We only want to
-      // count the number of times this was called from the WorkspaceBillingAccountMonitor spec, and in that case, the
-      // "force" boolean will be false.
-      verify(failingGcsDAO, times(1)).updateGoogleProjectBillingAccount(secondV1Workspace.googleProjectId, Option(newBillingAccount), originalBillingAccount, false)
+
+      verify(failingGcsDao, times(1)).setBillingAccountName(v1GoogleProjectId, newBillingAccount)
 
       system.stop(actor)
     }
@@ -231,26 +258,13 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       val v2Workspace = Workspace(billingProject.projectName.value, "v2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("differentId"), Option(GoogleProjectNumber("43")), originalBillingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, "rawls")
       val newBillingAccount = RawlsBillingAccountName("new-ba")
 
-      val failingGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
 
-      // We are going to mock this method that will get called multiple times with different params.  Need to implement
-      // a "catch-all" mock first before implementing a specific param matcher that will change the behavior.  Last
-      // matching param list wins per Mockito docs
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
-        any[GoogleProjectId],
-        any[Option[RawlsBillingAccountName]],
-        any[Option[RawlsBillingAccountName]],
-        any[Boolean]
-      )).thenReturn(Future.successful(new ProjectBillingInfo()))
-
-      val failureMessage = "because I feel like it"
-      val exception = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, failureMessage))
-      when(failingGcsDAO.updateGoogleProjectBillingAccount(
-        any[GoogleProjectId],
-        ArgumentMatchers.eq(Option(newBillingAccount)),
-        ArgumentMatchers.eq(originalBillingAccount),
-        ArgumentMatchers.eq(false)))
-        .thenReturn(Future.failed(exception))
+      val exceptionMessage = "Naughty naughty!  You ain't got no permissions!"
+      val failingGcsDao = new MockGoogleServicesDAO("") {
+        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] = {
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, exceptionMessage)))
+        }
+      }
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName)).getOrElse(fail("project not found"))
@@ -260,13 +274,13 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(workspaceQuery.createOrUpdate(v2Workspace))
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
 
-      val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDAO)
+      val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDao)
 
       eventually (timeout = timeout(Span(10, Seconds))) {
         runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName)).getOrElse(fail("project not found"))
           .invalidBillingAccount shouldBe true
         runAndWait(workspaceQuery.listWithBillingProject(billingProject.projectName))
-          .map(_.billingAccountErrorMessage shouldBe None)
+          .map(_.billingAccountErrorMessage.value should include(exceptionMessage))
       }
 
       system.stop(actor)
