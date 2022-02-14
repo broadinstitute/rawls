@@ -141,6 +141,18 @@ object WorkspaceVersions {
   }
 }
 
+
+case class MultiCloudWorkspaceRequest(namespace: String,
+                                      name: String,
+                                      attributes: AttributeMap,
+                                      authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
+                                      cloudPlatform: Option[WorkspaceCloudPlatform] = None
+                                     ) extends Attributable {
+  def toWorkspaceName = WorkspaceName(namespace,name)
+  def briefName: String = toWorkspaceName.toString
+  def path: String = toWorkspaceName.path
+}
+
 case class WorkspaceRequest(namespace: String,
                             name: String,
                             attributes: AttributeMap,
@@ -148,7 +160,6 @@ case class WorkspaceRequest(namespace: String,
                             copyFilesWithPrefix: Option[String] = None,
                             noWorkspaceOwner: Option[Boolean] = None,
                             bucketLocation: Option[String] = None,
-                            cloudPlatform: Option[WorkspaceCloudPlatform] = None
                            ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -903,7 +914,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val workspaceCloudPlatformFormat = rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
 
-  implicit val WorkspaceRequestFormat = jsonFormat8(WorkspaceRequest)
+  implicit val MultiCloudWorkspaceRequestFormat = jsonFormat5(MultiCloudWorkspaceRequest)
+
+  implicit val WorkspaceRequestFormat = jsonFormat7(WorkspaceRequest)
 
   implicit val workspaceFieldSpecsFormat = jsonFormat1(WorkspaceFieldSpecs.apply)
 

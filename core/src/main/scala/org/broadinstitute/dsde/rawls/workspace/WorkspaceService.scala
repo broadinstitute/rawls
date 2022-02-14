@@ -179,7 +179,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       })
     })
 
-  def withNewMultiCloudWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def withNewMultiCloudWorkspaceContext[T](workspaceRequest: MultiCloudWorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
     val cloudPlatform = workspaceRequest.cloudPlatform match {
       case Some(WorkspaceCloudPlatform.Azure) => WorkspaceCloudPlatform.Azure
       case Some(other) => throw new RawlsException(s"Cloud platform ${other} not supported for MC workspaces")
@@ -204,16 +204,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
             Future(workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
           ))
           savedWorkspace <- traceDBIOWithParent("saveNewWorkspaceToRawlsDB", parentSpan)(_ =>
-            createWorkspaceInDatabase(
+            createMultiCloudWorkspaceInDatabase(
               workspaceId.toString,
-              workspaceRequest, "",
+              workspaceRequest,
               WorkbenchEmail(userInfo.userEmail.value),
-              GoogleProjectId(""),
-              None,
               None,
               dataAccess,
-              parentSpan,
-              WorkspaceType.McWorkspace))
+              parentSpan))
           response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
         } yield {
           response
@@ -222,7 +219,11 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def createMultiCloudWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+  def createMultiCloudWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+    if (!config.multiCloudWorkspacesEnabled) {
+      throw new RawlsException("MC workspaces are not enabled")
+    }
+
     for {
       workspace <- traceWithParent("withNewMcWorkspaceContext", parentSpan) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
         withNewMultiCloudWorkspaceContext(workspaceRequest, dataAccess, s3) { workspaceContext =>
@@ -232,17 +233,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield workspace
   }
 
-
-  def createRawlsOrMcWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
-    if (!config.multiCloudWorkspacesEnabled) {
-      createWorkspace(workspaceRequest, parentSpan)
-    } else {
-      workspaceRequest.cloudPlatform match {
-        case Some(platform) => createMultiCloudWorkspace(workspaceRequest, parentSpan)
-        case _ => createWorkspace(workspaceRequest, parentSpan)
-      }
-    }
-  }
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
@@ -2298,8 +2288,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                          googleProjectNumber: Option[GoogleProjectNumber],
                                          currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
                                          dataAccess: DataAccess,
-                                         parentSpan: Span = null,
-                                         workspaceType: WorkspaceType = WorkspaceType.RawlsWorkspace
+                                         parentSpan: Span = null
                                        ): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
     val completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix match {
@@ -2325,7 +2314,40 @@ class WorkspaceService(protected val userInfo: UserInfo,
       billingAccountErrorMessage = None,
       completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
       shardState = WorkspaceShardStates.Sharded,
-      workspaceType
+      workspaceType = WorkspaceType.RawlsWorkspace
+    )
+    traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
+      .map(_ => workspace)
+  }
+
+  private def createMultiCloudWorkspaceInDatabase(
+                                         workspaceId: String,
+                                         workspaceRequest: MultiCloudWorkspaceRequest,
+                                         billingProjectOwnerPolicyEmail: WorkbenchEmail,
+                                         currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
+                                         dataAccess: DataAccess,
+                                         parentSpan: Span = null
+                                       ): ReadWriteAction[Workspace] = {
+    val currentDate = DateTime.now
+    val workspace = Workspace(
+      namespace = workspaceRequest.namespace,
+      name = workspaceRequest.name,
+      workspaceId = workspaceId,
+      bucketName = "",
+      workflowCollectionName = Some(workspaceId),
+      createdDate = currentDate,
+      lastModified = currentDate,
+      createdBy = userInfo.userEmail.value,
+      attributes = workspaceRequest.attributes,
+      isLocked = false,
+      workspaceVersion = WorkspaceVersions.V2,
+      googleProjectId = GoogleProjectId(""),
+      googleProjectNumber = None,
+      currentBillingAccountOnWorkspace,
+      billingAccountErrorMessage = None,
+      completedCloneWorkspaceFileTransfer = None,
+      shardState = WorkspaceShardStates.Sharded,
+      workspaceType = WorkspaceType.RawlsWorkspace
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)

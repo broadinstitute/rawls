@@ -32,7 +32,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           addLocationHeader(workspace.path) {
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).createRawlsOrMcWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                workspaceServiceConstructor(userInfo).createWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
               }
             }
           }
@@ -43,6 +43,19 @@ trait WorkspaceApiService extends UserInfoDirectives {
             traceRequest { span =>
               complete {
                 workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+              }
+            }
+          }
+        }
+    } ~
+      path("workspaces" / "mc" ) {
+        post {
+          entity(as[MultiCloudWorkspaceRequest]) { workspace =>
+            addLocationHeader(workspace.path) {
+              traceRequest { span =>
+                complete {
+                  workspaceServiceConstructor(userInfo).createMultiCloudWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                }
               }
             }
           }
