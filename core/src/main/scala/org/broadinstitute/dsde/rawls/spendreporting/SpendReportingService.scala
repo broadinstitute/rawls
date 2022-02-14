@@ -19,17 +19,18 @@ import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 
 object SpendReportingService {
-  def constructor(dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO)
+  def constructor(dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, defaultTableName: String)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): SpendReportingService = {
-    new SpendReportingService(userInfo, dataSource, bigQueryDAO, samDAO)
+    new SpendReportingService(userInfo, dataSource, bigQueryDAO, samDAO, defaultTableName)
   }
 }
 
 
-class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO)
+class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, defaultTableName: String)
                            (implicit val executionContext: ExecutionContext) extends LazyLogging {
 
+  // todo: extract this out of userservice so we don't have to duplicate it?
   def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(op: => Future[T]): Future[T] = {
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, userInfo).flatMap {
       case true => op
@@ -71,19 +72,19 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     SpendReportingResults(Seq(dailySpendAggregation), spendSummary)
   }
 
-  def dateTimeToISODateString(dt: DateTime) =
-    dt.toString(ISODateTimeFormat.date())
+  case class BillingProjectSpendExport(billingProjectName: RawlsBillingProjectName, billingAccountId: RawlsBillingAccountName, spendExportTable: Option[String])
 
-  case class BillingProjectSpendExport(billingProjectName: RawlsBillingProjectName, billingAccountId: RawlsBillingAccountName, spendExportGoogleProject: GoogleProject, spendExportDatasetName: BigQueryDatasetName, spendExportTableName: BigQueryTableName)
+  private def dateTimeToISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
 
   private def getSpendExportConfiguration(billingProjectName: RawlsBillingProjectName): Future[BillingProjectSpendExport] = {
     dataSource.inTransaction { dataAccess =>
        dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
     }.map {
       case Some(RawlsBillingProject(_, _, Some(billingAccount), _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject))) =>
-        BillingProjectSpendExport(billingProjectName, billingAccount, spendReportDatasetGoogleProject, spendReportDataset, spendReportTable)
+        BillingProjectSpendExport(billingProjectName, billingAccount, Option(s"${spendReportDatasetGoogleProject.value}.${spendReportDataset.value}.${spendReportTable.value}"))
+      case Some(RawlsBillingProject(_, _, Some(billingAccount), _, _, _, _, _, _, _, _)) => BillingProjectSpendExport(billingProjectName, billingAccount, None)
       case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"project ${billingProjectName.value} not found"))
-      case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"spend report configuration not set on billing project ${billingProjectName.value}"))
+      case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"billing account not found on billing project ${billingProjectName.value}"))
     }
   }
 
@@ -115,7 +116,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
            |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
            |  currency,
            |  DATE(_PARTITIONTIME) as date
-           | FROM `${spendExportConf.spendExportGoogleProject}.${spendExportConf.spendExportDatasetName}.${spendExportConf.spendExportTableName}`
+           | FROM `${spendExportConf.spendExportTable.getOrElse(defaultTableName)}`
            | WHERE billing_account_id = @billingAccountId
            | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
            | AND project.id in UNNEST(@projects)
@@ -128,8 +129,8 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
           new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("endDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(endDate))),
           new QueryParameter().setParameterType(new QueryParameterType().setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))
         )
-
-        jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(spendExportConf.spendExportGoogleProject.value), query, queryParams, "NAMED")
+// spendExportConf.spendExportTable.getOrElse(defaultTableName).split('.').headOption.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "invalid table format")))
+        jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject("terra-dev-68e684fe"), query, queryParams, "NAMED")
         jobStatus <- bigQueryDAO.getQueryStatus(jobRef)
         result: GetQueryResultsResponse <- bigQueryDAO.getQueryResult(jobStatus)
       } yield {

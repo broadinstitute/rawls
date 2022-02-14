@@ -474,7 +474,64 @@ paths:
     get:
       tags:
         - billing_v2
+      summary: get spend report for the billing project
+      description: get spend report for the billing project
       operationId: getSpendReport
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: start date of report
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: end date of report
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        200:
+          description: Success
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RawlsBillingProjectMember'
+        400:
+          description: spend report configuration not set or invalid parameters
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be a project owner to view the spend report of a project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: The specified billing project could not be found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
 
   /api/billing/v2/{projectId}/spendReportConfiguration:
     get:
