@@ -538,4 +538,19 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       Attributable.safePrint(attributeReferenceListMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> List(AttributeEntityReference(type,name1), AttributeEntityReference(type,name2)))"
     }
   }
+
+  "Workspace Type" - {
+    "should parse workspace type properly" in {
+      WorkspaceType.withName("rawls") shouldBe WorkspaceType.RawlsWorkspace
+      WorkspaceType.withName("mc") shouldBe WorkspaceType.McWorkspace
+    }
+
+    "should fail with invalid workspace type" in {
+      val thrown = intercept[RawlsException] {
+        WorkspaceType.withName("incorrect")
+      }
+
+      thrown.getMessage.contains("Invalid WorkspaceType")
+    }
+  }
 }
