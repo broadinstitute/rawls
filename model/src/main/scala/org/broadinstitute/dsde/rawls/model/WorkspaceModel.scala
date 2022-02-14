@@ -338,13 +338,22 @@ object WorkspaceType {
     * mc workspaces are owned and managed by workspace manager
     */
   sealed trait WorkspaceType extends RawlsEnumeration[WorkspaceType] {
-    override def toString: String = getClass.getSimpleName.stripSuffix("$")
+    override def toString: String = WorkspaceType.toString(this)
     override def withName(name: String): WorkspaceType = WorkspaceType.withName(name)
   }
 
   def withName(name: String): WorkspaceType = name.toLowerCase match {
     case "rawls" => RawlsWorkspace
     case "mc" => McWorkspace
+    case _ => throw new RawlsException(s"Invalid WorkspaceType [${name}]")
+  }
+
+  def toString(wt: WorkspaceType): String = {
+    wt match {
+      case RawlsWorkspace => "rawls"
+      case McWorkspace => "mc"
+      case _ => throw new RawlsException(s"Invalid WorkspaceType [${wt}]")
+    }
   }
 
   case object RawlsWorkspace extends WorkspaceType
