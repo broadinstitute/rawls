@@ -973,7 +973,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceShardStateFormat = rawlsEnumerationFormat(WorkspaceShardStates.withName)
 
-  implicit val WorkspaceStageFormat = rawlsEnumerationFormat(WorkspaceType.withName)
+  implicit val WorkspaceTypeFormat = rawlsEnumerationFormat(WorkspaceType.withName)
 
   implicit val WorkspaceDetailsFormat = jsonFormat19(WorkspaceDetails.applyOmitShardState)
 

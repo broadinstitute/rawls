@@ -2232,7 +2232,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                          googleProjectNumber: Option[GoogleProjectNumber],
                                          currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
                                          dataAccess: DataAccess,
-                                         parentSpan: Span = null, workspaceType: WorkspaceType = WorkspaceType.RawlsWorkspace): ReadWriteAction[Workspace] = {
+                                         parentSpan: Span = null,
+                                         workspaceType: WorkspaceType = WorkspaceType.RawlsWorkspace): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
     val completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix match {
       case Some(_) => None
