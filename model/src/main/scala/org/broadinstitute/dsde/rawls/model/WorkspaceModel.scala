@@ -333,9 +333,9 @@ object WorkspaceShardStates {
 
 object WorkspaceType {
   /**
-    * Represents the system-of-record for a workspace
-    * rawls workspaces are owned and managed by rawls
-    * mc workspaces are owned and managed by workspace manager
+    * Represents the system-of-record for a workspace.
+    * `rawls` workspaces are owned and managed by rawls.
+    * `mc` (multi-cloud) workspaces are owned and managed by workspace manager.
     */
   sealed trait WorkspaceType extends RawlsEnumeration[WorkspaceType] {
     override def toString: String = WorkspaceType.toString(this)
