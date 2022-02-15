@@ -55,7 +55,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
   "TDR Snapshot integration" - {
     //as of this writing, hermione.owner is the user with access to snapshots
 
-    "should be able to contact Data Repo" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
+    "should be able to contact Data Repo" taggedAs(Tags.AlphaTest) in {
       // status API is unauthenticated, but all our utility methods expect a token.
       // so, we'll send a token to the unauthenticated API to make this code path easier.
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
