@@ -258,7 +258,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
           traceDBIOWithParent("saveAction", rootSpan)(_ => saveAction)
         } recover {
-          case icve:java.sql.SQLIntegrityConstraintViolationException =>
+          case icve:com.mysql.jdbc.exceptions.jdbc4.MySQLIntegrityConstraintViolationException =>
             val userMessage =
               s"Database error occurred. Check if you are uploading entity names or entity types that differ only in case " +
                 s"from pre-existing entities."
