@@ -406,7 +406,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     "should introspect WorkspaceDetails correctly" in {
       val expected = List("namespace", "name", "workspaceId", "bucketName", "workflowCollectionName", "createdDate",
         "lastModified", "createdBy", "attributes", "isLocked", "authorizationDomain", "googleProject",
-        "googleProjectNumber", "workspaceVersion", "billingAccount", "billingAccountErrorMessage", "completedCloneWorkspaceFileTransfer", "shardState")
+        "googleProjectNumber", "workspaceVersion", "billingAccount", "billingAccountErrorMessage", "completedCloneWorkspaceFileTransfer",
+        "shardState", "workspaceType")
       WorkspaceFieldNames.workspaceDetailClassNames should contain theSameElementsAs expected
     }
     "should collate WorkspaceResponse and WorkspaceDetails correctly" in {
@@ -415,7 +416,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         "workspace.bucketName", "workspace.workflowCollectionName", "workspace.createdDate", "workspace.lastModified",
         "workspace.createdBy", "workspace.attributes", "workspace.isLocked", "workspace.authorizationDomain",
         "workspace.googleProject", "workspace.googleProjectNumber", "workspace.workspaceVersion",
-        "workspace.billingAccount", "workspace.billingAccountErrorMessage", "workspace.completedCloneWorkspaceFileTransfer", "workspace.shardState"
+        "workspace.billingAccount", "workspace.billingAccountErrorMessage", "workspace.completedCloneWorkspaceFileTransfer", "workspace.shardState",
+        "workspace.workspaceType"
       )
       WorkspaceFieldNames.workspaceResponseFieldNames should contain theSameElementsAs(expected)
     }
@@ -534,6 +536,21 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       Attributable.safePrint(realisticUserMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> Vector(AttributeString(gs://my-workflow/shard-0/cacheCopy/some_file.tsv), AttributeString(gs://my-workflow/shard-1/cacheCopy/some_file.tsv)))"
       Attributable.safePrint(attributeReferenceMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> AttributeEntityReference(type,name))"
       Attributable.safePrint(attributeReferenceListMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> List(AttributeEntityReference(type,name1), AttributeEntityReference(type,name2)))"
+    }
+  }
+
+  "Workspace Type" - {
+    "should parse workspace type properly" in {
+      WorkspaceType.withName("rawls") shouldBe WorkspaceType.RawlsWorkspace
+      WorkspaceType.withName("mc") shouldBe WorkspaceType.McWorkspace
+    }
+
+    "should fail with invalid workspace type" in {
+      val thrown = intercept[RawlsException] {
+        WorkspaceType.withName("incorrect")
+      }
+
+      thrown.getMessage.contains("Invalid WorkspaceType")
     }
   }
 }
