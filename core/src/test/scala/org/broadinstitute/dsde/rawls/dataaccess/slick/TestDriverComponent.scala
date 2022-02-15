@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
@@ -25,7 +26,6 @@ import org.scalatest.Suite
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import java.sql.SQLTransactionRollbackException
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -97,7 +97,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     DbResource.dataSource.database.run(chain).recoverWith {
       case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action)
-      case rollbackException: SQLTransactionRollbackException if rollbackException.getMessage.contains("try restarting transaction") => retryConcurrentModificationException(action)
+      case rollbackException: MySQLTransactionRollbackException if rollbackException.getMessage.contains("try restarting transaction") => retryConcurrentModificationException(action)
     }
   }
 
