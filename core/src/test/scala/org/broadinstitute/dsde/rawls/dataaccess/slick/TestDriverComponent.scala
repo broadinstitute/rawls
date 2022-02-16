@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.typesafe.config.ConfigFactory
+import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
@@ -32,7 +33,7 @@ import scala.concurrent.{Await, Future}
 import scala.language.{implicitConversions, postfixOps}
 
 // initialize database tables and connection pool only once
-object DbResource {
+object DbResource extends LazyLogging {
   // to override, e.g. to run against mysql:
   // $ sbt -Dtestdb=mysql test
   private val testdb = ConfigFactory.load.getStringOr("testdb", "mysql")
@@ -44,6 +45,9 @@ object DbResource {
 
   val dataSource = new SlickDataSource(dataConfig)(TestExecutionContext.testExecutionContext)
   dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
+  logger.info("executing liquibase a second time to verify changesets work on an already-initialized database ...")
+  dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
+
 }
 
 /**
