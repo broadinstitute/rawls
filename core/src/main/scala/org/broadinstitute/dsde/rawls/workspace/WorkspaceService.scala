@@ -5,6 +5,8 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.CreateCloudContextResult
+import bio.terra.workspace.model.JobReport.StatusEnum
 import cats.implicits._
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.StorageObject
@@ -53,6 +55,7 @@ import scala.jdk.CollectionConverters.{mapAsJavaMapConverter, mapAsScalaMapConve
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+import scala.concurrent.duration._
 
 /**
   * Created by dvoet on 4/27/15.
@@ -143,7 +146,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        googleIamDao: GoogleIamDAO,
                        terraBillingProjectOwnerRole: String,
                        terraWorkspaceCanComputeRole: String)
-                      (implicit protected val executionContext: ExecutionContext) extends RoleSupport
+                      (implicit protected val executionContext: ExecutionContext, val system: ActorSystem) extends RoleSupport
   with LibraryPermissionsSupport
   with FutureSupport
   with MethodWiths
@@ -154,6 +157,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   with WorkspaceSupport
   with EntitySupport
   with AttributeSupport
+  with Retry
   with StringValidationUtils {
 
   import dataSource.dataAccess.driver.api._
@@ -179,6 +183,40 @@ class WorkspaceService(protected val userInfo: UserInfo,
       })
     })
 
+  class WorkspaceManagerPollingOperationException(val status: StatusEnum) extends Exception
+
+  def getCloudContextCreationStatus(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): Future[CreateCloudContextResult] = {
+    val result = workspaceManagerDAO.getWorkspaceCreateCloudContextResult(
+      workspaceId, jobControlId, accessToken
+    )
+    result.getJobReport.getStatus match {
+      case StatusEnum.SUCCEEDED => Future.successful(result)
+      case _ => Future.failed(new WorkspaceManagerPollingOperationException(result.getJobReport.getStatus))
+    }
+  }
+
+  def jobStatusPredicate(t: Throwable): Boolean = {
+    t match {
+      case t: WorkspaceManagerPollingOperationException => (t.status == StatusEnum.RUNNING)
+      case _ => false
+    }
+  }
+
+
+  def pollCloudContext(workspaceId: UUID, jobControlId: String,  accessToken: OAuth2BearerToken) = {
+    for {
+      result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate) (2 seconds, 60 seconds) {
+        () => getCloudContextCreationStatus(workspaceId, jobControlId, accessToken)
+      }
+    } yield {
+      result match {
+        case Left(oops) => throw new RawlsException("whoops")
+        case Right(results) => ()
+      }
+    }
+  }
+
+
   def withNewMultiCloudWorkspaceContext[T](workspaceRequest: MultiCloudWorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
     val cloudPlatform = workspaceRequest.cloudPlatform match {
       case Some(WorkspaceCloudPlatform.Azure) => WorkspaceCloudPlatform.Azure
@@ -200,17 +238,24 @@ class WorkspaceService(protected val userInfo: UserInfo,
           _ <- traceDBIOWithParent("createWorkspaceInWSM", parentSpan)(_ => DBIO.from(
             Future(workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId, workspaceRequest.name, spendProfileId, userInfo.accessToken))
           ))
+          _ = logger.info("Creating cloud context in WSM")
           cloudContextCreateResult <- traceDBIOWithParent("createCloudContext", parentSpan)( _ => DBIO.from(
             Future(workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
           ))
-          savedWorkspace <- traceDBIOWithParent("saveNewWorkspaceToRawlsDB", parentSpan)(_ =>
+          _ = logger.info("Polling on cloud context in WSM")
+          pollingResult <- traceDBIOWithParent("pollCloudContext", parentSpan)( _ => DBIO.from(
+            pollCloudContext(workspaceId, cloudContextCreateResult.getJobReport.getId, userInfo.accessToken)
+          ))
+          _ = logger.info("Creating workspace record")
+          savedWorkspace <- traceDBIOWithParent("saveNewWorkspaceToRawlsDB", parentSpan)(_ => {
             createMultiCloudWorkspaceInDatabase(
               workspaceId.toString,
               workspaceRequest,
               WorkbenchEmail(userInfo.userEmail.value),
               None,
               dataAccess,
-              parentSpan))
+              parentSpan)
+          })
           response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
         } yield {
           response
