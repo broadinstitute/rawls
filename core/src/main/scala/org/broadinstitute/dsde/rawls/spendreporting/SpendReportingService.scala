@@ -38,10 +38,10 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }
   }
 
-  def extractSpendReportingResults(rows: util.List[TableRow], startTime: DateTime, endTime: DateTime): SpendReportingResults = {
-    val currency = Currency.getInstance(rows.asScala.head.getF.get(2).getV.toString)
+  def extractSpendReportingResults(rows: List[TableRow], startTime: DateTime, endTime: DateTime): SpendReportingResults = {
+    val currency = Currency.getInstance(rows.head.getF.get(2).getV.toString)
 
-    val dailySpend = rows.asScala.map { row =>
+    val dailySpend = rows.map { row =>
       val rowCost = BigDecimal(row.getF.get(0).getV.toString).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
       val rowCredits = BigDecimal(row.getF.get(1).getV.toString).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
       SpendReportingForDateRange(rowCost.toString(),
@@ -54,10 +54,10 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
       SpendReportingAggregationKey(""), dailySpend
     )
 
-    val costRollup = rows.asScala.map { row =>
+    val costRollup = rows.map { row =>
       BigDecimal(row.getF.get(0).getV.toString)
     }.sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-    val creditsRollup = rows.asScala.map { row =>
+    val creditsRollup = rows.map { row =>
       BigDecimal(row.getF.get(1).getV.toString)
     }.sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
 
@@ -102,7 +102,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     if (startDate.isAfter(endDate)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "start date must be before end date"))
   }
 
-  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[SpendReportingResults] = {
+  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[Option[SpendReportingResults]] = {
     validateReportParameters(startDate, endDate)
     requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) { // todo: new action here? this is an okay approx. but could add a specific one
       for {
@@ -134,7 +134,9 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         jobStatus <- bigQueryDAO.getQueryStatus(jobRef)
         result: GetQueryResultsResponse <- bigQueryDAO.getQueryResult(jobStatus)
       } yield {
-        extractSpendReportingResults(result.getRows, startDate, endDate)
+        Option(result.getRows).map { rows =>
+          extractSpendReportingResults(rows.asScala.toList, startDate, endDate)
+        }
       }
     }
   }

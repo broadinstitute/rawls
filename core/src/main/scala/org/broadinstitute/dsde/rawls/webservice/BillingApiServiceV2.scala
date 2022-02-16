@@ -55,7 +55,10 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     RawlsBillingProjectName(projectId),
                     DateTime.parse(startDate),
                     DateTime.parse(endDate)
-                  )
+                  ).map {
+                    case Some(spendReportResults) => StatusCodes.OK -> Option(spendReportResults)
+                    case None => StatusCodes.NotFound -> None
+                  }
                 }
               }
             }
