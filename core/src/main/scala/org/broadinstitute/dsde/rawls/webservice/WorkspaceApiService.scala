@@ -74,7 +74,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
       } ~
-      path("workspaces" / Segment / Segment / "migrate") { (namespace, name) =>
+      path("workspaces" / Segment / Segment / "migrations") { (namespace, name) =>
         val workspaceName = WorkspaceName(namespace, name)
         get {
           complete {
@@ -83,7 +83,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
               .map(ms => StatusCodes.OK -> ms)
           }
         } ~
-        put {
+        post {
           complete {
             workspaceServiceConstructor(userInfo)
               .migrateWorkspace(workspaceName)
