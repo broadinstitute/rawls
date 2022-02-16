@@ -96,8 +96,8 @@ object Dependencies {
      the end result of this incompatibility is that attempting to run Rawls' liquibase on an already-initialized database
      will throw an error "java.lang.ClassCastException: class java.time.LocalDateTime cannot be cast to class java.lang.String".
      This only occurs on already-initialized databases; it does not happen when liquibase is run the first time on an
-     empty DB. This is important:
-     >> the bug does not show up in unit tests, because unit tests start with an empty database <<
+     empty DB.
+
      The behavior change in mysql-connector-java between 8.0.22 and 8.0.23 needs to be assessed to see if it will cause
      any issues elsewhere in Rawls before upgrading.
    */
