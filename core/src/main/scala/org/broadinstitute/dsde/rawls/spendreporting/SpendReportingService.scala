@@ -127,7 +127,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
           new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("billingAccountId").setParameterValue(new QueryParameterValue().setValue(spendExportConf.billingAccountId.withoutPrefix())),
           new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("startDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(startDate))),
           new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("endDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(endDate))),
-          new QueryParameter().setParameterType(new QueryParameterType().setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))
+          new QueryParameter().setParameterType(new QueryParameterType().setType("ARRAY").setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))
         )
 // spendExportConf.spendExportTable.getOrElse(defaultTableName).split('.').headOption.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "invalid table format")))
         jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject("terra-dev-68e684fe"), query, queryParams, "NAMED")
