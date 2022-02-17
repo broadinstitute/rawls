@@ -486,14 +486,14 @@ paths:
             type: string
         - name: startDate
           in: query
-          description: start date of report
+          description: start date of report (YYYY-MM-DD)
           required: true
           schema:
             type: string
             format: date
         - name: endDate
           in: query
-          description: end date of report
+          description: end date of report (YYYY-MM-DD)
           required: true
           schema:
             type: string
@@ -506,9 +506,9 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/RawlsBillingProjectMember'
+                  $ref: '#/components/schemas/SpendReport'
         400:
-          description: spend report configuration not set or invalid parameters
+          description: invalid spend report parameters
           content:
             'application/json':
               schema:
@@ -6411,6 +6411,51 @@ components:
             Caller must have the add_project action for this service perimeter in
             Sam.
       description: ""
+    SpendReport:
+      required:
+        - spendDetails
+        - spendSummary
+      type: object
+      properties:
+        aggregationKey:
+          type: object
+          description: aggregation key
+          properties:
+            key:
+              type: string
+              description: key
+        spendData:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendReportForDateRange'
+        spendSummary:
+          $ref: '#/components/schemas/SpendReportForDateRange'
+    SpendReportForDateRange:
+      required:
+        - cost
+        - credits
+        - currency
+        - startTime
+        - endTime
+      type: object
+      properties:
+        cost:
+          type: string
+          description: total cost for date range
+        credits:
+          type: string
+          description: credits
+        currency:
+          type: string
+          description: currency that cost and credits uses
+        startTime:
+          type: string
+          format: timestamp
+          description: timestamp marking the start of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
+        endTime:
+          type: string
+          format: timestamp
+          description: timestamp marking the end of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
     SpendReportConfiguration:
       required:
         - datasetGoogleProject
