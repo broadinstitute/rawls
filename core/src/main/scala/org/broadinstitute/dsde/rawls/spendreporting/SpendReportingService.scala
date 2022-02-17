@@ -38,6 +38,13 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }
   }
 
+  def requireAlphaUser[T]()(op: => Future[T]): Future[T] = {
+    samDAO.userHasAction(SamResourceTypeNames.managedGroup, "Alpha_Spend_Report_Users", SamResourceAction("use"), userInfo).flatMap {
+      case true => op
+      case false => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "This API is not live yet. Please ")))
+    }
+  }
+
   def extractSpendReportingResults(rows: List[TableRow], startTime: DateTime, endTime: DateTime): SpendReportingResults = {
     val currency = Currency.getInstance(rows.head.getF.get(2).getV.toString)
 
@@ -105,36 +112,38 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
   def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[Option[SpendReportingResults]] = {
     validateReportParameters(startDate, endDate)
     requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) { // todo: new action here? this is an okay approx. but could add a specific one
-      for {
-        spendExportConf <- getSpendExportConfiguration(billingProjectName)
-        workspaceProjects <- getWorkspaceGoogleProjects(billingProjectName)
+      requireAlphaUser() {
+        for {
+          spendExportConf <- getSpendExportConfiguration(billingProjectName)
+          workspaceProjects <- getWorkspaceGoogleProjects(billingProjectName)
 
-        query =
-        s"""
-           | SELECT
-           |  SUM(cost) as cost,
-           |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-           |  currency,
-           |  DATE(_PARTITIONTIME) as date
-           | FROM `${spendExportConf.spendExportTable.getOrElse(defaultTableName)}`
-           | WHERE billing_account_id = @billingAccountId
-           | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
-           | AND project.id in UNNEST(@projects)
-           | GROUP BY currency, date
-           |""".stripMargin
+          query =
+          s"""
+             | SELECT
+             |  SUM(cost) as cost,
+             |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+             |  currency,
+             |  DATE(_PARTITIONTIME) as date
+             | FROM `${spendExportConf.spendExportTable.getOrElse(defaultTableName)}`
+             | WHERE billing_account_id = @billingAccountId
+             | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
+             | AND project.id in UNNEST(@projects)
+             | GROUP BY currency, date
+             |""".stripMargin
 
-        queryParams = List(
-          new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("billingAccountId").setParameterValue(new QueryParameterValue().setValue(spendExportConf.billingAccountId.withoutPrefix())),
-          new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("startDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(startDate))),
-          new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("endDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(endDate))),
-          new QueryParameter().setParameterType(new QueryParameterType().setType("ARRAY").setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))
-        )
-        jobRef <- bigQueryDAO.startParameterizedQuery(serviceProject, query, queryParams, "NAMED")
-        jobStatus <- bigQueryDAO.getQueryStatus(jobRef)
-        result: GetQueryResultsResponse <- bigQueryDAO.getQueryResult(jobStatus)
-      } yield {
-        Option(result.getRows).map { rows =>
-          extractSpendReportingResults(rows.asScala.toList, startDate, endDate)
+          queryParams = List(
+            new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("billingAccountId").setParameterValue(new QueryParameterValue().setValue(spendExportConf.billingAccountId.withoutPrefix())),
+            new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("startDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(startDate))),
+            new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("endDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(endDate))),
+            new QueryParameter().setParameterType(new QueryParameterType().setType("ARRAY").setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))
+          )
+          jobRef <- bigQueryDAO.startParameterizedQuery(serviceProject, query, queryParams, "NAMED")
+          jobStatus <- bigQueryDAO.getQueryStatus(jobRef)
+          result: GetQueryResultsResponse <- bigQueryDAO.getQueryResult(jobStatus)
+        } yield {
+          Option(result.getRows).map { rows =>
+            extractSpendReportingResults(rows.asScala.toList, startDate, endDate)
+          }
         }
       }
     }
