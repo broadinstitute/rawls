@@ -41,9 +41,11 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       rootSpan.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspace.toWorkspaceName.toString))
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("isEntityCacheCurrent", rootSpan) { outerSpan =>
+          // TODO: if !useCache or ~cacheEnabled, don't bother querying for cache staleness?
           dataAccess.entityCacheQuery.entityCacheExists(workspaceContext.workspaceIdAsUUID).flatMap { cacheExists =>
             // If a cache exists, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
             cacheExists.foreach { staleness =>
+              // TODO: send to a metrics service that allows these values to be graphed/analyzed, instead of just logging
               logger.info(s"entity statistics cache staleness: $staleness")
             }
             if(cacheExists.isDefined && useCache && cacheEnabled) {
@@ -54,6 +56,12 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
                 // TODO: if cache is out of date, fire off an async/non-blocking cache update.
                 // TODO: re-enable the "opportunistically update cache if user requests metadata while cache is out of date" test
+                // TODO: add unit test coverage:
+                  // - entityCacheExists staleness value is correct
+                  // - entityCacheExists is empty when cache does not exist
+                  // - always returns cached metadata even when cache is stale (assuming cache is enabled for the request and at the system level)
+                  // - opportunistic updates?
+                  // - what else?
 
                 dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
               }

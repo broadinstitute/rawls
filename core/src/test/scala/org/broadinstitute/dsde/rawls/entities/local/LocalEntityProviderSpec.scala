@@ -289,6 +289,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
 
+    // TODO: start isEntityCacheCurrent() tests; these are obsolete
     "consider cache out of date if no cache record" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
@@ -341,6 +342,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         assert(isCurrent)
       }
     }
+    // TODO: end isEntityCacheCurrent() tests; these are obsolete
 
     "insert cache record when updating if non-existent" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
