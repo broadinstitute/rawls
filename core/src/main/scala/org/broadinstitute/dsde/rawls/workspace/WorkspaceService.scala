@@ -233,7 +233,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def createMultiCloudWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
     if (!multiCloudConfig.multiCloudWorkspacesEnabled) {
-      throw new RawlsException("MC workspaces are not enabled")
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
     for {
