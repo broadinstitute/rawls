@@ -58,7 +58,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         DateTime.parse(row.getF.get(3).getV.toString).plusDays(1).minusSeconds(1))
     }
     val dailySpendAggregation = SpendReportingAggregation(
-      SpendReportingAggregationKey(""), dailySpend
+      SpendReportingAggregationKey("total"), dailySpend
     )
 
     val costRollup = rows.map { row =>
