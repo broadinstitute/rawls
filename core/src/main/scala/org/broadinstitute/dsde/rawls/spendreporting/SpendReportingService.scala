@@ -41,7 +41,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
   def requireAlphaUser[T]()(op: => Future[T]): Future[T] = {
     samDAO.userHasAction(SamResourceTypeNames.managedGroup, "Alpha_Spend_Report_Users", SamResourceAction("use"), userInfo).flatMap {
       case true => op
-      case false => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "This API is not live yet. Please ")))
+      case false => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "This API is not live yet.")))
     }
   }
 
@@ -111,8 +111,8 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
 
   def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[Option[SpendReportingResults]] = {
     validateReportParameters(startDate, endDate)
-    requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) { // todo: new action here? this is an okay approx. but could add a specific one
-      requireAlphaUser() {
+    requireAlphaUser() {
+      requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) { // todo: new action here? this is an okay approx. but could add a specific one
         for {
           spendExportConf <- getSpendExportConfiguration(billingProjectName)
           workspaceProjects <- getWorkspaceGoogleProjects(billingProjectName)
