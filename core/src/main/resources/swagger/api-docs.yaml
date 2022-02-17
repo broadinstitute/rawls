@@ -504,9 +504,7 @@ paths:
           content:
             'application/json':
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/SpendReport'
+                $ref: '#/components/schemas/SpendReport'
         400:
           description: invalid spend report parameters
           content:
@@ -6417,6 +6415,19 @@ components:
         - spendSummary
       type: object
       properties:
+        spendDetails:
+          description: aggregation of spend data
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendReportAggregation'
+        spendSummary:
+          $ref: '#/components/schemas/SpendReportForDateRange'
+    SpendReportAggregation:
+      required:
+        - aggregationKey
+        - spendData
+      type: object
+      properties:
         aggregationKey:
           type: object
           description: aggregation key
@@ -6428,8 +6439,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SpendReportForDateRange'
-        spendSummary:
-          $ref: '#/components/schemas/SpendReportForDateRange'
     SpendReportForDateRange:
       required:
         - cost
