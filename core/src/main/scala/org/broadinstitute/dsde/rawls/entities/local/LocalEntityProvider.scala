@@ -52,6 +52,9 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
                 val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
                 val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
 
+                // TODO: if cache is out of date, fire off an async/non-blocking cache update.
+                // TODO: re-enable the "opportunistically update cache if user requests metadata while cache is out of date" test
+
                 dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
               }
             }

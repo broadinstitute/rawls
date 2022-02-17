@@ -232,7 +232,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingCache
     }
 
-    "not use cache for entityTypeMetadata when useCache=true, cache is not up to date, and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
+    "use cache for entityTypeMetadata when useCache=true, cache is not up to date, and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
@@ -248,7 +248,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       typeCountCache should not be Map.empty
       attrNamesCache should not be Map.empty
 
-      entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
+      entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingCache
     }
 
     "not use cache for entityTypeMetadata when useCache=false even if cache is up to date and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
@@ -416,7 +416,8 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       secondMessage shouldBe empty
     }
 
-    "opportunistically update cache if user requests metadata while cache is out of date" in withLocalEntityProviderTestDatabase { dataSource =>
+    // temporarily disabled until we
+    "opportunistically update cache if user requests metadata while cache is out of date" ignore withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
       val wsid = workspaceContext.workspaceIdAsUUID
