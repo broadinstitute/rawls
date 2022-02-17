@@ -13,7 +13,7 @@ import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
-import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
+import org.broadinstitute.dsde.rawls.config.{MultiCloudWorkspaceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -68,7 +68,7 @@ object WorkspaceService {
                   notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
-                  config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
+                  config: WorkspaceServiceConfig, multiCloudConfig: MultiCloudWorkspaceConfig, requesterPaysSetupService: RequesterPaysSetupService,
                   entityManager: EntityManager, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String,
                   servicePerimeterService: ServicePerimeterService,
                   googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String
@@ -82,7 +82,7 @@ object WorkspaceService {
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
-      config, requesterPaysSetupService, resourceBufferService, resourceBufferSaEmail, servicePerimeterService,
+      config, multiCloudConfig, requesterPaysSetupService, resourceBufferService, resourceBufferSaEmail, servicePerimeterService,
       googleIamDao, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole)
   }
 
@@ -139,6 +139,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        override val workbenchMetricBaseName: String,
                        submissionCostService: SubmissionCostService,
                        config: WorkspaceServiceConfig,
+                       multiCloudConfig: MultiCloudWorkspaceConfig,
                        requesterPaysSetupService: RequesterPaysSetupService,
                        resourceBufferService: ResourceBufferService,
                        resourceBufferSaEmail: String,
@@ -183,52 +184,17 @@ class WorkspaceService(protected val userInfo: UserInfo,
       })
     })
 
-  class WorkspaceManagerPollingOperationException(val status: StatusEnum) extends Exception
-
-  def getCloudContextCreationStatus(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): Future[CreateCloudContextResult] = {
-    val result = workspaceManagerDAO.getWorkspaceCreateCloudContextResult(
-      workspaceId, jobControlId, accessToken
-    )
-    result.getJobReport.getStatus match {
-      case StatusEnum.SUCCEEDED => Future.successful(result)
-      case _ => Future.failed(new WorkspaceManagerPollingOperationException(result.getJobReport.getStatus))
-    }
-  }
-
-  def jobStatusPredicate(t: Throwable): Boolean = {
-    t match {
-      case t: WorkspaceManagerPollingOperationException => (t.status == StatusEnum.RUNNING)
-      case _ => false
-    }
-  }
-
-
-  def pollCloudContext(workspaceId: UUID, jobControlId: String,  accessToken: OAuth2BearerToken) = {
-    for {
-      result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate) (2 seconds, 60 seconds) {
-        () => getCloudContextCreationStatus(workspaceId, jobControlId, accessToken)
-      }
-    } yield {
-      result match {
-        case Left(oops) => throw new RawlsException("whoops")
-        case Right(results) => ()
-      }
-    }
-  }
-
-
   def withNewMultiCloudWorkspaceContext[T](workspaceRequest: MultiCloudWorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
     val cloudPlatform = workspaceRequest.cloudPlatform match {
-      case Some(WorkspaceCloudPlatform.Azure) => WorkspaceCloudPlatform.Azure
-      case Some(other) => throw new RawlsException(s"Cloud platform ${other} not supported for MC workspaces")
-      case _ => throw new RawlsException("Cloud platform required for MC workspaces")
+      case WorkspaceCloudPlatform.Azure => WorkspaceCloudPlatform.Azure
+      case other => throw new RawlsException(s"Cloud platform ${other} not supported for multi-cloud workspaces")
     }
 
     // todo unhardcode from config and pull from spend profile service
-    val spendProfileId = config.spendProfileId
-    val azureTenantId =  config.azureConfig.tenantId
-    val azureSubscriptionId = config.azureConfig.subscriptionId
-    val azureResourceGroupId = config.azureConfig.resourceGroupId
+    val spendProfileId = multiCloudConfig.spendProfileId
+    val azureTenantId =  multiCloudConfig.azureTenantId
+    val azureSubscriptionId = multiCloudConfig.azureSubscriptionId
+    val azureResourceGroupId = multiCloudConfig.azureResourceGroupId
 
     traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
       case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
@@ -238,15 +204,16 @@ class WorkspaceService(protected val userInfo: UserInfo,
           _ <- traceDBIOWithParent("createWorkspaceInWSM", parentSpan)(_ => DBIO.from(
             Future(workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId, workspaceRequest.name, spendProfileId, userInfo.accessToken))
           ))
-          _ = logger.info("Creating cloud context in WSM")
+          _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
           cloudContextCreateResult <- traceDBIOWithParent("createCloudContext", parentSpan)( _ => DBIO.from(
             Future(workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
           ))
-          _ = logger.info("Polling on cloud context in WSM")
+          jobControlId = cloudContextCreateResult.getJobReport.getId
+          _ = logger.info(s"Polling on cloud context in WSM [jobControlId = ${jobControlId}]")
           pollingResult <- traceDBIOWithParent("pollCloudContext", parentSpan)( _ => DBIO.from(
             pollCloudContext(workspaceId, cloudContextCreateResult.getJobReport.getId, userInfo.accessToken)
           ))
-          _ = logger.info("Creating workspace record")
+          _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
           savedWorkspace <- traceDBIOWithParent("saveNewWorkspaceToRawlsDB", parentSpan)(_ => {
             createMultiCloudWorkspaceInDatabase(
               workspaceId.toString,
@@ -265,7 +232,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   def createMultiCloudWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
-    if (!config.multiCloudWorkspacesEnabled) {
+    if (!multiCloudConfig.multiCloudWorkspacesEnabled) {
       throw new RawlsException("MC workspaces are not enabled")
     }
 
@@ -2593,7 +2560,41 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  // TODO refactor to a service class
+  def getCloudContextCreationStatus(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): Future[CreateCloudContextResult] = {
+    val result = workspaceManagerDAO.getWorkspaceCreateCloudContextResult(
+      workspaceId, jobControlId, accessToken
+    )
+    result.getJobReport.getStatus match {
+      case StatusEnum.SUCCEEDED => Future.successful(result)
+      case _ => Future.failed(new WorkspaceManagerPollingOperationException(result.getJobReport.getStatus))
+    }
+  }
+
+  def jobStatusPredicate(t: Throwable): Boolean = {
+    t match {
+      case t: WorkspaceManagerPollingOperationException => (t.status == StatusEnum.RUNNING)
+      case _ => false
+    }
+  }
+
+
+  def pollCloudContext(workspaceId: UUID, jobControlId: String,  accessToken: OAuth2BearerToken) = {
+    for {
+      result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate) (2 seconds, 60 seconds) {
+        () => getCloudContextCreationStatus(workspaceId, jobControlId, accessToken)
+      }
+    } yield {
+      result match {
+        case Left(oops) => throw new RawlsException("whoops")
+        case Right(results) => ()
+      }
+    }
+  }
+
+
 }
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)
+class WorkspaceManagerPollingOperationException(val status: StatusEnum) extends Exception

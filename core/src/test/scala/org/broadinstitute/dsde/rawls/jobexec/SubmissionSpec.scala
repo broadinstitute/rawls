@@ -9,7 +9,7 @@ import bio.terra.workspace.model.CloningInstructionsEnum
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config.{MultiCloudWorkspaceConfig, DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -342,6 +342,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         trackDetailedSubmissionMetrics = true,
         "fc-"
       )
+      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
+        multiCloudWorkspacesEnabled = false, "fakeSpendProfileId", "fake", "fake", "fake"
+      )
 
       val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
       val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
@@ -376,6 +379,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         workbenchMetricBaseName,
         mockSubmissionCostService,
         workspaceServiceConfig,
+        multiCloudWorkspaceConfig,
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,

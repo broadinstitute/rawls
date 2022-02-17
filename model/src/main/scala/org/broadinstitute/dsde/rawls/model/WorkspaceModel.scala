@@ -146,7 +146,7 @@ case class MultiCloudWorkspaceRequest(namespace: String,
                                       name: String,
                                       attributes: AttributeMap,
                                       authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
-                                      cloudPlatform: Option[WorkspaceCloudPlatform] = None
+                                      cloudPlatform: WorkspaceCloudPlatform
                                      ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString

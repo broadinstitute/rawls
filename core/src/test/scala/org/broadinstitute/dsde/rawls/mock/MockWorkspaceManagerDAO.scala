@@ -22,6 +22,7 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
   def mockEnumerateReferenceResponse(workspaceId: UUID) = references.collect {
     case ((wsId, _), refDescription) if wsId == workspaceId => refDescription
   }
+  def mockCreateAzureCloudContextResult(workspaceId: UUID) = new CreateCloudContextResult()
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
 
@@ -83,4 +84,17 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
     if (references.contains(workspaceId, referenceId))
       references -= ((workspaceId, referenceId))
   }
+
+  override def createWorkspaceWithSpendProfile(workspaceId: UUID, displayName: String, spendProfileId: String, accessToken: OAuth2BearerToken): CreatedWorkspace =
+    mockCreateWorkspaceResponse(workspaceId)
+
+  override def createAzureWorkspaceCloudContext(workspaceId: UUID,
+                                                azureTenantId: String,
+                                                azureResourceGroupId: String,
+                                                azureSubscriptionId: String,
+                                                accessToken: OAuth2BearerToken): CreateCloudContextResult = mockCreateAzureCloudContextResult(workspaceId)
+
+  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
+                                                    jobControlId: String,
+                                                    accessToken: OAuth2BearerToken): CreateCloudContextResult = mockCreateAzureCloudContextResult(workspaceId)
 }

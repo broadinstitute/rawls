@@ -354,6 +354,7 @@ object Boot extends IOApp with LazyLogging {
         StatusService.constructor(healthMonitor)
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(conf)
+      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
 
       val bondConfig = conf.getConfig("bond")
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
@@ -388,6 +389,7 @@ object Boot extends IOApp with LazyLogging {
         workbenchMetricBaseName = metricsPrefix,
         submissionCostService,
         workspaceServiceConfig,
+        multiCloudWorkspaceConfig,
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,
