@@ -431,7 +431,8 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         bigQueryDAO,
         samDAO,
-        gcsConfig.getString("billingExportTableName")
+        gcsConfig.getString("billingExportTableName"),
+        GoogleProject(gcsConfig.getString("serviceProject"))
       )
 
       val service = new RawlsApiServiceImpl(

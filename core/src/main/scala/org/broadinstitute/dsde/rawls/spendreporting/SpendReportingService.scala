@@ -19,15 +19,15 @@ import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 
 object SpendReportingService {
-  def constructor(dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, defaultTableName: String)
+  def constructor(dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, defaultTableName: String, serviceProject: GoogleProject)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): SpendReportingService = {
-    new SpendReportingService(userInfo, dataSource, bigQueryDAO, samDAO, defaultTableName)
+    new SpendReportingService(userInfo, dataSource, bigQueryDAO, samDAO, defaultTableName, serviceProject)
   }
 }
 
 
-class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, defaultTableName: String)
+class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, defaultTableName: String, serviceProject: GoogleProject)
                            (implicit val executionContext: ExecutionContext) extends LazyLogging {
 
   // todo: extract this out of userservice so we don't have to duplicate it?
@@ -129,8 +129,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
           new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("endDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(endDate))),
           new QueryParameter().setParameterType(new QueryParameterType().setType("ARRAY").setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))
         )
-// spendExportConf.spendExportTable.getOrElse(defaultTableName).split('.').headOption.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "invalid table format")))
-        jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject("terra-dev-68e684fe"), query, queryParams, "NAMED")
+        jobRef <- bigQueryDAO.startParameterizedQuery(serviceProject, query, queryParams, "NAMED")
         jobStatus <- bigQueryDAO.getQueryStatus(jobRef)
         result: GetQueryResultsResponse <- bigQueryDAO.getQueryResult(jobStatus)
       } yield {
