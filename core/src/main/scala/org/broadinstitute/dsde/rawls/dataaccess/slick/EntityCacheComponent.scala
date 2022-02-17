@@ -47,6 +47,23 @@ trait EntityCacheComponent {
       entityCacheQuery.insertOrUpdate(EntityCacheRecord(workspaceId, timestamp, errorMessage))
     }
 
+    /** does an entity cache exist at all, regardless of how current it is?
+      *  returns None if no cache exists
+      *  returns Some[Int] if a cache exists. The integer is the number of seconds
+      *   by which the cache is stale; this will be zero if the cache is up-to-date
+      * */
+    def entityCacheExists(workspaceId: UUID): ReadAction[Option[Int]] = {
+      val baseQuery = sql"""
+                      select TIMESTAMPDIFF(SECOND, w.last_modified, c.entity_cache_last_updated) as staleness
+                        from WORKSPACE w, WORKSPACE_ENTITY_CACHE c
+                        where c.workspace_id = w.id
+                        and c.workspace_id = $workspaceId;""".as[Int]
+
+      uniqueResult[Int](baseQuery)
+    }
+
+    /** does an up-to-date entity cache exist? */
+    // currently unused except in tests
     def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
       val baseQuery = sql"""SELECT EXISTS(
               SELECT 1
