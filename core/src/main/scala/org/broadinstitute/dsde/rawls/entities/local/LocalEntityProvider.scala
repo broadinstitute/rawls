@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent, traceReadOnlyDBIOWithParent}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
 
 import java.sql.Timestamp
@@ -51,11 +51,22 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
             if(cacheStaleness.isDefined && useCache && cacheEnabled) {
               traceDBIOWithParent("retrieve-cached-results", outerSpan) { _ =>
                 logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
-                val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+                // To avoid the worst use cases of cache staleness, retrieve uncached types+counts, but always
+                // use cache for attribute names.
+                // TODO: or, should we always retrieve types+counts from cache as well?
+                val typesAndCountsQ = if (cacheStaleness.contains(0)) {
+                  dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
+                } else {
+                  traceReadOnlyDBIOWithParent("getEntityTypesWithCounts", outerSpan) { _ =>
+                    dataAccess.entityQuery.getEntityTypesWithCounts(workspaceContext.workspaceIdAsUUID)
+                  }
+                }
                 val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
-                // TODO: if cache is out of date, fire off an async/non-blocking cache update. Make sure this is not in the same transaction!
-                // easy enough to call entityTypeMetadata(false), but need it to be in a separate transaction
-                // TODO: re-enable the "opportunistically update cache if user requests metadata while cache is out of date" test
+                // ideally, here we would fire off an async/non-blocking cache update, to get the cache updated before the
+                // EntityStatisticsCacheMonitor would notice it. If/when we implement this, make sure it does not inherit
+                // the db transaction - we want it to be completely separate. It's easy enough to add a call to
+                // entityTypeMetadata(false) here, but I think that would happen in the same transaction.
+                // Also: if we implement this, re-enable the "opportunistically update cache if user requests metadata while cache is out of date" test
                 dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
               }
             }
