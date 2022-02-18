@@ -70,6 +70,13 @@ object WorkspaceMigrationActor {
       .ignore
 
 
+  final def getMigrationAttempts(workspace: Workspace): ReadWriteAction[List[WorkspaceMigration]] =
+    workspaceMigrations
+      .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+      .result
+      .map(_.toList)
+
+
   final case class MigrationDeps(dataSource: SlickDataSource,
                                  googleProjectToBill: GoogleProject,
                                  workspaceService: WorkspaceService,

@@ -2,7 +2,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import _root_.slick.dbio.DBIOAction
-import com.mysql.jdbc.exceptions.MySQLTimeoutException
+import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}

@@ -8,8 +8,9 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
 import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.lifted.Query
-import spray.json.{JsObject, JsString, JsValue}
+import spray.json.{DeserializationException, JsObject, JsString, JsValue, RootJsonFormat}
 
+import scala.collection.immutable.Map
 import scala.concurrent.Future
 import scala.language.higherKinds
 
@@ -35,6 +36,40 @@ object MigrationUtils {
   }
 
   object Implicits {
+    implicit val outcomeJsonFormat = new RootJsonFormat[Outcome] {
+      val JsSuccess = JsObject("type" -> JsString("success"))
+
+      object JsFailure {
+        def unapply(json: JsValue): Option[String] = json match {
+          case JsObject(fields) =>
+            for {
+              jsType <- fields.get("type")
+              jsMessage <- fields.get("message")
+              message <- jsMessage match {
+                case JsString(message) if jsType == JsString("failure") => Some(message)
+                case _ => None
+              }
+            } yield message
+          case _ => None
+        }
+      }
+
+      override def read(json: JsValue): Outcome = json match {
+        case JsSuccess => Success
+        case JsFailure(message) => Failure(message)
+        case _ => throw DeserializationException(s"""Malformed json outcome: "$json".""")
+      }
+
+      override def write(outcome: Outcome): JsValue = outcome match {
+        case Success => JsSuccess
+        case Failure(message) => JsObject(
+          "type" -> JsString("failure"),
+          "message" -> JsString(message)
+        )
+      }
+    }
+
+
     implicit val semigroupOutcome: Semigroup[Outcome] = (a, b) => a match {
         case Success => b
         case Failure(msgA) => b match {

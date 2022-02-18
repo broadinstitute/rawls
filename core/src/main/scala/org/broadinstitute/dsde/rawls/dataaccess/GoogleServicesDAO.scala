@@ -100,7 +100,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param userProject the project to be billed - optional. If None, defaults to the bucket's project
     * @return optional Google bucket
     */
-  def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]]
+  def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Either[String, Bucket]]
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 

@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleS
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
 import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigration}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
@@ -32,6 +33,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Assertion, BeforeAndAfterAll, OptionValues}
 import slick.jdbc.MySQLProfile.api._
+import spray.json.{JsObject, JsString}
 
 import java.sql.{SQLException, Timestamp}
 import java.util.UUID
@@ -802,6 +804,19 @@ class WorkspaceMigrationActorSpec
         after.outcome shouldBe failure.some
       }
     }
+
+  "Outcome" should "have json support for Success" in {
+    val jsSuccess = outcomeJsonFormat.write(Success)
+    jsSuccess shouldBe JsObject("type" -> JsString("success"))
+    outcomeJsonFormat.read(jsSuccess) shouldBe Success
+  }
+
+  it should "have json support for Failure" in {
+    val message = UUID.randomUUID.toString
+    val jsFailure = outcomeJsonFormat.write(Failure(message))
+    jsFailure shouldBe JsObject("type" -> JsString("failure"), "message" -> JsString(message))
+    outcomeJsonFormat.read(jsFailure) shouldBe Failure(message)
+  }
 
 }
 

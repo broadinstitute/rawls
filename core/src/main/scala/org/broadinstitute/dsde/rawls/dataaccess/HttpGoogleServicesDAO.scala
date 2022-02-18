@@ -426,25 +426,25 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
+  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Either[String, Bucket]] = {
     implicit val service = GoogleInstrumentedService.Storage
-    retryWithRecoverWhen500orGoogleError(() => {
+    retryWithRecoverWhen500orGoogleError[Either[String, Bucket]](() => {
       val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
       userProject.map( p => getter.setUserProject(p.value) )
 
-      Option(executeGoogleRequest(getter))
+      Right(executeGoogleRequest(getter))
     }) {
-      case _: HttpResponseException => None
+      case e: HttpResponseException => Left(s"HTTP ${e.getStatusCode}: ${e.getStatusMessage} (${e.getMessage})")
     }
   }
 
   override def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]] = {
     getBucket(bucketName, userProject) map {
-      case Some(bucket) => bucket.getLocationType match {
+      case Right(bucket) => bucket.getLocationType match {
         case SingleRegionLocationType => Option(bucket.getLocation)
         case _ => None
       }
-      case None => throw new RawlsException(s"Failed to retrieve bucket `$bucketName`")
+      case Left(message) => throw new RawlsException(s"Failed to retrieve bucket `$bucketName`. $message")
     }
   }
 
