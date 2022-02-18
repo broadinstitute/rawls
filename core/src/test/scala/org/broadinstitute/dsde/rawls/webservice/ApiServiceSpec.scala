@@ -187,7 +187,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       samDAO,
       "test",
       GoogleProject("test")
-    )g
+    )
 
     val methodRepoDAO = new HttpMethodRepoDAO(
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
