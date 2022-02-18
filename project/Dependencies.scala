@@ -76,10 +76,9 @@ object Dependencies {
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.13" // upgrading a transitive dependency to avoid security warnings
+  val jerseyClient: ModuleID =    "org.glassfish.jersey.core"     % "jersey-client"         % "2.35"   // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
-  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.10"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
@@ -90,6 +89,20 @@ object Dependencies {
   val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
+
+  /* mysql-connector-java > 8.0.22 is incompatible with liquibase-core < 4.3.1. See:
+      - https://github.com/liquibase/liquibase/issues/1639
+      - https://dev.mysql.com/doc/relnotes/connector-j/8.0/en/news-8-0-23.html
+     the end result of this incompatibility is that attempting to run Rawls' liquibase on an already-initialized database
+     will throw an error "java.lang.ClassCastException: class java.time.LocalDateTime cannot be cast to class java.lang.String".
+     This only occurs on already-initialized databases; it does not happen when liquibase is run the first time on an
+     empty DB.
+
+     The behavior change in mysql-connector-java between 8.0.22 and 8.0.23 needs to be assessed to see if it will cause
+     any issues elsewhere in Rawls before upgrading.
+   */
+  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
 
   val workbenchLibsHash = "7ddf186"
 
@@ -208,6 +221,7 @@ object Dependencies {
     googleApiClient,
     scalaUri,
     workspaceManager,
+    jerseyClient,
     scalatest
   )
 
@@ -245,6 +259,7 @@ object Dependencies {
     scalaCache,
     apacheCommonsIO,
     workspaceManager,
+    jerseyClient,
     dataRepo,
     dataRepoJersey,
     antlrParser,
