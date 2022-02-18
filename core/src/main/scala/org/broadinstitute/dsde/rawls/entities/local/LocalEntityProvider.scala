@@ -41,28 +41,21 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       rootSpan.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspace.toWorkspaceName.toString))
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("isEntityCacheCurrent", rootSpan) { outerSpan =>
-          // TODO: if !useCache or ~cacheEnabled, don't bother querying for cache staleness?
-          dataAccess.entityCacheQuery.entityCacheExists(workspaceContext.workspaceIdAsUUID).flatMap { cacheExists =>
-            // If a cache exists, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
+          dataAccess.entityCacheQuery.entityCacheStaleness(workspaceContext.workspaceIdAsUUID).flatMap { cacheExists =>
+            // record the cache-staleness for this request
             cacheExists.foreach { staleness =>
               // TODO: send to a metrics service that allows these values to be graphed/analyzed, instead of just logging
               logger.info(s"entity statistics cache staleness: $staleness")
             }
+            // If a cache exists, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
             if(cacheExists.isDefined && useCache && cacheEnabled) {
               traceDBIOWithParent("retrieve-cached-results", outerSpan) { _ =>
                 logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
                 val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
                 val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
-
-                // TODO: if cache is out of date, fire off an async/non-blocking cache update.
+                // TODO: if cache is out of date, fire off an async/non-blocking cache update. Make sure this is not in the same transaction!
+                // easy enough to call entityTypeMetadata(false), but need it to be in a separate transaction
                 // TODO: re-enable the "opportunistically update cache if user requests metadata while cache is out of date" test
-                // TODO: add unit test coverage:
-                  // - entityCacheExists staleness value is correct
-                  // - entityCacheExists is empty when cache does not exist
-                  // - always returns cached metadata even when cache is stale (assuming cache is enabled for the request and at the system level)
-                  // - opportunistic updates?
-                  // - what else?
-
                 dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
               }
             }
@@ -79,9 +72,9 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
               logger.info(s"entity statistics cache: miss ($missReason) [${workspaceContext.workspaceIdAsUUID}]")
 
-              traceDBIOWithParent("retrieve-uncached-results", outerSpan) { _ =>
-                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext) flatMap { metadata =>
-                  val saveCacheAction = if (cacheEnabled && cacheExists.getOrElse(-1) > 0) {
+              traceDBIOWithParent("retrieve-uncached-results", outerSpan) { span =>
+                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext, span) flatMap { metadata =>
+                  val saveCacheAction = if (cacheEnabled && cacheExists.getOrElse(Integer.MAX_VALUE) > 0) {
                     // if the entity cache is not current, AND we have the metadata result, save it to the cache!
                     // the user has done us the favor of waiting for the result, let's take advantage of that result.
                     // if saving the cache here fails, ignore the failure and still get the metadata to the user
@@ -93,10 +86,10 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
                 }
               }
             }
-          }
-        }
-      }
-    }
+          } // end entityCacheExists flatmap
+        } // end traceDBIOWithParent
+      }// end transaction
+    } // end root-level trace
   }
 
   private def opportunisticSaveEntityCache(metadata: Map[String, EntityTypeMetadata], dataAccess: DataAccess) = {

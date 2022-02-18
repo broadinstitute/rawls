@@ -47,13 +47,13 @@ trait EntityCacheComponent {
       entityCacheQuery.insertOrUpdate(EntityCacheRecord(workspaceId, timestamp, errorMessage))
     }
 
-    // TODO: probably rename this method, I expect an "exists" method to return a boolean
-    /** does an entity cache exist at all, regardless of how current it is?
-      *  returns None if no cache exists
-      *  returns Some[Int] if a cache exists. The integer is the number of seconds
+    /**
+      * Describes the staleness of the entity cache for a given workspace.
+      *  - returns None if no cache exists
+      *  - returns Some[Int] if a cache exists. The integer is the number of seconds
       *   by which the cache is stale; this will be zero if the cache is up-to-date
       * */
-    def entityCacheExists(workspaceId: UUID): ReadAction[Option[Int]] = {
+    def entityCacheStaleness(workspaceId: UUID): ReadAction[Option[Int]] = {
       val baseQuery = sql"""
                       select TIMESTAMPDIFF(SECOND, c.entity_cache_last_updated, w.last_modified) as staleness
                         from WORKSPACE w, WORKSPACE_ENTITY_CACHE c
@@ -66,18 +66,21 @@ trait EntityCacheComponent {
     /** does an up-to-date entity cache exist? */
     // currently unused except in tests
     def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
-      val baseQuery = sql"""SELECT EXISTS(
-              SELECT 1
-                FROM WORKSPACE w, WORKSPACE_ENTITY_CACHE c
-                WHERE
-                  w.id = $workspaceId
-                  and w.id = c.workspace_id
-                  and w.last_modified = c.entity_cache_last_updated
-                LIMIT 1);""".as[Int]
+      // staleness of 0 means the cache is current
+      entityCacheStaleness(workspaceId).map (_.getOrElse(Integer.MAX_VALUE) == 0)
 
-      uniqueResult[Int](baseQuery).map { existsResult =>
-        existsResult.contains(1)
-      }
+//      val baseQuery = sql"""SELECT EXISTS(
+//              SELECT 1
+//                FROM WORKSPACE w, WORKSPACE_ENTITY_CACHE c
+//                WHERE
+//                  w.id = $workspaceId
+//                  and w.id = c.workspace_id
+//                  and w.last_modified = c.entity_cache_last_updated
+//                LIMIT 1);""".as[Int]
+//
+//      uniqueResult[Int](baseQuery).map { existsResult =>
+//        existsResult.contains(1)
+//      }
     }
 
   }

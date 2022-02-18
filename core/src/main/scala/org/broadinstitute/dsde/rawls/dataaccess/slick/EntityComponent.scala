@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.WorkspaceShardState
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
 import slick.jdbc.{GetResult, JdbcProfile}
 
@@ -550,9 +550,13 @@ trait EntityComponent {
 
     // get entity types, counts, and attribute names to populate UI tables.  Active entities and attributes only.
 
-    def getEntityTypeMetadata(workspaceContext: Workspace): ReadAction[Map[String, EntityTypeMetadata]] = {
-      val typesAndCountsQ = getEntityTypesWithCounts(workspaceContext.workspaceIdAsUUID)
-      val typesAndAttrsQ = getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, workspaceContext.shardState)
+    def getEntityTypeMetadata(workspaceContext: Workspace, outerSpan: Span = null): ReadAction[Map[String, EntityTypeMetadata]] = {
+      val typesAndCountsQ = traceReadOnlyDBIOWithParent("getEntityTypesWithCounts", outerSpan) { _ =>
+        getEntityTypesWithCounts(workspaceContext.workspaceIdAsUUID)
+      }
+      val typesAndAttrsQ = traceReadOnlyDBIOWithParent("getAttrNamesAndEntityTypes", outerSpan) { _ =>
+        getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, workspaceContext.shardState)
+      }
 
       generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
     }

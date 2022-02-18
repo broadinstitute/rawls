@@ -206,6 +206,9 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
     //The test data for the following entity cache tests are set up so that the cache will return results that are different
     //than would be returned by not using the cache. This will help us determine that we are correctly calling the cache or going
     //in for the full DB query
+  }
+
+  "LocalEntityProvider Entity Statistics Cache feature" should {
 
     val expectedResultWhenUsingCache = localEntityProviderTestData.workspaceEntityTypeCacheEntries.map { case (entityType, entityTypeCount) =>
       entityType -> EntityTypeMetadata(entityTypeCount, s"${entityType}_id", localEntityProviderTestData.workspaceAttrNameCacheEntries(entityType).map(attrName => toDelimitedName(attrName)))
@@ -289,7 +292,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
 
-    // TODO: start isEntityCacheCurrent() tests; these are obsolete
+    // =========== START isEntityCacheCurrent() tests; these are obsolete
     "consider cache out of date if no cache record" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
@@ -307,7 +310,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
     "consider cache out of date if cache record exists but is old" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
-      val wsLastModifiedTimestamp = Timestamp.from(Instant.ofEpochMilli(localEntityProviderTestData.workspace.lastModified.getMillis-10000))
+      val wsLastModifiedTimestamp = Timestamp.from(Instant.ofEpochMilli(localEntityProviderTestData.workspace.lastModified.getMillis - 10000))
 
       withClue("cache record should not exist before updating") {
         assert(!runAndWait(workspaceFilter.exists.result))
@@ -342,7 +345,61 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         assert(isCurrent)
       }
     }
-    // TODO: end isEntityCacheCurrent() tests; these are obsolete
+    // =========== END isEntityCacheCurrent() tests; these are obsolete
+
+    "return None from entityCacheStaleness if cache is non-existent" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      val staleness = runAndWait(entityCacheQuery.entityCacheStaleness(wsid))
+      withClue("staleness value should be None for non-existent caches") {
+        staleness shouldBe empty
+      }
+    }
+    "return Some(positive integer) from entityCacheStaleness if cache exists but is stale" in withLocalEntityProviderTestDatabase { _ =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+      val wsLastModifiedTimestamp = Timestamp.from(Instant.ofEpochMilli(localEntityProviderTestData.workspace.lastModified.getMillis - 10000))
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      // update cache timestamp
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, wsLastModifiedTimestamp))
+
+      val staleness = runAndWait(entityCacheQuery.entityCacheStaleness(wsid))
+      withClue(s"staleness value of [$staleness] should contain a positive integer") {
+        staleness match {
+          case Some(n) => n should be > 0
+          case None => fail("found None")
+        }
+      }
+    }
+    "return Some(0) from entityCacheStaleness if cache is up-to-date" in withLocalEntityProviderTestDatabase { da =>
+      val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
+      val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
+
+      withClue("cache record should not exist before updating") {
+        assert(!runAndWait(workspaceFilter.exists.result))
+      }
+
+      val existingWorkspace = runAndWait(workspaceQuery.findById(wsid.toString))
+      existingWorkspace should not be empty
+      val wsLastModifiedTimestamp = new Timestamp(existingWorkspace.get.lastModified.getMillis)
+
+      // update cache timestamp
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, wsLastModifiedTimestamp))
+
+      val staleness = runAndWait(entityCacheQuery.entityCacheStaleness(wsid))
+      withClue("staleness value should be Some(0) for up-to-date caches") {
+        staleness should contain (0)
+      }
+    }
 
     "insert cache record when updating if non-existent" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
@@ -418,7 +475,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       secondMessage shouldBe empty
     }
 
-    // temporarily disabled until we
+    // temporarily disabled until we re-implement opportunistic cache update
     "opportunistically update cache if user requests metadata while cache is out of date" ignore withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
@@ -446,100 +503,98 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         assert(isCurrentAfter)
       }
     }
-
-    "return helpful error message when upserting case-divergent entity names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
-      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
-
-      // create the first entity with name "myname"
-      val entity1 = Entity("myname", "casetest", Map())
-      val created1 = localEntityProvider.createEntity(entity1).futureValue
-      created1 shouldBe entity1
-
-      // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
-      val entity2 = Entity("MyName", "casetest", Map())
-      val ex = recoverToExceptionIf[Exception] {
-        localEntityProvider.createEntity(entity2)
-      }.futureValue
-
-      ex match {
-        case er:RawlsExceptionWithErrorReport =>
-          val expectedMessage = s"${entity2.entityType} ${entity2.name} already exists in ${workspaceContext.toWorkspaceName}"
-          er.errorReport.message shouldBe expectedMessage
-        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
-      }
-    }
-
-    "return helpful error message when upserting case-divergent entity names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
-      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
-
-      // create the first entity with name "myname"
-      val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
-      val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
-      created1.size shouldBe 1
-
-      // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
-      val upsert2 = Seq(EntityUpdateDefinition("MyName", "casetest", Seq()))
-      val ex = recoverToExceptionIf[Exception] {
-        localEntityProvider.batchUpsertEntities(upsert2)
-      }.futureValue
-
-      ex match {
-        case er:RawlsExceptionWithErrorReport =>
-          val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities."
-          er.errorReport.message shouldBe expectedMessage
-        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
-      }
-    }
-
-    "return helpful error message when upserting case-divergent type names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
-      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
-
-      // create the first entity with type "casetest"
-      val entity1 = Entity("myname", "casetest", Map())
-      val created1 = localEntityProvider.createEntity(entity1).futureValue
-      created1 shouldBe entity1
-
-      // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
-      val entity2 = Entity("myname", "CaseTest", Map())
-      val ex = recoverToExceptionIf[Exception] {
-        localEntityProvider.createEntity(entity2)
-      }.futureValue
-
-      ex match {
-        case er:RawlsExceptionWithErrorReport =>
-          val expectedMessage = s"${entity2.entityType} ${entity2.name} already exists in ${workspaceContext.toWorkspaceName}"
-          er.errorReport.message shouldBe expectedMessage
-        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
-      }
-    }
-
-    "return helpful error message when upserting case-divergent type names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
-      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
-
-      // create the first entity with type "casetest"
-      val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
-      val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
-      created1.size shouldBe 1
-
-      // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
-      val upsert2 = Seq(EntityUpdateDefinition("myname", "CaseTest", Seq()))
-      val ex = recoverToExceptionIf[Exception] {
-        localEntityProvider.batchUpsertEntities(upsert2)
-      }.futureValue
-
-      ex match {
-        case er:RawlsExceptionWithErrorReport =>
-          val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities."
-          er.errorReport.message shouldBe expectedMessage
-        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
-      }
-    }
-
-
-
   }
+
+  "return helpful error message when upserting case-divergent entity names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
+    val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+    // create the first entity with name "myname"
+    val entity1 = Entity("myname", "casetest", Map())
+    val created1 = localEntityProvider.createEntity(entity1).futureValue
+    created1 shouldBe entity1
+
+    // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
+    val entity2 = Entity("MyName", "casetest", Map())
+    val ex = recoverToExceptionIf[Exception] {
+      localEntityProvider.createEntity(entity2)
+    }.futureValue
+
+    ex match {
+      case er:RawlsExceptionWithErrorReport =>
+        val expectedMessage = s"${entity2.entityType} ${entity2.name} already exists in ${workspaceContext.toWorkspaceName}"
+        er.errorReport.message shouldBe expectedMessage
+      case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+    }
+  }
+
+  "return helpful error message when upserting case-divergent entity names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
+    val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+    // create the first entity with name "myname"
+    val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
+    val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
+    created1.size shouldBe 1
+
+    // attempt to create the second entity with name "MyName" - differing from entity1's name only in case
+    val upsert2 = Seq(EntityUpdateDefinition("MyName", "casetest", Seq()))
+    val ex = recoverToExceptionIf[Exception] {
+      localEntityProvider.batchUpsertEntities(upsert2)
+    }.futureValue
+
+    ex match {
+      case er:RawlsExceptionWithErrorReport =>
+        val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities."
+        er.errorReport.message shouldBe expectedMessage
+      case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+    }
+  }
+
+  "return helpful error message when upserting case-divergent type names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
+    val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+    // create the first entity with type "casetest"
+    val entity1 = Entity("myname", "casetest", Map())
+    val created1 = localEntityProvider.createEntity(entity1).futureValue
+    created1 shouldBe entity1
+
+    // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
+    val entity2 = Entity("myname", "CaseTest", Map())
+    val ex = recoverToExceptionIf[Exception] {
+      localEntityProvider.createEntity(entity2)
+    }.futureValue
+
+    ex match {
+      case er:RawlsExceptionWithErrorReport =>
+        val expectedMessage = s"${entity2.entityType} ${entity2.name} already exists in ${workspaceContext.toWorkspaceName}"
+        er.errorReport.message shouldBe expectedMessage
+      case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+    }
+  }
+
+  "return helpful error message when upserting case-divergent type names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
+    val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+    // create the first entity with type "casetest"
+    val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
+    val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
+    created1.size shouldBe 1
+
+    // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
+    val upsert2 = Seq(EntityUpdateDefinition("myname", "CaseTest", Seq()))
+    val ex = recoverToExceptionIf[Exception] {
+      localEntityProvider.batchUpsertEntities(upsert2)
+    }.futureValue
+
+    ex match {
+      case er:RawlsExceptionWithErrorReport =>
+        val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities."
+        er.errorReport.message shouldBe expectedMessage
+      case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
+    }
+  }
+
 }
