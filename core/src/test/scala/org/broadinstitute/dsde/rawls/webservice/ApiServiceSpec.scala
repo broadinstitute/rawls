@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.PoisonPill
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
@@ -37,10 +39,10 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
-import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -179,7 +181,13 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       gcsDAO
     )_
 
-    override val spendReportingConstructor = ???
+    override val spendReportingConstructor = SpendReportingService.constructor(
+      slickDataSource,
+      bigQueryDAO,
+      samDAO,
+      "test",
+      GoogleProject("test")
+    )g
 
     val methodRepoDAO = new HttpMethodRepoDAO(
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
