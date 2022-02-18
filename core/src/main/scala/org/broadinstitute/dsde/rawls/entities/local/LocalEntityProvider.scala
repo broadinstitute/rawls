@@ -41,14 +41,14 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       rootSpan.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspace.toWorkspaceName.toString))
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("isEntityCacheCurrent", rootSpan) { outerSpan =>
-          dataAccess.entityCacheQuery.entityCacheStaleness(workspaceContext.workspaceIdAsUUID).flatMap { cacheExists =>
+          dataAccess.entityCacheQuery.entityCacheStaleness(workspaceContext.workspaceIdAsUUID).flatMap { cacheStaleness =>
             // record the cache-staleness for this request
-            cacheExists.foreach { staleness =>
+            cacheStaleness.foreach { staleness =>
               // TODO: send to a metrics service that allows these values to be graphed/analyzed, instead of just logging
               logger.info(s"entity statistics cache staleness: $staleness")
             }
             // If a cache exists, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
-            if(cacheExists.isDefined && useCache && cacheEnabled) {
+            if(cacheStaleness.isDefined && useCache && cacheEnabled) {
               traceDBIOWithParent("retrieve-cached-results", outerSpan) { _ =>
                 logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
                 val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
@@ -65,7 +65,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
                 "cache disabled at system level"
               else if (!useCache)
                 "user request specified cache bypass"
-              else if (cacheExists.isEmpty)
+              else if (cacheStaleness.isEmpty)
                 "cache does not exist"
               else
                 "unknown reason - this should be unreachable"
@@ -74,7 +74,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
               traceDBIOWithParent("retrieve-uncached-results", outerSpan) { span =>
                 dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext, span) flatMap { metadata =>
-                  val saveCacheAction = if (cacheEnabled && cacheExists.getOrElse(Integer.MAX_VALUE) > 0) {
+                  val saveCacheAction = if (cacheEnabled && cacheStaleness.getOrElse(Integer.MAX_VALUE) > 0) {
                     // if the entity cache is not current, AND we have the metadata result, save it to the cache!
                     // the user has done us the favor of waiting for the result, let's take advantage of that result.
                     // if saving the cache here fails, ignore the failure and still get the metadata to the user

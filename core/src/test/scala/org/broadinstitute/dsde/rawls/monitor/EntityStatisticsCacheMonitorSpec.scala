@@ -157,14 +157,10 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
     val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
-    //Update the entityCacheLastUpdated field to be older than lastModified, so we can test our scenario of having a stale cache
-    // runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
-
-    //Load the current entityMetadata (which should not use the cache)
+    //Load the current entityMetadata, explicitly bypassing the cache
     val originalResult = Await.result(localEntityProvider.entityTypeMetadata(false), Duration.Inf)
 
-    //Note that the call to entityTypeMetadata updated the cache as a side effect, since the cache was out of date.
-    //Therefore, once again update the entityCacheLastUpdated field to be older than lastModified, so
+    //Update the entityCacheLastUpdated field to be older than lastModified, so
     //the monitor will update it using its internal code path
     runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 2)))
 
