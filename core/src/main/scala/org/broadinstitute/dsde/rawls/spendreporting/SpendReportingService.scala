@@ -111,7 +111,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     validateReportParameters(startDate, endDate)
 
     requireAlphaUser() {
-      requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) { // todo: new action here? this is an okay approx. but could add a specific one
+      requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReport) {
         for {
           spendExportConf <- getSpendExportConfiguration(billingProjectName)
           workspaceProjects <- getWorkspaceGoogleProjects(billingProjectName)
