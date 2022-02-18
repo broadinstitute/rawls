@@ -21,7 +21,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
 
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
 
-  it should "throw an exception if creating a multi-cloud workspace if not enabled" in {
+  it should "throw an exception if creating a multi-cloud workspace is not enabled" in {
     val userInfo = UserInfo(RawlsUserEmail("example@example.com"), OAuth2BearerToken("fake_token"), 1234, RawlsUserSubjectId("ABCDEF"))
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, 2 seconds, "fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id")

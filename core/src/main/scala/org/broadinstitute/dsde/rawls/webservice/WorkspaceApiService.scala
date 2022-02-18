@@ -55,7 +55,10 @@ trait WorkspaceApiService extends UserInfoDirectives {
             addLocationHeader(workspace.path) {
               traceRequest { span =>
                 complete {
-                  multiCloudWorkspaceServiceConstructor(userInfo).createMultiCloudWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                  multiCloudWorkspaceServiceConstructor(userInfo)
+                    .createMultiCloudWorkspace(workspace, span).map {
+                      w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty))
+                  }
                 }
               }
             }

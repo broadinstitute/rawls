@@ -7,7 +7,6 @@ import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.mock.MockWorkspaceManagerDAO.defaultCloudContextResult
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport}
 
 import java.util.UUID
@@ -15,17 +14,7 @@ import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 
 
-object MockWorkspaceManagerDAO {
-  def buildWithCloudContextResult(result: CreateCloudContextResult) = {
-    new MockWorkspaceManagerDAO(result)
-  }
-
-
-  val defaultCloudContextResult = new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED))
-}
-
-
-class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = defaultCloudContextResult) extends WorkspaceManagerDAO {
+class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = MockWorkspaceManagerDAO.defaultCloudContextResult) extends WorkspaceManagerDAO {
 
   val references: TrieMap[(UUID, UUID), DataRepoSnapshotResource] = TrieMap()
 
@@ -111,4 +100,13 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
                                                     jobControlId: String,
                                                     accessToken: OAuth2BearerToken): CreateCloudContextResult = mockCreateAzureCloudContextResult()
+}
+
+
+object MockWorkspaceManagerDAO {
+  val defaultCloudContextResult: CreateCloudContextResult = new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED))
+
+  def buildWithCloudContextResult(result: CreateCloudContextResult) = {
+    new MockWorkspaceManagerDAO(result)
+  }
 }
