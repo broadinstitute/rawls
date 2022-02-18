@@ -342,9 +342,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         trackDetailedSubmissionMetrics = true,
         "fc-"
       )
-      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
-        multiCloudWorkspacesEnabled = false, "fakeSpendProfileId", "fake", "fake", "fake"
-      )
+      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
 
       val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
       val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
@@ -379,7 +377,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         workbenchMetricBaseName,
         mockSubmissionCostService,
         workspaceServiceConfig,
-        multiCloudWorkspaceConfig,
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,

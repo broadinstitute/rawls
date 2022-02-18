@@ -37,7 +37,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
@@ -371,6 +371,12 @@ object Boot extends IOApp with LazyLogging {
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
+      val multiCloudWorkspaceServiceConstructor: (UserInfo) => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
+        slickDataSource,
+        workspaceManagerDAO,
+        multiCloudWorkspaceConfig
+      )
+
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
@@ -389,7 +395,6 @@ object Boot extends IOApp with LazyLogging {
         workbenchMetricBaseName = metricsPrefix,
         submissionCostService,
         workspaceServiceConfig,
-        multiCloudWorkspaceConfig,
         requesterPaysSetupService,
         entityManager,
         resourceBufferService,
@@ -415,6 +420,7 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val service = new RawlsApiServiceImpl(
+        multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
         entityServiceConstructor,
         userServiceConstructor,

@@ -196,13 +196,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       true,
       "fc-"
     )
-    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
-      false,
-      "fake",
-      "fake",
-      "fake",
-      "fake"
-    )
+    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
@@ -232,7 +226,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       workbenchMetricBaseName,
       submissionCostService,
       workspaceServiceConfig,
-      multiCloudWorkspaceConfig,
       requesterPaysSetupService,
       entityManager,
       resourceBufferService,
@@ -242,6 +235,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
     )_
+
+    override val multiCloudWorkspaceServiceConstructor = ???
 
     override val entityServiceConstructor = EntityService.constructor(
       slickDataSource,

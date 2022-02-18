@@ -41,7 +41,10 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
   }
 
-  override def createWorkspaceWithSpendProfile(workspaceId: UUID, displayName: String, spendProfileId: String, accessToken: OAuth2BearerToken): CreatedWorkspace = {
+  override def createWorkspaceWithSpendProfile(workspaceId: UUID,
+                                               displayName: String,
+                                               spendProfileId: String,
+                                               accessToken: OAuth2BearerToken): CreatedWorkspace = {
     getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody()
       .id(workspaceId)
       .displayName(displayName)

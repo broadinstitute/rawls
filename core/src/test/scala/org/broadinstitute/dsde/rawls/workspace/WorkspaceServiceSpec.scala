@@ -28,7 +28,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
@@ -44,7 +44,6 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.mapAsScalaMapConverter
@@ -147,12 +146,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       true,
       "fc-"
     )
-    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
-      false,
-      "fake",
-      "fake",
-      "fake",
-      "fake"
+    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
+    override val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
+      dataSource, workspaceManagerDAO, multiCloudWorkspaceConfig
     )
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
@@ -187,7 +183,6 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       workbenchMetricBaseName,
       submissionCostService,
       workspaceServiceConfig,
-      multiCloudWorkspaceConfig,
       requesterPaysSetupService,
       entityManager,
       resourceBufferService,
@@ -1696,19 +1691,5 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
 
     actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
-  }
-
-  it should "throw an exception if creating a multi-cloud workspace if not enabled" in withTestDataServices { services =>
-    val workspaceRequest = new MultiCloudWorkspaceRequest(
-      "fake_namespace",
-      "fake_name",
-      Map.empty,
-      None,
-      WorkspaceCloudPlatform.Azure
-    )
-    val actual = intercept[RawlsExceptionWithErrorReport] {
-      services.workspaceService.createMultiCloudWorkspace(workspaceRequest)
-    }
-    actual.errorReport.statusCode.get shouldEqual StatusCodes.NotImplemented
   }
 }

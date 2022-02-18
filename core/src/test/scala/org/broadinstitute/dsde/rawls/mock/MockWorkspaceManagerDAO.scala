@@ -3,16 +3,29 @@ package org.broadinstitute.dsde.rawls.mock
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.mock.MockWorkspaceManagerDAO.defaultCloudContextResult
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport}
 
 import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 
-class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
+
+object MockWorkspaceManagerDAO {
+  def buildWithCloudContextResult(result: CreateCloudContextResult) = {
+    new MockWorkspaceManagerDAO(result)
+  }
+
+
+  val defaultCloudContextResult = new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED))
+}
+
+
+class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = defaultCloudContextResult) extends WorkspaceManagerDAO {
 
   val references: TrieMap[(UUID, UUID), DataRepoSnapshotResource] = TrieMap()
 
@@ -22,7 +35,8 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
   def mockEnumerateReferenceResponse(workspaceId: UUID) = references.collect {
     case ((wsId, _), refDescription) if wsId == workspaceId => refDescription
   }
-  def mockCreateAzureCloudContextResult(workspaceId: UUID) = new CreateCloudContextResult()
+  def mockInitialCreateAzureCloudContextResult() = new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.RUNNING))
+  def mockCreateAzureCloudContextResult() = createCloudContextResult
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
 
@@ -92,9 +106,9 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
                                                 azureTenantId: String,
                                                 azureResourceGroupId: String,
                                                 azureSubscriptionId: String,
-                                                accessToken: OAuth2BearerToken): CreateCloudContextResult = mockCreateAzureCloudContextResult(workspaceId)
+                                                accessToken: OAuth2BearerToken): CreateCloudContextResult = mockInitialCreateAzureCloudContextResult()
 
   override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
                                                     jobControlId: String,
-                                                    accessToken: OAuth2BearerToken): CreateCloudContextResult = mockCreateAzureCloudContextResult(workspaceId)
+                                                    accessToken: OAuth2BearerToken): CreateCloudContextResult = mockCreateAzureCloudContextResult()
 }
