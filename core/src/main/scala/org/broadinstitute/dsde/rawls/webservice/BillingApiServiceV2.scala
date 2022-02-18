@@ -21,6 +21,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
 
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+  import org.broadinstitute.dsde.rawls.model.SpendReportingJsonSupport._
   import spray.json.DefaultJsonProtocol._
 
   val userServiceConstructor: UserInfo => UserService

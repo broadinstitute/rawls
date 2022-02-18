@@ -6,7 +6,6 @@ import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
-import org.joda.time.DateTime
 import spray.json._
 
 import scala.language.implicitConversions
@@ -137,8 +136,6 @@ case class CreateRawlsV2BillingProjectFullRequest(
   billingAccount: RawlsBillingAccountName,
   servicePerimeter: Option[ServicePerimeterName])
 
-case class BillingProjectSpendConfiguration(datasetGoogleProject: GoogleProject, datasetName: BigQueryDatasetName)
-
 case class UpdateRawlsBillingAccountRequest(billingAccount: RawlsBillingAccountName)
 
 case class SyncReportItem(operation: String, email: String, errorReport: Option[ErrorReport])
@@ -203,8 +200,6 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val CreateRawlsV2BillingProjectFullRequestFormat = jsonFormat3(CreateRawlsV2BillingProjectFullRequest)
 
-  implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
-
   implicit val UpdateRawlsBillingAccountRequestFormat = jsonFormat1(UpdateRawlsBillingAccountRequest)
 
   implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
@@ -220,28 +215,9 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val WorkspaceBillingAccountFormat = jsonFormat2(WorkspaceBillingAccount)
 
   implicit val RawlsBillingProjectResponseFormat = jsonFormat7(RawlsBillingProjectResponse)
-
-  implicit val SpendReportingForDateRangeFormat = jsonFormat5(SpendReportingForDateRange)
-
-  implicit val SpendReportingAggregationKeyFormat = jsonFormat1(SpendReportingAggregationKey)
-  implicit val SpendReportingAggregationFormat = jsonFormat2(SpendReportingAggregation)
-  implicit val SpendReportingResultsFormat = jsonFormat2(SpendReportingResults)
-
-
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
 
-// TODO don't dump these case classes here
-case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], spendSummary: SpendReportingForDateRange)
-case class SpendReportingAggregation(aggregationKey: SpendReportingAggregationKey, spendData: Seq[SpendReportingForDateRange])
-case class SpendReportingForDateRange(
-                                       cost: String,
-                                       credits: String,
-                                       currency: String,
-                                       startTime: DateTime,
-                                       endTime: DateTime
-                                     )
 
-case class SpendReportingAggregationKey(key: String)
 

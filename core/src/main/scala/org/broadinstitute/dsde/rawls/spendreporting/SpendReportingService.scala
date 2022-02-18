@@ -79,8 +79,6 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     SpendReportingResults(Seq(dailySpendAggregation), spendSummary)
   }
 
-  case class BillingProjectSpendExport(billingProjectName: RawlsBillingProjectName, billingAccountId: RawlsBillingAccountName, spendExportTable: Option[String])
-
   private def dateTimeToISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
 
   private def getSpendExportConfiguration(billingProjectName: RawlsBillingProjectName): Future[BillingProjectSpendExport] = {
@@ -111,6 +109,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
 
   def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[Option[SpendReportingResults]] = {
     validateReportParameters(startDate, endDate)
+
     requireAlphaUser() {
       requireProjectAction(billingProjectName, SamBillingProjectActions.alterSpendReportConfiguration) { // todo: new action here? this is an okay approx. but could add a specific one
         for {
