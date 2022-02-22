@@ -196,7 +196,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       true,
       "fc-"
     )
-    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
@@ -239,7 +238,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
-      multiCloudWorkspaceConfig
+      MultiCloudWorkspaceConfig(testConf)
     )
 
     override val entityServiceConstructor = EntityService.constructor(

@@ -148,7 +148,7 @@ case class MultiCloudWorkspaceRequest(namespace: String,
                                       authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
                                       cloudPlatform: WorkspaceCloudPlatform
                                      ) extends Attributable {
-  def toWorkspaceName = WorkspaceName(namespace,name)
+  def toWorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
 }
@@ -216,6 +216,35 @@ object Workspace {
     val googleProjectId = GoogleProjectId(randomString)
     val googleProjectNumber = GoogleProjectNumber(randomString)
     new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate), shardState = WorkspaceShardStates.Sharded, workspaceType = WorkspaceType.RawlsWorkspace)
+  }
+
+  def buildMcWorkpace(namespace: String,
+                      name: String,
+                      workspaceId: String,
+                      createdDate: DateTime,
+                      lastModified: DateTime,
+                      createdBy: String,
+                      attributes: AttributeMap): Workspace = {
+    new Workspace(
+      namespace = namespace,
+      name = name,
+      workspaceId = workspaceId,
+      bucketName = "",
+      workflowCollectionName = Some(workspaceId),
+      createdDate = createdDate,
+      lastModified = lastModified,
+      createdBy = createdBy,
+      attributes = attributes,
+      isLocked = false,
+      workspaceVersion = WorkspaceVersions.V2,
+      googleProjectId = GoogleProjectId(""),
+      googleProjectNumber = None,
+      currentBillingAccountOnGoogleProject = None,
+      billingAccountErrorMessage = None,
+      completedCloneWorkspaceFileTransfer = None,
+      shardState = WorkspaceShardStates.Sharded,
+      workspaceType = WorkspaceType.McWorkspace
+    )
   }
 }
 

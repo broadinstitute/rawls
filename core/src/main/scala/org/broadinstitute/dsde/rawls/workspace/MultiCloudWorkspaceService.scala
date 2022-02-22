@@ -148,25 +148,14 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
                                                   dataAccess: DataAccess,
                                                   parentSpan: Span = null): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
-    val workspace = Workspace(
+    val workspace = Workspace.buildMcWorkpace(
       namespace = workspaceRequest.namespace,
       name = workspaceRequest.name,
       workspaceId = workspaceId,
-      bucketName = "",
-      workflowCollectionName = Some(workspaceId),
       createdDate = currentDate,
       lastModified = currentDate,
       createdBy = userInfo.userEmail.value,
-      attributes = workspaceRequest.attributes,
-      isLocked = false,
-      workspaceVersion = WorkspaceVersions.V2,
-      googleProjectId = GoogleProjectId(""),
-      googleProjectNumber = None,
-      currentBillingAccountOnGoogleProject = None,
-      billingAccountErrorMessage = None,
-      completedCloneWorkspaceFileTransfer = None,
-      shardState = WorkspaceShardStates.Sharded,
-      workspaceType = WorkspaceType.McWorkspace
+      attributes = workspaceRequest.attributes
     )
     traceDBIOWithParent("saveMultiCloudWorkspace", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)
