@@ -296,7 +296,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       } yield {}
     }
 
-  // todo: move these to SpendReportingService
   def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, spendReportConfiguration: BillingProjectSpendConfiguration): Future[Int] = {
 
     val datasetName = spendReportConfiguration.datasetName

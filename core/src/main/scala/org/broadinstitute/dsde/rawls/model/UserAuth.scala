@@ -218,6 +218,3 @@ class UserAuthJsonSupport extends JsonSupport {
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
-
-
-
