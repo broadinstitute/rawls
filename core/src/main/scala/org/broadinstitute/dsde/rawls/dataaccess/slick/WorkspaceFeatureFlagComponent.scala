@@ -25,7 +25,7 @@ trait WorkspaceFeatureFlagComponent {
 
     def save(workspaceId: UUID, flagname: String, enabled: Boolean, config: Option[String] = None): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
       val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname, enabled, config)
-      workspaceFeatureFlagQuery returning workspaceFeatureFlagQuery += flagRecord
+      (workspaceFeatureFlagQuery += flagRecord).map (_ => flagRecord)
     }
 
     def saveAll(flags: List[WorkspaceFeatureFlagRecord]): ReadWriteAction[List[WorkspaceFeatureFlagRecord]] = {
