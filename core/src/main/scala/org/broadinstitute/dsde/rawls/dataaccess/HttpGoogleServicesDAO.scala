@@ -660,8 +660,12 @@ class HttpGoogleServicesDAO(
       //Iterate over each chunk.
       val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
 
+        //Filter out the billing accounts that are closed, as they have no value to users
+        //and clutter their lists and cause confusion
+        val filteredChunk = chunk.filter(_.getOpen)
+
         //Run all tests in the chunk in parallel.
-        IO.fromFuture(IO(Future.traverse(chunk){ acct =>
+        IO.fromFuture(IO(Future.traverse(filteredChunk){ acct =>
           val acctName = RawlsBillingAccountName(acct.getName)
           testDMBillingAccountAccess(acctName) map { firecloudHasAccount =>
             RawlsBillingAccount(acctName, firecloudHasAccount, acct.getDisplayName)
