@@ -552,5 +552,10 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
       thrown.getMessage.contains("Invalid WorkspaceType")
     }
+
+    "should output the string representation" in {
+      WorkspaceType.McWorkspace.toString shouldBe "mc"
+      WorkspaceType.RawlsWorkspace.toString shouldBe "rawls"
+    }
   }
 }
