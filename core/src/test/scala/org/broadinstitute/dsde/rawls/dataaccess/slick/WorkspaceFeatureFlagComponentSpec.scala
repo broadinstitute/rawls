@@ -274,7 +274,7 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
     actualFlags1 should have size 3
     actualFlags2 should have size 4
 
-    val deleteCount = runAndWait(workspaceFeatureFlagQuery.deleteFlagsAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID,
+    val deleteCount = runAndWait(workspaceFeatureFlagQuery.deleteFlagsForWorkspace(minimalTestData.workspace.workspaceIdAsUUID,
       List("two", "this flag doesn't exist")))
 
     deleteCount shouldBe 1
