@@ -68,11 +68,12 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
 
   private def createWorkspace[T](workspaceRequest: MultiCloudWorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)
                                 (op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    val azureConfig = multiCloudWorkspaceConfig.azureConfig.getOrElse(throw new RawlsException("Config not present"))
     // TODO these will come from the spend profile service in the future
-    val spendProfileId = multiCloudWorkspaceConfig.spendProfileId
-    val azureTenantId = multiCloudWorkspaceConfig.azureTenantId
-    val azureSubscriptionId = multiCloudWorkspaceConfig.azureSubscriptionId
-    val azureResourceGroupId = multiCloudWorkspaceConfig.azureResourceGroupId
+    val spendProfileId = azureConfig.spendProfileId
+    val azureTenantId = azureConfig.azureTenantId
+    val azureSubscriptionId = azureConfig.azureSubscriptionId
+    val azureResourceGroupId = azureConfig.azureResourceGroupId
 
     traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
       case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
