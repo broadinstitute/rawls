@@ -23,11 +23,6 @@
             <column name="config" type="varchar(4000)">
                 <constraints nullable="true"/>
             </column>
-            <column name="last_modified"
-                    type="DATETIME(6)"
-                    defaultValueComputed="NOW(6)">
-                <constraints nullable="false"/>
-            </column>
         </createTable>
 
     </changeSet>
