@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
-import org.joda.time.DateTime
+import org.joda.time.{DateTime, Days}
 import org.joda.time.format.ISODateTimeFormat
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -105,6 +105,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
 
   private def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit = {
     if (startDate.isAfter(endDate)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "start date must be before end date"))
+    if (Days.daysBetween(startDate, endDate).getDays > 90) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "provided dates exceed maximum report date range"))
   }
 
   def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[Option[SpendReportingResults]] = {
