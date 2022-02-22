@@ -23,7 +23,7 @@ trait WorkspaceSupport {
   def accessCheck(workspace: Workspace, requiredAction: SamResourceAction, ignoreLock: Boolean): Future[Unit] = {
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo) flatMap { hasRequiredLevel =>
       if (hasRequiredLevel) {
-        if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(requiredAction) && workspace.isLocked && !ignoreLock)
+        if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute, SamWorkspaceActions.delete).contains(requiredAction) && workspace.isLocked && !ignoreLock)
           Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
         else
           Future.successful(())
