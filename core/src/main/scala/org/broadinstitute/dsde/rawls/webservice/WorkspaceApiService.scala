@@ -91,10 +91,20 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
       } ~
-      path("workspaces" / Segment / Segment / "migrate") { (workspaceNamespace, workspaceName) =>
-        put {
+      path("workspaces" / Segment / Segment / "migrations") { (namespace, name) =>
+        val workspaceName = WorkspaceName(namespace, name)
+        get {
           complete {
-            workspaceServiceConstructor(userInfo).migrateWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+            workspaceServiceConstructor(userInfo)
+              .getWorkspaceMigrationAttempts(workspaceName)
+              .map(ms => StatusCodes.OK -> ms)
+          }
+        } ~
+        post {
+          complete {
+            workspaceServiceConstructor(userInfo)
+              .migrateWorkspace(workspaceName)
+              .map(_ => StatusCodes.NoContent)
           }
         }
       } ~

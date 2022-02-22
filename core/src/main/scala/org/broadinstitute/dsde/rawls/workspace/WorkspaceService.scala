@@ -33,7 +33,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
+import org.broadinstitute.dsde.rawls.monitor.migration.{WorkspaceMigrationActor, WorkspaceMigrationDetails}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -2117,6 +2117,14 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- maybeUpdateInvalidBillingAccountField(billingProject, !hasAccess, parentSpan)
     } yield hasAccess
   }
+
+  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationDetails]] =
+    for {
+      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
+      attempts <- dataSource.inTransaction { _ =>
+        WorkspaceMigrationActor.getMigrationAttempts(workspace)
+      }
+    } yield attempts.map(WorkspaceMigrationDetails.fromWorkspaceMigration)
 
   def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = {
     logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")

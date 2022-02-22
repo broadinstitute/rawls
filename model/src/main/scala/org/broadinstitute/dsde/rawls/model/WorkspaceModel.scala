@@ -218,32 +218,32 @@ object Workspace {
     new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate), shardState = WorkspaceShardStates.Sharded, workspaceType = WorkspaceType.RawlsWorkspace)
   }
 
-  def buildMcWorkpace(namespace: String,
-                      name: String,
-                      workspaceId: String,
-                      createdDate: DateTime,
-                      lastModified: DateTime,
-                      createdBy: String,
-                      attributes: AttributeMap): Workspace = {
-    new Workspace(
-      namespace = namespace,
-      name = name,
-      workspaceId = workspaceId,
-      bucketName = "",
-      workflowCollectionName = Some(workspaceId),
-      createdDate = createdDate,
-      lastModified = lastModified,
-      createdBy = createdBy,
-      attributes = attributes,
-      isLocked = false,
-      workspaceVersion = WorkspaceVersions.V2,
-      googleProjectId = GoogleProjectId(""),
-      googleProjectNumber = None,
-      currentBillingAccountOnGoogleProject = None,
-      billingAccountErrorMessage = None,
-      completedCloneWorkspaceFileTransfer = None,
-      shardState = WorkspaceShardStates.Sharded,
-      workspaceType = WorkspaceType.McWorkspace
+  def apply(namespace: String,
+            name: String,
+            workspaceId: String,
+            createdDate: DateTime,
+            lastModified: DateTime,
+            createdBy: String,
+            attributes: AttributeMap
+           ) = {
+    new Workspace(namespace,
+      name,
+      workspaceId,
+      "",
+      None,
+      createdDate,
+      lastModified,
+      createdBy,
+      attributes,
+      false,
+      WorkspaceVersions.V2,
+      GoogleProjectId(""),
+      None,
+      None,
+      None,
+      None,
+      WorkspaceShardStates.Sharded,
+      WorkspaceType.McWorkspace
     )
   }
 }

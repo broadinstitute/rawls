@@ -2,12 +2,38 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import cats.implicits._
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.outcomeJsonFormat
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
+import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
+import spray.json.DefaultJsonProtocol._
 
 import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 
+
+final case class WorkspaceMigrationDetails(id: Long,
+                                           created: Instant,
+                                           started: Option[Instant],
+                                           updated: Instant,
+                                           finished: Option[Instant],
+                                           outcome: Option[Outcome]
+                                          )
+
+object WorkspaceMigrationDetails {
+  def fromWorkspaceMigration(m: WorkspaceMigration): WorkspaceMigrationDetails =
+    WorkspaceMigrationDetails(
+      m.id,
+      m.created.toInstant,
+      m.started.map(_.toInstant),
+      m.updated.toInstant,
+      m.finished.map(_.toInstant),
+      m.outcome
+    )
+
+  implicit val workspaceMigrationDetailsJsonFormat = jsonFormat6(WorkspaceMigrationDetails.apply)
+}
 
 final case class WorkspaceMigration(id: Long,
                                     workspaceId: UUID,

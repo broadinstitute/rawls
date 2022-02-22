@@ -149,7 +149,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
                                                   dataAccess: DataAccess,
                                                   parentSpan: Span = null): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
-    val workspace = Workspace.buildMcWorkpace(
+    val workspace = Workspace(
       namespace = workspaceRequest.namespace,
       name = workspaceRequest.name,
       workspaceId = workspaceId,

@@ -1189,13 +1189,33 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  "migrateWorkspace" should "create an entry in the migration table" in withTestDataServices { services =>
-    withWorkspaceContext(testData.workspace) { ctx =>
-      Await.result(services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName), Duration.Inf)
-      val isMigrating = runAndWait(WorkspaceMigrationActor.isInQueueToMigrate(testData.workspace))
-      isMigrating should be(true)
+  "migrateWorkspace" should "create an entry in the migration table" in
+    withTestDataServices { services =>
+      Await.result(
+        for {
+          _ <- services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName)
+          isMigrating <- services.slickDataSource.inTransaction { _ =>
+            WorkspaceMigrationActor.isInQueueToMigrate(testData.workspace)
+          }
+        } yield isMigrating should be(true),
+        30.seconds
+      )
     }
-  }
+
+  "getWorkspaceMigrations" should "return a list of workspace migration attempts" in
+    withTestDataServices { services =>
+      Await.result(
+        for {
+          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspace.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName)
+          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspace.toWorkspaceName)
+        } yield {
+          before shouldBe empty
+          after should not be empty
+        },
+        30.seconds
+      )
+    }
 
   "createWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
     val newWorkspaceName = "space_for_workin"
