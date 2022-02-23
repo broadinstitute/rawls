@@ -167,8 +167,8 @@ object WorkspaceMigrationActor {
         val makeError = (message: String, data: Map[String, Any]) => WorkspaceMigrationException(
           message = s"The workspace migration failed while configuring a new Google Project: $message.",
           data = Map(
-            ("migrationId" -> migration.id),
-            ("workspace" -> workspace.toWorkspaceName)
+            "migrationId" -> migration.id,
+            "workspace" -> workspace.toWorkspaceName
           ) ++ data
         )
 
@@ -196,16 +196,16 @@ object WorkspaceMigrationActor {
 
           _ <- MigrateAction.raiseWhen(billingProject.invalidBillingAccount) {
             makeError("invalid billing account on billing project", Map(
-              ("billingProject" -> billingProject.projectName),
-              ("billingProjectBillingAccount" -> billingProjectBillingAccount)
+              "billingProject" -> billingProject.projectName,
+              "billingProjectBillingAccount" -> billingProjectBillingAccount
             ))
           }
 
           _ <- MigrateAction.raiseWhen(workspaceBillingAccount != billingProjectBillingAccount) {
             makeError("billing account on workspace differs from billing account on billing project", Map(
-              ("workspaceBillingAccount" -> workspaceBillingAccount),
-              ("billingProject" -> billingProject.projectName),
-              ("billingProjectBillingAccount" -> billingProjectBillingAccount)
+              "workspaceBillingAccount" -> workspaceBillingAccount,
+              "billingProject" -> billingProject.projectName,
+              "billingProjectBillingAccount" -> billingProjectBillingAccount
             ))
           }
 
