@@ -1734,6 +1734,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "not allow an owner to delete a locked workspace" in withLockedWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
+    Delete(s"${testData.workspace.path}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+  }
+
   it should "allow an owner to unlock the workspace (repeatedly)" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
     Put(s"${testData.workspace.path}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
