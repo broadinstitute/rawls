@@ -1,73 +1,78 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.model.WorkspaceFeatureFlag
+
 class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   // exemplar flags for tests below
   val flagsForWorkspace1 = List(
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "one"),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "two"),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "three")
+    WorkspaceFeatureFlag("one"),
+    WorkspaceFeatureFlag("two"),
+    WorkspaceFeatureFlag("three")
   )
 
   val flagsForWorkspace2 = List(
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "one"),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "two"),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "three"),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "four"),
+    WorkspaceFeatureFlag("one"),
+    WorkspaceFeatureFlag("two"),
+    WorkspaceFeatureFlag("three"),
+    WorkspaceFeatureFlag("four")
   )
 
   behavior of "WorkspaceFeatureFlagComponent"
 
   it should "save individual flags via save()" in withMinimalTestDatabase { _ =>
-    (flagsForWorkspace1 ++ flagsForWorkspace2).foreach { flag =>
-      runAndWait(workspaceFeatureFlagQuery.save(flag.workspaceId, flag.flagName))
+    flagsForWorkspace1.foreach { flag =>
+      runAndWait(workspaceFeatureFlagQuery.save(minimalTestData.workspace.workspaceIdAsUUID, flag))
+    }
+    flagsForWorkspace2.foreach { flag =>
+      runAndWait(workspaceFeatureFlagQuery.save(minimalTestData.workspace2.workspaceIdAsUUID, flag))
     }
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))
 
-    actualFlags1 should contain theSameElementsAs(flagsForWorkspace1)
-    actualFlags2 should contain theSameElementsAs(flagsForWorkspace2)
+    actualFlags1 should contain theSameElementsAs flagsForWorkspace1
+    actualFlags2 should contain theSameElementsAs flagsForWorkspace2
   }
 
   it should "error when inserting pre-existing flags via save()" in withMinimalTestDatabase { _ =>
     // save the exemplar flags
     flagsForWorkspace1.foreach { flag =>
-      runAndWait(workspaceFeatureFlagQuery.save(flag.workspaceId, flag.flagName))
+      runAndWait(workspaceFeatureFlagQuery.save(minimalTestData.workspace.workspaceIdAsUUID, flag))
     }
     // ensure they saved
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
-    actualFlags1 should contain theSameElementsAs(flagsForWorkspace1)
+    actualFlags1 should contain theSameElementsAs flagsForWorkspace1
     // attempt to re-save one of the flags, should error
     val ex = intercept[Exception] {
-      runAndWait(workspaceFeatureFlagQuery.save(minimalTestData.workspace.workspaceIdAsUUID, "two"))
+      runAndWait(workspaceFeatureFlagQuery.save(minimalTestData.workspace.workspaceIdAsUUID, WorkspaceFeatureFlag("two")))
     }
     ex.getMessage should startWith("Duplicate entry")
   }
 
   it should "batch-save multiple flags via saveAll()" in withMinimalTestDatabase { _ =>
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace1))
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace2))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace2.workspaceIdAsUUID, flagsForWorkspace2))
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))
 
-    actualFlags1 should contain theSameElementsAs(flagsForWorkspace1)
-    actualFlags2 should contain theSameElementsAs(flagsForWorkspace2)
+    actualFlags1 should contain theSameElementsAs flagsForWorkspace1
+    actualFlags2 should contain theSameElementsAs flagsForWorkspace2
   }
 
   it should "error when inserting pre-existing flags via saveAll()"in withMinimalTestDatabase { _ =>
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
     // attempt to re-save one of the flags, should error
     val ex = intercept[Exception] {
-      runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace1.tail))
+      runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1.tail))
     }
     ex.getMessage should startWith("Duplicate entry")
   }
 
   it should "return an empty list when listing all flags for a workspace if none exist" in withMinimalTestDatabase { _ =>
     // save some flags into workspace *ONE*
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
 
     // list flags for workspace *TWO*, should not find any for workspace one
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))
@@ -79,89 +84,95 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
     // N.B. the save()* unit tests also verify the same functionality
 
     // save some flags into workspace one
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
 
     // list flags for workspace one, should not find any for workspace one
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
 
-    actualFlags1 should contain theSameElementsAs(flagsForWorkspace1)
+    actualFlags1 should contain theSameElementsAs flagsForWorkspace1
   }
 
   it should "return an empty list when listing specific flags for a workspace if none exist" in withMinimalTestDatabase { _ =>
     // save some flags into workspace *ONE*
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
 
     // list flags for workspace *TWO*, should not find any for workspace one
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listFlagsForWorkspace(
       minimalTestData.workspace2.workspaceIdAsUUID,
-      List("two", "three")))
+      List("two", "three").map(WorkspaceFeatureFlag)))
 
     actualFlags2 shouldBe empty
   }
 
   it should "return an empty list when listing specific flags for a workspace if those flags do not exist" in withMinimalTestDatabase { _ =>
     // save some flags into workspace *ONE*
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
 
     // list flags for workspace one, but the wrong flags
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listFlagsForWorkspace(
       minimalTestData.workspace.workspaceIdAsUUID,
-      List("these", "flags", "don't", "exist")))
+      List("these", "flags", "don't", "exist").map(WorkspaceFeatureFlag)))
 
     actualFlags1 shouldBe empty
   }
 
   it should "return the requested flags when listing specific flags for a workspace" in withMinimalTestDatabase { _ =>
     // save some flags into workspace two
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace2))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace2.workspaceIdAsUUID, flagsForWorkspace2))
 
-    val flagNamesToFind = List("two", "four")
+    val flagNamesToFind = List("two", "four").map(WorkspaceFeatureFlag)
 
     // list flags for workspace one, but only specific ones
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listFlagsForWorkspace(
       minimalTestData.workspace2.workspaceIdAsUUID,
       flagNamesToFind))
 
-    val expectedFlags = flagsForWorkspace2.filter(flag => flagNamesToFind.contains(flag.flagName))
-    expectedFlags.map(_.flagName) should contain theSameElementsAs(flagNamesToFind)
+    val expectedFlags = flagsForWorkspace2.filter(flag => flagNamesToFind.contains(flag))
+    expectedFlags should contain theSameElementsAs flagNamesToFind
 
     actualFlags2 should contain theSameElementsAs expectedFlags
   }
 
   it should "insert non-existent flags via saveOrUpdate" in withMinimalTestDatabase { _ =>
-    (flagsForWorkspace1 ++ flagsForWorkspace2).foreach { flag =>
-      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(flag.workspaceId, flag.flagName))
+    flagsForWorkspace1.foreach { flag =>
+      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(minimalTestData.workspace.workspaceIdAsUUID, flag))
+    }
+    flagsForWorkspace2.foreach { flag =>
+      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(minimalTestData.workspace2.workspaceIdAsUUID, flag))
     }
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))
 
-    actualFlags1 should contain theSameElementsAs(flagsForWorkspace1)
-    actualFlags2 should contain theSameElementsAs(flagsForWorkspace2)
+    actualFlags1 should contain theSameElementsAs flagsForWorkspace1
+    actualFlags2 should contain theSameElementsAs flagsForWorkspace2
   }
 
   it should "update pre-existing flags via saveOrUpdate" in withMinimalTestDatabase { _ =>
-    (flagsForWorkspace1 ++ flagsForWorkspace2).foreach { flag =>
-      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(flag.workspaceId, flag.flagName))
+    flagsForWorkspace1.foreach { flag =>
+      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(minimalTestData.workspace.workspaceIdAsUUID, flag))
+    }
+    flagsForWorkspace2.foreach { flag =>
+      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(minimalTestData.workspace2.workspaceIdAsUUID, flag))
     }
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))
 
-    actualFlags1 should contain theSameElementsAs(flagsForWorkspace1)
-    actualFlags2 should contain theSameElementsAs(flagsForWorkspace2)
+    actualFlags1 should contain theSameElementsAs flagsForWorkspace1
+    actualFlags2 should contain theSameElementsAs flagsForWorkspace2
 
     // now, update flag "one" for workspace 1 and flag "two" for workspace 2
-    val update1 = WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "one")
-    val update2 = WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "two")
+    val update1 = WorkspaceFeatureFlag("one")
+    val update2 = WorkspaceFeatureFlag("two")
 
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(update1.workspaceId, update1.flagName))
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(update2.workspaceId, update2.flagName))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(minimalTestData.workspace.workspaceIdAsUUID, update1))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(minimalTestData.workspace2.workspaceIdAsUUID, update2))
 
     val actualUpdated1 = runAndWait(workspaceFeatureFlagQuery.listFlagsForWorkspace(minimalTestData.workspace.workspaceIdAsUUID,
-      List("one", "three")))
+      List("one", "three").map(WorkspaceFeatureFlag)))
     val actualUpdated2 = runAndWait(workspaceFeatureFlagQuery.listFlagsForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID,
-      List("two", "four")))
+      List("two", "four").map(WorkspaceFeatureFlag)))
 
     actualUpdated1 should have size 2
     actualUpdated2 should have size 2
@@ -172,43 +183,43 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
   }
 
   it should "insert non-existent flags via saveOrUpdateAll" in withMinimalTestDatabase { _ =>
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(flagsForWorkspace1))
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(flagsForWorkspace2))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(minimalTestData.workspace2.workspaceIdAsUUID, flagsForWorkspace2))
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))
 
-    actualFlags1 should contain theSameElementsAs(flagsForWorkspace1)
-    actualFlags2 should contain theSameElementsAs(flagsForWorkspace2)
+    actualFlags1 should contain theSameElementsAs flagsForWorkspace1
+    actualFlags2 should contain theSameElementsAs flagsForWorkspace2
   }
 
   it should "update pre-existing flags via saveOrUpdateAll" in withMinimalTestDatabase { _ =>
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(flagsForWorkspace1))
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(flagsForWorkspace2))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(minimalTestData.workspace2.workspaceIdAsUUID, flagsForWorkspace2))
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))
 
-    actualFlags1 should contain theSameElementsAs(flagsForWorkspace1)
-    actualFlags2 should contain theSameElementsAs(flagsForWorkspace2)
+    actualFlags1 should contain theSameElementsAs flagsForWorkspace1
+    actualFlags2 should contain theSameElementsAs flagsForWorkspace2
 
     // now, update flags "one" and "two" for workspace 1 and flags "two" and "three" for workspace 2
     val update1 = List(
-      WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "one"),
-      WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "two")
+      WorkspaceFeatureFlag("one"),
+      WorkspaceFeatureFlag("two")
     )
     val update2 = List(
-      WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "two"),
-      WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "three"),
+      WorkspaceFeatureFlag("two"),
+      WorkspaceFeatureFlag("three"),
     )
 
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(update1))
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(update2))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(minimalTestData.workspace.workspaceIdAsUUID, update1))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(minimalTestData.workspace2.workspaceIdAsUUID, update2))
 
     val actualUpdated1 = runAndWait(workspaceFeatureFlagQuery.listFlagsForWorkspace(minimalTestData.workspace.workspaceIdAsUUID,
-      List("one", "two", "three")))
+      List("one", "two", "three").map(WorkspaceFeatureFlag)))
     val actualUpdated2 = runAndWait(workspaceFeatureFlagQuery.listFlagsForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID,
-      List("two", "three", "four")))
+      List("two", "three", "four").map(WorkspaceFeatureFlag)))
 
 
     // validate that we updated the flags we meant to update, but did not update another flag
@@ -217,8 +228,8 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
   }
 
   it should "delete all flags for a workspace" in withMinimalTestDatabase { _ =>
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace1))
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace2))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace2.workspaceIdAsUUID, flagsForWorkspace2))
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))
@@ -238,7 +249,7 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
   }
 
   it should "noop when deleting all flags for a workspace if none exist" in withMinimalTestDatabase { _ =>
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace2))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace2.workspaceIdAsUUID, flagsForWorkspace2))
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))
@@ -258,8 +269,8 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
   }
 
   it should "delete specific flags for a workspace" in withMinimalTestDatabase { _ =>
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace1))
-    runAndWait(workspaceFeatureFlagQuery.saveAll(flagsForWorkspace2))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace.workspaceIdAsUUID, flagsForWorkspace1))
+    runAndWait(workspaceFeatureFlagQuery.saveAll(minimalTestData.workspace2.workspaceIdAsUUID, flagsForWorkspace2))
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     val actualFlags2 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace2.workspaceIdAsUUID))

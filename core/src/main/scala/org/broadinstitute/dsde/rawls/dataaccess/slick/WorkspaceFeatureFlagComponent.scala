@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.model.WorkspaceFeatureFlag
+
 import java.util.UUID
 
 case class WorkspaceFeatureFlagRecord(workspaceId: UUID,
@@ -19,34 +21,39 @@ trait WorkspaceFeatureFlagComponent {
 
   object workspaceFeatureFlagQuery extends TableQuery(new WorkspaceFeatureFlagTable(_)) {
 
-    def save(workspaceId: UUID, flagname: String): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
-      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname)
-      (workspaceFeatureFlagQuery += flagRecord).map (_ => flagRecord)
+    def save(workspaceId: UUID, flag: WorkspaceFeatureFlag): ReadWriteAction[WorkspaceFeatureFlag] = {
+      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flag.name)
+      (workspaceFeatureFlagQuery += flagRecord).map (_ => flag)
     }
 
-    def saveAll(flags: List[WorkspaceFeatureFlagRecord]): ReadWriteAction[List[WorkspaceFeatureFlagRecord]] = {
-      (workspaceFeatureFlagQuery ++= flags).map (_ => flags)
+    def saveAll(workspaceId: UUID, flags: List[WorkspaceFeatureFlag]): ReadWriteAction[List[WorkspaceFeatureFlag]] = {
+      val flagRecords = flags.map(f => WorkspaceFeatureFlagRecord(workspaceId, f.name))
+      (workspaceFeatureFlagQuery ++= flagRecords).map (_ => flags)
     }
 
-    def saveOrUpdate(workspaceId: UUID, flagname: String): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
-      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname)
-      workspaceFeatureFlagQuery.insertOrUpdate(flagRecord).map (_ => flagRecord)
+    def saveOrUpdate(workspaceId: UUID, flag: WorkspaceFeatureFlag): ReadWriteAction[WorkspaceFeatureFlag] = {
+      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flag.name)
+      workspaceFeatureFlagQuery.insertOrUpdate(flagRecord).map (_ => flag)
     }
 
-    def saveOrUpdateAll(flags: List[WorkspaceFeatureFlagRecord]): ReadWriteAction[List[WorkspaceFeatureFlagRecord]] = {
+    def saveOrUpdateAll(workspaceId: UUID, flags: List[WorkspaceFeatureFlag]): ReadWriteAction[List[WorkspaceFeatureFlag]] = {
       // Slick does not support an insertOrUpdateAll??
-      val upsertActions = flags.map { flagRecord =>
-        workspaceFeatureFlagQuery.insertOrUpdate(flagRecord)
+      val upsertActions = flags.map { f =>
+        workspaceFeatureFlagQuery.insertOrUpdate(WorkspaceFeatureFlagRecord(workspaceId, f.name))
       }
       DBIO.sequence(upsertActions).map (_ => flags)
     }
 
-    def listAllForWorkspace(workspaceId: UUID): ReadAction[Seq[WorkspaceFeatureFlagRecord]] = {
-      filter(_.workspaceId === workspaceId).result
+    def listAllForWorkspace(workspaceId: UUID): ReadAction[Seq[WorkspaceFeatureFlag]] = {
+      filter(_.workspaceId === workspaceId).result.map { recs =>
+        recs.map(rec => WorkspaceFeatureFlag(rec.flagName))
+      }
     }
 
-    def listFlagsForWorkspace(workspaceId: UUID, flagnames: List[String]): ReadAction[Seq[WorkspaceFeatureFlagRecord]] = {
-      filter(flag => flag.workspaceId === workspaceId && flag.flagName.inSetBind(flagnames)).result
+    def listFlagsForWorkspace(workspaceId: UUID, flags: List[WorkspaceFeatureFlag]): ReadAction[Seq[WorkspaceFeatureFlag]] = {
+      filter(flag => flag.workspaceId === workspaceId && flag.flagName.inSetBind(flags.map(_.name))).result.map { recs =>
+        recs.map(rec => WorkspaceFeatureFlag(rec.flagName))
+      }
     }
 
     def deleteAllForWorkspace(workspaceId: UUID): ReadWriteAction[Int] = {
