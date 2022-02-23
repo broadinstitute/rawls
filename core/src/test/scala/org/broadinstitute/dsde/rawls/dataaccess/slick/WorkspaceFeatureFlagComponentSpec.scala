@@ -4,23 +4,23 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
 
   // exemplar flags for tests below
   val flagsForWorkspace1 = List(
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "one", enabled = true),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "two", enabled = false),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "three", enabled = true)
+    WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "one"),
+    WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "two"),
+    WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "three")
   )
 
   val flagsForWorkspace2 = List(
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "one", enabled = false),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "two", enabled = true),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "three", enabled = true),
-    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "four", enabled = false),
+    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "one"),
+    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "two"),
+    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "three"),
+    WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "four"),
   )
 
   behavior of "WorkspaceFeatureFlagComponent"
 
   it should "save individual flags via save()" in withMinimalTestDatabase { _ =>
     (flagsForWorkspace1 ++ flagsForWorkspace2).foreach { flag =>
-      runAndWait(workspaceFeatureFlagQuery.save(flag.workspaceId, flag.flagName, flag.enabled))
+      runAndWait(workspaceFeatureFlagQuery.save(flag.workspaceId, flag.flagName))
     }
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
@@ -33,15 +33,14 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
   it should "error when inserting pre-existing flags via save()" in withMinimalTestDatabase { _ =>
     // save the exemplar flags
     flagsForWorkspace1.foreach { flag =>
-      runAndWait(workspaceFeatureFlagQuery.save(flag.workspaceId, flag.flagName, flag.enabled))
+      runAndWait(workspaceFeatureFlagQuery.save(flag.workspaceId, flag.flagName))
     }
     // ensure they saved
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
     actualFlags1 should contain theSameElementsAs(flagsForWorkspace1)
     // attempt to re-save one of the flags, should error
     val ex = intercept[Exception] {
-      runAndWait(workspaceFeatureFlagQuery.save(minimalTestData.workspace.workspaceIdAsUUID, "two",
-        enabled = true))
+      runAndWait(workspaceFeatureFlagQuery.save(minimalTestData.workspace.workspaceIdAsUUID, "two"))
     }
     ex.getMessage should startWith("Duplicate entry")
   }
@@ -131,7 +130,7 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
 
   it should "insert non-existent flags via saveOrUpdate" in withMinimalTestDatabase { _ =>
     (flagsForWorkspace1 ++ flagsForWorkspace2).foreach { flag =>
-      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(flag.workspaceId, flag.flagName, flag.enabled))
+      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(flag.workspaceId, flag.flagName))
     }
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
@@ -143,7 +142,7 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
 
   it should "update pre-existing flags via saveOrUpdate" in withMinimalTestDatabase { _ =>
     (flagsForWorkspace1 ++ flagsForWorkspace2).foreach { flag =>
-      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(flag.workspaceId, flag.flagName, flag.enabled))
+      runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(flag.workspaceId, flag.flagName))
     }
 
     val actualFlags1 = runAndWait(workspaceFeatureFlagQuery.listAllForWorkspace(minimalTestData.workspace.workspaceIdAsUUID))
@@ -153,13 +152,11 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
     actualFlags2 should contain theSameElementsAs(flagsForWorkspace2)
 
     // now, update flag "one" for workspace 1 and flag "two" for workspace 2
-    val update1 = WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "one",
-      enabled = false)
-    val update2 = WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "two",
-      enabled = false)
+    val update1 = WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "one")
+    val update2 = WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "two")
 
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(update1.workspaceId, update1.flagName, update1.enabled))
-    runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(update2.workspaceId, update2.flagName, update2.enabled))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(update1.workspaceId, update1.flagName))
+    runAndWait(workspaceFeatureFlagQuery.saveOrUpdate(update2.workspaceId, update2.flagName))
 
     val actualUpdated1 = runAndWait(workspaceFeatureFlagQuery.listFlagsForWorkspace(minimalTestData.workspace.workspaceIdAsUUID,
       List("one", "three")))
@@ -197,12 +194,12 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
 
     // now, update flags "one" and "two" for workspace 1 and flags "two" and "three" for workspace 2
     val update1 = List(
-      WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "one", enabled = false),
-      WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "two", enabled = true)
+      WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "one"),
+      WorkspaceFeatureFlagRecord(minimalTestData.workspace.workspaceIdAsUUID, "two")
     )
     val update2 = List(
-      WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "two", enabled = false),
-      WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "three", enabled = true),
+      WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "two"),
+      WorkspaceFeatureFlagRecord(minimalTestData.workspace2.workspaceIdAsUUID, "three"),
     )
 
     runAndWait(workspaceFeatureFlagQuery.saveOrUpdateAll(update1))
@@ -281,4 +278,5 @@ class WorkspaceFeatureFlagComponentSpec extends TestDriverComponentWithFlatSpecA
     actualFlagsPostDelete1 should have size 2
     actualFlagsPostDelete2 should have size 4
   }
+
 }

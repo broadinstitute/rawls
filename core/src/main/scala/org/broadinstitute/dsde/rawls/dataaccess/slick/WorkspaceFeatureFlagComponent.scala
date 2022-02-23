@@ -3,8 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 case class WorkspaceFeatureFlagRecord(workspaceId: UUID,
-                                      flagName: String,
-                                      enabled: Boolean)
+                                      flagName: String)
 
 trait WorkspaceFeatureFlagComponent {
   this: DriverComponent =>
@@ -14,15 +13,14 @@ trait WorkspaceFeatureFlagComponent {
   class WorkspaceFeatureFlagTable(tag: Tag) extends Table[WorkspaceFeatureFlagRecord](tag, "WORKSPACE_FEATURE_FLAG") {
     def workspaceId = column[UUID]("workspace_id", O.PrimaryKey)
     def flagName = column[String]("flagname", O.PrimaryKey, O.Length(100))
-    def enabled = column[Boolean]("enabled")
 
-    def * = (workspaceId, flagName, enabled) <> (WorkspaceFeatureFlagRecord.tupled, WorkspaceFeatureFlagRecord.unapply)
+    def * = (workspaceId, flagName) <> (WorkspaceFeatureFlagRecord.tupled, WorkspaceFeatureFlagRecord.unapply)
   }
 
   object workspaceFeatureFlagQuery extends TableQuery(new WorkspaceFeatureFlagTable(_)) {
 
-    def save(workspaceId: UUID, flagname: String, enabled: Boolean): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
-      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname, enabled)
+    def save(workspaceId: UUID, flagname: String): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
+      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname)
       (workspaceFeatureFlagQuery += flagRecord).map (_ => flagRecord)
     }
 
@@ -30,8 +28,8 @@ trait WorkspaceFeatureFlagComponent {
       (workspaceFeatureFlagQuery ++= flags).map (_ => flags)
     }
 
-    def saveOrUpdate(workspaceId: UUID, flagname: String, enabled: Boolean): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
-      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname, enabled)
+    def saveOrUpdate(workspaceId: UUID, flagname: String): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
+      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname)
       workspaceFeatureFlagQuery.insertOrUpdate(flagRecord).map (_ => flagRecord)
     }
 

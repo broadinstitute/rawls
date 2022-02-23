@@ -17,9 +17,6 @@
                              primaryKey="true"
                              primaryKeyName="PK_WORKSPACE_FEATURE_FLAG"/>
             </column>
-            <column name="enabled" type="boolean">
-                <constraints nullable="false"/>
-            </column>
         </createTable>
 
     </changeSet>
