@@ -358,7 +358,6 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       }
     }
 
-    // TODO: why is this test failing?
     "use cache for attributes only when cache is not up to date but the attributes feature flag is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
@@ -374,6 +373,9 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
           AttributeName.withDefaultNS("yetOneMore") -> AttributeString("baz")
         ))
       runAndWait(entityQuery.save(localEntityProviderTestData.workspace, newEntity))
+      // and delete the other pre-existing participant. By adding one participant and deleting the other, we keep the counts the same
+      // else, when checking counts against expectedResultWhenUsingFullQueries, we'd be off by one
+      runAndWait(entityQuery.hide(localEntityProviderTestData.workspace, Seq(localEntityProviderTestData.participant1.toReference)))
 
       // verify the new attributes are present in uncached metadata
       val entityTypeMetadataResultBeforeFlags = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
@@ -413,10 +415,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       // entityTypeMetadataResult types/counts should match expectedResultWhenUsingFullQueries.
       entityTypeMetadataResult.keySet.foreach { typeName =>
         if (expectedResultWhenUsingFullQueries.contains(typeName)) {
-          // TODO: this is failing!
-          withClue(s"for type $typeName with actual count ${entityTypeMetadataResult(typeName).count}: ") {
-            entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingFullQueries(typeName).count
-          }
+          entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingFullQueries(typeName).count
         } else {
           entityTypeMetadataResult(typeName).count shouldBe 0
         }
