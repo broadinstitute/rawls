@@ -4,11 +4,12 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model.{CreateCloudContextResult, JobReport}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.MockWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{MultiCloudWorkspaceRequest, RawlsUserEmail, RawlsUserSubjectId, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceType}
+import org.joda.time.DateTime
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -35,6 +36,26 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     }
 
     actual.errorReport.statusCode shouldBe Some(StatusCodes.NotImplemented)
+  }
+
+  it should "throw an exception if a workspace with the same name already exists" in {
+    val namespace = "testing_ns" + UUID.randomUUID().toString
+    val name = "fake_name"
+    val userInfo = UserInfo(RawlsUserEmail("example@example.com"), OAuth2BearerToken("fake_token"), 1234, RawlsUserSubjectId("ABCDEF"))
+    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+    val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = true, 60 seconds, Some(AzureConfig("fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id")))
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource, workspaceManagerDAO, config
+    )(userInfo)
+    val request = MultiCloudWorkspaceRequest(
+      namespace, name, Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure)
+
+    Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+    val thrown = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+    }
+
+    thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
   it should "create a workspace" in {

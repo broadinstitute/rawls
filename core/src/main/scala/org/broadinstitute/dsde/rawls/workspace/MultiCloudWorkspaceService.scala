@@ -9,15 +9,14 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
+import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, ErrorReport, GoogleProjectId, MultiCloudWorkspaceRequest, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceShardStates, WorkspaceType, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
-import slick.dbio.DBIO
 import slick.jdbc.TransactionIsolation
 
 import java.util.UUID
@@ -56,18 +55,13 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
     }
 
     for {
-      workspace <- traceWithParent("withNewMcWorkspaceContext", parentSpan)(
-        opSpan => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
-          createWorkspace(workspaceRequest, dataAccess, opSpan) { createdWorkspace =>
-            DBIO.successful(createdWorkspace)
-          }
-        }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
-    } yield workspace
+      workspace <- traceWithParent("createMultiCloudWorkspace", parentSpan)(s1 =>
+        createWorkspace(workspaceRequest, s1))
 
+    } yield workspace
   }
 
-  private def createWorkspace[T](workspaceRequest: MultiCloudWorkspaceRequest, dataAccess: DataAccess, parentSpan: Span)
-                                (op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  private def createWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span): Future[Workspace] = {
     val azureConfig = multiCloudWorkspaceConfig.azureConfig.getOrElse(throw new RawlsException("Config not present"))
     // TODO these will come from the spend profile service in the future
     val spendProfileId = azureConfig.spendProfileId
@@ -75,36 +69,35 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
     val azureSubscriptionId = azureConfig.azureSubscriptionId
     val azureResourceGroupId = azureConfig.azureResourceGroupId
 
-    traceDBIOWithParent("findByName", parentSpan)(_ => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName])))) flatMap {
-      case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
-      case None => {
-        val workspaceId = UUID.randomUUID
-        for {
-          _ <- traceDBIOWithParent("createWorkspaceInWSM", parentSpan)(_ => DBIO.from(
-            Future(workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId, workspaceRequest.name, spendProfileId, userInfo.accessToken))
-          ))
-          _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
-          cloudContextCreateResult <- traceDBIOWithParent("createCloudContext", parentSpan)(_ => DBIO.from(
-            Future(workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
-          ))
-          jobControlId = cloudContextCreateResult.getJobReport.getId
-          _ = logger.info(s"Polling on cloud context in WSM [jobControlId = ${jobControlId}]")
-          pollingResult <- traceDBIOWithParent("pollCloudContext", parentSpan)(_ => DBIO.from(
-            pollCloudContext(workspaceId, cloudContextCreateResult.getJobReport.getId, userInfo.accessToken)
-          ))
-          _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
-          savedWorkspace <- traceDBIOWithParent("saveNewWorkspaceToRawlsDB", parentSpan)(_ => {
-            createMultiCloudWorkspaceInDatabase(
-              workspaceId.toString,
-              workspaceRequest,
-              dataAccess,
-              parentSpan)
-          })
-          response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
-        } yield {
-          response
-        }
+    val workspaceId = UUID.randomUUID
+    for {
+      _ <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName) }.flatMap {
+        case Some(_) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
+        case None => Future.successful()
       }
+      _ <- traceWithParent("createMultiCloudWorkspaceInWSM", parentSpan)(_ =>
+        Future(workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId, workspaceRequest.name, spendProfileId, userInfo.accessToken))
+      )
+      _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
+      cloudContextCreateResult <- traceWithParent("createAzureCloudContextInWSM", parentSpan)(_ =>
+        Future(workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
+      )
+      jobControlId = cloudContextCreateResult.getJobReport.getId
+      _ = logger.info(s"Polling on cloud context in WSM [jobControlId = ${jobControlId}]")
+      _ <- traceWithParent("pollCreateAzureCloudContextInWSM", parentSpan)(_ =>
+        pollCloudContext(workspaceId, cloudContextCreateResult.getJobReport.getId, userInfo.accessToken)
+      )
+      _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
+      savedWorkspace: Workspace <- traceWithParent("saveMultiCloudWorkspaceToDB", parentSpan)(_ => dataSource.inTransaction({ dataAccess =>
+        createMultiCloudWorkspaceInDatabase(
+          workspaceId.toString,
+          workspaceRequest,
+          dataAccess,
+          parentSpan)
+      }, TransactionIsolation.ReadCommitted)
+      )
+    } yield {
+      savedWorkspace
     }
   }
 
@@ -166,4 +159,5 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
 class CloudContextCreationFailureException(message: String,
                                            val workspaceId: UUID,
                                            val jobControlId: String) extends RawlsException(message)
+
 class WorkspaceManagerPollingOperationException(val status: StatusEnum) extends Exception
