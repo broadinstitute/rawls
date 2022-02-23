@@ -4,8 +4,7 @@ import java.util.UUID
 
 case class WorkspaceFeatureFlagRecord(workspaceId: UUID,
                                       flagName: String,
-                                      enabled: Boolean,
-                                      config: Option[String])
+                                      enabled: Boolean)
 
 trait WorkspaceFeatureFlagComponent {
   this: DriverComponent =>
@@ -16,15 +15,14 @@ trait WorkspaceFeatureFlagComponent {
     def workspaceId = column[UUID]("workspace_id", O.PrimaryKey)
     def flagName = column[String]("flagname", O.PrimaryKey, O.Length(100))
     def enabled = column[Boolean]("enabled")
-    def config = column[Option[String]]("config", O.Length(4000))
 
-    def * = (workspaceId, flagName, enabled, config) <> (WorkspaceFeatureFlagRecord.tupled, WorkspaceFeatureFlagRecord.unapply)
+    def * = (workspaceId, flagName, enabled) <> (WorkspaceFeatureFlagRecord.tupled, WorkspaceFeatureFlagRecord.unapply)
   }
 
   object workspaceFeatureFlagQuery extends TableQuery(new WorkspaceFeatureFlagTable(_)) {
 
-    def save(workspaceId: UUID, flagname: String, enabled: Boolean, config: Option[String] = None): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
-      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname, enabled, config)
+    def save(workspaceId: UUID, flagname: String, enabled: Boolean): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
+      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname, enabled)
       (workspaceFeatureFlagQuery += flagRecord).map (_ => flagRecord)
     }
 
@@ -32,8 +30,8 @@ trait WorkspaceFeatureFlagComponent {
       (workspaceFeatureFlagQuery ++= flags).map (_ => flags)
     }
 
-    def saveOrUpdate(workspaceId: UUID, flagname: String, enabled: Boolean, config: Option[String] = None): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
-      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname, enabled, config)
+    def saveOrUpdate(workspaceId: UUID, flagname: String, enabled: Boolean): ReadWriteAction[WorkspaceFeatureFlagRecord] = {
+      val flagRecord = WorkspaceFeatureFlagRecord(workspaceId, flagname, enabled)
       workspaceFeatureFlagQuery.insertOrUpdate(flagRecord).map (_ => flagRecord)
     }
 

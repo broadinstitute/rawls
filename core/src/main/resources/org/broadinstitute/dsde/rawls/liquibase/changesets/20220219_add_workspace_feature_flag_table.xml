@@ -20,9 +20,6 @@
             <column name="enabled" type="boolean">
                 <constraints nullable="false"/>
             </column>
-            <column name="config" type="varchar(4000)">
-                <constraints nullable="true"/>
-            </column>
         </createTable>
 
     </changeSet>
