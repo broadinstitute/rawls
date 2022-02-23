@@ -145,7 +145,6 @@ object WorkspaceVersions {
 case class MultiCloudWorkspaceRequest(namespace: String,
                                       name: String,
                                       attributes: AttributeMap,
-                                      authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
                                       cloudPlatform: WorkspaceCloudPlatform
                                      ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace, name)
@@ -942,7 +941,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val workspaceCloudPlatformFormat = rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
 
-  implicit val MultiCloudWorkspaceRequestFormat = jsonFormat5(MultiCloudWorkspaceRequest)
+  implicit val MultiCloudWorkspaceRequestFormat = jsonFormat4(MultiCloudWorkspaceRequest)
 
   implicit val WorkspaceRequestFormat = jsonFormat7(WorkspaceRequest)
 

@@ -57,7 +57,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
                 complete {
                   multiCloudWorkspaceServiceConstructor(userInfo)
                     .createMultiCloudWorkspace(workspace, span).map {
-                      w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty))
+                      w => StatusCodes.Created -> WorkspaceDetails(w, Set.empty)
                   }
                 }
               }
