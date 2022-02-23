@@ -98,7 +98,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
     }.map { workspaces =>
       workspaces.collect {
-        case Workspace(_, _, _, _, _, _, _, _, _, _, WorkspaceVersions.V2, googleProjectId, _, _, _, _, _) => GoogleProject(googleProjectId.value)
+        case workspace if workspace.workspaceVersion == WorkspaceVersions.V2 => GoogleProject(workspace.googleProjectId.value)
       }.toSet
     }
   }
