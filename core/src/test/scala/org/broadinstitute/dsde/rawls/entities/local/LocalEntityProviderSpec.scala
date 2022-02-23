@@ -340,16 +340,17 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       typeCountCache should not be Map.empty
       attrNamesCache should not be Map.empty
 
-      // expectedResultWhenUsingFullQueries is missing the "sample" type ...
+      // metadata response always contains the union of types found by cache and by full queries
+      val allTypeNames = expectedResultWhenUsingFullQueries.keySet ++ expectedResultWhenUsingCache.keySet
+      entityTypeMetadataResult.keySet should contain theSameElementsAs allTypeNames
 
       // entityTypeMetadataResult types/counts should match expectedResultWhenUsingCache
-      entityTypeMetadataResult.keySet should contain theSameElementsAs expectedResultWhenUsingCache.keySet
       entityTypeMetadataResult.keySet.foreach { typeName =>
         entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingCache(typeName).count
       }
       // entityTypeMetadataResult attributes should match expectedResultWhenUsingFullQueries
       entityTypeMetadataResult.keySet.foreach { typeName =>
-        if (expectedResultWhenUsingFullQueries.keySet.contains(typeName)) {
+        if (expectedResultWhenUsingFullQueries.contains(typeName)) {
           entityTypeMetadataResult(typeName).attributeNames should contain theSameElementsAs expectedResultWhenUsingFullQueries(typeName).attributeNames
         } else {
           entityTypeMetadataResult(typeName).attributeNames shouldBe empty
@@ -357,6 +358,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       }
     }
 
+    // TODO: why is this test failing?
     "use cache for attributes only when cache is not up to date but the attributes feature flag is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
@@ -404,17 +406,23 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       typeCountCache should not be Map.empty
       attrNamesCache should not be Map.empty
 
-      // entityTypeMetadataResult types/counts should match expectedResultWhenUsingFullQueries
+      // metadata response always contains the union of types found by cache and by full queries
+      val allTypeNames = expectedResultWhenUsingFullQueries.keySet ++ expectedResultWhenUsingCache.keySet
+      entityTypeMetadataResult.keySet should contain theSameElementsAs allTypeNames
+
+      // entityTypeMetadataResult types/counts should match expectedResultWhenUsingFullQueries.
       entityTypeMetadataResult.keySet.foreach { typeName =>
         if (expectedResultWhenUsingFullQueries.contains(typeName)) {
-          entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingFullQueries(typeName).count
+          // TODO: this is failing!
+          withClue(s"for type $typeName with actual count ${entityTypeMetadataResult(typeName).count}: ") {
+            entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingFullQueries(typeName).count
+          }
         } else {
           entityTypeMetadataResult(typeName).count shouldBe 0
         }
       }
       // entityTypeMetadataResult attributes should match expectedResultWhenUsingCache
       entityTypeMetadataResult.keySet.foreach { typeName =>
-        expectedResultWhenUsingCache.keySet should contain(typeName)
         entityTypeMetadataResult(typeName).attributeNames should contain theSameElementsAs expectedResultWhenUsingCache(typeName).attributeNames
       }
     }
