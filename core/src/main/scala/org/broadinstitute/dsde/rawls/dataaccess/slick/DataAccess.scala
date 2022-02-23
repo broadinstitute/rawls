@@ -24,7 +24,8 @@ trait DataAccess
   with EntityAttributeStatisticsComponent
   with EntityCacheComponent
   with LocalEntityExpressionQueries
-  with CloneWorkspaceFileTransferComponent {
+  with CloneWorkspaceFileTransferComponent
+  with WorkspaceFeatureFlagComponent {
 
 
   this: DriverComponent =>

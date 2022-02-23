@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet id="add_workspace_feature_flag_table" author="davidan" logicalFilePath="dummy">
+
+        <createTable tableName="WORKSPACE_FEATURE_FLAG">
+            <column name="workspace_id" type="BINARY(16)">
+                <constraints nullable="false"
+                             referencedTableName="WORKSPACE"
+                             referencedColumnNames="id"
+                             foreignKeyName="FK_FEATURE_FLAG_WORKSPACE_ID"
+                             deleteCascade="true"
+                             primaryKey="true"
+                             primaryKeyName="PK_WORKSPACE_FEATURE_FLAG"/>
+            </column>
+            <column name="flagname" type="varchar(100)">
+                <constraints nullable="false"
+                             primaryKey="true"
+                             primaryKeyName="PK_WORKSPACE_FEATURE_FLAG"/>
+            </column>
+        </createTable>
+
+    </changeSet>
+</databaseChangeLog>

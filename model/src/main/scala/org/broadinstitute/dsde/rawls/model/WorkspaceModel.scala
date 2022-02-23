@@ -841,6 +841,8 @@ object AttributeStringifier {
 
 case class WorkspaceTag(tag: String, count: Int)
 
+case class WorkspaceFeatureFlag(name: String)
+
 class WorkspaceJsonSupport extends JsonSupport {
   import DataReferenceModelJsonSupport.DataReferenceNameFormat
   import UserModelJsonSupport.RawlsBillingAccountNameFormat
