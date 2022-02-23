@@ -101,7 +101,7 @@ trait EntityStatisticsCacheSupport extends LazyLogging {
         CacheFeatureFlags(alwaysCacheTypeCounts = alwaysCacheTypeCounts, alwaysCacheAttributes = alwaysCacheAttributes)
       }
       */
-      DBIO.successful(CacheFeatureFlags(alwaysCacheTypeCounts = false, alwaysCacheAttributes = true))
+      DBIO.successful(CacheFeatureFlags(alwaysCacheTypeCounts = false, alwaysCacheAttributes = false))
     }
   }
 

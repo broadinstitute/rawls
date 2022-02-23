@@ -235,7 +235,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingCache
     }
 
-    "use cache for entityTypeMetadata when useCache=true, cache is not up to date, and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
+    "not use cache for entityTypeMetadata when useCache=true, cache is not up to date, and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
@@ -251,7 +251,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       typeCountCache should not be Map.empty
       attrNamesCache should not be Map.empty
 
-      entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingCache
+      entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
 
     "not use cache for entityTypeMetadata when useCache=false even if cache is up to date and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
@@ -291,6 +291,8 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
+
+    "use cache for entityTypeMetadata when cache is not up to date but feature flags are enabled" is pending
 
     // =========== START isEntityCacheCurrent() tests; these are obsolete
     "consider cache out of date if no cache record" in withLocalEntityProviderTestDatabase { _ =>
@@ -360,6 +362,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         staleness shouldBe empty
       }
     }
+
     "return Some(positive integer) from entityCacheStaleness if cache exists but is stale" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
@@ -380,6 +383,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         }
       }
     }
+
     "return Some(0) from entityCacheStaleness if cache is up-to-date" in withLocalEntityProviderTestDatabase { da =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
@@ -475,7 +479,6 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       secondMessage shouldBe empty
     }
 
-    // temporarily disabled until we re-implement opportunistic cache update
     "opportunistically update cache if user requests metadata while cache is out of date" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
@@ -503,6 +506,8 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         assert(isCurrentAfter)
       }
     }
+
+
   }
 
   "LocalEntityProvider case-sensitivity" should {
