@@ -158,7 +158,8 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
     //Update the entityCacheLastUpdated field to be older than lastModified, so we can test our scenario of having a stale cache
-    runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
+    // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
+    runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
 
     //Load the current entityMetadata (which should not use the cache)
     val originalResult = Await.result(localEntityProvider.entityTypeMetadata(true), Duration.Inf)

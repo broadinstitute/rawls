@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeNumber, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.scalatest.RecoverMethods.recoverToExceptionIf
@@ -239,8 +239,9 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
-      //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
-      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 1)))
+      // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
+      // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
@@ -292,7 +293,112 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
 
-    "use cache for entityTypeMetadata when cache is not up to date but feature flags are enabled" is pending
+    "use cache for entityTypeMetadata when cache is not up to date but both feature flags are enabled" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
+      // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
+
+      // TODO: set both feature flags here before calling entityTypeMetadata!
+
+      val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+
+      val typeCountCache = runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+      val attrNamesCache = runAndWait(dataSource.dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+
+      //assert that there is something in the cache for this workspace
+      typeCountCache should not be Map.empty
+      attrNamesCache should not be Map.empty
+
+      entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingCache
+    }
+
+    "use cache for types and counts only when cache is not up to date but the type/count feature flag is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
+      // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
+
+      // TODO: set the type/count feature flag (only) here before calling entityTypeMetadata!
+
+      val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+
+      val typeCountCache = runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+      val attrNamesCache = runAndWait(dataSource.dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+
+      //assert that there is something in the cache for this workspace
+      typeCountCache should not be Map.empty
+      attrNamesCache should not be Map.empty
+
+      // entityTypeMetadataResult types/counts should match expectedResultWhenUsingCache
+      entityTypeMetadataResult.keySet should contain theSameElementsAs expectedResultWhenUsingCache.keySet
+      entityTypeMetadataResult.keySet.foreach { typeName =>
+        entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingCache(typeName).count
+      }
+      // entityTypeMetadataResult attributes should match expectedResultWhenUsingFullQueries
+      entityTypeMetadataResult.keySet.foreach { typeName =>
+        expectedResultWhenUsingFullQueries.keySet should contain(typeName)
+        entityTypeMetadataResult(typeName).attributeNames should contain theSameElementsAs expectedResultWhenUsingFullQueries(typeName).attributeNames
+      }
+    }
+
+    "use cache for attributes only when cache is not up to date but the attributes feature flag is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
+      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+
+      // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
+      // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
+
+      // add new attributes to the workspace, so we have a difference between cached and uncached
+      val newEntity = Entity("newEntityWithNewAttributes", localEntityProviderTestData.participant1.entityType,
+          Map(AttributeName.withDefaultNS("somethingNew") -> AttributeString("foo"),
+          AttributeName.withDefaultNS("anotherNew") -> AttributeString("bar"),
+          AttributeName.withDefaultNS("yetOneMore") -> AttributeString("baz")
+        ))
+      runAndWait(entityQuery.save(localEntityProviderTestData.workspace, newEntity))
+
+      // verify the new attributes are present in uncached metadata
+      val entityTypeMetadataResultBeforeFlags = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+
+      val addedAttrNames = entityTypeMetadataResultBeforeFlags("participant").attributeNames diff expectedResultWhenUsingFullQueries("participant").attributeNames
+      addedAttrNames should contain theSameElementsAs List("somethingNew", "anotherNew", "yetOneMore")
+
+      // since the cache was out of date, that last request to entityTypeMetadata opportunistically wrote the cache. Reset it so
+      // this unit test will keep working!
+      runAndWait(entityAttributeStatisticsQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID))
+      runAndWait(entityAttributeStatisticsQuery.batchInsert(workspaceContext.workspaceIdAsUUID, localEntityProviderTestData.workspaceAttrNameCacheEntries))
+      runAndWait(entityTypeStatisticsQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID))
+      runAndWait(entityTypeStatisticsQuery.batchInsert(workspaceContext.workspaceIdAsUUID, localEntityProviderTestData.workspaceEntityTypeCacheEntries))
+
+      // TODO: now, set attribute feature flag (only) here.
+
+      // with feature flag set, retrieve metadata again. This time it should use the cache, which will NOT return
+      // the added attribute names
+      val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+
+      val typeCountCache = runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+      val attrNamesCache = runAndWait(dataSource.dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
+
+      //assert that there is something in the cache for this workspace
+      typeCountCache should not be Map.empty
+      attrNamesCache should not be Map.empty
+
+      // entityTypeMetadataResult types/counts should match expectedResultWhenUsingFullQueries
+      entityTypeMetadataResult.keySet should contain theSameElementsAs expectedResultWhenUsingFullQueries.keySet
+      entityTypeMetadataResult.keySet.foreach { typeName =>
+        entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingFullQueries(typeName).count
+      }
+      // entityTypeMetadataResult attributes should match expectedResultWhenUsingCache
+      entityTypeMetadataResult.keySet.foreach { typeName =>
+        expectedResultWhenUsingCache.keySet should contain(typeName)
+        entityTypeMetadataResult(typeName).attributeNames should contain theSameElementsAs expectedResultWhenUsingCache(typeName).attributeNames
+      }
+    }
 
     // =========== START isEntityCacheCurrent() tests; these are obsolete
     "consider cache out of date if no cache record" in withLocalEntityProviderTestDatabase { _ =>
