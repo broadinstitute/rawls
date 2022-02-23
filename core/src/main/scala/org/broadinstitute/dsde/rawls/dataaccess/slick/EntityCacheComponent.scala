@@ -50,8 +50,9 @@ trait EntityCacheComponent {
     /**
       * Describes the staleness of the entity cache for a given workspace.
       *  - returns None if no cache exists
-      *  - returns Some[Int] if a cache exists. The integer is the number of seconds
-      *   by which the cache is stale; this will be zero if the cache is up-to-date
+      *  - returns Some(0) if a cache exists and is up-to-date
+      *  - returns Some(n) if a cache exists but is out of date, where n is a positive integer representing
+      *     the number of seconds by which the cache is stale.
       * */
     def entityCacheStaleness(workspaceId: UUID): ReadAction[Option[Int]] = {
       val baseQuery = sql"""
@@ -63,6 +64,7 @@ trait EntityCacheComponent {
       uniqueResult[Int](baseQuery)
     }
 
+    // TODO: update the tests that call this method to call entityCacheStaleness instead, then delete this method
     /** does an up-to-date entity cache exist? currently unused except in tests */
     def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
       // staleness of 0 means the cache is current

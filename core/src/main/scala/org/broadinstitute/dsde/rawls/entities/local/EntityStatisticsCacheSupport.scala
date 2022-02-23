@@ -11,18 +11,23 @@ import java.sql.Timestamp
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
+/**
+  * helper methods that deal with entity type metadata and its cache
+  */
 trait EntityStatisticsCacheSupport extends LazyLogging {
 
   implicit protected val executionContext: ExecutionContext
-
-  val workspaceContext: Workspace
   protected val dataSource: SlickDataSource
+  val workspaceContext: Workspace
 
   import dataSource.dataAccess.driver.api._
 
-  /** convenience method for querying and then assembling an entity type metadata response
-    *
-    * see also getEntityTypeMetadata() in EntityComponent
+  private val FEATURE_ALWAYS_CACHE_TYPE_COUNTS = "alwaysCacheTypeCounts"
+  private val FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES = "alwaysCacheAttributes"
+
+  /** convenience method for querying and then assembling an entity type metadata response.
+    * if this method retrieves metadata directly from entities and attributes (i.e. not from cache),
+    * it will update the cache with the results it found.
     * */
   def calculateMetadataResponse(dataAccess: DataAccess,
                                         countsFromCache: Boolean,
@@ -88,11 +93,11 @@ trait EntityStatisticsCacheSupport extends LazyLogging {
       // TODO: use actual feature flag methods once that PR merges. Will look something like:
       /*
       dataAccess.workspaceFeatureFlagQuery.listFlagsForWorkspace(workspaceContext.workspaceIdAsUUID,
-        List("alwaysCacheTypeCounts", "alwaysCacheAttributes")).flatMap { foundFlags =>
+        List(FEATURE_ALWAYS_CACHE_TYPE_COUNTS, FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES)).flatMap { foundFlags =>
 
         val flagMap: Map[String, Boolean] = foundFlags.map { flag => (flag.flagname -> flag.enabled)}
-        val alwaysCacheTypeCounts = flagMap.getOrElse("alwaysCacheTypeCounts", false)
-        val alwaysCacheAttributes = flagMap.getOrElse("alwaysCacheAttributes", false)
+        val alwaysCacheTypeCounts = flagMap.getOrElse(FEATURE_ALWAYS_CACHE_TYPE_COUNTS, false)
+        val alwaysCacheAttributes = flagMap.getOrElse(FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES, false)
         CacheFeatureFlags(alwaysCacheTypeCounts = alwaysCacheTypeCounts, alwaysCacheAttributes = alwaysCacheAttributes)
       }
       */

@@ -66,17 +66,15 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
             case Some(staleness) =>
               // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
               cacheFeatureFlags(dataAccess, rootSpan).flatMap { flags =>
-                val alwaysCacheCounts = flags.alwaysCacheTypeCounts
-                val alwaysCacheAttributes = flags.alwaysCacheAttributes
-                if (alwaysCacheCounts || alwaysCacheAttributes) {
-                  rootSpan.putAttribute("alwaysCacheCountsFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(alwaysCacheCounts))
-                  rootSpan.putAttribute("alwaysCacheAttributesFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(alwaysCacheAttributes))
-                  logger.info(s"entity statistics cache: partial hit (alwaysCacheCounts=$alwaysCacheCounts, alwaysCacheAttributes=$alwaysCacheAttributes) [${workspaceContext.workspaceIdAsUUID}]")
+                if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
+                  rootSpan.putAttribute("alwaysCacheCountsFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts))
+                  rootSpan.putAttribute("alwaysCacheAttributesFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes))
+                  logger.info(s"entity statistics cache: partial hit (alwaysCacheCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}) [${workspaceContext.workspaceIdAsUUID}]")
                 } else {
                   logger.info(s"entity statistics cache: miss (cache is out of date) [${workspaceContext.workspaceIdAsUUID}]")
                   // and opportunistically save
                 }
-                calculateMetadataResponse(dataAccess, countsFromCache = alwaysCacheCounts, attributesFromCache = alwaysCacheAttributes, rootSpan)
+                calculateMetadataResponse(dataAccess, countsFromCache = flags.alwaysCacheTypeCounts, attributesFromCache = flags.alwaysCacheAttributes, rootSpan)
               } // end feature-flags lookup
           } // end staleness lookup
         } // end if useCache/cacheEnabled check

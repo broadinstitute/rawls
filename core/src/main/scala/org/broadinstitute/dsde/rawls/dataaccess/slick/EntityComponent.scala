@@ -549,7 +549,8 @@ trait EntityComponent {
     }
 
     // get entity types, counts, and attribute names to populate UI tables.  Active entities and attributes only.
-
+    /* currently unused except in tests */
+    // TODO: update the tests that call this method, then delete this method
     def getEntityTypeMetadata(workspaceContext: Workspace, outerSpan: Span = null): ReadAction[Map[String, EntityTypeMetadata]] = {
       val typesAndCountsQ = traceReadOnlyDBIOWithParent("getEntityTypesWithCounts", outerSpan) { _ =>
         getEntityTypesWithCounts(workspaceContext.workspaceIdAsUUID)
