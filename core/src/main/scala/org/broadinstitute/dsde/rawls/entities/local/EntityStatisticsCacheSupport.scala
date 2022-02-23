@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, EntityTypeMetadata, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, EntityTypeMetadata, Workspace, WorkspaceFeatureFlag}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
 
 import java.sql.Timestamp
@@ -22,8 +22,10 @@ trait EntityStatisticsCacheSupport extends LazyLogging {
 
   import dataSource.dataAccess.driver.api._
 
-  private val FEATURE_ALWAYS_CACHE_TYPE_COUNTS = "alwaysCacheTypeCounts"
-  private val FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES = "alwaysCacheAttributes"
+  val FEATURE_ALWAYS_CACHE_TYPE_COUNTS = WorkspaceFeatureFlag("alwaysCacheTypeCounts")
+  val FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES = WorkspaceFeatureFlag("alwaysCacheAttributes")
+
+  case class CacheFeatureFlags(alwaysCacheTypeCounts: Boolean, alwaysCacheAttributes: Boolean)
 
   /** convenience method for querying and then assembling an entity type metadata response.
     * if this method retrieves metadata directly from entities and attributes (i.e. not from cache),
@@ -84,24 +86,15 @@ trait EntityStatisticsCacheSupport extends LazyLogging {
     }
   }
 
-  // TODO: move case class somewhere more central
-  case class CacheFeatureFlags(alwaysCacheTypeCounts: Boolean, alwaysCacheAttributes: Boolean)
-
   /** wrapper for workspace feature flag lookup, includes performance tracing */
   def cacheFeatureFlags(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[CacheFeatureFlags] = {
     traceReadOnlyDBIOWithParent("getWorkspaceFeatureFlags", outerSpan) { _ =>
-      // TODO: use actual feature flag methods once that PR merges. Will look something like:
-      /*
       dataAccess.workspaceFeatureFlagQuery.listFlagsForWorkspace(workspaceContext.workspaceIdAsUUID,
-        List(FEATURE_ALWAYS_CACHE_TYPE_COUNTS, FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES)).flatMap { foundFlags =>
-
-        val flagMap: Map[String, Boolean] = foundFlags.map { flag => (flag.flagname -> flag.enabled)}
-        val alwaysCacheTypeCounts = flagMap.getOrElse(FEATURE_ALWAYS_CACHE_TYPE_COUNTS, false)
-        val alwaysCacheAttributes = flagMap.getOrElse(FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES, false)
+        List(FEATURE_ALWAYS_CACHE_TYPE_COUNTS, FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES)).map { flags =>
+        val alwaysCacheTypeCounts = flags.contains(FEATURE_ALWAYS_CACHE_TYPE_COUNTS)
+        val alwaysCacheAttributes = flags.contains(FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES)
         CacheFeatureFlags(alwaysCacheTypeCounts = alwaysCacheTypeCounts, alwaysCacheAttributes = alwaysCacheAttributes)
       }
-      */
-      DBIO.successful(CacheFeatureFlags(alwaysCacheTypeCounts = false, alwaysCacheAttributes = false))
     }
   }
 

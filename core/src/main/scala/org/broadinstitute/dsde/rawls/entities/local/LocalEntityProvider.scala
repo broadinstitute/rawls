@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.trace
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
@@ -13,11 +13,10 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, D
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent, traceReadOnlyDBIOWithParent}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
 
-import java.sql.Timestamp
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -63,13 +62,13 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
               // cache is up to date - return cached
               logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
               calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, rootSpan)
-            case Some(staleness) =>
+            case Some(_) =>
               // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
               cacheFeatureFlags(dataAccess, rootSpan).flatMap { flags =>
                 if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
-                  rootSpan.putAttribute("alwaysCacheCountsFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts))
+                  rootSpan.putAttribute("alwaysCacheTypeCountsFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts))
                   rootSpan.putAttribute("alwaysCacheAttributesFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes))
-                  logger.info(s"entity statistics cache: partial hit (alwaysCacheCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}) [${workspaceContext.workspaceIdAsUUID}]")
+                  logger.info(s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}) [${workspaceContext.workspaceIdAsUUID}]")
                 } else {
                   logger.info(s"entity statistics cache: miss (cache is out of date) [${workspaceContext.workspaceIdAsUUID}]")
                   // and opportunistically save

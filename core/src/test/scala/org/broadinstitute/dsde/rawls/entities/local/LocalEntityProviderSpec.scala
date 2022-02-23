@@ -293,6 +293,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
 
+    // TODO: validate this unit test
     "use cache for entityTypeMetadata when cache is not up to date but both feature flags are enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
@@ -301,7 +302,9 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
       runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
 
-      // TODO: set both feature flags here before calling entityTypeMetadata!
+      // set both feature flags here before calling entityTypeMetadata
+      runAndWait(workspaceFeatureFlagQuery.save(workspaceContext.workspaceIdAsUUID, localEntityProvider.FEATURE_ALWAYS_CACHE_TYPE_COUNTS))
+      runAndWait(workspaceFeatureFlagQuery.save(workspaceContext.workspaceIdAsUUID, localEntityProvider.FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
@@ -312,6 +315,8 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       typeCountCache should not be Map.empty
       attrNamesCache should not be Map.empty
 
+      // TODO: is this a valid test? Do we need to change some attributes to make sure that cached vs. uncached attributes are different?
+      // see the "use cache for attributes only when cache is not up to date but the attributes feature flag is enabled" for an example
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingCache
     }
 
@@ -323,7 +328,8 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
       runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
 
-      // TODO: set the type/count feature flag (only) here before calling entityTypeMetadata!
+      // set the type/count feature flag (only) here before calling entityTypeMetadata
+      runAndWait(workspaceFeatureFlagQuery.save(workspaceContext.workspaceIdAsUUID, localEntityProvider.FEATURE_ALWAYS_CACHE_TYPE_COUNTS))
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
@@ -334,6 +340,8 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       typeCountCache should not be Map.empty
       attrNamesCache should not be Map.empty
 
+      // expectedResultWhenUsingFullQueries is missing the "sample" type ...
+
       // entityTypeMetadataResult types/counts should match expectedResultWhenUsingCache
       entityTypeMetadataResult.keySet should contain theSameElementsAs expectedResultWhenUsingCache.keySet
       entityTypeMetadataResult.keySet.foreach { typeName =>
@@ -341,8 +349,11 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       }
       // entityTypeMetadataResult attributes should match expectedResultWhenUsingFullQueries
       entityTypeMetadataResult.keySet.foreach { typeName =>
-        expectedResultWhenUsingFullQueries.keySet should contain(typeName)
-        entityTypeMetadataResult(typeName).attributeNames should contain theSameElementsAs expectedResultWhenUsingFullQueries(typeName).attributeNames
+        if (expectedResultWhenUsingFullQueries.keySet.contains(typeName)) {
+          entityTypeMetadataResult(typeName).attributeNames should contain theSameElementsAs expectedResultWhenUsingFullQueries(typeName).attributeNames
+        } else {
+          entityTypeMetadataResult(typeName).attributeNames shouldBe empty
+        }
       }
     }
 
@@ -375,7 +386,12 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       runAndWait(entityTypeStatisticsQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID))
       runAndWait(entityTypeStatisticsQuery.batchInsert(workspaceContext.workspaceIdAsUUID, localEntityProviderTestData.workspaceEntityTypeCacheEntries))
 
-      // TODO: now, set attribute feature flag (only) here.
+      // and update the entityCacheLastUpdated field to be prior to lastModified AGAIN, so we can test our scenario of having a fresh cache
+      // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
+
+      // now, set attribute feature flag (only) here.
+      runAndWait(workspaceFeatureFlagQuery.save(workspaceContext.workspaceIdAsUUID, localEntityProvider.FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES))
 
       // with feature flag set, retrieve metadata again. This time it should use the cache, which will NOT return
       // the added attribute names
@@ -389,9 +405,12 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       attrNamesCache should not be Map.empty
 
       // entityTypeMetadataResult types/counts should match expectedResultWhenUsingFullQueries
-      entityTypeMetadataResult.keySet should contain theSameElementsAs expectedResultWhenUsingFullQueries.keySet
       entityTypeMetadataResult.keySet.foreach { typeName =>
-        entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingFullQueries(typeName).count
+        if (expectedResultWhenUsingFullQueries.contains(typeName)) {
+          entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingFullQueries(typeName).count
+        } else {
+          entityTypeMetadataResult(typeName).count shouldBe 0
+        }
       }
       // entityTypeMetadataResult attributes should match expectedResultWhenUsingCache
       entityTypeMetadataResult.keySet.foreach { typeName =>
@@ -433,7 +452,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       }
     }
 
-    "consider cache to be current if cache record exists and is equal to workspace last-modified" in withLocalEntityProviderTestDatabase { da =>
+    "consider cache to be current if cache record exists and is equal to workspace last-modified" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
 
@@ -490,7 +509,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       }
     }
 
-    "return Some(0) from entityCacheStaleness if cache is up-to-date" in withLocalEntityProviderTestDatabase { da =>
+    "return Some(0) from entityCacheStaleness if cache is up-to-date" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
 
