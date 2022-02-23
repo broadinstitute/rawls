@@ -54,11 +54,9 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
-    for {
-      workspace <- traceWithParent("createMultiCloudWorkspace", parentSpan)(s1 =>
-        createWorkspace(workspaceRequest, s1))
-
-    } yield workspace
+    traceWithParent("createMultiCloudWorkspace", parentSpan)(s1 =>
+        createWorkspace(workspaceRequest, s1)
+    )
   }
 
   private def createWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span): Future[Workspace] = {
