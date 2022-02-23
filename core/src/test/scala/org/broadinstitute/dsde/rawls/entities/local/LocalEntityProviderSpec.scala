@@ -293,12 +293,37 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingFullQueries
     }
 
-    // TODO: validate this unit test
     "use cache for entityTypeMetadata when cache is not up to date but both feature flags are enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
 
       // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
+      // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
+      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
+
+      // add new attributes to the workspace, so we have a difference between cached and uncached, by saving the participant with a
+      // new set of attributes
+      val newEntity = Entity(localEntityProviderTestData.participant1.name, localEntityProviderTestData.participant1.entityType,
+        Map(AttributeName.withDefaultNS("somethingNew") -> AttributeString("foo"),
+          AttributeName.withDefaultNS("anotherNew") -> AttributeString("bar"),
+          AttributeName.withDefaultNS("yetOneMore") -> AttributeString("baz")
+        ))
+      runAndWait(entityQuery.save(localEntityProviderTestData.workspace, newEntity))
+
+      // verify the new attributes are present in uncached metadata
+      val entityTypeMetadataResultBeforeFlags = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+
+      val addedAttrNames = entityTypeMetadataResultBeforeFlags("participant").attributeNames diff expectedResultWhenUsingFullQueries("participant").attributeNames
+      addedAttrNames should contain theSameElementsAs List("somethingNew", "anotherNew", "yetOneMore")
+
+      // since the cache was out of date, that last request to entityTypeMetadata opportunistically wrote the cache. Reset it so
+      // this unit test will keep working!
+      runAndWait(entityAttributeStatisticsQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID))
+      runAndWait(entityAttributeStatisticsQuery.batchInsert(workspaceContext.workspaceIdAsUUID, localEntityProviderTestData.workspaceAttrNameCacheEntries))
+      runAndWait(entityTypeStatisticsQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID))
+      runAndWait(entityTypeStatisticsQuery.batchInsert(workspaceContext.workspaceIdAsUUID, localEntityProviderTestData.workspaceEntityTypeCacheEntries))
+
+      // and update the entityCacheLastUpdated field to be prior to lastModified AGAIN, so we can test our scenario of having a fresh cache
       // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
       runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
 
@@ -308,15 +333,6 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
-      val typeCountCache = runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
-      val attrNamesCache = runAndWait(dataSource.dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
-
-      //assert that there is something in the cache for this workspace
-      typeCountCache should not be Map.empty
-      attrNamesCache should not be Map.empty
-
-      // TODO: is this a valid test? Do we need to change some attributes to make sure that cached vs. uncached attributes are different?
-      // see the "use cache for attributes only when cache is not up to date but the attributes feature flag is enabled" for an example
       entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingCache
     }
 
@@ -333,13 +349,6 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
-      val typeCountCache = runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
-      val attrNamesCache = runAndWait(dataSource.dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
-
-      //assert that there is something in the cache for this workspace
-      typeCountCache should not be Map.empty
-      attrNamesCache should not be Map.empty
-
       // metadata response always contains the union of types found by cache and by full queries
       val allTypeNames = expectedResultWhenUsingFullQueries.keySet ++ expectedResultWhenUsingCache.keySet
       entityTypeMetadataResult.keySet should contain theSameElementsAs allTypeNames
@@ -348,14 +357,10 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       entityTypeMetadataResult.keySet.foreach { typeName =>
         entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingCache(typeName).count
       }
-      // entityTypeMetadataResult attributes should match expectedResultWhenUsingFullQueries
-      entityTypeMetadataResult.keySet.foreach { typeName =>
-        if (expectedResultWhenUsingFullQueries.contains(typeName)) {
-          entityTypeMetadataResult(typeName).attributeNames should contain theSameElementsAs expectedResultWhenUsingFullQueries(typeName).attributeNames
-        } else {
-          entityTypeMetadataResult(typeName).attributeNames shouldBe empty
-        }
-      }
+      // entityTypeMetadataResult attributes should match expectedResultWhenUsingFullQueries for participants;
+      // samples should be the empty list since uncached results have no samples
+      entityTypeMetadataResult("sample").attributeNames shouldBe empty
+      entityTypeMetadataResult("participant").attributeNames shouldBe expectedResultWhenUsingFullQueries("participant").attributeNames
     }
 
     "use cache for attributes only when cache is not up to date but the attributes feature flag is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
@@ -366,16 +371,14 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
       runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
 
-      // add new attributes to the workspace, so we have a difference between cached and uncached
-      val newEntity = Entity("newEntityWithNewAttributes", localEntityProviderTestData.participant1.entityType,
+      // add new attributes to the workspace, so we have a difference between cached and uncached, by saving the participant with a
+      // new set of attributes
+      val newEntity = Entity(localEntityProviderTestData.participant1.name, localEntityProviderTestData.participant1.entityType,
           Map(AttributeName.withDefaultNS("somethingNew") -> AttributeString("foo"),
           AttributeName.withDefaultNS("anotherNew") -> AttributeString("bar"),
           AttributeName.withDefaultNS("yetOneMore") -> AttributeString("baz")
         ))
       runAndWait(entityQuery.save(localEntityProviderTestData.workspace, newEntity))
-      // and delete the other pre-existing participant. By adding one participant and deleting the other, we keep the counts the same
-      // else, when checking counts against expectedResultWhenUsingFullQueries, we'd be off by one
-      runAndWait(entityQuery.hide(localEntityProviderTestData.workspace, Seq(localEntityProviderTestData.participant1.toReference)))
 
       // verify the new attributes are present in uncached metadata
       val entityTypeMetadataResultBeforeFlags = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
@@ -401,25 +404,15 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       // the added attribute names
       val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
 
-      val typeCountCache = runAndWait(dataSource.dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
-      val attrNamesCache = runAndWait(dataSource.dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID))
-
-      //assert that there is something in the cache for this workspace
-      typeCountCache should not be Map.empty
-      attrNamesCache should not be Map.empty
-
       // metadata response always contains the union of types found by cache and by full queries
       val allTypeNames = expectedResultWhenUsingFullQueries.keySet ++ expectedResultWhenUsingCache.keySet
       entityTypeMetadataResult.keySet should contain theSameElementsAs allTypeNames
 
-      // entityTypeMetadataResult types/counts should match expectedResultWhenUsingFullQueries.
-      entityTypeMetadataResult.keySet.foreach { typeName =>
-        if (expectedResultWhenUsingFullQueries.contains(typeName)) {
-          entityTypeMetadataResult(typeName).count shouldBe expectedResultWhenUsingFullQueries(typeName).count
-        } else {
-          entityTypeMetadataResult(typeName).count shouldBe 0
-        }
-      }
+      // entityTypeMetadataResult types/counts should match expectedResultWhenUsingFullQueries for participants.
+      // the count for samples should be 0, since uncached results have no samples
+      entityTypeMetadataResult("participant").count shouldBe expectedResultWhenUsingFullQueries("participant").count
+      entityTypeMetadataResult("sample").count shouldBe 0
+
       // entityTypeMetadataResult attributes should match expectedResultWhenUsingCache
       entityTypeMetadataResult.keySet.foreach { typeName =>
         entityTypeMetadataResult(typeName).attributeNames should contain theSameElementsAs expectedResultWhenUsingCache(typeName).attributeNames

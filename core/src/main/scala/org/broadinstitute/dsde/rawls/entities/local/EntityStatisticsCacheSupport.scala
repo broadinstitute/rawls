@@ -43,7 +43,7 @@ trait EntityStatisticsCacheSupport extends LazyLogging {
         val saveCacheAction = if (countsFromCache || attributesFromCache) {
           DBIO.successful(())
         } else {
-          opportunisticSaveEntityCache(metadata, dataAccess, outerSpan)
+          opportunisticSaveEntityCache(metadata, dataAccess, innerSpan)
         }
         saveCacheAction.map(_ => metadata)
       }
