@@ -476,7 +476,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
     }
 
     // temporarily disabled until we re-implement opportunistic cache update
-    "opportunistically update cache if user requests metadata while cache is out of date" ignore withLocalEntityProviderTestDatabase { dataSource =>
+    "opportunistically update cache if user requests metadata while cache is out of date" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
       val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
       val wsid = workspaceContext.workspaceIdAsUUID
