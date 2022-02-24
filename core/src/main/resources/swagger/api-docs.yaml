@@ -486,14 +486,14 @@ paths:
             type: string
         - name: startDate
           in: query
-          description: start date of report (YYYY-MM-DD). Data included in report will start at 12 AM UTC.
+          description: start date of report (YYYY-MM-DD). Data included in report will start at 12 AM UTC on this date.
           required: true
           schema:
             type: string
             format: date
         - name: endDate
           in: query
-          description: end date of report (YYYY-MM-DD). Data included in report will end at 11:59 PM UTC.
+          description: end date of report (YYYY-MM-DD). Data included in report will end at 11:59 PM UTC on this date.
           required: true
           schema:
             type: string
