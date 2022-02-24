@@ -660,9 +660,13 @@ class HttpGoogleServicesDAO(
       //Iterate over each chunk.
       val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
 
-        //Filter out the billing accounts that are closed, as they have no value to users
-        //and clutter their lists and cause confusion
-        val filteredChunk = chunk.filter(_.getOpen)
+        //Filter out the billing accounts that are closed. They have no value to users
+        //and can cause confusion by cluttering their lists
+        val filteredChunk = chunk.filter { account =>
+          //Wrap in an Option for safety, as getOpen can return null
+          val isOpen = Option(account.getOpen)
+          isOpen.getOrElse(false) == true
+        }
 
         //Run all tests in the chunk in parallel.
         IO.fromFuture(IO(Future.traverse(filteredChunk){ acct =>
