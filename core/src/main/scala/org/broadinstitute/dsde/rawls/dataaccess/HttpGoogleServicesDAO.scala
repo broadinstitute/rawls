@@ -665,7 +665,9 @@ class HttpGoogleServicesDAO(
         val filteredChunk = chunk.filter { account =>
           //Wrap in an Option for safety, as getOpen can return null
           val isOpen = Option(account.getOpen)
-          isOpen.getOrElse(false) == true
+          //Convert null into true. Google doesn't document the behavior in this case, so it's better to potentially return
+          //slightly too many than omit potentially valid billing accounts. nulls should be rare or non-existent.
+          isOpen.getOrElse(true) == true
         }
 
         //Run all tests in the chunk in parallel.
