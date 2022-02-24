@@ -30,11 +30,10 @@ object SpendReportingService {
 class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, defaultTableName: String, serviceProject: GoogleProject)
                            (implicit val executionContext: ExecutionContext) extends LazyLogging {
 
-  // todo: extract this out of userservice so we don't have to duplicate it?
   def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(op: => Future[T]): Future[T] = {
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, userInfo).flatMap {
       case true => op
-      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a project owner.")))
+      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot perform ${action.value} on project ${projectName.value}")))
     }
   }
 
@@ -105,7 +104,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
 
   private def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit = {
     if (startDate.isAfter(endDate)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "start date must be before end date"))
-    if (Days.daysBetween(startDate, endDate).getDays > 90) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "provided dates exceed maximum report date range"))
+    else if (Days.daysBetween(startDate, endDate).getDays > 90) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "provided dates exceed maximum report date range"))
   }
 
   def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[Option[SpendReportingResults]] = {
