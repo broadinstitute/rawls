@@ -58,14 +58,14 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource, va
     for {
       objectsToCopy <- gcsDAO.listObjectsWithPrefix(pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName, pendingCloneWorkspaceFileTransfer.copyFilesWithPrefix, Option(pendingCloneWorkspaceFileTransfer.destWorkspaceGoogleProjectId)).recoverWith {
         case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue => {
-          logger.warn(s"403 received when listing objects in ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} before copying to ${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}: $e")
+          logger.warn(s"403 received when listing objects in ${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName} before copying to ${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}")
           Future.failed(e)
         }
       }
       copiedObjects <- Future.traverse(objectsToCopy) { objectToCopy =>
         gcsDAO.copyFile(pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName, objectToCopy.getName, pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName, objectToCopy.getName, Option(pendingCloneWorkspaceFileTransfer.destWorkspaceGoogleProjectId)).recoverWith {
           case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue => {
-            logger.warn(s"403 received when copying [${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName}/${objectToCopy.getName}] to [${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}]: $e")
+            logger.warn(s"403 received when copying [${pendingCloneWorkspaceFileTransfer.sourceWorkspaceBucketName}/${objectToCopy.getName}] to [${pendingCloneWorkspaceFileTransfer.destWorkspaceBucketName}]")
             Future.failed(e)
           }
         }
