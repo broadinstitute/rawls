@@ -30,9 +30,10 @@ import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureM
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMonitor
+import org.broadinstitute.dsde.rawls.monitor.migration.{WorkspaceMigrationActor, WorkspaceMigrationDetails}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -502,13 +503,20 @@ class WorkspaceService(protected val userInfo: UserInfo,
         for {
           _ <- deletePetsInProject(googleProjectId, userInfoForSam)
           _ <- gcsDAO.deleteGoogleProject(googleProjectId)
-          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam)
+          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam).recover {
+            case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+              logger.info(s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion")
+          }
         } yield ()
   }
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] = {
     for {
-      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, userInfo)
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, userInfo).recover {
+        case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+          logger.info(s"google-project resource ${projectName.value} not found in Sam. Continuing with workspace deletion")
+          Set[UserIdInfo]()
+      }
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
     } yield ()
   }
@@ -1986,7 +1994,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { _ =>
         // Since we don't necessarily know what the RBS Billing Account is, we need to bypass the "oldBillingAccount"
         // check when updating the Billing Account on the project
-        gcsDAO.updateGoogleProjectBillingAccount(googleProjectId, Option(billingAccount), None, force = true)
+        gcsDAO.setBillingAccountName(googleProjectId, billingAccount)
       }
 
       _ = logger.info(s"Creating labels for ${googleProjectId}.")
@@ -2110,12 +2118,20 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield hasAccess
   }
 
+  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationDetails]] =
+    for {
+      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
+      attempts <- dataSource.inTransaction { _ =>
+        WorkspaceMigrationActor.getMigrationAttempts(workspace)
+      }
+    } yield attempts.map(WorkspaceMigrationDetails.fromWorkspaceMigration)
+
   def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = {
     logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")
     for {
       workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
       _ <- dataSource.inTransaction { dataAccess =>
-        WorkspaceMigrationMonitor.schedule(workspace)
+        WorkspaceMigrationActor.schedule(workspace)
       }
     } yield()
   }
@@ -2224,7 +2240,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                          googleProjectNumber: Option[GoogleProjectNumber],
                                          currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
                                          dataAccess: DataAccess,
-                                         parentSpan: Span = null): ReadWriteAction[Workspace] = {
+                                         parentSpan: Span = null,
+                                         workspaceType: WorkspaceType = WorkspaceType.RawlsWorkspace): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
     val completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix match {
       case Some(_) => None
@@ -2248,7 +2265,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
       currentBillingAccountOnWorkspace,
       billingAccountErrorMessage = None,
       completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
-      shardState = WorkspaceShardStates.Sharded
+      shardState = WorkspaceShardStates.Sharded,
+      workspaceType
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)

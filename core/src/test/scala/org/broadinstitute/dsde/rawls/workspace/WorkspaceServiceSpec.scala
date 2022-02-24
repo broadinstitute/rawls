@@ -21,7 +21,7 @@ import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMonitor
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -1186,13 +1186,33 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  "migrateWorkspace" should "create an entry in the migration table" in withTestDataServices { services =>
-    withWorkspaceContext(testData.workspace) { ctx =>
-      Await.result(services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName), Duration.Inf)
-      val isMigrating = runAndWait(WorkspaceMigrationMonitor.isInQueueToMigrate(testData.workspace))
-      isMigrating should be(true)
+  "migrateWorkspace" should "create an entry in the migration table" in
+    withTestDataServices { services =>
+      Await.result(
+        for {
+          _ <- services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName)
+          isMigrating <- services.slickDataSource.inTransaction { _ =>
+            WorkspaceMigrationActor.isInQueueToMigrate(testData.workspace)
+          }
+        } yield isMigrating should be(true),
+        30.seconds
+      )
     }
-  }
+
+  "getWorkspaceMigrations" should "return a list of workspace migration attempts" in
+    withTestDataServices { services =>
+      Await.result(
+        for {
+          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspace.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName)
+          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspace.toWorkspaceName)
+        } yield {
+          before shouldBe empty
+          after should not be empty
+        },
+        30.seconds
+      )
+    }
 
   "createWorkspace" should "create a V2 Workspace" in withTestDataServices { services =>
     val newWorkspaceName = "space_for_workin"
@@ -1312,16 +1332,14 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // whatever that Google Project is, we set the right Billing Account on it, which is the Billing Account specified
     // in the Billing Project.  Additionally, only when creating a new Workspace, we can `force` the update (and ignore
     // the "oldBillingAccount" value
-    verify(services.gcsDAO).updateGoogleProjectBillingAccount(
+    verify(services.gcsDAO).setBillingAccountName(
       any[GoogleProjectId],
-      ArgumentMatchers.eq(billingProject.billingAccount),
-      any[Option[RawlsBillingAccountName]],
-      ArgumentMatchers.eq(true)
+      ArgumentMatchers.eq(billingProject.billingAccount.get)
     )
   }
 
   it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct")), None, true))
+    when(services.gcsDAO.setBillingAccountName(GoogleProjectId("project-from-buffer"), RawlsBillingAccountName("fakeBillingAcct")))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
     val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
@@ -1567,11 +1585,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // Project ID gets allocated when creating the Workspace, so we don't care what it is here.  We do care that
     // we set the right Billing Account on it, which is the Billing Account specified by the Billing Project in the
     // clone Workspace Request
-    verify(services.gcsDAO, times(1)).updateGoogleProjectBillingAccount(
+    verify(services.gcsDAO, times(1)).setBillingAccountName(
       any[GoogleProjectId],
-      ArgumentMatchers.eq(destBillingProject.billingAccount),
-      ArgumentMatchers.eq(None),
-      ArgumentMatchers.eq(true))
+      ArgumentMatchers.eq(destBillingProject.billingAccount.get))
   }
 
   it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
@@ -1581,7 +1597,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val cloneWorkspaceRequest = WorkspaceRequest(clonedWorkspaceName.namespace, clonedWorkspaceName.name, Map.empty)
 
     // Note: It seems that trying to use ArgumentMatchers when stubbing this method on a Spy results in NPE.  I do not know why.
-    when(services.gcsDAO.updateGoogleProjectBillingAccount(GoogleProjectId("project-from-buffer"), Option(RawlsBillingAccountName("fakeBillingAcct")), None, true))
+    when(services.gcsDAO.setBillingAccountName(GoogleProjectId("project-from-buffer"), RawlsBillingAccountName("fakeBillingAcct")))
       .thenReturn(Future.failed(new Exception("Fake error from Google")))
 
     intercept[Exception] {

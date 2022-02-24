@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
+import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
@@ -26,13 +26,14 @@ import org.scalatest.Suite
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
+import java.sql.SQLTransactionRollbackException
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.{implicitConversions, postfixOps}
 
 // initialize database tables and connection pool only once
-object DbResource {
+object DbResource extends LazyLogging {
   // to override, e.g. to run against mysql:
   // $ sbt -Dtestdb=mysql test
   private val testdb = ConfigFactory.load.getStringOr("testdb", "mysql")
@@ -44,6 +45,9 @@ object DbResource {
 
   val dataSource = new SlickDataSource(dataConfig)(TestExecutionContext.testExecutionContext)
   dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
+  logger.info("executing liquibase a second time to verify changesets work on an already-initialized database ...")
+  dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
+
 }
 
 /**
@@ -97,7 +101,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     DbResource.dataSource.database.run(chain).recoverWith {
       case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action)
-      case rollbackException: MySQLTransactionRollbackException if rollbackException.getMessage.contains("try restarting transaction") => retryConcurrentModificationException(action)
+      case rollbackException: SQLTransactionRollbackException if rollbackException.getMessage.contains("try restarting transaction") => retryConcurrentModificationException(action)
     }
   }
 
@@ -173,7 +177,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              attributes: AttributeMap,
                              isLocked: Boolean) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount, None, Option(createdDate), WorkspaceShardStates.Sharded)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, WorkspaceVersions.V2, GoogleProjectId(UUID.randomUUID().toString), Option(GoogleProjectNumber(UUID.randomUUID().toString)), project.billingAccount, None, Option(createdDate), WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
   }
   def makeWorkspaceWithUsers(project: RawlsBillingProject,
                              name: String,
@@ -192,7 +196,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              billingAccountErrorMessage: Option[String],
                              completedCloneWorkspaceFileTransfer: Option[DateTime]) = {
 
-    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, WorkspaceShardStates.Sharded)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, workflowCollectionName, createdDate, createdDate, createdBy, attributes, isLocked, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnWorkspace, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
   }
 
   class EmptyWorkspace() extends TestData {
@@ -226,7 +230,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
     val billingAccount = maybeBillingAccount
 
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount, None, Option(currentTime()), WorkspaceShardStates.Sharded)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, workspaceVersion, googleProjectId, googleProjectNumber, billingAccount, None, Option(currentTime()), WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
 
     override def save() = {
       DBIO.seq(
@@ -1088,8 +1092,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     val workspace2 = Workspace(wsName2.namespace, wsName2.name, UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     // TODO (CA-1235): Remove these after PPW Migration is complete
-    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()), WorkspaceShardStates.Sharded)
-    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()), WorkspaceShardStates.Sharded)
+    val v1Workspace = Workspace(v1WsName.namespace, v1WsName.name, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()), WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
+    val v1Workspace2 = Workspace(v1WsName2.namespace, v1WsName2.name, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, None, None, Option(currentTime()), WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
 
     override def save() = {
       DBIO.seq(
