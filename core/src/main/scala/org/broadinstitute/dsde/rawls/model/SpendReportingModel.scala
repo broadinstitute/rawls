@@ -19,6 +19,7 @@ case class SpendReportingForDateRange(
                                        endTime: DateTime
                                      )
 
+// Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
 case class SpendReportingAggregationKey(key: String)
 
 class SpendReportingJsonSupport extends JsonSupport {

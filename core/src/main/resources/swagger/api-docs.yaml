@@ -486,14 +486,14 @@ paths:
             type: string
         - name: startDate
           in: query
-          description: start date of report (YYYY-MM-DD)
+          description: start date of report (YYYY-MM-DD). Data included in report will start at 12 AM UTC.
           required: true
           schema:
             type: string
             format: date
         - name: endDate
           in: query
-          description: end date of report (YYYY-MM-DD)
+          description: end date of report (YYYY-MM-DD). Data included in report will end at 11:59 PM UTC.
           required: true
           schema:
             type: string
@@ -6416,7 +6416,7 @@ components:
       type: object
       properties:
         spendDetails:
-          description: aggregation of spend data
+          description: details of spend data, categorized by given key
           type: array
           items:
             $ref: '#/components/schemas/SpendReportAggregation'
@@ -6430,7 +6430,7 @@ components:
       properties:
         aggregationKey:
           type: object
-          description: aggregation key
+          description: Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
           properties:
             key:
               type: string
@@ -6453,18 +6453,18 @@ components:
           description: total cost for date range
         credits:
           type: string
-          description: credits
+          description: credits towards reported cost. cost - credits = amount billed to users
         currency:
           type: string
           description: currency that cost and credits uses
         startTime:
           type: string
           format: timestamp
-          description: timestamp marking the start of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
+          description: timestamp (UTC) marking the start of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
         endTime:
           type: string
           format: timestamp
-          description: timestamp marking the end of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
+          description: timestamp (UTC) marking the end of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
     SpendReportConfiguration:
       required:
         - datasetGoogleProject
