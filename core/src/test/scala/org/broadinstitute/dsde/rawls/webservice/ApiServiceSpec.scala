@@ -14,7 +14,7 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.config.{gitDataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, MultiCloudWorkspaceConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, SwaggerConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -181,12 +181,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       gcsDAO
     )_
 
+    val spendReportingServiceConfig = SpendReportingServiceConfig("test", GoogleProject("test-project"), 90)
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
       bigQueryDAO,
       samDAO,
-      "test",
-      GoogleProject("test")
+      spendReportingServiceConfig
     )
 
     val methodRepoDAO = new HttpMethodRepoDAO(

@@ -1,39 +1,37 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
-import java.util
 import java.util.Currency
 
 import akka.http.scaladsl.model.StatusCodes
 import com.google.api.services.bigquery.model._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
-import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
-import org.joda.time.{DateTime, Days}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
+import org.joda.time.{DateTime, Days}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 
 object SpendReportingService {
-  def constructor(dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, defaultTableName: String, serviceProject: GoogleProject)
+  def constructor(dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, spendReportingServiceConfig: SpendReportingServiceConfig)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): SpendReportingService = {
-    new SpendReportingService(userInfo, dataSource, bigQueryDAO, samDAO, defaultTableName, serviceProject)
+    new SpendReportingService(userInfo, dataSource, bigQueryDAO, samDAO, spendReportingServiceConfig)
   }
 }
 
-
-class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, defaultTableName: String, serviceProject: GoogleProject)
+class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, bigQueryDAO: GoogleBigQueryDAO, samDAO: SamDAO, spendReportingServiceConfig: SpendReportingServiceConfig)
                            (implicit val executionContext: ExecutionContext) extends LazyLogging {
-
   def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(op: => Future[T]): Future[T] = {
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, userInfo).flatMap {
       case true => op
-      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot perform ${action.value} on project ${projectName.value}")))
+      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"${userInfo.userEmail.value} cannot perform ${action.value} on project ${projectName.value}")))
     }
   }
 
@@ -45,7 +43,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
   }
 
   def extractSpendReportingResults(rows: List[TableRow], startTime: DateTime, endTime: DateTime): SpendReportingResults = {
-    val currency = Currency.getInstance(rows.head.getF.get(2).getV.toString)
+    val currency = getCurrency(rows)
 
     val dailySpend = rows.map { row =>
       val rowCost = BigDecimal(row.getF.get(0).getV.toString).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
@@ -78,18 +76,29 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     SpendReportingResults(Seq(dailySpendAggregation), spendSummary)
   }
 
+  /**
+    * Ensure that BigQuery results only include one type of currency and return that currency.
+    */
+  private def getCurrency(rows: List[TableRow]): Currency = {
+    val currencies = rows.map(_.getF.get(2).getV.toString)
+
+    Currency.getInstance(currencies.reduce { (x, y) =>
+      if (x.equals(y)) {
+         x
+      } else {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Inconsistent currencies found while aggregating spend data: $x and $y cannot be combined"))
+      }
+    })
+  }
+
   private def dateTimeToISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
 
   private def getSpendExportConfiguration(billingProjectName: RawlsBillingProjectName): Future[BillingProjectSpendExport] = {
     dataSource.inTransaction { dataAccess =>
-       dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
-    }.map {
-      case Some(RawlsBillingProject(_, _, Some(billingAccount), _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject))) =>
-        BillingProjectSpendExport(billingProjectName, billingAccount, Option(s"${spendReportDatasetGoogleProject.value}.${spendReportDataset.value}.${spendReportTable.value}"))
-      case Some(RawlsBillingProject(_, _, Some(billingAccount), _, _, _, _, _, _, _, _)) => BillingProjectSpendExport(billingProjectName, billingAccount, None)
-      case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"project ${billingProjectName.value} not found"))
-      case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"billing account not found on billing project ${billingProjectName.value}"))
-    }
+       dataAccess.rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(billingProjectName)
+    }.recover {
+      case _: RawlsException => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"billing account not found on billing project ${billingProjectName.value}"))
+    }.map(_.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"billing project ${billingProjectName.value} not found"))))
   }
 
   private def getWorkspaceGoogleProjects(billingProjectName: RawlsBillingProjectName): Future[Set[GoogleProject]] = {
@@ -103,8 +112,32 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
   }
 
   private def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit = {
-    if (startDate.isAfter(endDate)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "start date must be before end date"))
-    else if (Days.daysBetween(startDate, endDate).getDays > 90) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "provided dates exceed maximum report date range"))
+    if (startDate.isAfter(endDate)) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"start date $startDate must be before end date $endDate"))
+    } else if (Days.daysBetween(startDate, endDate).getDays > spendReportingServiceConfig.maxDateRange) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"provided dates exceed maximum report date range of ${spendReportingServiceConfig.maxDateRange} days"))
+    }
+  }
+
+  private def stringQueryParameter(parameterName: String, parameterValue: String): QueryParameter = {
+    new QueryParameter()
+      .setName(parameterName)
+      .setParameterType(new QueryParameterType().setType("STRING"))
+      .setParameterValue(new QueryParameterValue().setValue(parameterValue))
+  }
+
+  private def stringArrayQueryParameter(parameterName: String, parameterValues: List[String]): QueryParameter = {
+    val queryParameterArrayValues = parameterValues.map(new QueryParameterValue().setValue(_)).asJava
+
+    new QueryParameter()
+      .setName(parameterName)
+      .setParameterType(
+        new QueryParameterType()
+          .setType("ARRAY")
+          .setArrayType(new QueryParameterType().setType("STRING")))
+      .setParameterValue(
+        new QueryParameterValue()
+          .setArrayValues(queryParameterArrayValues))
   }
 
   def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[Option[SpendReportingResults]] = {
@@ -123,7 +156,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
              |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
              |  currency,
              |  DATE(_PARTITIONTIME) as date
-             | FROM `${spendExportConf.spendExportTable.getOrElse(defaultTableName)}`
+             | FROM `${spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)}`
              | WHERE billing_account_id = @billingAccountId
              | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
              | AND project.id in UNNEST(@projects)
@@ -131,12 +164,12 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
              |""".stripMargin
 
           queryParams = List(
-            new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("billingAccountId").setParameterValue(new QueryParameterValue().setValue(spendExportConf.billingAccountId.withoutPrefix())),
-            new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("startDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(startDate))),
-            new QueryParameter().setParameterType(new QueryParameterType().setType("STRING")).setName("endDate").setParameterValue(new QueryParameterValue().setValue(dateTimeToISODateString(endDate))),
-            new QueryParameter().setParameterType(new QueryParameterType().setType("ARRAY").setArrayType(new QueryParameterType().setType("STRING"))).setName("projects").setParameterValue(new QueryParameterValue().setArrayValues(workspaceProjects.map(project => new QueryParameterValue().setValue(project.value)).toList.asJava))
+            stringQueryParameter("billingAccountId", spendExportConf.billingAccountId.withoutPrefix()),
+            stringQueryParameter("startDate", dateTimeToISODateString(startDate)),
+            stringQueryParameter("endDate", dateTimeToISODateString(endDate)),
+            stringArrayQueryParameter("projects", workspaceProjects.map(_.value).toList)
           )
-          jobRef <- bigQueryDAO.startParameterizedQuery(serviceProject, query, queryParams, "NAMED")
+          jobRef <- bigQueryDAO.startParameterizedQuery(spendReportingServiceConfig.serviceProject, query, queryParams, "NAMED")
           jobStatus <- bigQueryDAO.getQueryStatus(jobRef)
           result: GetQueryResultsResponse <- bigQueryDAO.getQueryResult(jobStatus)
         } yield {

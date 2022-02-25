@@ -3,9 +3,9 @@ package org.broadinstitute.dsde.rawls.spendreporting
 import java.util
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.google.api.services.bigquery.model.{GetQueryResultsResponse, Job, JobReference, QueryParameter, TableCell, TableRow}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.{SamBillingProjectActions, SamResourceAction, SamResourceTypeNames}
@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, when}
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
@@ -25,7 +24,7 @@ import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 
 
-class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalatestRouteTest with MockitoTestUtils {
+class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with Matchers with MockitoTestUtils {
   val firstRow: util.List[TableCell] = List(
     new TableCell().setV("0.0"), // cost
     new TableCell().setV("0.0"), // credits
@@ -44,6 +43,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   ).asJava
 
   val defaultServiceProject: GoogleProject = GoogleProject("project")
+  val spendReportingServiceConfig: SpendReportingServiceConfig = SpendReportingServiceConfig("table", defaultServiceProject, 4)
 
   // Create Spend Reporting Service with Sam and BQ DAOs that mock happy-path responses and return defaultTable. Override Sam and BQ responses as needed
   def createSpendReportingService(
@@ -57,14 +57,14 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     when(samDAO.userHasAction(mockitoEq(SamResourceTypeNames.billingProject), any[String], mockitoEq(SamBillingProjectActions.readSpendReport), mockitoEq(userInfo)))
       .thenReturn(Future.successful(true))
 
-    when(bqDAO.startParameterizedQuery(mockitoEq(defaultServiceProject), any[String], any[List[QueryParameter]], any[String]))
+    when(bqDAO.startParameterizedQuery(mockitoEq(spendReportingServiceConfig.serviceProject), any[String], any[List[QueryParameter]], any[String]))
       .thenReturn(Future.successful(new JobReference()))
     when(bqDAO.getQueryStatus(any[JobReference]))
       .thenReturn(Future.successful(new Job()))
     when(bqDAO.getQueryResult(any[Job]))
       .thenReturn(Future.successful(new GetQueryResultsResponse().setRows(bqTable)))
 
-    new SpendReportingService(userInfo, dataSource, bqDAO, samDAO, "table", defaultServiceProject)
+    new SpendReportingService(userInfo, dataSource, bqDAO, samDAO, spendReportingServiceConfig)
   }
 
   "SpendReportingService" should "unmarshal results from Google" in withDefaultTestDatabase { dataSource: SlickDataSource =>
@@ -120,11 +120,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
   }
 
-  it should "throw an exception when date range is larger than 90 days" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+  it should s"throw an exception when date range is larger than ${spendReportingServiceConfig.maxDateRange} days" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource)
 
     val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, startDate = DateTime.now().minusDays(91), endDate = DateTime.now()), Duration.Inf)
+      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange + 1), endDate = DateTime.now()), Duration.Inf)
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
   }

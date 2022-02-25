@@ -427,12 +427,17 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("dataRepo.terraInstanceName")
       )
 
+      val spendReportingServiceConfig = SpendReportingServiceConfig(
+        gcsConfig.getString("billingExportTableName"),
+        GoogleProject(gcsConfig.getString("serviceProject")),
+        90
+      )
+
       val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
         slickDataSource,
         bigQueryDAO,
         samDAO,
-        gcsConfig.getString("billingExportTableName"),
-        GoogleProject(gcsConfig.getString("serviceProject"))
+        spendReportingServiceConfig
       )
 
       val service = new RawlsApiServiceImpl(
