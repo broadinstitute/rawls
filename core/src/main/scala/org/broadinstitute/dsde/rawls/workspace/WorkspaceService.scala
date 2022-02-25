@@ -1983,7 +1983,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           if (billingProject.servicePerimeter.isDefined)
             ProjectPoolType.ExfiltrationControlled else
             ProjectPoolType.Regular,
-          workspaceId
+          rbsHandoutRequestId
         )
       }
 
