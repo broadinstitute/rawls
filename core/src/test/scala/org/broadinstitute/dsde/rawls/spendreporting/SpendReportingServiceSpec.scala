@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{SamBillingProjectActions, SamResourceAction, SamResourceTypeNames}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamResourceAction, SamResourceTypeNames}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -43,7 +43,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   ).asJava
 
   val defaultServiceProject: GoogleProject = GoogleProject("project")
-  val spendReportingServiceConfig: SpendReportingServiceConfig = SpendReportingServiceConfig("table", defaultServiceProject, 4)
+  val spendReportingServiceConfig: SpendReportingServiceConfig = SpendReportingServiceConfig("table", defaultServiceProject, 90)
 
   // Create Spend Reporting Service with Sam and BQ DAOs that mock happy-path responses and return defaultTable. Override Sam and BQ responses as needed
   def createSpendReportingService(
@@ -127,5 +127,55 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, startDate = DateTime.now().minusDays(spendReportingServiceConfig.maxDateRange + 1), endDate = DateTime.now()), Duration.Inf)
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
+  it should "throw an exception if the billing project cannot be found" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource)
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getSpendForBillingProject(RawlsBillingProjectName("fakeProject"), DateTime.now().minusDays(1), DateTime.now()), Duration.Inf)
+    }
+    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+  }
+
+  it should "throw an exception if the billing project does not have a linked billing account" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource)
+    val projectName = RawlsBillingProjectName("fakeProject")
+    runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, CreationStatuses.Ready, billingAccount = None, None)))
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getSpendForBillingProject(projectName, DateTime.now().minusDays(1), DateTime.now()), Duration.Inf)
+    }
+    e.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
+  it should "throw an exception if BigQuery returns multiple kinds of currencies" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val bqDAO = mock[GoogleBigQueryDAO](RETURNS_SMART_NULLS)
+    val service = createSpendReportingService(dataSource, bqDAO = bqDAO)
+
+    val usdRow = List(
+      new TableCell().setV("0.0"), // cost
+      new TableCell().setV("0.0"), // credits
+      new TableCell().setV("USD"), // currency
+      new TableCell().setV(s"${DateTime.now().toString}") // timestamp
+    ).asJava
+    val cadRow = List(
+      new TableCell().setV("0.10111"), // cost
+      new TableCell().setV("0.0"), // credits
+      new TableCell().setV("CAD"), // currency
+      new TableCell().setV(s"${DateTime.now().toString}") // timestamp
+    ).asJava
+    val internationalTable = List(
+      new TableRow().setF(usdRow),
+      new TableRow().setF(cadRow)
+    ).asJava
+
+    when(bqDAO.getQueryResult(any[Job]))
+      .thenReturn(Future.successful(new GetQueryResultsResponse().setRows(internationalTable)))
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()), Duration.Inf)
+    }
+    e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
   }
 }
