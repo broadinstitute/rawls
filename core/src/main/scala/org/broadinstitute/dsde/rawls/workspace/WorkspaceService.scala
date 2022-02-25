@@ -1967,6 +1967,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * @param billingProject
     * @param billingAccount
     * @param workspaceId
+    * @param rbsHandoutRequestId
     * @param span
     * @return Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
     */
@@ -1974,20 +1975,23 @@ class WorkspaceService(protected val userInfo: UserInfo,
                          billingAccount: RawlsBillingAccountName,
                          workspaceId: String,
                          workspaceName: WorkspaceName,
-                         span: Span = null) : Future[(GoogleProjectId, GoogleProjectNumber)] = {
-    val projectPoolType = billingProject.servicePerimeter match {
-      case Some(_) => ProjectPoolType.ExfiltrationControlled
-      case _ => ProjectPoolType.Regular
-    }
-
+                         rbsHandoutRequestId: String,
+                         span: Span = null) : Future[(GoogleProjectId, GoogleProjectNumber)] =
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span) { _ =>
-        resourceBufferService.getGoogleProjectFromBuffer(projectPoolType, workspaceId)
+        resourceBufferService.getGoogleProjectFromBuffer(
+          if (billingProject.servicePerimeter.isDefined)
+            ProjectPoolType.ExfiltrationControlled else
+            ProjectPoolType.Regular,
+          rbsHandoutRequestId
+        )
       }
 
       _ = logger.info(s"Moving google project ${googleProjectId} to folder.")
       _ <- traceWithParent("maybeMoveGoogleProjectToFolder", span) { _ =>
-        maybeMoveGoogleProjectToFolder(billingProject.servicePerimeter, googleProjectId)
+        billingProject.servicePerimeter.traverse_ {
+          userServiceConstructor(userInfo).moveGoogleProjectToServicePerimeterFolder(_, googleProjectId)
+        }
       }
 
       _ = logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing the RBS billing account.")
@@ -2018,7 +2022,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
         gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail)))
       }
     } yield (googleProjectId, googleProjectNumber)
-  }
 
   private def setupGoogleProjectIam(googleProjectId : GoogleProjectId,
                                     policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
@@ -2027,20 +2030,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
     logger.info(s"Updating google project IAM ${googleProjectId}.")
     traceWithParent("updateGoogleProjectIam", span) { _ =>
       updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail)
-    }
-  }
-
-
-  /**
-    * If there is a service perimeter, move the google project to the folder for the perimeter
-    * @param servicePerimeterName
-    * @param googleProjectId
-    * @return
-    */
-  private def maybeMoveGoogleProjectToFolder(servicePerimeterName: Option[ServicePerimeterName], googleProjectId: GoogleProjectId): Future[Unit] = {
-    servicePerimeterName match {
-      case Some(name) => userServiceConstructor(userInfo).moveGoogleProjectToServicePerimeterFolder(name, googleProjectId)
-      case None => Future.successful(())
     }
   }
 
@@ -2124,7 +2113,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       attempts <- dataSource.inTransaction { _ =>
         WorkspaceMigrationActor.getMigrationAttempts(workspace)
       }
-    } yield attempts.map(WorkspaceMigrationDetails.fromWorkspaceMigration)
+    } yield attempts.mapWithIndex(WorkspaceMigrationDetails.fromWorkspaceMigration)
 
   def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = {
     logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")
@@ -2316,7 +2305,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
               (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan) { span =>
                 DBIO.from(
                   for {
-                    (googleProjectId, googleProjectNumber) <- setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, span)
+                    (googleProjectId, googleProjectNumber) <- setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, rbsHandoutRequestId = workspaceId, span)
                     _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)
                   } yield (googleProjectId, googleProjectNumber)
                 )

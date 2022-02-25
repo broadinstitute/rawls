@@ -653,6 +653,7 @@ class WorkspaceMigrationActorSpec
         transferJob <- refreshTransferJobs
       } yield {
         transferJob.migrationId shouldBe migration.id
+        transferJob.finished shouldBe defined
         transferJob.outcome.value shouldBe Outcome.Success
       }
     }

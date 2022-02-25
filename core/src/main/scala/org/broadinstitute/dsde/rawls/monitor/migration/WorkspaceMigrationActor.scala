@@ -27,7 +27,7 @@ import java.time.{Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 import scala.language.higherKinds
 
 
@@ -73,6 +73,7 @@ object WorkspaceMigrationActor {
   final def getMigrationAttempts(workspace: Workspace): ReadWriteAction[List[WorkspaceMigration]] =
     workspaceMigrations
       .filter(_.workspaceId === workspace.workspaceIdAsUUID)
+      .sortBy(_.id)
       .result
       .map(_.toList)
 
@@ -215,7 +216,16 @@ object WorkspaceMigrationActor {
               billingProject,
               workspaceBillingAccount,
               workspace.workspaceId,
-              workspace.toWorkspaceName
+              workspace.toWorkspaceName,
+              // Use a combination of the workspaceId and the current workspace google project id
+              // as the the resource buffer service (RBS) idempotence token. Why? So that we can
+              // test this actor with v2 workspaces whose Google Projects have already been claimed
+              // from RBS via the WorkspaceService.
+              // The actual value doesn't matter, it just has to be different to whatever the
+              // WorkspaceService uses otherwise we'll keep getting back the same google project id.
+              // Adding on the current project id means that this call will be idempotent for all
+              // attempts at migrating a workspace (until one succeeds, then this will change).
+              rbsHandoutRequestId = workspace.workspaceId ++ workspace.googleProjectId.value
             ).io
           }
 
@@ -241,9 +251,10 @@ object WorkspaceMigrationActor {
           _ <- createBucketInSameRegion(
             migration,
             workspace,
-            GcsBucketName(workspace.bucketName),
-            googleProjectId,
-            GcsBucketName(tmpBucketName)
+            sourceGoogleProject = GoogleProject(workspace.googleProjectId.value),
+            sourceBucketName = GcsBucketName(workspace.bucketName),
+            destGoogleProject = GoogleProject(googleProjectId.value),
+            destBucketName = GcsBucketName(tmpBucketName)
           )
 
           created <- nowTimestamp
@@ -262,7 +273,7 @@ object WorkspaceMigrationActor {
       (migration, workspace) =>
         for {
           tmpBucketName <- MigrateAction.liftIO(IO {
-            migration.tmpBucketName.getOrElse(throw noGoogleProjectError(migration, workspace))
+            migration.tmpBucketName.getOrElse(throw noTmpBucketError(migration, workspace))
           })
 
           _ <- startBucketTransferJob(
@@ -316,12 +327,14 @@ object WorkspaceMigrationActor {
       (migration, workspace) =>
         for {
           (googleProjectId, tmpBucketName) <- getGoogleProjectAndTmpBucket(migration, workspace)
+          destGoogleProject = GoogleProject(googleProjectId.value)
           _ <- createBucketInSameRegion(
             migration,
             workspace,
-            tmpBucketName,
-            googleProjectId,
-            GcsBucketName(workspace.bucketName)
+            sourceGoogleProject = destGoogleProject,
+            sourceBucketName = tmpBucketName,
+            destGoogleProject = destGoogleProject,
+            destBucketName = GcsBucketName(workspace.bucketName)
           )
 
           created <- nowTimestamp
@@ -413,8 +426,9 @@ object WorkspaceMigrationActor {
 
   final def createBucketInSameRegion(migration: WorkspaceMigration,
                                      workspace: Workspace,
+                                     sourceGoogleProject: GoogleProject,
                                      sourceBucketName: GcsBucketName,
-                                     destGoogleProject: GoogleProjectId,
+                                     destGoogleProject: GoogleProject,
                                      destBucketName: GcsBucketName)
   : MigrateAction[Unit] =
     for {
@@ -424,9 +438,9 @@ object WorkspaceMigrationActor {
       _ <- MigrateAction.liftIO {
         for {
           sourceBucketOpt <- storageService.getBucket(
-            googleProjectToBill, // bill "requester-pays" requests to the migration project
+            sourceGoogleProject,
             sourceBucketName,
-            List(BucketGetOption.userProject(destGoogleProject.value))
+            List(BucketGetOption.userProject(googleProjectToBill.value))
           )
 
           sourceBucket = sourceBucketOpt.getOrElse(
@@ -444,13 +458,23 @@ object WorkspaceMigrationActor {
           // with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket
           // and the storage_byte_hours in it that is kept for 180 days
           _ <- storageService.insertBucket(
-            googleProject = GoogleProject(destGoogleProject.value),
+            googleProject = destGoogleProject,
             bucketName = destBucketName,
             labels = Option(sourceBucket.getLabels).map(_.toMap).getOrElse(Map.empty),
             bucketPolicyOnlyEnabled = true,
             logBucket = GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(GoogleProjectId(destGoogleProject.value))).some,
             location = Option(sourceBucket.getLocation)
           ).compile.drain
+
+          // Poll for bucket to be created
+          _ <- IO.sleep(100.milliseconds).whileM_ {
+            storageService.getBucket(
+              destGoogleProject,
+              destBucketName,
+              List(BucketGetOption.userProject(googleProjectToBill.value))
+            )
+            .map(_.isEmpty)
+          }
         } yield ()
       }
     } yield ()
@@ -523,11 +547,12 @@ object WorkspaceMigrationActor {
       }
 
       (status, message) = toTuple(outcome)
+      finished <- nowTimestamp
       _ <- inTransaction { _ =>
         storageTransferJobs
           .filter(_.id === transferJob.id)
-          .map(row => (row.outcome, row.message))
-          .update(status, message)
+          .map(row => (row.finished, row.outcome, row.message))
+          .update(finished.some, status, message)
       }
     } yield transferJob.copy(outcome = outcome.some)
 
@@ -580,11 +605,14 @@ object WorkspaceMigrationActor {
 
         transferred <- nowTimestamp.map(_.some)
         _ <- inTransaction { _ =>
-          val migrationQuery = workspaceMigrations.filter(_.id === transferJob.migrationId)
-          if (migration.workspaceBucketTransferred.isEmpty)
-            migrationQuery.map(_.workspaceBucketTransferred).update(transferred) else
-            migrationQuery.map(_.tmpBucketTransferred).update(transferred)
-
+          workspaceMigrations
+            .filter(_.id === transferJob.migrationId)
+            .map { row =>
+              if (migration.workspaceBucketTransferred.isEmpty)
+                row.workspaceBucketTransferred else
+                row.tmpBucketTransferred
+            }
+            .update(transferred)
         }
       } yield ()
     }
@@ -702,9 +730,9 @@ object WorkspaceMigrationActor {
     WorkspaceMigrationException(
       message = "Workspace migration failed: Workspace cloud bucket not found.",
       data = Map(
-        ("migrationId" -> migration.id),
-        ("workspace" -> workspace.toWorkspaceName),
-        ("workspaceBucket" -> workspace.bucketName)
+        "migrationId" -> migration.id,
+        "workspace" -> workspace.toWorkspaceName,
+        "workspaceBucket" -> workspace.bucketName
       )
     )
 
@@ -713,9 +741,9 @@ object WorkspaceMigrationActor {
     WorkspaceMigrationException(
       message = "Workspace migration failed: Temporary cloud storage bucket not found.",
       data = Map(
-        ("migrationId" -> migration.id),
-        ("workspace" -> workspace.toWorkspaceName),
-        ("tmpBucket" -> migration.tmpBucketName)
+        "migrationId" -> migration.id,
+        "workspace" -> workspace.toWorkspaceName,
+        "tmpBucket" -> migration.tmpBucketName
       )
     )
 
