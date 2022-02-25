@@ -32,7 +32,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     new TableCell().setV(s"${DateTime.now().toString}") // timestamp
   ).asJava
   val secondRow: util.List[TableCell] = List(
-    new TableCell().setV("0.1"), // cost
+    new TableCell().setV("0.10111"), // cost
     new TableCell().setV("0.0"), // credits
     new TableCell().setV("USD"), // currency
     new TableCell().setV(s"${DateTime.now().toString}") // timestamp

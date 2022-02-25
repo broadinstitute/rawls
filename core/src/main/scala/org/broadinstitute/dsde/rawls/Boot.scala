@@ -430,7 +430,7 @@ object Boot extends IOApp with LazyLogging {
       val spendReportingServiceConfig = SpendReportingServiceConfig(
         gcsConfig.getString("billingExportTableName"),
         GoogleProject(gcsConfig.getString("serviceProject")),
-        90
+        gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
       )
 
       val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
