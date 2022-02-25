@@ -746,7 +746,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Option(RawlsBillingAccountName("fakeBillingAcct")),
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded
+      WorkspaceShardStates.Sharded,
+      WorkspaceType.RawlsWorkspace
     )
 
     runAndWait(
@@ -1730,6 +1731,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) { status }
+      }
+  }
+
+  it should "not allow an owner to delete a locked workspace" in withLockedWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
+    Delete(s"${testData.workspace.path}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
       }
   }
 
