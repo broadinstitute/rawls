@@ -548,20 +548,6 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map(query => unmarshalEntities(query, workspaceContext.shardState))
     }
 
-    // get entity types, counts, and attribute names to populate UI tables.  Active entities and attributes only.
-    /* currently unused except in tests */
-    // TODO: update the tests that call this method, then delete this method
-    def getEntityTypeMetadata(workspaceContext: Workspace, outerSpan: Span = null): ReadAction[Map[String, EntityTypeMetadata]] = {
-      val typesAndCountsQ = traceReadOnlyDBIOWithParent("getEntityTypesWithCounts", outerSpan) { _ =>
-        getEntityTypesWithCounts(workspaceContext.workspaceIdAsUUID)
-      }
-      val typesAndAttrsQ = traceReadOnlyDBIOWithParent("getAttrNamesAndEntityTypes", outerSpan) { _ =>
-        getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, workspaceContext.shardState)
-      }
-
-      generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
-    }
-
     def getEntityTypesWithCounts(workspaceId: UUID): ReadAction[Map[String, Int]] = {
       findActiveEntityByWorkspace(workspaceId).groupBy(e => e.entityType).map { case (entityType, entities) =>
         (entityType, entities.length)
