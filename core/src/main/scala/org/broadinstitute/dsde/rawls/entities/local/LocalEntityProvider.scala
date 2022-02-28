@@ -70,7 +70,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
                   rootSpan.putAttribute("alwaysCacheAttributesFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes))
                   logger.info(s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]")
                 } else {
-                  logger.info(s"entity statistics cache: miss (cache is out of date) [${workspaceContext.workspaceIdAsUUID}]")
+                  logger.info(s"entity statistics cache: miss (cache is out of date, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]")
                   // and opportunistically save
                 }
                 calculateMetadataResponse(dataAccess, countsFromCache = flags.alwaysCacheTypeCounts, attributesFromCache = flags.alwaysCacheAttributes, rootSpan)
