@@ -6419,10 +6419,10 @@ components:
           description: details of spend data, categorized by given key
           type: array
           items:
-            $ref: '#/components/schemas/SpendReportAggregation'
+            $ref: '#/components/schemas/SpendReportingAggregation'
         spendSummary:
-          $ref: '#/components/schemas/SpendReportForDateRange'
-    SpendReportAggregation:
+          $ref: '#/components/schemas/SpendReportingForDateRange'
+    SpendReportingAggregation:
       required:
         - aggregationKey
         - spendData
@@ -6438,8 +6438,8 @@ components:
         spendData:
           type: array
           items:
-            $ref: '#/components/schemas/SpendReportForDateRange'
-    SpendReportForDateRange:
+            $ref: '#/components/schemas/SpendReportingForDateRange'
+    SpendReportingForDateRange:
       required:
         - cost
         - credits

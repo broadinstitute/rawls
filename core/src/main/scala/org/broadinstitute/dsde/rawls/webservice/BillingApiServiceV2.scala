@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
@@ -11,6 +12,7 @@ import org.joda.time.DateTime
 
 import scala.collection.immutable
 import scala.concurrent.ExecutionContext
+import scala.util.Try
 
 /**
   * Created by dvoet on 11/2/2020.
@@ -52,13 +54,19 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             get {
               parameters("startDate".as[String], "endDate".as[String]) { (startDate, endDate) =>
                 complete {
-                  spendReportingConstructor(userInfo).getSpendForBillingProject(
-                    RawlsBillingProjectName(projectId),
-                    DateTime.parse(startDate),
-                    DateTime.parse(endDate)
-                  ).map {
-                    case Some(spendReportResults) => StatusCodes.OK -> Option(spendReportResults)
-                    case None => StatusCodes.NotFound -> None
+                  Try {
+                    (DateTime.parse(startDate), DateTime.parse(endDate))
+                  }.recover {
+                    case _: IllegalArgumentException => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "invalid dates provided"))
+                  }.map { case (parsedStartDate, parsedEndDate) =>
+                    spendReportingConstructor(userInfo).getSpendForBillingProject(
+                      RawlsBillingProjectName(projectId),
+                      parsedStartDate,
+                      parsedEndDate
+                    ).map {
+                      case Some(spendReportResults) => StatusCodes.OK -> Option(spendReportResults)
+                      case None => StatusCodes.NotFound -> None
+                    }
                   }
                 }
               }
