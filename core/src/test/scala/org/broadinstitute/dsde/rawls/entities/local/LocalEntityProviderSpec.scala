@@ -419,7 +419,6 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       }
     }
 
-    // =========== START isEntityCacheCurrent() tests; these are obsolete
     "consider cache out of date if no cache record" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
@@ -428,7 +427,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         assert(!runAndWait(workspaceFilter.exists.result))
       }
 
-      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      val isCurrent = runAndWait(entityCacheQuery.entityCacheStaleness(wsid)).contains(0)
       withClue("cache should be out of date") {
         assert(!isCurrent)
       }
@@ -446,7 +445,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       // update cache timestamp
       runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, wsLastModifiedTimestamp))
 
-      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      val isCurrent = runAndWait(entityCacheQuery.entityCacheStaleness(wsid)).contains(0)
       withClue("cache should be out of date") {
         assert(!isCurrent)
       }
@@ -467,12 +466,11 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       // update cache timestamp
       runAndWait(entityCacheQuery.updateCacheLastUpdated(wsid, wsLastModifiedTimestamp))
 
-      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      val isCurrent = runAndWait(entityCacheQuery.entityCacheStaleness(wsid)).contains(0)
       withClue("cache should be current") {
         assert(isCurrent)
       }
     }
-    // =========== END isEntityCacheCurrent() tests; these are obsolete
 
     "return None from entityCacheStaleness if cache is non-existent" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
@@ -614,7 +612,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         assert(!runAndWait(workspaceFilter.exists.result))
       }
 
-      val isCurrentBefore = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      val isCurrentBefore = runAndWait(entityCacheQuery.entityCacheStaleness(wsid)).contains(0)
       withClue("cache should be not-current before requesting metadata") {
         assert(!isCurrentBefore)
       }
@@ -626,7 +624,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         assert(runAndWait(workspaceFilter.exists.result))
       }
 
-      val isCurrentAfter = runAndWait(entityCacheQuery.isEntityCacheCurrent(wsid))
+      val isCurrentAfter = runAndWait(entityCacheQuery.entityCacheStaleness(wsid)).contains(0)
       withClue("cache should be current after requesting metadata") {
         assert(isCurrentAfter)
       }

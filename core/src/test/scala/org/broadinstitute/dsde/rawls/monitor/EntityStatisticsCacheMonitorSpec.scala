@@ -240,7 +240,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
 
     // this first monitor should, eventually, update the workspace's cache
     eventually(timeout = timeout(timeoutPerWorkspace*3)) {
-      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID))
+      val isCurrent = runAndWait(entityCacheQuery.entityCacheStaleness(workspaceContext.workspaceIdAsUUID)).contains(0)
       isCurrent shouldBe true
     }
 
@@ -258,13 +258,13 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     // remove the cache record for our test workspace, and wait for the the monitor to sweep and update its cache.
     val killCacheFuture = for {
       _ <- entityCacheQuery.filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
-      isCurrent <- entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID)
-    } yield isCurrent
+      staleness <- entityCacheQuery.entityCacheStaleness(workspaceContext.workspaceIdAsUUID)
+    } yield staleness.contains(0)
 
     runAndWait(killCacheFuture) shouldBe false
 
     eventually(timeout = timeout(timeoutPerWorkspace*3)) {
-      val isCurrent = runAndWait(entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID))
+      val isCurrent = runAndWait(entityCacheQuery.entityCacheStaleness(workspaceContext.workspaceIdAsUUID)).contains(0)
       isCurrent shouldBe true
     }
   }

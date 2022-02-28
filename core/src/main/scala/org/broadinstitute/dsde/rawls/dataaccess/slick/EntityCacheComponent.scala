@@ -63,14 +63,5 @@ trait EntityCacheComponent {
 
       uniqueResult[Int](baseQuery)
     }
-
-    // TODO: update the tests that call this method to call entityCacheStaleness instead, then delete this method
-    /** does an up-to-date entity cache exist? currently unused except in tests */
-    def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
-      // staleness of 0 means the cache is current
-      entityCacheStaleness(workspaceId).map (_.getOrElse(Integer.MAX_VALUE) == 0)
-    }
-
   }
-
 }
