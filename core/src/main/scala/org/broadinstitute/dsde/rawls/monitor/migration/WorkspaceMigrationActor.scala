@@ -3,8 +3,8 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import cats.data.{NonEmptyList, OptionT, ReaderT}
-import cats.effect.unsafe.implicits.{global => ioruntime}
 import cats.effect.IO
+import cats.effect.unsafe.implicits.{global => ioruntime}
 import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketGetOption
@@ -89,6 +89,9 @@ object WorkspaceMigrationActor {
 
   object MigrateAction {
 
+    final def apply[A](f: MigrationDeps => OptionT[IO, A]): MigrateAction[A] =
+      ReaderT { env => f(env) }
+
     // lookup a value in the environment using `selector`
     final def asks[A](selector: MigrationDeps => A): MigrateAction[A] =
       ReaderT.ask[OptionT[IO, *], MigrationDeps].map(selector)
@@ -117,7 +120,7 @@ object WorkspaceMigrationActor {
 
   implicit class MigrateActionOps[A](action: MigrateAction[A]) {
     final def handleErrorWith(f: Throwable => MigrateAction[A]): MigrateAction[A] =
-      ReaderT { env =>
+      MigrateAction { env =>
         OptionT(action.run(env).value.handleErrorWith(f(_).run(env).value))
       }
   }
@@ -411,13 +414,12 @@ object WorkspaceMigrationActor {
           migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration, workspace))
         })
 
-        _ <- inTransaction(dataAccess =>
-          dataAccess
-            .workspaceQuery
+        _ <- inTransaction {
+          _.workspaceQuery
             .filter(_.id === workspace.workspaceIdAsUUID)
             .map(w => (w.googleProjectId, w.googleProjectNumber))
             .update((googleProjectId.value, migration.newGoogleProjectNumber.map(_.toString)))
-        )
+        }
 
         _ <- migrationFinished(migration.id, Success)
       } yield ()
@@ -431,16 +433,13 @@ object WorkspaceMigrationActor {
                                      destGoogleProject: GoogleProject,
                                      destBucketName: GcsBucketName)
   : MigrateAction[Unit] =
-    for {
-      (storageService, googleProjectToBill) <- MigrateAction.asks { env =>
-        (env.storageService, env.googleProjectToBill)
-      }
-      _ <- MigrateAction.liftIO {
+    MigrateAction { env =>
+      OptionT.liftF {
         for {
-          sourceBucketOpt <- storageService.getBucket(
+          sourceBucketOpt <- env.storageService.getBucket(
             sourceGoogleProject,
             sourceBucketName,
-            List(BucketGetOption.userProject(googleProjectToBill.value))
+            List(BucketGetOption.userProject(env.googleProjectToBill.value))
           )
 
           sourceBucket = sourceBucketOpt.getOrElse(
@@ -457,7 +456,7 @@ object WorkspaceMigrationActor {
           // todo: CA-1637 do we need to transfer the storage logs for this workspace? the logs are prefixed
           // with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket
           // and the storage_byte_hours in it that is kept for 180 days
-          _ <- storageService.insertBucket(
+          _ <- env.storageService.insertBucket(
             googleProject = destGoogleProject,
             bucketName = destBucketName,
             labels = Option(sourceBucket.getLabels).map(_.toMap).getOrElse(Map.empty),
@@ -467,18 +466,27 @@ object WorkspaceMigrationActor {
           ).compile.drain
 
           // Poll for bucket to be created
+          deadline = 10.seconds.fromNow
           _ <- IO.sleep(100.milliseconds).whileM_ {
-            storageService.getBucket(
+            IO.raiseWhen(deadline.isOverdue()) {
+              WorkspaceMigrationException(
+                message = "Workspace migration failed: timed out waiting for bucket creation",
+                data = Map(
+                  "migrationId" -> migration.id,
+                  "workspace" -> workspace.toWorkspaceName,
+                  "googleProject" -> destGoogleProject,
+                  "bucketName" -> destBucketName
+                )
+              )
+            } *> env.storageService.getBucket(
               destGoogleProject,
               destBucketName,
-              List(BucketGetOption.userProject(googleProjectToBill.value))
-            )
-            .map(_.isEmpty)
+              List(BucketGetOption.userProject(env.googleProjectToBill.value))
+            ).map(_.isDefined)
           }
         } yield ()
       }
-    } yield ()
-
+    }
 
   final def startBucketTransferJob(migration: WorkspaceMigration,
                                    workspace: Workspace,
@@ -547,14 +555,14 @@ object WorkspaceMigrationActor {
       }
 
       (status, message) = toTuple(outcome)
-      finished <- nowTimestamp
+      finished <- nowTimestamp.map(_.some)
       _ <- inTransaction { _ =>
         storageTransferJobs
           .filter(_.id === transferJob.id)
           .map(row => (row.finished, row.outcome, row.message))
-          .update(finished.some, status, message)
+          .update(finished, status, message)
       }
-    } yield transferJob.copy(outcome = outcome.some)
+    } yield transferJob.copy(finished = finished, outcome = outcome.some)
 
 
   final def getOperationOutcome(operation: Operation): Option[Outcome] =
