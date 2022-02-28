@@ -935,6 +935,78 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/flags:
+    get:
+      tags:
+        - admin
+        - workspaces
+      summary: list feature flags for workspace
+      description: list feature flags for workspace
+      operationId: listWorkspaceFlags
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: string
+        403:
+          description: You must be an admin to list feature flags
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    put:
+      tags:
+        - admin
+        - workspaces
+      summary: overwrite feature flags for workspace
+      description: overwrite feature flags for workspace
+      operationId: overwriteWorkspaceFlags
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      requestBody:
+        description: full set of flags for this workspace
+        required: true
+        content:
+          'application/json':
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: string
+        403:
+          description: You must be an admin to overwrite feature flags
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/admin/refreshToken/{userSubjectId}:
     delete:
       deprecated: true

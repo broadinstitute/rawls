@@ -1865,6 +1865,32 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  def adminListWorkspaceFeatureFlags(workspaceName: WorkspaceName): Future[Seq[WorkspaceFeatureFlag]] = {
+    asFCAdmin {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          dataAccess.workspaceFeatureFlagQuery.listAllForWorkspace(workspaceContext.workspaceIdAsUUID)
+        }
+      }
+    }
+  }
+
+  def adminOverwriteWorkspaceFeatureFlags(workspaceName: WorkspaceName, flagNames: List[String]): Future[Seq[WorkspaceFeatureFlag]] = {
+    asFCAdmin {
+      val flags = flagNames.map(WorkspaceFeatureFlag)
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          for {
+            _ <- dataAccess.workspaceFeatureFlagQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID)
+            _ <- dataAccess.workspaceFeatureFlagQuery.saveAll(workspaceContext.workspaceIdAsUUID, flags)
+          } yield {
+            flags
+          }
+        }
+      }
+    }
+  }
+
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] = {
     //don't do the sam REST call inside the db transaction.
     getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
