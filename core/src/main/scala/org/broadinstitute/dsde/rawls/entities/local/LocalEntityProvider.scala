@@ -62,13 +62,13 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
               // cache is up to date - return cached
               logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
               calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, rootSpan)
-            case Some(_) =>
+            case Some(stalenessSeconds) =>
               // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
               cacheFeatureFlags(dataAccess, rootSpan).flatMap { flags =>
                 if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
                   rootSpan.putAttribute("alwaysCacheTypeCountsFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts))
                   rootSpan.putAttribute("alwaysCacheAttributesFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes))
-                  logger.info(s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}) [${workspaceContext.workspaceIdAsUUID}]")
+                  logger.info(s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]")
                 } else {
                   logger.info(s"entity statistics cache: miss (cache is out of date) [${workspaceContext.workspaceIdAsUUID}]")
                   // and opportunistically save
