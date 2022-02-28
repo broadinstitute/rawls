@@ -302,7 +302,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
 
       // add new attributes to the workspace, so we have a difference between cached and uncached, by saving the participant with a
-      // new set of attributes
+      // new set of attributes and counts
       val newEntity = Entity(localEntityProviderTestData.participant1.name, localEntityProviderTestData.participant1.entityType,
         Map(AttributeName.withDefaultNS("somethingNew") -> AttributeString("foo"),
           AttributeName.withDefaultNS("anotherNew") -> AttributeString("bar"),
@@ -310,30 +310,27 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
         ))
       runAndWait(entityQuery.save(localEntityProviderTestData.workspace, newEntity))
 
-      // verify the new attributes are present in uncached metadata
-      val entityTypeMetadataResultBeforeFlags = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
-
-      val addedAttrNames = entityTypeMetadataResultBeforeFlags("participant").attributeNames diff expectedResultWhenUsingFullQueries("participant").attributeNames
-      addedAttrNames should contain theSameElementsAs List("somethingNew", "anotherNew", "yetOneMore")
-
-      // since the cache was out of date, that last request to entityTypeMetadata opportunistically wrote the cache. Reset it so
-      // this unit test will keep working!
-      runAndWait(entityAttributeStatisticsQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID))
-      runAndWait(entityAttributeStatisticsQuery.batchInsert(workspaceContext.workspaceIdAsUUID, localEntityProviderTestData.workspaceAttrNameCacheEntries))
-      runAndWait(entityTypeStatisticsQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID))
-      runAndWait(entityTypeStatisticsQuery.batchInsert(workspaceContext.workspaceIdAsUUID, localEntityProviderTestData.workspaceEntityTypeCacheEntries))
-
-      // and update the entityCacheLastUpdated field to be prior to lastModified AGAIN, so we can test our scenario of having a fresh cache
-      // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
-      runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
-
       // set both feature flags here before calling entityTypeMetadata
       runAndWait(workspaceFeatureFlagQuery.save(workspaceContext.workspaceIdAsUUID, localEntityProvider.FEATURE_ALWAYS_CACHE_TYPE_COUNTS))
       runAndWait(workspaceFeatureFlagQuery.save(workspaceContext.workspaceIdAsUUID, localEntityProvider.FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES))
 
-      val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+      // verify the attribute name cache is stale on first access, because of the feature flags
+      val entityTypeMetadataResultWithFlags = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = true)))
+      val addedAttrNamesWithFlags = entityTypeMetadataResultWithFlags("participant").attributeNames
+      addedAttrNamesWithFlags shouldNot contain theSameElementsAs List("somethingNew", "anotherNew", "yetOneMore")
 
-      entityTypeMetadataResult should contain theSameElementsAs expectedResultWhenUsingCache
+      // verify the counts cache is stale on first access as well
+      entityTypeMetadataResultWithFlags.keySet.foreach { typeName =>
+        entityTypeMetadataResultWithFlags(typeName).count shouldBe expectedResultWhenUsingCache(typeName).count
+      }
+      // now call again, this time without the cache, and make sure the values are updated
+      val entityTypeMetadataResult = runAndWait(DBIO.from(localEntityProvider.entityTypeMetadata(useCache = false)))
+      val addedAttrNames = entityTypeMetadataResult("participant").attributeNames
+      addedAttrNames should contain theSameElementsAs List("somethingNew", "anotherNew", "yetOneMore")
+
+      // verify the counts are updated as well
+      entityTypeMetadataResultWithFlags("participant").count shouldBe expectedResultWhenUsingFullQueries("participant").count
+      entityTypeMetadataResultWithFlags("sample").count shouldBe expectedResultWhenUsingCache("sample").count
     }
 
     "use cache for types and counts only when cache is not up to date but the type/count feature flag is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
@@ -343,6 +340,15 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
       // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
       runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis - 10000)))
+
+      // add new attributes to the workspace, so we have a difference between cached and uncached, by saving the participant with a
+      // new set of attributes and counts
+      val newEntity = Entity(localEntityProviderTestData.participant1.name, localEntityProviderTestData.participant1.entityType,
+        Map(AttributeName.withDefaultNS("somethingNew") -> AttributeString("foo"),
+          AttributeName.withDefaultNS("anotherNew") -> AttributeString("bar"),
+          AttributeName.withDefaultNS("yetOneMore") -> AttributeString("baz")
+        ))
+      runAndWait(entityQuery.save(localEntityProviderTestData.workspace, newEntity))
 
       // set the type/count feature flag (only) here before calling entityTypeMetadata
       runAndWait(workspaceFeatureFlagQuery.save(workspaceContext.workspaceIdAsUUID, localEntityProvider.FEATURE_ALWAYS_CACHE_TYPE_COUNTS))
@@ -360,7 +366,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       // entityTypeMetadataResult attributes should match expectedResultWhenUsingFullQueries for participants;
       // samples should be the empty list since uncached results have no samples
       entityTypeMetadataResult("sample").attributeNames shouldBe empty
-      entityTypeMetadataResult("participant").attributeNames shouldBe expectedResultWhenUsingFullQueries("participant").attributeNames
+      entityTypeMetadataResult("participant").attributeNames should contain theSameElementsAs List("somethingNew", "anotherNew", "yetOneMore")
     }
 
     "use cache for attributes only when cache is not up to date but the attributes feature flag is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
