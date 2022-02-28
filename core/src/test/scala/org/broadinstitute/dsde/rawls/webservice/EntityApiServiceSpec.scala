@@ -1152,7 +1152,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         assertMetadataMapsEqual(expectedMetadataMap, responseAs[Map[String, EntityTypeMetadata]])
-        assertMetadataMapsEqual(expectedMetadataMap, runAndWait(entityQuery.getEntityTypeMetadata(constantData.workspace)))
       }
   }
 
@@ -1183,7 +1182,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         assertMetadataMapsEqual(expectedMetadataMap, responseAs[Map[String, EntityTypeMetadata]])
-        assertMetadataMapsEqual(expectedMetadataMap, runAndWait(entityQuery.getEntityTypeMetadata(constantData.workspace)))
       }
   }
 
