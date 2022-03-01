@@ -1058,6 +1058,15 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
 
+  implicit object WorkspaceFeatureFlagFormat extends JsonFormat[WorkspaceFeatureFlag] {
+    override def write(flag: WorkspaceFeatureFlag): JsValue = JsString(flag.name)
+
+    override def read(json: JsValue): WorkspaceFeatureFlag = json match {
+      case JsString(name) => WorkspaceFeatureFlag(name)
+      case _ => throw DeserializationException("unexpected json type")
+    }
+  }
+
   implicit object StatusCodeFormat extends JsonFormat[StatusCode] {
     override def write(code: StatusCode): JsValue = JsNumber(code.intValue)
 
