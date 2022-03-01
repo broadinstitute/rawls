@@ -12,7 +12,7 @@ import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, SamBillingProjectPolicyNames, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, SamBillingProjectPolicyNames, SamFullyQualifiedResourceId, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
@@ -447,6 +447,16 @@ object WorkspaceMigrationActor {
               accessPolicies,
               billingProjectOwnerPolicyEmail
             )
+
+            _ <- sam.createResourceFull(
+              SamResourceTypeNames.googleProject,
+              googleProjectId.value,
+              Map.empty,
+              Set.empty,
+              userInfo,
+              Some(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
+            )
+
           } yield ()
         }
 
