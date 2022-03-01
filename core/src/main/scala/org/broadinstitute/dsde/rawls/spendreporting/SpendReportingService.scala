@@ -8,10 +8,10 @@ import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.format.ISODateTimeFormat
 import org.joda.time.{DateTime, Days}
@@ -57,7 +57,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         DateTime.parse(row.get("date").getStringValue).plusDays(1).minusSeconds(1))
     }
     val dailySpendAggregation = SpendReportingAggregation(
-      SpendReportingAggregationKey("total"), dailySpend
+      SpendReportingAggregationKeys.Total, dailySpend
     )
 
     val costRollup = rows.map { row =>

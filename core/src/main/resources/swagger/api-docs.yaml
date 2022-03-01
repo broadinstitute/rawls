@@ -6310,12 +6310,9 @@ components:
       type: object
       properties:
         aggregationKey:
-          type: object
+          type: string
+          enum: [Total, Workspace]
           description: Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
-          properties:
-            key:
-              type: string
-              description: key
         spendData:
           type: array
           items:
