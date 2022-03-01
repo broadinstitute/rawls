@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -16,7 +18,6 @@ import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 import spray.json.DefaultJsonProtocol._
 
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
@@ -532,6 +533,30 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  "GET /billing/v2/{projectName}/spendReport" should "400 when invalid dates are given" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+
+    Get(s"/billing/v2/${project.projectName.value}/spendReport?startDate=nothing&endDate=20-020-123556") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  it should "404 when no dates are given" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+
+    Get(s"/billing/v2/${project.projectName.value}/spendReport") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.NotFound, responseAs[String]) {
           status
         }
       }

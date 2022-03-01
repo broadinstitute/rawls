@@ -3,12 +3,16 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.user.UserService
-import spray.json.DefaultJsonProtocol._
+import org.joda.time.DateTime
 
+import scala.collection.immutable
 import scala.concurrent.ExecutionContext
+import scala.util.Try
 
 /**
   * Created by dvoet on 11/2/2020.
@@ -19,12 +23,15 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
 
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+  import org.broadinstitute.dsde.rawls.model.SpendReportingJsonSupport._
   import spray.json.DefaultJsonProtocol._
 
   val userServiceConstructor: UserInfo => UserService
+  val spendReportingConstructor: UserInfo => SpendReportingService
 
   val billingRoutesV2: server.Route = requireUserInfo() { userInfo =>
     pathPrefix("billing" / "v2") {
+
       pathPrefix(Segment) { projectId =>
         pathEnd {
           get {
@@ -41,6 +48,30 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                 userServiceConstructor(userInfo).deleteBillingProject(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
               }
             }
+        } ~
+        pathPrefix("spendReport") {
+          pathEndOrSingleSlash {
+            get {
+              parameters("startDate".as[String], "endDate".as[String]) { (startDate, endDate) =>
+                complete {
+                  Try {
+                    (DateTime.parse(startDate), DateTime.parse(endDate))
+                  }.recover {
+                    case _: IllegalArgumentException => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "invalid dates provided"))
+                  }.map { case (parsedStartDate, parsedEndDate) =>
+                    spendReportingConstructor(userInfo).getSpendForBillingProject(
+                      RawlsBillingProjectName(projectId),
+                      parsedStartDate,
+                      parsedEndDate
+                    ).map {
+                      case Some(spendReportResults) => StatusCodes.OK -> Option(spendReportResults)
+                      case None => StatusCodes.NotFound -> None
+                    }
+                  }
+                }
+              }
+            }
+          }
         } ~
         pathPrefix("spendReportConfiguration") {
           pathEnd {

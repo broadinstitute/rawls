@@ -316,7 +316,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
         billingAccountId <- dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _)) => billingAccountName.value.stripPrefix("billingAccounts/")
+            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _)) => billingAccountName.withoutPrefix()
             case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The Google project associated with billing project ${billingProjectName.value} is not linked to an active billing account."))
           }
         }

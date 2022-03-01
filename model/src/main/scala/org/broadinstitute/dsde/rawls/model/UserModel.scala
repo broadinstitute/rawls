@@ -55,7 +55,9 @@ case class RawlsGroupName(value: String) extends UserAuthType {
   }
 }
 case class RawlsGroupEmail(value: String) extends UserAuthType
-case class RawlsBillingAccountName(value: String) extends UserAuthType
+case class RawlsBillingAccountName(value: String) extends UserAuthType {
+  def withoutPrefix(): String = value.stripPrefix("billingAccounts/")
+}
 case class RawlsBillingProjectName(value: String) extends UserAuthType
 
 class UserModelJsonSupport extends JsonSupport {

@@ -32,6 +32,7 @@ import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
+import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
@@ -426,6 +427,19 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("dataRepo.terraInstanceName")
       )
 
+      val spendReportingServiceConfig = SpendReportingServiceConfig(
+        gcsConfig.getString("billingExportTableName"),
+        GoogleProject(gcsConfig.getString("serviceProject")),
+        gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
+      )
+
+      val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
+        slickDataSource,
+        bigQueryDAO,
+        samDAO,
+        spendReportingServiceConfig
+      )
+
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
@@ -433,6 +447,7 @@ object Boot extends IOApp with LazyLogging {
         userServiceConstructor,
         genomicsServiceConstructor,
         snapshotServiceConstructor,
+        spendReportingServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(
