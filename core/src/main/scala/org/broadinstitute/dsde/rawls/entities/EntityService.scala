@@ -167,12 +167,25 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] =
+    // TODO: AJ-244 add unit tests that assert we throw an error when result set is too large
+    // TODO: AJ-244 retrieve hardLimit from config, not hardcoded here
+    val hardLimit = 400000
+
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("listActiveEntitiesOfType", parentSpan) { _ =>
-          dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
-        }.map { r =>
-          r.toSeq
+        traceDBIOWithParent("countActiveEntitiesOfType", parentSpan) { countSpan =>
+          dataAccess.entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID).length.result.flatMap { entityCount =>
+            if (entityCount > hardLimit) {
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
+                s"Result set size of $entityCount cannot exceed $hardLimit. Use the paginated entityQuery API instead."))
+            } else {
+              traceDBIOWithParent("listActiveEntitiesOfType", countSpan) { _ =>
+                dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
+              }.map { r =>
+                r.toSeq
+              }
+            }
+          }
         }
       }
     }
