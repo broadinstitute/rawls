@@ -166,7 +166,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       metadataFuture.recover(bigQueryRecover)
     }
 
-  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] =
+  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] = {
     // TODO: AJ-244 add unit tests that assert we throw an error when result set is too large
     // TODO: AJ-244 retrieve hardLimit from config, not hardcoded here
     val hardLimit = 400000
@@ -189,6 +189,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         }
       }
     }
+  }
 
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[EntityQueryResponse] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
