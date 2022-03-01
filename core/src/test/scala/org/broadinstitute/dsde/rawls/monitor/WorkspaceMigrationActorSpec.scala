@@ -1,21 +1,23 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.testkit.typed.scaladsl.ActorTestKit
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
+import com.google.api.services.compute.ComputeScopes
+import com.google.auth.oauth2.{GoogleCredentials, ServiceAccountCredentials}
 import com.google.cloud.storage.{Acl, Storage}
 import com.google.cloud.{Identity, Policy}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
 import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigration}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
@@ -31,22 +33,21 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.{Assertion, BeforeAndAfterAll, OptionValues}
+import org.scalatest.{Assertion, OptionValues}
 import slick.jdbc.MySQLProfile.api._
 import spray.json.{JsObject, JsString}
 
+import java.io.FileInputStream
 import java.sql.{SQLException, Timestamp}
-import java.util.UUID
+import java.util.{Collections, UUID}
 import scala.language.postfixOps
 
 class WorkspaceMigrationActorSpec
   extends AnyFlatSpecLike
-    with BeforeAndAfterAll
     with Matchers
     with Eventually
     with OptionValues {
 
-  val testKit: ActorTestKit = ActorTestKit()
   implicit val logger = new ConsoleLogger("unit_test", LogLevel(false, false, true, true))
   implicit val ec = IORuntime.global.compute
   implicit val timestampOrdering = new Ordering[Timestamp] {
@@ -73,7 +74,8 @@ class WorkspaceMigrationActorSpec
           fakeGoogleProjectUsedForMigrationExpenses,
           services.workspaceService,
           MockStorageService(),
-          MockStorageTransferService()
+          MockStorageTransferService(),
+          UserInfo(services.user.userEmail, OAuth2BearerToken("foo"), 0, services.user.userSubjectId)
         )
       }
         .value
@@ -137,9 +139,6 @@ class WorkspaceMigrationActorSpec
 
   def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
     spec.workspaceQuery.createOrUpdate(workspace) >> schedule(workspace)
-
-
-  override def afterAll(): Unit = testKit.shutdownTestKit()
 
 
   "isMigrating" should "return false when a workspace is not being migrated" in
@@ -386,7 +385,12 @@ class WorkspaceMigrationActorSpec
           googleStorageService => test.run(
             env.copy(
               googleProjectToBill = serviceProject,
-              storageService = googleStorageService
+              storageService = googleStorageService,
+              userInfo = UserInfo.buildFromTokens(
+                ServiceAccountCredentials
+                  .fromStream(new FileInputStream(pathToCredentialJson))
+                  .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
+              )
             )
           ).value
         }
@@ -490,7 +494,12 @@ class WorkspaceMigrationActorSpec
           googleStorageService => test.run(
             env.copy(
               googleProjectToBill = serviceProject,
-              storageService = googleStorageService
+              storageService = googleStorageService,
+              userInfo = UserInfo.buildFromTokens(
+                ServiceAccountCredentials
+                  .fromStream(new FileInputStream(pathToCredentialJson))
+                  .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
+              )
             )
           ).value
         }

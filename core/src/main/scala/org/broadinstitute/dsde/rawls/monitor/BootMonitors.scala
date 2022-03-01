@@ -267,7 +267,8 @@ object BootMonitors extends LazyLogging {
         googleProjectToBill = serviceProject, // todo: figure out who pays for this
         workspaceService(rawlsUserInfo),
         storageService,
-        storageTransferService
+        storageTransferService,
+        rawlsUserInfo
       ).behavior,
       "WorkspaceMigrationActor"
     )

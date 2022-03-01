@@ -12,7 +12,7 @@ import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
@@ -82,7 +82,8 @@ object WorkspaceMigrationActor {
                                  googleProjectToBill: GoogleProject,
                                  workspaceService: WorkspaceService,
                                  storageService: GoogleStorageService[IO],
-                                 storageTransferService: GoogleStorageTransferService[IO])
+                                 storageTransferService: GoogleStorageTransferService[IO],
+                                 userInfo: UserInfo)
 
 
   type MigrateAction[A] = ReaderT[OptionT[IO, *], MigrationDeps, A]
@@ -414,6 +415,8 @@ object WorkspaceMigrationActor {
           migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration, workspace))
         })
 
+
+
         _ <- inTransaction {
           _.workspaceQuery
             .filter(_.id === workspace.workspaceIdAsUUID)
@@ -468,21 +471,24 @@ object WorkspaceMigrationActor {
           // Poll for bucket to be created
           deadline = 10.seconds.fromNow
           _ <- IO.sleep(100.milliseconds).whileM_ {
-            IO.raiseWhen(deadline.isOverdue()) {
-              WorkspaceMigrationException(
-                message = "Workspace migration failed: timed out waiting for bucket creation",
-                data = Map(
-                  "migrationId" -> migration.id,
-                  "workspace" -> workspace.toWorkspaceName,
-                  "googleProject" -> destGoogleProject,
-                  "bucketName" -> destBucketName
+            for {
+              _ <- IO.raiseWhen(deadline.isOverdue()) {
+                WorkspaceMigrationException(
+                  message = "Workspace migration failed: timed out waiting for bucket creation",
+                  data = Map(
+                    "migrationId" -> migration.id,
+                    "workspace" -> workspace.toWorkspaceName,
+                    "googleProject" -> destGoogleProject,
+                    "bucketName" -> destBucketName
+                  )
                 )
+              }
+              bucket <- env.storageService.getBucket(
+                destGoogleProject,
+                destBucketName,
+                List(BucketGetOption.userProject(env.googleProjectToBill.value))
               )
-            } *> env.storageService.getBucket(
-              destGoogleProject,
-              destBucketName,
-              List(BucketGetOption.userProject(env.googleProjectToBill.value))
-            ).map(_.isDefined)
+            } yield bucket.isEmpty
           }
         } yield ()
       }
@@ -767,7 +773,8 @@ object WorkspaceMigrationActor {
             googleProjectToBill: GoogleProject,
             workspaceService: WorkspaceService,
             storageService: GoogleStorageService[IO],
-            storageTransferService: GoogleStorageTransferService[IO])
+            storageTransferService: GoogleStorageTransferService[IO],
+            actorSaUserInfo: UserInfo)
   : Behavior[Message] =
     Behaviors.setup { context =>
 
@@ -780,7 +787,8 @@ object WorkspaceMigrationActor {
                 googleProjectToBill,
                 workspaceService,
                 storageService,
-                storageTransferService
+                storageTransferService,
+                actorSaUserInfo
               )
             )
             .value
