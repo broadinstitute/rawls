@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
+import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -1334,13 +1335,19 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // the "oldBillingAccount" value
     verify(services.gcsDAO).setBillingAccountName(
       any[GoogleProjectId],
-      ArgumentMatchers.eq(billingProject.billingAccount.get)
+      ArgumentMatchers.eq(billingProject.billingAccount.get),
+      any[OpenCensusSpan]
     )
   }
 
   it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
-    when(services.gcsDAO.setBillingAccountName(GoogleProjectId("project-from-buffer"), RawlsBillingAccountName("fakeBillingAcct")))
-      .thenReturn(Future.failed(new Exception("Fake error from Google")))
+    doReturn(Future.failed(new Exception("failed")), null)
+      .when(services.gcsDAO)
+      .setBillingAccountName(
+        ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
+        ArgumentMatchers.eq(RawlsBillingAccountName("fakeBillingAcct")),
+        any[OpenCensusSpan]
+      )
 
     val workspaceName = WorkspaceName(testData.testProject1Name.value, "sad_workspace")
     val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
@@ -1587,7 +1594,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // clone Workspace Request
     verify(services.gcsDAO, times(1)).setBillingAccountName(
       any[GoogleProjectId],
-      ArgumentMatchers.eq(destBillingProject.billingAccount.get))
+      ArgumentMatchers.eq(destBillingProject.billingAccount.get),
+      any[OpenCensusSpan]
+    )
   }
 
   it should "fail to create a database object when GoogleServicesDAO throws an exception when updating billing account" in withTestDataServices { services =>
@@ -1596,9 +1605,13 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val clonedWorkspaceName = WorkspaceName(destBillingProject.projectName.value, "sad_workspace")
     val cloneWorkspaceRequest = WorkspaceRequest(clonedWorkspaceName.namespace, clonedWorkspaceName.name, Map.empty)
 
-    // Note: It seems that trying to use ArgumentMatchers when stubbing this method on a Spy results in NPE.  I do not know why.
-    when(services.gcsDAO.setBillingAccountName(GoogleProjectId("project-from-buffer"), RawlsBillingAccountName("fakeBillingAcct")))
-      .thenReturn(Future.failed(new Exception("Fake error from Google")))
+    doReturn(Future.failed(new Exception("Fake error from Google")), null)
+      .when(services.gcsDAO)
+      .setBillingAccountName(
+        ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
+        ArgumentMatchers.eq(RawlsBillingAccountName("fakeBillingAcct")),
+        any[OpenCensusSpan]
+      )
 
     intercept[Exception] {
       Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, cloneWorkspaceRequest), Duration.Inf)

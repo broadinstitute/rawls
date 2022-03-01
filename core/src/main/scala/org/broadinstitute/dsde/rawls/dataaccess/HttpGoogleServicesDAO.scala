@@ -44,7 +44,7 @@ import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
 import fs2.Stream
 import io.opencensus.scala.Tracing._
-import io.opencensus.trace.Span
+import io.opencensus.trace.{AttributeValue, Span}
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
@@ -687,12 +687,12 @@ class HttpGoogleServicesDAO(
     * @param billingAccountName
     * @return
     */
-  override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] = {
+  override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: Span = null): Future[ProjectBillingInfo] = {
     // Since this method should only be called with a non-empty Billing Account Name, then Rawls should also make sure
     // that Billing is enabled for the Google Project, otherwise users' projects could get "stuck" in a Disabled Billing
     // state with no way to reenable because they do not have permissions to do this directly on the Google Project.
     val newProjectBillingInfo = new ProjectBillingInfo().setBillingAccountName(billingAccountName.value).setBillingEnabled(true)
-    updateBillingInfo(googleProjectId, newProjectBillingInfo)
+    updateBillingInfo(googleProjectId, newProjectBillingInfo, span)
   }
 
   override def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo] = {
@@ -700,19 +700,29 @@ class HttpGoogleServicesDAO(
     updateBillingInfo(googleProjectId, newProjectBillingInfo)
   }
 
-  private def updateBillingInfo(googleProjectId: GoogleProjectId, projectBillingInfo: ProjectBillingInfo): Future[ProjectBillingInfo] = {
+  private def updateBillingInfo(googleProjectId: GoogleProjectId, projectBillingInfo: ProjectBillingInfo, parentSpan: Span = null): Future[ProjectBillingInfo] = {
     implicit val service = GoogleInstrumentedService.Billing
     val billingSvcCred = getBillingServiceAccountCredential
     val cloudBillingProjectsApi = getCloudBillingManager(billingSvcCred).projects()
-    val updater = cloudBillingProjectsApi.updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo)
-    retryWithRecoverWhen500orGoogleError(() => {
-      blocking {
-        executeGoogleRequest(updater)
+
+    traceWithParent("cloudBillingProjectsApi.updateBillingInfo", parentSpan) { s =>
+      val updater = cloudBillingProjectsApi.updateBillingInfo(s"projects/${googleProjectId.value}", projectBillingInfo)
+      retryWithRecoverWhen500orGoogleError(() => {
+        blocking {
+          val span = startSpanWithParent("executeGoogleRequest", s)
+          span.putAttribute("googleProjectId", AttributeValue.stringAttributeValue(googleProjectId.value))
+          span.putAttribute("billingAccount", AttributeValue.stringAttributeValue(projectBillingInfo.getBillingAccountName))
+
+          val result = executeGoogleRequest(updater)
+
+          span.end()
+          result
+        }
+      }) {
+        case e: GoogleJsonResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue =>
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
+            s"Rawls service account does not have access to Billing Account on Google Project ${googleProjectId}: ${projectBillingInfo}", e))
       }
-    }) {
-      case e: GoogleJsonResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden,
-          s"Rawls service account does not have access to Billing Account on Google Project ${googleProjectId}: ${projectBillingInfo}", e))
     }
   }
 
