@@ -884,7 +884,7 @@ class HttpGoogleServicesDAO(
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
     val cloudResManager = getCloudResourceManagerWithBillingServiceAccountCredential
-    retryExponentially(when500orNon404GoogleError)(() =>
+    retryExponentially(throwable => when500orExcludedGoogleError(throwable, Set(StatusCodes.NotFound, StatusCodes.Forbidden)))(() =>
       Future(blocking(executeGoogleRequest(cloudResManager.projects().get(googleProject.value))))
     )
   }

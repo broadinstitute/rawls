@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.google
 
+import akka.http.scaladsl.model.StatusCode
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
@@ -37,6 +38,11 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
   // might cause a bunch of failures.
   def when500orNon404GoogleError(throwable: Throwable): Boolean = throwable match {
     case e: HttpResponseException if e.getStatusCode == 404 => false
+    case t => when500orGoogleError(t)
+  }
+
+  def when500orExcludedGoogleError(throwable: Throwable, excludedStatusCodes: Set[StatusCode]): Boolean = throwable match {
+    case e: HttpResponseException if excludedStatusCodes.contains(StatusCode.int2StatusCode(e.getStatusCode)) => false
     case t => when500orGoogleError(t)
   }
 
