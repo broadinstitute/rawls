@@ -41,7 +41,7 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     case t => when500orGoogleError(t)
   }
 
-  def when500orExcludedGoogleError(throwable: Throwable, excludedStatusCodes: Set[StatusCode]): Boolean = throwable match {
+  def when500orNonExcludedGoogleError(throwable: Throwable, excludedStatusCodes: Set[StatusCode]): Boolean = throwable match {
     case e: HttpResponseException if excludedStatusCodes.contains(StatusCode.int2StatusCode(e.getStatusCode)) => false
     case t => when500orGoogleError(t)
   }

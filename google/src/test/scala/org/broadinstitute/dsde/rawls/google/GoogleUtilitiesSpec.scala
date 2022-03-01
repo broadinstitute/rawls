@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.google
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.testkit.TestKit
 import com.google.api.client.googleapis.json.GoogleJsonError.ErrorInfo
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
@@ -93,6 +94,14 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
     when500orNon404GoogleError(buildGoogleJsonResponseException(500)) shouldBe true
     when500orNon404GoogleError(buildHttpResponseException(500)) shouldBe true
     when500orNon404GoogleError(new IOException("boom")) shouldBe true
+  }
+
+  "when500orNonExcludedGoogleError" should "return true for 500 or Google errors except those specified" in {
+    when500orNonExcludedGoogleError(buildGoogleJsonResponseException(400), Set(StatusCodes.NotFound)) shouldBe true
+    when500orNonExcludedGoogleError(buildGoogleJsonResponseException(404), Set(StatusCodes.NotFound)) shouldBe false
+    when500orNonExcludedGoogleError(buildGoogleJsonResponseException(418), Set(StatusCodes.NotFound, StatusCodes.ImATeapot)) shouldBe false
+    when500orNonExcludedGoogleError(buildHttpResponseException(500), Set(StatusCodes.Forbidden, StatusCodes.EnhanceYourCalm)) shouldBe true
+    when500orNonExcludedGoogleError(new IOException("boom"), Set(StatusCodes.PreconditionFailed, StatusCodes.NotImplemented)) shouldBe true
   }
 
   "retryWhen500orGoogleError" should "retry once per backoff interval and then fail" in {
