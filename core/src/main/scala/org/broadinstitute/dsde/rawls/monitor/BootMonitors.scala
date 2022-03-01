@@ -123,7 +123,7 @@ object BootMonitors extends LazyLogging {
     startAvroUpsertMonitor(system, entityService, gcsDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO,
       importServiceDAO, avroUpsertMonitorConfig, slickDataSource)
 
-    startWorkspaceMigrationActor(system, conf, gcsDAO.getBillingServiceAccountCredential, slickDataSource, workspaceService, googleStorage, googleStorageTransferService)
+    startWorkspaceMigrationActor(system, conf, gcsDAO.getBillingServiceAccountCredential, slickDataSource, workspaceService, googleStorage, googleStorageTransferService, samDAO)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -256,7 +256,8 @@ object BootMonitors extends LazyLogging {
                                            dataSource: SlickDataSource,
                                            workspaceService: UserInfo => WorkspaceService,
                                            storageService: GoogleStorageService[IO],
-                                           storageTransferService: GoogleStorageTransferService[IO]) = {
+                                           storageTransferService: GoogleStorageTransferService[IO],
+                                           sam: SamDAO) = {
     val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
     val rawlsUserInfo = UserInfo.buildFromTokens(credential)
 
@@ -268,6 +269,7 @@ object BootMonitors extends LazyLogging {
         workspaceService(rawlsUserInfo),
         storageService,
         storageTransferService,
+        sam,
         rawlsUserInfo
       ).behavior,
       "WorkspaceMigrationActor"

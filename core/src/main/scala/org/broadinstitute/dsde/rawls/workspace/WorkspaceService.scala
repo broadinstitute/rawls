@@ -2023,10 +2023,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
     } yield (googleProjectId, googleProjectNumber)
 
-  private def setupGoogleProjectIam(googleProjectId : GoogleProjectId,
-                                    policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
-                                    billingProjectOwnerPolicyEmail: WorkbenchEmail,
-                                    span: Span = null): Future[Unit] = {
+  def setupGoogleProjectIam(googleProjectId : GoogleProjectId,
+                            policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
+                            billingProjectOwnerPolicyEmail: WorkbenchEmail,
+                            span: Span = null): Future[Unit] = {
     logger.info(s"Updating google project IAM ${googleProjectId}.")
     traceWithParent("updateGoogleProjectIam", span) { _ =>
       updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail)

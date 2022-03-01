@@ -11,8 +11,8 @@ import com.google.cloud.storage.Storage.BucketGetOption
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, SamBillingProjectPolicyNames, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationHistory
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.JobTransferSchedule
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
 import java.sql.Timestamp
@@ -27,6 +28,7 @@ import java.time.{Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.higherKinds
 
@@ -83,6 +85,7 @@ object WorkspaceMigrationActor {
                                  workspaceService: WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO],
+                                 sam: SamDAO,
                                  userInfo: UserInfo)
 
 
@@ -409,13 +412,43 @@ object WorkspaceMigrationActor {
 
   final def updateWorkspaceRecord: MigrateAction[Unit] =
     withMigration(_.tmpBucketDeleted.isDefined) { (migration, workspace) =>
+
+      def fromFuture[A](future: => Future[A]): MigrateAction[A] =
+        MigrateAction.liftIO(future.io)
+
       for {
-        // note that the google project number may not exist so we'll only parse out the project id
-        googleProjectId <- MigrateAction.liftIO(IO {
-          migration.newGoogleProjectId.getOrElse(throw noGoogleProjectError(migration, workspace))
-        })
+        (workspaceService, sam, userInfo) <- MigrateAction.asks { env =>
+          (env.workspaceService, env.sam, env.userInfo)
+        }
 
+        googleProjectId = migration.newGoogleProjectId.getOrElse(
+          throw noGoogleProjectError(migration, workspace)
+        )
 
+        _ <- fromFuture {
+          for {
+            billingProjectOwnerPolicyEmail <- sam.getPolicySyncStatus(
+              SamResourceTypeNames.billingProject,
+              workspace.namespace,
+              SamBillingProjectPolicyNames.owner,
+              userInfo
+            )
+              .map(_.email)
+
+            accessPolicies <- sam.listPoliciesForResource(
+              SamResourceTypeNames.workspace,
+              workspace.workspaceId,
+              userInfo
+            )
+              .map(_.map(p => p.policyName -> p.email).toMap)
+
+            _ <- workspaceService.setupGoogleProjectIam(
+              googleProjectId,
+              accessPolicies,
+              billingProjectOwnerPolicyEmail
+            )
+          } yield ()
+        }
 
         _ <- inTransaction {
           _.workspaceQuery
@@ -774,6 +807,7 @@ object WorkspaceMigrationActor {
             workspaceService: WorkspaceService,
             storageService: GoogleStorageService[IO],
             storageTransferService: GoogleStorageTransferService[IO],
+            sam: SamDAO,
             actorSaUserInfo: UserInfo)
   : Behavior[Message] =
     Behaviors.setup { context =>
@@ -788,6 +822,7 @@ object WorkspaceMigrationActor {
                 workspaceService,
                 storageService,
                 storageTransferService,
+                sam,
                 actorSaUserInfo
               )
             )

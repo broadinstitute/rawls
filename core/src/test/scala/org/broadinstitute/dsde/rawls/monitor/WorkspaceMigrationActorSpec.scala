@@ -7,7 +7,7 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.services.compute.ComputeScopes
-import com.google.auth.oauth2.{GoogleCredentials, ServiceAccountCredentials}
+import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.storage.{Acl, Storage}
 import com.google.cloud.{Identity, Policy}
 import com.google.longrunning.Operation
@@ -75,6 +75,7 @@ class WorkspaceMigrationActorSpec
           services.workspaceService,
           MockStorageService(),
           MockStorageTransferService(),
+          services.samDAO,
           UserInfo(services.user.userEmail, OAuth2BearerToken("foo"), 0, services.user.userSubjectId)
         )
       }
