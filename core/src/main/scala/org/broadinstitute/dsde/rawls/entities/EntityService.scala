@@ -167,7 +167,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] = {
-    // TODO: AJ-244 add unit tests that assert we throw an error when result set is too large
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("countActiveEntitiesOfType", parentSpan) { countSpan =>
@@ -189,7 +188,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   }
 
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[EntityQueryResponse] = {
-    // TODO: AJ-244 retrieve hardLimit from config, not hardcoded heres
     if (query.pageSize > pageSizeLimit) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Page size cannot exceed $pageSizeLimit"))
     }
