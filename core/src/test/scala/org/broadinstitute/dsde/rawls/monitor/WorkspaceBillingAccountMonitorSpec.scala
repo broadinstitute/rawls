@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.testkit.TestKit
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
+import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
@@ -116,7 +117,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       val exceptionMessage = "oh what a shame!  It went kerplooey!"
       val failingGcsDAO = spy(new MockGoogleServicesDAO("") {
-        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] =
+        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: OpenCensusSpan = null): Future[ProjectBillingInfo] =
           Future.failed(new RawlsException(exceptionMessage))
       })
       val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDAO)
@@ -218,7 +219,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       val exceptionMessage = "oh what a shame!  It went kerplooey!"
       val failingGcsDao = spy(new MockGoogleServicesDAO("") {
-        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] = {
+        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: OpenCensusSpan = null): Future[ProjectBillingInfo] = {
           if (googleProjectId == v1GoogleProjectId) {
             Future.failed(new RawlsException(exceptionMessage))
           } else {
@@ -244,7 +245,10 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
           .billingAccountErrorMessage shouldBe None
       }
 
-      verify(failingGcsDao, times(1)).setBillingAccountName(v1GoogleProjectId, newBillingAccount)
+      verify(failingGcsDao, times(1)).setBillingAccountName(
+        ArgumentMatchers.eq(v1GoogleProjectId), ArgumentMatchers.eq(newBillingAccount),
+        any[OpenCensusSpan]
+      )
 
       system.stop(actor)
     }
@@ -261,7 +265,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       val exceptionMessage = "Naughty naughty!  You ain't got no permissions!"
       val failingGcsDao = new MockGoogleServicesDAO("") {
-        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName): Future[ProjectBillingInfo] = {
+        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: OpenCensusSpan = null): Future[ProjectBillingInfo] = {
           Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, exceptionMessage)))
         }
       }

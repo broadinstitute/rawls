@@ -2017,10 +2017,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
 
       _ = logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing the RBS billing account.")
-      _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { _ =>
+      _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { s =>
         // Since we don't necessarily know what the RBS Billing Account is, we need to bypass the "oldBillingAccount"
         // check when updating the Billing Account on the project
-        gcsDAO.setBillingAccountName(googleProjectId, billingAccount)
+        s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
+        s.putAttribute("googleProjectId", OpenCensusAttributeValue.stringAttributeValue(googleProjectId.value))
+        s.putAttribute("billingAccount", OpenCensusAttributeValue.stringAttributeValue(billingAccount.value))
+        gcsDAO.setBillingAccountName(googleProjectId, billingAccount, s)
       }
 
       _ = logger.info(s"Creating labels for ${googleProjectId}.")
