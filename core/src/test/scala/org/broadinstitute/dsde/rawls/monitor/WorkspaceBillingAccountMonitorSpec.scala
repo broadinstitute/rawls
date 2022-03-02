@@ -245,7 +245,10 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
           .billingAccountErrorMessage shouldBe None
       }
 
-      verify(failingGcsDao, times(1)).setBillingAccountName(v1GoogleProjectId, newBillingAccount)
+      verify(failingGcsDao, times(1)).setBillingAccountName(
+        ArgumentMatchers.eq(v1GoogleProjectId), ArgumentMatchers.eq(newBillingAccount),
+        any[OpenCensusSpan]
+      )
 
       system.stop(actor)
     }
