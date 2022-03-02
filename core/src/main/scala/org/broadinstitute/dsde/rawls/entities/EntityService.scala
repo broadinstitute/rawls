@@ -23,15 +23,15 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object EntityService {
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, entityManager: EntityManager)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, entityManager: EntityManager, pageSizeLimit: Int)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): EntityService = {
 
-    new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName)
+    new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName, pageSizeLimit)
   }
 }
 
-class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, entityManager: EntityManager, override val workbenchMetricBaseName: String)(implicit protected val executionContext: ExecutionContext)
+class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, entityManager: EntityManager, override val workbenchMetricBaseName: String, pageSizeLimit: Int)(implicit protected val executionContext: ExecutionContext)
   extends WorkspaceSupport with EntitySupport with AttributeSupport with LazyLogging with RawlsInstrumented with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
@@ -168,16 +168,13 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] = {
     // TODO: AJ-244 add unit tests that assert we throw an error when result set is too large
-    // TODO: AJ-244 retrieve hardLimit from config, not hardcoded here
-    val hardLimit = 400000
-
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("countActiveEntitiesOfType", parentSpan) { countSpan =>
           dataAccess.entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID).length.result.flatMap { entityCount =>
-            if (entityCount > hardLimit) {
+            if (entityCount > pageSizeLimit) {
               throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
-                s"Result set size of $entityCount cannot exceed $hardLimit. Use the paginated entityQuery API instead."))
+                s"Result set size of $entityCount cannot exceed $pageSizeLimit. Use the paginated entityQuery API instead."))
             } else {
               traceDBIOWithParent("listActiveEntitiesOfType", countSpan) { _ =>
                 dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
@@ -193,10 +190,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[EntityQueryResponse] = {
     // TODO: AJ-244 retrieve hardLimit from config, not hardcoded heres
-    // TODO: AJ-244 add unit tests that assert we throw an error when page size is too large
-    val hardLimit = 400000
-    if (query.pageSize > hardLimit) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Page size cannot exceed $hardLimit"))
+    if (query.pageSize > pageSizeLimit) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Page size cannot exceed $pageSizeLimit"))
     }
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>

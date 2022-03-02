@@ -416,7 +416,8 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         samDAO,
         workbenchMetricBaseName = metricsPrefix,
-        entityManager
+        entityManager,
+        conf.getInt("entities.pageSizeLimit")
       )
 
       val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(
