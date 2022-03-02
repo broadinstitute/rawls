@@ -171,7 +171,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("countActiveEntitiesOfType", parentSpan) { countSpan =>
-          dataAccess.entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceIdAsUUID).length.result.flatMap { entityCount =>
+          dataAccess.entityQuery.findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result.flatMap { entityCount =>
             if (entityCount > pageSizeLimit) {
               throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
                 s"Result set size of $entityCount cannot exceed $pageSizeLimit. Use the paginated entityQuery API instead."))
