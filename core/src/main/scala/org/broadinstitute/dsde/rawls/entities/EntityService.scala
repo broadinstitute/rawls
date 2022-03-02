@@ -192,6 +192,13 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   }
 
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[EntityQueryResponse] = {
+    // TODO: AJ-244 retrieve hardLimit from config, not hardcoded heres
+    // TODO: AJ-244 add unit tests that assert we throw an error when page size is too large
+    val hardLimit = 400000
+    if (query.pageSize > hardLimit) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Page size cannot exceed $hardLimit"))
+    }
+
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)

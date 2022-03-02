@@ -167,13 +167,6 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   }
 
   override def queryEntities(entityType: String, query: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
-    // TODO: AJ-244 retrieve hardLimit from config, not hardcoded heres
-    // TODO: AJ-244 add unit tests that assert we throw an error when page size is too large
-    val hardLimit = 400000
-    if (query.pageSize > hardLimit) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Page size cannot exceed $hardLimit"))
-    }
-
     dataSource.inTransaction { dataAccess =>
       traceDBIOWithParent("loadEntityPage", parentSpan) { s1 =>
         s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
