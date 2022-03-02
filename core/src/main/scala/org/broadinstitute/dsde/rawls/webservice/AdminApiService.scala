@@ -99,6 +99,20 @@ trait AdminApiService extends UserInfoDirectives {
         }
       }
     } ~
+    path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>
+        get {
+          complete {
+            workspaceServiceConstructor(userInfo).adminListWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace, workspaceName))
+          }
+        } ~
+        put {
+          entity(as[List[String]]) { flagNames =>
+            complete {
+              workspaceServiceConstructor(userInfo).adminOverwriteWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace, workspaceName), flagNames)
+            }
+          }
+        }
+      } ~
     path("admin" / "refreshToken" / Segment ) { userSubjectId =>
       delete {
         complete { userServiceConstructor(userInfo).adminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))).map(_ => StatusCodes.OK) }

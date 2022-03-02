@@ -470,6 +470,67 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/billing/v2/{projectId}/spendReport:
+    get:
+      tags:
+        - billing_v2
+      summary: get spend report for the billing project
+      description: get spend report for the billing project
+      operationId: getSpendReport
+      parameters:
+        - name: projectId
+          in: path
+          description: Billing Project ID
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: start date of report (YYYY-MM-DD). Data included in report will start at 12 AM UTC on this date.
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          description: end date of report (YYYY-MM-DD). Data included in report will end at 11:59 PM UTC on this date.
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        200:
+          description: Success
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/SpendReport'
+        400:
+          description: invalid spend report parameters
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        403:
+          description: You must be a project owner to view the spend report of a project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: The specified billing project could not be found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+
+
   /api/billing/v2/{projectId}/spendReportConfiguration:
     get:
       tags:
@@ -925,6 +986,78 @@ paths:
                   $ref: '#/components/schemas/WorkspaceDetails'
         403:
           description: You must be an admin to list workspaces
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+  /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/flags:
+    get:
+      tags:
+        - admin
+        - workspaces
+      summary: list feature flags for workspace
+      description: list feature flags for workspace
+      operationId: listWorkspaceFlags
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: string
+        403:
+          description: You must be an admin to list feature flags
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          description: Rawls Internal Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+    put:
+      tags:
+        - admin
+        - workspaces
+      summary: overwrite feature flags for workspace
+      description: overwrite feature flags for workspace
+      operationId: overwriteWorkspaceFlags
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      requestBody:
+        description: full set of flags for this workspace
+        required: true
+        content:
+          'application/json':
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: string
+        403:
+          description: You must be an admin to overwrite feature flags
           content:
             'application/json':
               schema:
@@ -6348,6 +6481,62 @@ components:
             Caller must have the add_project action for this service perimeter in
             Sam.
       description: ""
+    SpendReport:
+      required:
+        - spendDetails
+        - spendSummary
+      type: object
+      properties:
+        spendDetails:
+          description: details of spend data, categorized by given key
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendReportingAggregation'
+        spendSummary:
+          $ref: '#/components/schemas/SpendReportingForDateRange'
+    SpendReportingAggregation:
+      required:
+        - aggregationKey
+        - spendData
+      type: object
+      properties:
+        aggregationKey:
+          type: object
+          description: Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
+          properties:
+            key:
+              type: string
+              description: key
+        spendData:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendReportingForDateRange'
+    SpendReportingForDateRange:
+      required:
+        - cost
+        - credits
+        - currency
+        - startTime
+        - endTime
+      type: object
+      properties:
+        cost:
+          type: string
+          description: total cost for date range
+        credits:
+          type: string
+          description: credits towards reported cost. cost - credits = amount billed to users
+        currency:
+          type: string
+          description: currency that cost and credits uses
+        startTime:
+          type: string
+          format: timestamp
+          description: timestamp (UTC) marking the start of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
+        endTime:
+          type: string
+          format: timestamp
+          description: timestamp (UTC) marking the end of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
     SpendReportConfiguration:
       required:
         - datasetGoogleProject

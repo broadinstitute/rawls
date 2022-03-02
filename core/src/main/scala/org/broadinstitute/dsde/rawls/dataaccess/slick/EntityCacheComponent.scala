@@ -47,21 +47,21 @@ trait EntityCacheComponent {
       entityCacheQuery.insertOrUpdate(EntityCacheRecord(workspaceId, timestamp, errorMessage))
     }
 
-    def isEntityCacheCurrent(workspaceId: UUID): ReadAction[Boolean] = {
-      val baseQuery = sql"""SELECT EXISTS(
-              SELECT 1
-                FROM WORKSPACE w, WORKSPACE_ENTITY_CACHE c
-                WHERE
-                  w.id = $workspaceId
-                  and w.id = c.workspace_id
-                  and w.last_modified = c.entity_cache_last_updated
-                LIMIT 1);""".as[Int]
+    /**
+      * Describes the staleness of the entity cache for a given workspace.
+      *  - returns None if no cache exists
+      *  - returns Some(0) if a cache exists and is up-to-date
+      *  - returns Some(n) if a cache exists but is out of date, where n is a positive integer representing
+      *     the number of seconds by which the cache is stale.
+      * */
+    def entityCacheStaleness(workspaceId: UUID): ReadAction[Option[Int]] = {
+      val baseQuery = sql"""
+                      select TIMESTAMPDIFF(SECOND, c.entity_cache_last_updated, w.last_modified) as staleness
+                        from WORKSPACE w, WORKSPACE_ENTITY_CACHE c
+                        where c.workspace_id = w.id
+                        and c.workspace_id = $workspaceId;""".as[Int]
 
-      uniqueResult[Int](baseQuery).map { existsResult =>
-        existsResult.contains(1)
-      }
+      uniqueResult[Int](baseQuery)
     }
-
   }
-
 }

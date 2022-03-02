@@ -660,8 +660,18 @@ class HttpGoogleServicesDAO(
       //Iterate over each chunk.
       val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
 
+        //Filter out the billing accounts that are closed. They have no value to users
+        //and can cause confusion by cluttering their lists
+        val filteredChunk = chunk.filter { account =>
+          //Wrap in an Option for safety, as getOpen can return null
+          val isOpen = Option(account.getOpen)
+          //Convert null into true. Google doesn't document the behavior in this case, so it's better to potentially return
+          //slightly too many than omit potentially valid billing accounts. nulls should be rare or non-existent.
+          isOpen.getOrElse(true) == true
+        }
+
         //Run all tests in the chunk in parallel.
-        IO.fromFuture(IO(Future.traverse(chunk){ acct =>
+        IO.fromFuture(IO(Future.traverse(filteredChunk){ acct =>
           val acctName = RawlsBillingAccountName(acct.getName)
           testDMBillingAccountAccess(acctName) map { firecloudHasAccount =>
             RawlsBillingAccount(acctName, firecloudHasAccount, acct.getDisplayName)

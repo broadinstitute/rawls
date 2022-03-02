@@ -136,8 +136,6 @@ case class CreateRawlsV2BillingProjectFullRequest(
   billingAccount: RawlsBillingAccountName,
   servicePerimeter: Option[ServicePerimeterName])
 
-case class BillingProjectSpendConfiguration(datasetGoogleProject: GoogleProject, datasetName: BigQueryDatasetName)
-
 case class UpdateRawlsBillingAccountRequest(billingAccount: RawlsBillingAccountName)
 
 case class SyncReportItem(operation: String, email: String, errorReport: Option[ErrorReport])
@@ -201,8 +199,6 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
   implicit val CreateRawlsV2BillingProjectFullRequestFormat = jsonFormat3(CreateRawlsV2BillingProjectFullRequest)
-
-  implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
 
   implicit val UpdateRawlsBillingAccountRequestFormat = jsonFormat1(UpdateRawlsBillingAccountRequest)
 

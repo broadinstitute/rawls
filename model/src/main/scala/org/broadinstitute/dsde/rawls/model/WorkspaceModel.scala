@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
 import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates.WorkspaceShardState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
@@ -140,6 +141,17 @@ object WorkspaceVersions {
   }
 }
 
+
+case class MultiCloudWorkspaceRequest(namespace: String,
+                                      name: String,
+                                      attributes: AttributeMap,
+                                      cloudPlatform: WorkspaceCloudPlatform
+                                     ) extends Attributable {
+  def toWorkspaceName = WorkspaceName(namespace, name)
+  def briefName: String = toWorkspaceName.toString
+  def path: String = toWorkspaceName.path
+}
+
 case class WorkspaceRequest(namespace: String,
                             name: String,
                             attributes: AttributeMap,
@@ -203,6 +215,35 @@ object Workspace {
     val googleProjectId = GoogleProjectId(randomString)
     val googleProjectNumber = GoogleProjectNumber(randomString)
     new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate), shardState = WorkspaceShardStates.Sharded, workspaceType = WorkspaceType.RawlsWorkspace)
+  }
+
+  def apply(namespace: String,
+            name: String,
+            workspaceId: String,
+            createdDate: DateTime,
+            lastModified: DateTime,
+            createdBy: String,
+            attributes: AttributeMap
+           ) = {
+    new Workspace(namespace,
+      name,
+      workspaceId,
+      "",
+      None,
+      createdDate,
+      lastModified,
+      createdBy,
+      attributes,
+      false,
+      WorkspaceVersions.V2,
+      GoogleProjectId(""),
+      None,
+      None,
+      None,
+      None,
+      WorkspaceShardStates.Sharded,
+      WorkspaceType.McWorkspace
+    )
   }
 }
 
@@ -358,6 +399,22 @@ object WorkspaceType {
 
   case object RawlsWorkspace extends WorkspaceType
   case object McWorkspace extends WorkspaceType
+}
+
+object WorkspaceCloudPlatform {
+  sealed trait WorkspaceCloudPlatform extends RawlsEnumeration[WorkspaceCloudPlatform] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): WorkspaceCloudPlatform = WorkspaceCloudPlatform.withName(name)
+  }
+
+  def withName(name: String): WorkspaceCloudPlatform = name.toLowerCase match {
+    case "azure" => Azure
+    case "gcp" => Gcp
+    case _ => throw new RawlsException(s"invalid cloud platform [${name}]")
+  }
+
+  case object Azure extends WorkspaceCloudPlatform
+  case object Gcp extends WorkspaceCloudPlatform
 }
 
 sealed trait MethodRepoMethod {
@@ -884,6 +941,10 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityFormat = jsonFormat3(Entity)
 
+  implicit val workspaceCloudPlatformFormat = rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
+
+  implicit val MultiCloudWorkspaceRequestFormat = jsonFormat4(MultiCloudWorkspaceRequest)
+
   implicit val WorkspaceRequestFormat = jsonFormat7(WorkspaceRequest)
 
   implicit val workspaceFieldSpecsFormat = jsonFormat1(WorkspaceFieldSpecs.apply)
@@ -996,6 +1057,15 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodInputsOutputsFormat = jsonFormat2(MethodInputsOutputs)
 
   implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
+
+  implicit object WorkspaceFeatureFlagFormat extends JsonFormat[WorkspaceFeatureFlag] {
+    override def write(flag: WorkspaceFeatureFlag): JsValue = JsString(flag.name)
+
+    override def read(json: JsValue): WorkspaceFeatureFlag = json match {
+      case JsString(name) => WorkspaceFeatureFlag(name)
+      case _ => throw DeserializationException("unexpected json type")
+    }
+  }
 
   implicit object StatusCodeFormat extends JsonFormat[StatusCode] {
     override def write(code: StatusCode): JsValue = JsNumber(code.intValue)

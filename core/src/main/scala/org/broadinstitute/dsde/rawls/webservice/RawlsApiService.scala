@@ -23,9 +23,10 @@ import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
+import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 
 import java.sql.SQLTransactionRollbackException
 import scala.concurrent.duration.FiniteDuration
@@ -69,11 +70,13 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   with AdminApiService with UserApiService with BillingApiService with BillingApiServiceV2 with NotificationsApiService with SnapshotApiService
   with StatusApiService with InstrumentationDirectives with SwaggerRoutes with VersionApiService with ServicePerimeterApiService {
 
+  val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val entityServiceConstructor: UserInfo => EntityService
   val userServiceConstructor: UserInfo => UserService
   val genomicsServiceConstructor: UserInfo => GenomicsService
   val snapshotServiceConstructor: UserInfo => SnapshotService
+  val spendReportingConstructor: UserInfo => SpendReportingService
   val statusServiceConstructor: () => StatusService
   val executionServiceCluster: ExecutionServiceCluster
   val appVersion: ApplicationVersion
@@ -149,4 +152,4 @@ trait VersionApiService {
   }
 }
 
-class RawlsApiServiceImpl(val workspaceServiceConstructor: UserInfo => WorkspaceService, val entityServiceConstructor: UserInfo => EntityService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val snapshotServiceConstructor: UserInfo => SnapshotService, val statusServiceConstructor: () => StatusService, val executionServiceCluster: ExecutionServiceCluster, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration, val batchUpsertMaxBytes: Long, override val workbenchMetricBaseName: String, val samDAO: SamDAO, val swaggerConfig: SwaggerConfig)(implicit val executionContext: ExecutionContext, val materializer: Materializer) extends RawlsApiService with StandardUserInfoDirectives
+class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService, val workspaceServiceConstructor: UserInfo => WorkspaceService, val entityServiceConstructor: UserInfo => EntityService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val snapshotServiceConstructor: UserInfo => SnapshotService, val spendReportingConstructor: UserInfo => SpendReportingService, val statusServiceConstructor: () => StatusService, val executionServiceCluster: ExecutionServiceCluster, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration, val batchUpsertMaxBytes: Long, override val workbenchMetricBaseName: String, val samDAO: SamDAO, val swaggerConfig: SwaggerConfig)(implicit val executionContext: ExecutionContext, val materializer: Materializer) extends RawlsApiService with StandardUserInfoDirectives
