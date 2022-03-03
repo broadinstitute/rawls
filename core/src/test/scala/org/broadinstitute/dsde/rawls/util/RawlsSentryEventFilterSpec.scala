@@ -20,6 +20,17 @@ class RawlsSentryEventFilterSpec extends AnyFreeSpec {
       }
     }
 
+    // https://broadworkbench.atlassian.net/browse/BW-1125
+    "should filter out 'pet service account not found' errors" in {
+      val e = evt("org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport: ErrorReport(rawls,HTTP error calling URI " +
+        "https://sam/api/google/petServiceAccount/abc@terra.iam.gserviceaccount.com. Response: {\"causes\":[]," +
+        "\"message\":\"pet service account not found\",\"source\":\"sam\",\"stackTrace\":[],\"statusCode\":404}," +
+        "Some(404 Not Found),List(),List(),None)")
+      assertResult(false) {
+        new RawlsSentryEventFilter().shouldSend(e)
+      }
+    }
+
     "should NOT filter any other messages" in {
       val e = evt("This is some other error message that should be sent to Sentry")
       assertResult(true) {
