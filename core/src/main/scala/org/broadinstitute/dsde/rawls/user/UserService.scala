@@ -51,7 +51,6 @@ object UserService {
   def getDefaultGoogleProjectPolicies(ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, requesterPaysRole: String) = {
     Map(
       "roles/viewer" -> Set(s"group:${ownerGroupEmail.value}"),
-      "roles/billing.projectManager" -> Set(s"group:${ownerGroupEmail.value}"),
       requesterPaysRole -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
       "roles/bigquery.jobUser" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
     )
