@@ -64,8 +64,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                       parsedStartDate,
                       parsedEndDate
                     ).map {
-                      case Some(spendReportResults) => StatusCodes.OK -> Option(spendReportResults)
-                      case None => StatusCodes.NotFound -> None
+                      sr => StatusCodes.OK -> sr
                     }
                   }
                 }

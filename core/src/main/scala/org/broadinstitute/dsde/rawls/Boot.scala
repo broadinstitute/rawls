@@ -427,15 +427,15 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("dataRepo.terraInstanceName")
       )
 
+      val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(gcsConfig.getString("bigQueryJson"), GoogleProject(gcsConfig.getString("serviceProject")))
       val spendReportingServiceConfig = SpendReportingServiceConfig(
         gcsConfig.getString("billingExportTableName"),
-        GoogleProject(gcsConfig.getString("serviceProject")),
         gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
       )
 
       val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
         slickDataSource,
-        bigQueryDAO,
+        spendReportingBigQueryService,
         samDAO,
         spendReportingServiceConfig
       )

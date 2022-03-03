@@ -1,16 +1,15 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
-import java.util
 
 import akka.http.scaladsl.model.StatusCodes
-import com.google.api.services.bigquery.model.{GetQueryResultsResponse, Job, JobReference, QueryParameter, TableCell, TableRow}
+import com.google.cloud.PageImpl
+import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, Schema, StandardSQLTypeName, TableResult}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamResourceAction, SamResourceTypeNames}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
@@ -25,64 +24,65 @@ import scala.jdk.CollectionConverters._
 
 
 class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with Matchers with MockitoTestUtils {
-  val firstRow: util.List[TableCell] = List(
-    new TableCell().setV("0.0"), // cost
-    new TableCell().setV("0.0"), // credits
-    new TableCell().setV("USD"), // currency
-    new TableCell().setV(s"${DateTime.now().toString}") // timestamp
-  ).asJava
-  val secondRow: util.List[TableCell] = List(
-    new TableCell().setV("0.10111"), // cost
-    new TableCell().setV("0.0"), // credits
-    new TableCell().setV("USD"), // currency
-    new TableCell().setV(s"${DateTime.now().toString}") // timestamp
-  ).asJava
-  val defaultTable: util.List[TableRow] = List(
-    new TableRow().setF(firstRow),
-    new TableRow().setF(secondRow)
-  ).asJava
-
+  val fields: List[Field] = List(
+    Field.of("cost", StandardSQLTypeName.STRING),
+    Field.of("credits", StandardSQLTypeName.STRING),
+    Field.of("currency", StandardSQLTypeName.STRING),
+    Field.of("date", StandardSQLTypeName.STRING)
+  )
+  val firstRow: List[FieldValue] = List(
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // cost
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}") // date
+  )
+  val secondRow: List[FieldValue] = List(
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.10111"), // cost
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}") // date
+  )
+  val defaultFieldValues: List[FieldValueList] = List(
+    FieldValueList.of(firstRow.asJava, fields:_*),
+    FieldValueList.of(secondRow.asJava, fields:_*)
+  )
+  val defaultPage: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, defaultFieldValues.asJava)
+  val schema: Schema = Schema.of(fields:_*)
+  val defaultTableResult: TableResult = new TableResult(schema, 2, defaultPage)
   val defaultServiceProject: GoogleProject = GoogleProject("project")
-  val spendReportingServiceConfig: SpendReportingServiceConfig = SpendReportingServiceConfig("table", defaultServiceProject, 90)
+  val spendReportingServiceConfig: SpendReportingServiceConfig = SpendReportingServiceConfig("table", 90)
 
   // Create Spend Reporting Service with Sam and BQ DAOs that mock happy-path responses and return defaultTable. Override Sam and BQ responses as needed
   def createSpendReportingService(
                                    dataSource: SlickDataSource,
                                    samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
-                                   bqDAO: GoogleBigQueryDAO = mock[GoogleBigQueryDAO](RETURNS_SMART_NULLS),
-                                   bqTable: util.List[TableRow] = defaultTable
+                                   tableResult: TableResult = defaultTableResult
                                  ): SpendReportingService = {
     when(samDAO.userHasAction(SamResourceTypeNames.managedGroup, "Alpha_Spend_Report_Users", SamResourceAction("use"), userInfo))
       .thenReturn(Future.successful(true))
     when(samDAO.userHasAction(mockitoEq(SamResourceTypeNames.billingProject), any[String], mockitoEq(SamBillingProjectActions.readSpendReport), mockitoEq(userInfo)))
       .thenReturn(Future.successful(true))
+    val mockServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult))
 
-    when(bqDAO.startParameterizedQuery(mockitoEq(spendReportingServiceConfig.serviceProject), any[String], any[List[QueryParameter]], any[String]))
-      .thenReturn(Future.successful(new JobReference()))
-    when(bqDAO.getQueryStatus(any[JobReference]))
-      .thenReturn(Future.successful(new Job()))
-    when(bqDAO.getQueryResult(any[Job]))
-      .thenReturn(Future.successful(new GetQueryResultsResponse().setRows(bqTable)))
-
-    new SpendReportingService(userInfo, dataSource, bqDAO, samDAO, spendReportingServiceConfig)
+    new SpendReportingService(userInfo, dataSource, mockServiceFactory.getServiceFromJson("json", defaultServiceProject), samDAO, spendReportingServiceConfig)
   }
 
   "SpendReportingService" should "unmarshal results from Google" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource)
 
-    val res = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()), Duration.Inf)
-    val reportingResults = res.getOrElse(fail("results not returned"))
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe "0.10" // sum of costs in defaultTable
   }
 
-  it should "tolerate getting a response from BQ with zero rows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val bqDAO = mock[GoogleBigQueryDAO](RETURNS_SMART_NULLS)
-    val service = createSpendReportingService(dataSource, bqDAO = bqDAO)
+  it should "throw an exception when BQ returns zero rows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val emptyPage = new PageImpl[FieldValueList](null, null, List[FieldValueList]().asJava)
+    val emptyTableResult = new TableResult(schema, 0, emptyPage)
+    val service = createSpendReportingService(dataSource, tableResult = emptyTableResult)
 
-    when(bqDAO.getQueryResult(any[Job]))
-      .thenReturn(Future.successful(new GetQueryResultsResponse()))
-
-    Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()), Duration.Inf) shouldBe None
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()), Duration.Inf)
+    }
+    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
   }
 
   it should "throw an exception when user does not have read_spend_report" in withDefaultTestDatabase { dataSource: SlickDataSource =>
@@ -150,28 +150,17 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   }
 
   it should "throw an exception if BigQuery returns multiple kinds of currencies" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val bqDAO = mock[GoogleBigQueryDAO](RETURNS_SMART_NULLS)
-    val service = createSpendReportingService(dataSource, bqDAO = bqDAO)
-
-    val usdRow = List(
-      new TableCell().setV("0.0"), // cost
-      new TableCell().setV("0.0"), // credits
-      new TableCell().setV("USD"), // currency
-      new TableCell().setV(s"${DateTime.now().toString}") // timestamp
-    ).asJava
     val cadRow = List(
-      new TableCell().setV("0.10111"), // cost
-      new TableCell().setV("0.0"), // credits
-      new TableCell().setV("CAD"), // currency
-      new TableCell().setV(s"${DateTime.now().toString}") // timestamp
-    ).asJava
-    val internationalTable = List(
-      new TableRow().setF(usdRow),
-      new TableRow().setF(cadRow)
-    ).asJava
+      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.10111"),
+      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"),
+      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "CAD"),
+      FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}")
+    )
 
-    when(bqDAO.getQueryResult(any[Job]))
-      .thenReturn(Future.successful(new GetQueryResultsResponse().setRows(internationalTable)))
+    val internationalPage = new PageImpl[FieldValueList](null, null, (FieldValueList.of(cadRow.asJava, fields:_*) :: defaultFieldValues).asJava)
+    val internationalTable = new TableResult(schema, 3, internationalPage)
+
+    val service = createSpendReportingService(dataSource, tableResult = internationalTable)
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()), Duration.Inf)
