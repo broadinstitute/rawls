@@ -352,23 +352,6 @@ object ImportStatuses {
   case object Error extends ImportStatus
 }
 
-object WorkspaceShardStates {
-  sealed trait WorkspaceShardState extends RawlsEnumeration[WorkspaceShardState] {
-    override def toString = getClass.getSimpleName.stripSuffix("$")
-    override def withName(name: String): WorkspaceShardState = WorkspaceShardStates.withName(name)
-  }
-
-  def withName(name: String): WorkspaceShardState = name.toLowerCase match {
-    case "unsharded" => Unsharded
-    case "sharded" => Sharded
-    case _ => throw new RawlsException(s"invalid ShardState [${name}]")
-  }
-
-  case object Unsharded extends WorkspaceShardState
-  case object Sharded extends WorkspaceShardState
-  case object Unknown extends WorkspaceShardState
-}
-
 object WorkspaceType {
   /**
     * Represents the system-of-record for a workspace.
@@ -1006,8 +989,6 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
   implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
-
-  implicit val WorkspaceShardStateFormat = rawlsEnumerationFormat(WorkspaceShardStates.withName)
 
   implicit val WorkspaceTypeFormat = rawlsEnumerationFormat(WorkspaceType.withName)
 
