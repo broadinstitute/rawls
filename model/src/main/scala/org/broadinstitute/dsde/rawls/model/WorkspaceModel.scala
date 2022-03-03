@@ -195,7 +195,6 @@ case class Workspace(
 
 /** convenience constructor (for unit tests only!)
   * defaults workspace version to v2 and google project id and google project number to random strings
-  * defaults workspace to sharded since all newly-created workspaces will be sharded
   * TODO: to be refactored/removed in https://broadworkbench.atlassian.net/browse/CA-1128
    */
 object Workspace {

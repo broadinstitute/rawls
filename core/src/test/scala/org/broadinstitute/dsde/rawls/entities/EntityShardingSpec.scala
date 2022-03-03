@@ -69,9 +69,9 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
     testCode(apiService)
   }
 
-  // checks row counts for each shard, plus the _archived table
+  // checks row counts for each shard
   def checkShardCounts(expected: Map[ShardId, Int] = Map()): Unit = {
-    // default to 0 for all shards plus the archive table
+    // default to 0 for all shards
     val default: Map[ShardId, Int] = (allShards).map(_ -> 0).toMap
     val combined = default ++ expected
     combined.foreach {
