@@ -721,7 +721,10 @@ class HttpGoogleServicesDAO(
         blocking {
           val span = startSpanWithParent("executeGoogleRequest", s)
           span.putAttribute("googleProjectId", AttributeValue.stringAttributeValue(googleProjectId.value))
-          span.putAttribute("billingAccount", AttributeValue.stringAttributeValue(projectBillingInfo.getBillingAccountName))
+          span.putAttribute("billingAccount", AttributeValue.stringAttributeValue(Option(projectBillingInfo.getBillingAccountName) match {
+            case Some(value) => value
+            case None => ""
+          }))
 
           val result = executeGoogleRequest(updater)
 
