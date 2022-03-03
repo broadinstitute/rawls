@@ -138,7 +138,7 @@ trait EntityStatisticsCacheSupport extends LazyLogging {
   /** wrapper for uncached type-attributes lookup, includes performance tracing */
   def uncachedTypeAttributes(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[Map[String, Seq[AttributeName]]] = {
     traceReadOnlyDBIOWithParent("getAttrNamesAndEntityTypes", outerSpan) { _ =>
-      dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, workspaceContext.shardState)
+      dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID)
     }
   }
 

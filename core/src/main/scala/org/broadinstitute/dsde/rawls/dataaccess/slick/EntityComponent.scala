@@ -222,9 +222,9 @@ trait EntityComponent {
       }
 
       // the where clause for this query is filled in specific to the use case
-      def baseEntityAndAttributeSql(workspace: Workspace): String = baseEntityAndAttributeSql(workspace.workspaceIdAsUUID, workspace.shardState)
+      def baseEntityAndAttributeSql(workspace: Workspace): String = baseEntityAndAttributeSql(workspace.workspaceIdAsUUID)
 
-      def baseEntityAndAttributeSql(workspaceId: UUID, shardState: WorkspaceShardState): String = baseEntityAndAttributeSql(determineShard(workspaceId))
+      def baseEntityAndAttributeSql(workspaceId: UUID): String = baseEntityAndAttributeSql(determineShard(workspaceId))
 
       private def baseEntityAndAttributeSql(shardId: ShardId): String = {
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
@@ -263,7 +263,7 @@ trait EntityComponent {
         * @param sortFieldName
         * @return
         */
-      private def paginationSubquery(workspaceId: UUID, shardState: WorkspaceShardState, entityType: String, sortFieldName: String) = {
+      private def paginationSubquery(workspaceId: UUID, entityType: String, sortFieldName: String) = {
         val shardId = determineShard(workspaceId)
 
         val (sortColumns, sortJoin) = sortFieldName match {
@@ -345,7 +345,7 @@ trait EntityComponent {
         // additional joins-to-subquery to provide proper pagination
         val paginationJoin = concatSqlActions(
           sql""" join (""",
-          paginationSubquery(workspaceContext.workspaceIdAsUUID, workspaceContext.shardState, entityType, entityQuery.sortField),
+          paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
           filterSql("and", "e"),
           order(""),
           sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize} ) p on p.id = e.id "
@@ -423,11 +423,11 @@ trait EntityComponent {
         sql"""#${baseEntityAndAttributeSql(workspaceContext)} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
       }
 
-      def actionForIds(workspaceId: UUID, shardState: WorkspaceShardState, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def actionForIds(workspaceId: UUID, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
         if( entityIds.isEmpty ) {
           DBIO.successful(Seq.empty[EntityAndAttributesResult])
         } else {
-          val baseSelect = sql"""#${baseEntityAndAttributeSql(workspaceId, shardState)} where e.id in ("""
+          val baseSelect = sql"""#${baseEntityAndAttributeSql(workspaceId)} where e.id in ("""
           val entityIdSql = reduceSqlActionsWithDelim(entityIds.map { id => sql"$id" }.toSeq)
           concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
         }
@@ -494,7 +494,7 @@ trait EntityComponent {
       EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
     }
 
-    private def findActiveAttributesByEntityId(workspaceId: UUID, shardState: WorkspaceShardState, entityId: Rep[Long]): EntityAttributeQuery = for {
+    private def findActiveAttributesByEntityId(workspaceId: UUID, entityId: Rep[Long]): EntityAttributeQuery = for {
       entityAttrRec <- entityAttributeShardQuery(workspaceId) if entityAttrRec.ownerId === entityId && ! entityAttrRec.deleted
     } yield entityAttrRec
 
@@ -513,11 +513,11 @@ trait EntityComponent {
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"
 
     def get(workspaceContext: Workspace, entityType: String, entityName: String): ReadAction[Option[Entity]] = {
-      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map(query => unmarshalEntities(query, workspaceContext.shardState)) map(_.headOption)
+      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map(query => unmarshalEntities(query)) map(_.headOption)
     }
 
-    def getEntities(workspaceId: UUID, shardState: WorkspaceShardState, entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
-      EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, shardState, entityIds.toSet) map(query => unmarshalEntitiesWithIds(query, shardState))
+    def getEntities(workspaceId: UUID, entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
+      EntityAndAttributesRawSqlQuery.actionForIds(workspaceId, entityIds.toSet) map(query => unmarshalEntitiesWithIds(query))
     }
 
     def getEntityRecords(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
@@ -529,23 +529,23 @@ trait EntityComponent {
     }
 
     def getActiveEntities(workspaceContext: Workspace, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
-      EntityAndAttributesRawSqlQuery.activeActionForRefs(workspaceContext, entityRefs.toSet) map(query => unmarshalEntities(query, workspaceContext.shardState))
+      EntityAndAttributesRawSqlQuery.activeActionForRefs(workspaceContext, entityRefs.toSet) map(query => unmarshalEntities(query))
     }
 
     // list all entities or those in a category
 
     def listActiveEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] = {
-      EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map(query => unmarshalEntities(query, workspaceContext.shardState))
+      EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map(query => unmarshalEntities(query))
     }
 
     // includes "deleted" hidden entities
     //Note: currently only used by tests?
     def listEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] = {
-      EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map(query => unmarshalEntities(query, workspaceContext.shardState))
+      EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map(query => unmarshalEntities(query))
     }
 
     def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] = {
-      EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map(query => unmarshalEntities(query, workspaceContext.shardState))
+      EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map(query => unmarshalEntities(query))
     }
 
     def getEntityTypesWithCounts(workspaceId: UUID): ReadAction[Map[String, Int]] = {
@@ -564,10 +564,10 @@ trait EntityComponent {
       *                     no limit
       * @return result set containing entity types -> seq of attribute names
       */
-    def getAttrNamesAndEntityTypes(workspaceId: UUID, shardState: WorkspaceShardState, queryTimeout: Int = 0): ReadAction[Map[String, Seq[AttributeName]]] = {
+    def getAttrNamesAndEntityTypes(workspaceId: UUID, queryTimeout: Int = 0): ReadAction[Map[String, Seq[AttributeName]]] = {
       val typesAndAttrNames = for {
         entityRec <- findActiveEntityByWorkspace(workspaceId)
-        attrib <- findActiveAttributesByEntityId(workspaceId, shardState, entityRec.id)
+        attrib <- findActiveAttributesByEntityId(workspaceId, entityRec.id)
       } yield {
         (entityRec.entityType, (attrib.namespace, attrib.name))
       }
@@ -582,7 +582,7 @@ trait EntityComponent {
     // get paginated entities for UI display, as a result of executing a query
     def loadEntityPage(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentSpan: Span = null): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
       EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext, entityType, entityQuery, parentSpan) map { case (unfilteredCount, filteredCount, pagination) =>
-        (unfilteredCount, filteredCount, unmarshalEntities(pagination, workspaceContext.shardState))
+        (unfilteredCount, filteredCount, unmarshalEntities(pagination))
       }
     }
 
@@ -603,7 +603,7 @@ trait EntityComponent {
         preExistingEntityRecs <- getEntityRecords(workspaceContext.workspaceIdAsUUID, entities.map(_.toReference).toSet)
         savingEntityRecs <- entityQueryWithInlineAttributes.insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference)).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs.map(_.toReference)).map(_ ++ savingEntityRecs)
-        actuallyUpdatedEntityIds <- rewriteAttributes(workspaceContext.workspaceIdAsUUID, workspaceContext.shardState, entities, savingEntityRecs.map(_.id), referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap)
+        actuallyUpdatedEntityIds <- rewriteAttributes(workspaceContext.workspaceIdAsUUID, entities, savingEntityRecs.map(_.id), referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap)
         actuallyUpdatedPreExistingEntityRecs = preExistingEntityRecs.filter(e => actuallyUpdatedEntityIds.contains(e.id))
         _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(actuallyUpdatedPreExistingEntityRecs, entities)
       } yield entities
@@ -716,7 +716,7 @@ trait EntityComponent {
 
           for {
             _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, deletes)
-            updatedEntities <- entityQuery.getEntities(workspaceContext.workspaceIdAsUUID, workspaceContext.shardState, Seq(entityRecord.id))
+            updatedEntities <- entityQuery.getEntities(workspaceContext.workspaceIdAsUUID, Seq(entityRecord.id))
             _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(entityRecs, updatedEntities.map(elem => elem._2))
           } yield {}
         }
@@ -752,7 +752,7 @@ trait EntityComponent {
       }
     }
 
-    private def rewriteAttributes(workspaceId: UUID, shardState: WorkspaceShardState, entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]) = {
+    private def rewriteAttributes(workspaceId: UUID, entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]) = {
       val attributesToSave = for {
         entity <- entitiesToSave
         (attributeName, attribute) <- entity.attributes
@@ -903,7 +903,7 @@ trait EntityComponent {
         val refsToId = entityRecs.map(rec => EntityPath(Seq(rec.toReference)) -> rec.id).toMap
         recursiveGetEntityReferences(context, Up, entityRecs.map(_.id).toSet, refsToId)
       } flatMap { refs =>
-        val entityAction = EntityAndAttributesRawSqlQuery.activeActionForRefs(context, refs.flatMap(_.path).toSet) map(query => unmarshalEntities(query, context.shardState))
+        val entityAction = EntityAndAttributesRawSqlQuery.activeActionForRefs(context, refs.flatMap(_.path).toSet) map(query => unmarshalEntities(query))
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
     }
@@ -995,11 +995,11 @@ trait EntityComponent {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 
-    private def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], shardState: WorkspaceShardState): Seq[Entity] = {
-      unmarshalEntitiesWithIds(entityAttributeRecords, shardState).map { case (_, entity) => entity }
+    private def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[Entity] = {
+      unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
     }
 
-    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult], shardState: WorkspaceShardState): Seq[(Long, Entity)] = {
+    private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[(Long, Entity)] = {
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
 
       // note that not all entities have attributes, thus the collect below
