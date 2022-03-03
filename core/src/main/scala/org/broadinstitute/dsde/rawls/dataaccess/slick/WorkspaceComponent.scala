@@ -289,10 +289,6 @@ trait WorkspaceComponent {
       uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
     }
 
-    def getWorkspaceShardState(workspaceId: UUID): ReadAction[WorkspaceShardState] = {
-      uniqueResult(workspaceQuery.filter(_.id === workspaceId).map(_.shardState).result).map(opt => opt.getOrElse(throw new RawlsException(s"Unexpected shard state for workspace $workspaceId. Shard state was null."))).map(WorkspaceShardStates.withName)
-    }
-
     /**
       * Lists all workspaces with a particular attribute name/value pair.
       *

@@ -122,7 +122,6 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
         // calculate entity statistics
         entityTypesWithCounts <- dataAccess.entityQuery.getEntityTypesWithCounts(workspaceId)
         // calculate entity attribute statistics
-        workspaceShardState <- dataAccess.workspaceQuery.getWorkspaceShardState(workspaceId)
         entityTypesWithAttrNames <- dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceId, attrNamesTimeout)
         _ <- dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceId, entityTypesWithCounts, entityTypesWithAttrNames, timestamp)
       } yield ()
