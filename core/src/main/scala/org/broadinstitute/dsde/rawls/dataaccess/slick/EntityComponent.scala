@@ -558,7 +558,6 @@ trait EntityComponent {
     /**
       * Find the distinct attribute names associated with each entity type in the workspace.
       * @param workspaceId the workspace to query
-      * @param shardState the workspace's sharding status
       * @param queryTimeout the current query timeout limit in seconds; zero means there is
       *                     no limit
       * @return result set containing entity types -> seq of attribute names
