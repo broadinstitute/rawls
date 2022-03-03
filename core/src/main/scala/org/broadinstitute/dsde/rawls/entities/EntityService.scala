@@ -23,15 +23,15 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 object EntityService {
-  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, entityManager: EntityManager)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, entityManager: EntityManager, pageSizeLimit: Int)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): EntityService = {
 
-    new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName)
+    new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName, pageSizeLimit)
   }
 }
 
-class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, entityManager: EntityManager, override val workbenchMetricBaseName: String)(implicit protected val executionContext: ExecutionContext)
+class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, entityManager: EntityManager, override val workbenchMetricBaseName: String, pageSizeLimit: Int)(implicit protected val executionContext: ExecutionContext)
   extends WorkspaceSupport with EntitySupport with AttributeSupport with LazyLogging with RawlsInstrumented with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
@@ -169,15 +169,28 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("listActiveEntitiesOfType", parentSpan) { _ =>
-          dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
-        }.map { r =>
-          r.toSeq
+        traceDBIOWithParent("countActiveEntitiesOfType", parentSpan) { countSpan =>
+          dataAccess.entityQuery.findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result.flatMap { entityCount =>
+            if (entityCount > pageSizeLimit) {
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
+                s"Result set size of $entityCount cannot exceed $pageSizeLimit. Use the paginated entityQuery API instead."))
+            } else {
+              traceDBIOWithParent("listActiveEntitiesOfType", countSpan) { _ =>
+                dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
+              }.map { r =>
+                r.toSeq
+              }
+            }
+          }
         }
       }
     }
 
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[EntityQueryResponse] = {
+    if (query.pageSize > pageSizeLimit) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Page size cannot exceed $pageSizeLimit"))
+    }
+
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)

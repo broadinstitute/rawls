@@ -256,7 +256,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
-      entityManager
+      entityManager,
+     1000
     )_
 
     def cleanupSupervisor = {
