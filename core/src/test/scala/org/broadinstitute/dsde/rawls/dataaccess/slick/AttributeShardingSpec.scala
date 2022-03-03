@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates
 
 import java.util.UUID
 

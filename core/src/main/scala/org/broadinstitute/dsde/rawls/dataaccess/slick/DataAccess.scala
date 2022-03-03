@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
-import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import slick.jdbc.JdbcProfile
 
