@@ -166,7 +166,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       metadataFuture.recover(bigQueryRecover)
     }
 
-  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] = {
+  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("countActiveEntitiesOfType", parentSpan) { countSpan =>
@@ -185,7 +185,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         }
       }
     }
-  }
 
   def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[EntityQueryResponse] = {
     if (query.pageSize > pageSizeLimit) {
