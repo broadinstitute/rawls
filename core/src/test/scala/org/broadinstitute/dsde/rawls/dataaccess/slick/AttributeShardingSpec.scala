@@ -41,18 +41,8 @@ class AttributeShardingSpec extends TestDriverComponentWithFlatSpecAndMatchers w
   uuidCases foreach {
     case (uuidString, expectedShardId) =>
       it should s"calculate shardId for UUID('$uuidString') correctly" in {
-        assertResult(expectedShardId) { determineShard(UUID.fromString(uuidString), WorkspaceShardStates.Sharded) }
+        assertResult(expectedShardId) { determineShard(UUID.fromString(uuidString)) }
       }
   }
-
-  uuidCases foreach {
-    case (uuidString, _) =>
-      it should s"calculate archived shardId for UUID('$uuidString') correctly" in {
-        assertResult("archived") { determineShard(UUID.fromString(uuidString), WorkspaceShardStates.Unsharded) }
-      }
-  }
-
-
-
 
 }

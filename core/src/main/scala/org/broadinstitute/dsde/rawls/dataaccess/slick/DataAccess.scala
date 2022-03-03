@@ -42,7 +42,7 @@ trait DataAccess
     (0L to 15L) map { secondLong =>
       val first = firstLong.toHexString
       val second = secondLong.toHexString
-      determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000"), shardState = WorkspaceShardStates.Sharded).toString
+      determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000")).toString
     }
   }).toSet
 
