@@ -26,7 +26,6 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       None,
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded,
       WorkspaceType.RawlsWorkspace
     )
 

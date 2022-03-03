@@ -30,7 +30,6 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
       None,
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded,
       WorkspaceType.RawlsWorkspace
     )
 
@@ -74,7 +73,6 @@ class EntityAttributeStatisticsSpec extends TestDriverComponentWithFlatSpecAndMa
       None,
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded,
       WorkspaceType.RawlsWorkspace
     )
 

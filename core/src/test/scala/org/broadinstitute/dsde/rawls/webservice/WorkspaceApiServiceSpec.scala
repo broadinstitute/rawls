@@ -746,7 +746,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Option(RawlsBillingAccountName("fakeBillingAcct")),
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded,
       WorkspaceType.RawlsWorkspace
     )
 
