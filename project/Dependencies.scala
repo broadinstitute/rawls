@@ -5,7 +5,7 @@ object Dependencies {
   val akkaHttpV = "10.2.9"
   val slickV = "3.3.2"
 
-  val googleV = "1.22.0"
+  val googleV = "1.31.1"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
   val cromwellVersion = "40-2754783"
