@@ -3,7 +3,9 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.unmarshalling.Unmarshaller
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
@@ -29,6 +31,8 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
   val userServiceConstructor: UserInfo => UserService
   val spendReportingConstructor: UserInfo => SpendReportingService
 
+  implicit def spendReportingAggregationKeyUnmarshaller: Unmarshaller[String, SpendReportingAggregationKey] = Unmarshaller.strict(SpendReportingAggregationKeys.withName)
+
   val billingRoutesV2: server.Route = requireUserInfo() { userInfo =>
     pathPrefix("billing" / "v2") {
 
@@ -52,7 +56,13 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
         pathPrefix("spendReport") {
           pathEndOrSingleSlash {
             get {
-              parameters("startDate".as[String], "endDate".as[String]) { (startDate, endDate) =>
+              parameters(
+                "startDate".as[String],
+                "endDate".as[String],
+                "aggregationKey"
+                  .as[SpendReportingAggregationKey](spendReportingAggregationKeyUnmarshaller)
+                  .withDefault(SpendReportingAggregationKeys.Daily))
+              { (startDate, endDate, aggregationKey) =>
                 complete {
                   Try {
                     (DateTime.parse(startDate), DateTime.parse(endDate))
@@ -62,7 +72,8 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     spendReportingConstructor(userInfo).getSpendForBillingProject(
                       RawlsBillingProjectName(projectId),
                       parsedStartDate,
-                      parsedEndDate
+                      parsedEndDate,
+                      aggregationKey
                     ).map {
                       sr => StatusCodes.OK -> sr
                     }

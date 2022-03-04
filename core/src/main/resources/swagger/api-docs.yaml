@@ -497,6 +497,15 @@ paths:
           schema:
             type: string
             format: date
+        - name: aggregationKey
+          in: query
+          description: Key indicating how to aggregate spend data in results
+          required: false
+          schema:
+            type: string
+            enum:
+              - Daily
+              - Workspace
       responses:
         200:
           description: Success
@@ -6311,7 +6320,9 @@ components:
       properties:
         aggregationKey:
           type: string
-          enum: [Total, Workspace]
+          enum:
+            - Daily
+            - Workspace
           description: Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
         spendData:
           type: array

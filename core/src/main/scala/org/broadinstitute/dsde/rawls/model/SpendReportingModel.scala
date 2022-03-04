@@ -31,12 +31,12 @@ object SpendReportingAggregationKeys {
   }
 
   def withName(name: String): SpendReportingAggregationKey = name.toLowerCase match {
-    case "total" => Total
+    case "daily" => Daily
     case "workspace" => Workspace
     case _ => throw new RawlsException(s"invalid SpendReportingAggregationKey [${name}]")
   }
 
-  case object Total extends SpendReportingAggregationKey
+  case object Daily extends SpendReportingAggregationKey
   case object Workspace extends SpendReportingAggregationKey
 }
 

@@ -9,6 +9,7 @@ import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -57,7 +58,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         DateTime.parse(row.get("date").getStringValue).plusDays(1).minusSeconds(1))
     }
     val dailySpendAggregation = SpendReportingAggregation(
-      SpendReportingAggregationKeys.Total, dailySpend
+      SpendReportingAggregationKeys.Daily, dailySpend
     )
 
     val costRollup = rows.map { row =>
@@ -143,7 +144,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
       .build()
 }
 
-  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[SpendReportingResults] = {
+  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime, aggregationKey: SpendReportingAggregationKey = SpendReportingAggregationKeys.Daily): Future[SpendReportingResults] = {
     validateReportParameters(startDate, endDate)
     requireAlphaUser() {
       requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReport) {
