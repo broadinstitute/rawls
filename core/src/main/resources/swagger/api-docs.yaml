@@ -4291,7 +4291,7 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/cloud-billing
-   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
       - $ref: '#/components/parameters/workspaceNamePathParam'
