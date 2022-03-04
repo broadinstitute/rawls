@@ -71,7 +71,7 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
     new ResourceList().resources(resources)
   }
 
-  override def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
+  override def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataRepoSnapshotReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
     if (references.contains(workspaceId, referenceId)) {
       val existingRef = references.get(workspaceId, referenceId).get
       val newMetadata = existingRef.getMetadata.name(
