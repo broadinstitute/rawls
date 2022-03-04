@@ -29,34 +29,6 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
 
     "JSON logic" - {
 
-      // TODO: obsolete test, these are now simple classes
-      "DataReferenceDescriptionList, which contains DataReferenceDescription, which contains DataRepoSnapshot" in {
-        val referenceId = UUID.randomUUID()
-        val workspaceId = UUID.randomUUID()
-        assertResult {
-          s"""{"resources":[{"referenceId": "$referenceId","name":"test-ref","workspaceId":"$workspaceId","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"description":"test description","cloningInstructions":"$NOTHING"}]}""".parseJson
-        } {
-          DataReferenceList(resources = Seq(
-            DataReferenceDescription(
-              referenceId = referenceId,
-              name = "test-ref",
-              description = "test description",
-              workspaceId = workspaceId,
-              referenceType = DATA_REPO_SNAPSHOT.getValue,
-              reference = new DataRepoSnapshot(instanceName = "test-instance", snapshot = "test-snapshot"),
-              cloningInstructions = NOTHING.getValue
-            )
-          )).toJson
-        }
-      }
-
-      // TODO: obsolete test, this now tests spray-json UUID deserialization
-      "DataReferenceDescription with bad UUID's should fail" in {
-        assertThrows[DeserializationException] {
-          s"""{"referenceId": "abcd","name":"test-ref","workspaceId":"abcd","referenceType":"$DATA_REPO_SNAPSHOT","reference":{"instanceName":"test-instance","snapshot":"test-snapshot"},"cloningInstructions":"$NOTHING"}""".parseJson.convertTo[DataReferenceDescription]
-        }
-      }
-
       "DataRepoSnapshotResource, ResourceMetadata, DataRepoSnapshotAttributes" in {
         val resourceId = UUID.randomUUID()
         val workspaceId = UUID.randomUUID()
