@@ -22,7 +22,7 @@ import scala.util.{Failure, Success, Try}
 trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInstrumented {
   implicit val executionContext: ExecutionContext
 
-  protected def when500orGoogleError(throwable: Throwable): Boolean = {
+  protected def when500or400orGoogleError(throwable: Throwable): Boolean = {
     throwable match {
       case t: HttpResponseException => t.getStatusCode/100 == 5 || t.getStatusCode/100 == 4
       case ioe: IOException => true
@@ -30,7 +30,15 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     }
   }
 
-  // Sadly when500orGoogleError retries on 404s which is not always the behaviour we want. 404s
+  protected def when500orGoogleError(throwable: Throwable): Boolean = {
+    throwable match {
+      case t: HttpResponseException => t.getStatusCode/100 == 5
+      case ioe: IOException => true
+      case _ => false
+    }
+  }
+
+  // Sadly when500or400orGoogleError retries on 404s which is not always the behaviour we want. 404s
   // mean different things in different contexts. Sometimes they mean the resource does not
   // exist/you can't access it; sometimes it means it does not exist *yet* and sometimes something
   // else. As such, it should have been handled explicitly depending on the context and not rolled
@@ -38,20 +46,21 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
   // might cause a bunch of failures.
   def when500orNon404GoogleError(throwable: Throwable): Boolean = throwable match {
     case e: HttpResponseException if e.getStatusCode == 404 => false
-    case t => when500orGoogleError(t)
+    case t => when500or400orGoogleError(t)
   }
 
-  def when500orNonExcludedGoogleError(throwable: Throwable, excludedStatusCodes: Set[StatusCode]): Boolean = throwable match {
+  //Predicate to exclude certain Google status codes from retries
+  def whenGoogleStatusDoesntContain(throwable: Throwable, excludedStatusCodes: Set[StatusCode]): Boolean = throwable match {
     case e: HttpResponseException if excludedStatusCodes.contains(StatusCode.int2StatusCode(e.getStatusCode)) => false
-    case t => when500orGoogleError(t)
+    case t => true
   }
 
   protected def retryWhen500orGoogleError[T](op: () => T)(implicit histo: Histogram): Future[T] = {
-    retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
+    retryExponentially(when500or400orGoogleError)(() => Future(blocking(op())))
   }
 
   protected def retryWithRecoverWhen500orGoogleError[T](op: () => T)(recover: PartialFunction[Throwable, T])(implicit histo: Histogram): Future[T] = {
-    retryExponentially(when500orGoogleError)(() => Future(blocking(op())).recover(recover))
+    retryExponentially(when500or400orGoogleError)(() => Future(blocking(op())).recover(recover))
   }
 
   protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters): T = {
