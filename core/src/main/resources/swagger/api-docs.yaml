@@ -17,7 +17,6 @@ tags:
   - name: methodconfigs
   - name: notifications
   - name: servicePerimeters
-  - name: snapshots
   - name: snapshots_v2
   - name: status
   - name: submissions
