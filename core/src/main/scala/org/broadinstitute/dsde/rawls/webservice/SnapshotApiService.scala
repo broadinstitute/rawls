@@ -6,7 +6,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, SnapshotListResponse, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescription, DataReferenceList, DataRepoSnapshot, NamedDataRepoSnapshot, SnapshotListResponse, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 
@@ -45,9 +45,9 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       } ~
       patch {
-        entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
+        entity(as[UpdateDataRepoSnapshotReferenceRequestBody]) { updateDataRepoSnapshotReferenceRequestBody =>
           complete {
-            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
+            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataRepoSnapshotReferenceRequestBody).map(_ => StatusCodes.NoContent)
           }
         }
       } ~
@@ -89,9 +89,9 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       } ~
       patch {
-        entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
+        entity(as[UpdateDataRepoSnapshotReferenceRequestBody]) { updateDataRepoSnapshotReferenceRequestBody =>
           complete {
-            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
+            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataRepoSnapshotReferenceRequestBody).map(_ => StatusCodes.NoContent)
           }
         }
       } ~
@@ -129,9 +129,9 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       } ~
       patch {
-        entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
+        entity(as[UpdateDataRepoSnapshotReferenceRequestBody]) { updateDataRepoSnapshotReferenceRequestBody =>
           complete {
-            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
+            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataRepoSnapshotReferenceRequestBody).map(_ => StatusCodes.NoContent)
           }
         }
       } ~
@@ -146,29 +146,20 @@ trait SnapshotApiService extends UserInfoDirectives {
   // -------  REMOVE WHEN GETTING RID OF V1 SNAPSHOT ENDPOINTS -------
 
   private def dataRepoSnapshotResourceToDataReferenceDescription(resource: DataRepoSnapshotResource): DataReferenceDescription = {
-    new DataReferenceDescription()
-      .name(resource.getMetadata.getName)
-      .description(resource.getMetadata.getDescription)
-      .referenceId(resource.getMetadata.getResourceId)
-      .referenceType(ReferenceTypeEnum.fromValue(resource.getMetadata.getResourceType.getValue))
-      .workspaceId(resource.getMetadata.getWorkspaceId)
-      .reference(new DataRepoSnapshot().instanceName(resource.getAttributes.getInstanceName).snapshot(resource.getAttributes.getSnapshot))
-      .cloningInstructions(resource.getMetadata.getCloningInstructions)
+    DataReferenceDescription(
+      name = resource.getMetadata.getName,
+      description = resource.getMetadata.getDescription,
+      referenceId = resource.getMetadata.getResourceId,
+      referenceType = resource.getMetadata.getResourceType.getValue,
+      workspaceId = resource.getMetadata.getWorkspaceId,
+      reference = DataRepoSnapshot(instanceName = resource.getAttributes.getInstanceName, snapshot = resource.getAttributes.getSnapshot),
+      cloningInstructions = resource.getMetadata.getCloningInstructions.getValue
+    )
   }
 
-  private def snapshotListResponseToDataReferenceList(snapshotResponse: SnapshotListResponse): DataReferenceList= {
-    import scala.collection.JavaConverters._
-    val snaps = snapshotResponse.gcpDataRepoSnapshots.map{ res =>
-      new DataReferenceDescription()
-        .name(res.getMetadata.getName)
-        .description(res.getMetadata.getDescription)
-        .referenceId(res.getMetadata.getResourceId)
-        .referenceType(ReferenceTypeEnum.fromValue(res.getMetadata.getResourceType.getValue))
-        .workspaceId(res.getMetadata.getWorkspaceId)
-        .reference(new DataRepoSnapshot().instanceName(res.getAttributes.getInstanceName).snapshot(res.getAttributes.getSnapshot))
-        .cloningInstructions(res.getMetadata.getCloningInstructions)
-    }.asJava
-    new DataReferenceList().resources(snaps)
+  private def snapshotListResponseToDataReferenceList(snapshotResponse: SnapshotListResponse): DataReferenceList = {
+    val snaps = snapshotResponse.gcpDataRepoSnapshots.map(dataRepoSnapshotResourceToDataReferenceDescription)
+    DataReferenceList(snaps)
   }
 
 }

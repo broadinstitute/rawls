@@ -26,7 +26,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     description = Option(DataReferenceDescriptionField("bar")),
     snapshotId = UUID.randomUUID()
   ))
-  val defaultSnapshotUpdateBodyJson = httpJson(new UpdateDataReferenceRequestBody().name("foo2").description("bar2"))
+  val defaultSnapshotUpdateBodyJson = httpJson(new UpdateDataRepoSnapshotReferenceRequestBody().name("foo2").description("bar2"))
 
   // base MockWorkspaceManagerDAO always returns a value for enumerateDataReferences.
   // this version, used inside this spec, throws errors on specific workspaces,
@@ -537,7 +537,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        Get(s"${baseSnapshotsPath}/${response.getReferenceId}") ~>
+        Get(s"${baseSnapshotsPath}/${response.referenceId}") ~>
           sealRoute(services.snapshotRoutes) ~>
           check {
             assertResult(StatusCodes.OK) {
@@ -639,9 +639,9 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
                 }
                 // Our mock doesn't guarantee order, so we just check that there are two
                 // elements, that one is named "foo", and that one is named "bar"
-                assert(response.getResources.size == 2)
+                assert(response.resources.size == 2)
                 assertResult(Set("foo", "bar")) {
-                  response.getResources.asScala.map(_.getName).toSet
+                  response.resources.map(_.name).toSet
                 }
               }
           }
@@ -679,7 +679,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assert(response.getResources.isEmpty)
+        assert(response.resources.isEmpty)
       }
   }
 
@@ -703,7 +703,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, "Unexpected snapshot creation status") {
           status
         }
-        Patch(s"${baseSnapshotsPath}/${response.getReferenceId}", defaultSnapshotUpdateBodyJson) ~>
+        Patch(s"${baseSnapshotsPath}/${response.referenceId}", defaultSnapshotUpdateBodyJson) ~>
           sealRoute(services.snapshotRoutes) ~>
           check {
             assertResult(StatusCodes.NoContent, "Unexpected snapshot update response") {
@@ -712,15 +712,15 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
           }
 
         //verify that it was updated
-        Get(s"${baseSnapshotsPath}/${response.getReferenceId}") ~>
+        Get(s"${baseSnapshotsPath}/${response.referenceId}") ~>
           sealRoute(services.snapshotRoutes) ~>
           check {
             val response = responseAs[DataReferenceDescription]
             assertResult(StatusCodes.OK, "Unexpected return code getting updated snapshot") {
               status
             }
-            assert(response.getName == "foo2", "Unexpected result of updating snapshot name")
-            assert(response.getDescription == "bar2", "Unexpected result of updating snapshot description")
+            assert(response.name == "foo2", "Unexpected result of updating snapshot name")
+            assert(response.description == "bar2", "Unexpected result of updating snapshot description")
           }
       }
   }
@@ -774,7 +774,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        Delete(s"${baseSnapshotsPath}/${response.getReferenceId}") ~>
+        Delete(s"${baseSnapshotsPath}/${response.referenceId}") ~>
           sealRoute(services.snapshotRoutes) ~>
           check {
             assertResult(StatusCodes.NoContent) {
@@ -783,7 +783,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
           }
 
         //verify that it was deleted
-        Delete(s"${baseSnapshotsPath}/${response.getReferenceId}") ~>
+        Delete(s"${baseSnapshotsPath}/${response.referenceId}") ~>
           sealRoute(services.snapshotRoutes) ~>
           check {
             assertResult(StatusCodes.NotFound) {

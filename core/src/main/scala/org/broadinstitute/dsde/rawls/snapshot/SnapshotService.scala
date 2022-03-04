@@ -146,12 +146,15 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     SnapshotListResponse(refs)
   }
 
-  def updateSnapshot(workspaceName: WorkspaceName, snapshotId: String, updateInfo: UpdateDataReferenceRequestBody): Future[Unit] = {
+  def updateSnapshot(workspaceName: WorkspaceName, snapshotId: String, updateInfo: UpdateDataRepoSnapshotReferenceRequestBody): Future[Unit] = {
     val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       // check that snapshot exists before updating it. If the snapshot does not exist, the GET attempt will throw a 404
       workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
-      // build the update request body
+      // build the update request body. reject if name or description is missing, and ignore snapshot/instanceName in the original request.
+      if (Option(updateInfo.getName).isEmpty && Option(updateInfo.getDescription).isEmpty) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "name or description is required"))
+      }
       val updateBody = new UpdateDataRepoSnapshotReferenceRequestBody()
       updateBody.setName(updateInfo.getName)
       updateBody.setDescription(updateInfo.getDescription)
