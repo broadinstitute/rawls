@@ -150,13 +150,11 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     val snapshotUuid = validateSnapshotId(snapshotId)
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       // check that snapshot exists before updating it. If the snapshot does not exist, the GET attempt will throw a 404
-      val existingResource = workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
-      // build the update request body from the existing snapshot plus the updates from the user
+      workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, userInfo.accessToken)
+      // build the update request body
       val updateBody = new UpdateDataRepoSnapshotReferenceRequestBody()
       updateBody.setName(updateInfo.getName)
       updateBody.setDescription(updateInfo.getDescription)
-      updateBody.setSnapshot(existingResource.getAttributes.getSnapshot)
-      updateBody.setInstanceName(existingResource.getAttributes.getInstanceName)
       // perform the update
       workspaceManagerDAO.updateDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, updateBody, userInfo.accessToken)
     }
