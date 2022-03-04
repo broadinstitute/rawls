@@ -45,7 +45,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }
   }
 
-  def extractSpendReportingResults(rows: List[FieldValueList], startTime: DateTime, endTime: DateTime): SpendReportingResults = {
+  def extractDailySpendReportingResults(rows: List[FieldValueList], startTime: DateTime, endTime: DateTime): SpendReportingResults = {
     val currency = getCurrency(rows)
 
     val dailySpend = rows.map { row =>
@@ -59,6 +59,44 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }
     val dailySpendAggregation = SpendReportingAggregation(
       SpendReportingAggregationKeys.Daily, dailySpend
+    )
+
+    val costRollup = rows.map { row =>
+      BigDecimal(row.get("cost").getDoubleValue)
+    }.sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+    val creditsRollup = rows.map { row =>
+      BigDecimal(row.get("credits").getDoubleValue)
+    }.sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+
+    val spendSummary = SpendReportingForDateRange(
+      costRollup.toString(),
+      creditsRollup.toString(),
+      currency.getCurrencyCode,
+      startTime,
+      endTime
+    )
+
+    SpendReportingResults(Seq(dailySpendAggregation), spendSummary)
+  }
+
+  def extractWorkspaceSpendReportingResults(rows: List[FieldValueList], startTime: DateTime, endTime: DateTime, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName]): SpendReportingResults = {
+    val currency = getCurrency(rows)
+
+    val workspaceSpend = rows.map { row =>
+      val rowCost = BigDecimal(row.get("cost").getDoubleValue).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+      val rowCredits = BigDecimal(row.get("credits").getDoubleValue).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+      val rowGoogleProjectId = GoogleProject(row.get("googleProjectId").getStringValue)
+      val rowWorkspaceName = workspaceProjectsToNames.getOrElse(rowGoogleProjectId, throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"unexpected project ${rowGoogleProjectId.value} returned by BigQuery")))
+      SpendReportingForDateRange(rowCost.toString(),
+        rowCredits.toString(),
+        currency.getCurrencyCode,
+        startTime,
+        endTime,
+        Option(rowWorkspaceName),
+        Option(rowGoogleProjectId))
+    }
+    val dailySpendAggregation = SpendReportingAggregation(
+      SpendReportingAggregationKeys.Workspace, workspaceSpend
     )
 
     val costRollup = rows.map { row =>
@@ -104,13 +142,13 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }.map(_.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"billing project ${billingProjectName.value} not found"))))
   }
 
-  private def getWorkspaceGoogleProjects(billingProjectName: RawlsBillingProjectName): Future[Set[GoogleProject]] = {
+  private def getWorkspaceGoogleProjects(billingProjectName: RawlsBillingProjectName): Future[Map[GoogleProject, WorkspaceName]] = {
     dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
     }.map { workspaces =>
       workspaces.collect {
-        case workspace if workspace.workspaceVersion == WorkspaceVersions.V2 => GoogleProject(workspace.googleProjectId.value)
-      }.toSet
+        case workspace if workspace.workspaceVersion == WorkspaceVersions.V2 => GoogleProject(workspace.googleProjectId.value) -> workspace.toWorkspaceName
+      }.toMap
     }
   }
 
@@ -148,39 +186,82 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     validateReportParameters(startDate, endDate)
     requireAlphaUser() {
       requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReport) {
-        for {
-          spendExportConf <- getSpendExportConfiguration(billingProjectName)
-          workspaceProjects <- getWorkspaceGoogleProjects(billingProjectName)
-
-          query =
-          s"""
-             | SELECT
-             |  SUM(cost) as cost,
-             |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-             |  currency,
-             |  DATE(_PARTITIONTIME) as date
-             | FROM `${spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)}`
-             | WHERE billing_account_id = @billingAccountId
-             | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
-             | AND project.id in UNNEST(@projects)
-             | GROUP BY currency, date
-             |""".stripMargin
-
-          queryJobConfiguration = QueryJobConfiguration
-            .newBuilder(query)
-            .addNamedParameter("billingAccountId", stringQueryParameterValue(spendExportConf.billingAccountId.withoutPrefix()))
-            .addNamedParameter("startDate", stringQueryParameterValue(dateTimeToISODateString(startDate)))
-            .addNamedParameter("endDate", stringQueryParameterValue(dateTimeToISODateString(endDate)))
-            .addNamedParameter("projects", stringArrayQueryParameterValue(workspaceProjects.map(_.value).toList))
-            .build()
-
-          result <- bigQueryService.use(_.query(queryJobConfiguration)).unsafeToFuture()
-        } yield {
-          result.getValues.asScala.toList match {
-            case Nil => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"no spend data found for billing project ${billingProjectName.value} between dates $startDate and $endDate"))
-            case rows => extractSpendReportingResults(rows, startDate, endDate)
-          }
+        aggregationKey match {
+          case SpendReportingAggregationKeys.Daily => getDailySpendBreakdown(billingProjectName, startDate, endDate)
+          case SpendReportingAggregationKeys.Workspace => getWorkspaceSpendBreakdown(billingProjectName, startDate, endDate)
         }
+      }
+    }
+  }
+
+  private def getDailySpendBreakdown(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[SpendReportingResults] = {
+    for {
+      spendExportConf <- getSpendExportConfiguration(billingProjectName)
+      workspaceProjects <- getWorkspaceGoogleProjects(billingProjectName)
+
+      query =
+      s"""
+         | SELECT
+         |  SUM(cost) as cost,
+         |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+         |  currency,
+         |  DATE(_PARTITIONTIME) as date
+         | FROM `${spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)}`
+         | WHERE billing_account_id = @billingAccountId
+         | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
+         | AND project.id in UNNEST(@projects)
+         | GROUP BY currency, date
+         |""".stripMargin
+
+      queryJobConfiguration = QueryJobConfiguration
+        .newBuilder(query)
+        .addNamedParameter("billingAccountId", stringQueryParameterValue(spendExportConf.billingAccountId.withoutPrefix()))
+        .addNamedParameter("startDate", stringQueryParameterValue(dateTimeToISODateString(startDate)))
+        .addNamedParameter("endDate", stringQueryParameterValue(dateTimeToISODateString(endDate)))
+        .addNamedParameter("projects", stringArrayQueryParameterValue(workspaceProjects.keySet.map(_.value).toList))
+        .build()
+
+      result <- bigQueryService.use(_.query(queryJobConfiguration)).unsafeToFuture()
+    } yield {
+      result.getValues.asScala.toList match {
+        case Nil => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"no spend data found for billing project ${billingProjectName.value} between dates $startDate and $endDate"))
+        case rows => extractDailySpendReportingResults(rows, startDate, endDate)
+      }
+    }
+  }
+
+  private def getWorkspaceSpendBreakdown(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime): Future[SpendReportingResults] = {
+    for {
+      spendExportConf <- getSpendExportConfiguration(billingProjectName)
+      workspaceProjects <- getWorkspaceGoogleProjects(billingProjectName)
+
+      query =
+      s"""
+         | SELECT
+         |  SUM(cost) as cost,
+         |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+         |  currency,
+         |  project.id as googleProjectId
+         | FROM `${spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)}`
+         | WHERE billing_account_id = @billingAccountId
+         | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
+         | AND project.id in UNNEST(@projects)
+         | GROUP BY currency, googleProjectId
+         |""".stripMargin
+
+      queryJobConfiguration = QueryJobConfiguration
+        .newBuilder(query)
+        .addNamedParameter("billingAccountId", stringQueryParameterValue(spendExportConf.billingAccountId.withoutPrefix()))
+        .addNamedParameter("startDate", stringQueryParameterValue(dateTimeToISODateString(startDate)))
+        .addNamedParameter("endDate", stringQueryParameterValue(dateTimeToISODateString(endDate)))
+        .addNamedParameter("projects", stringArrayQueryParameterValue(workspaceProjects.keySet.map(_.value).toList))
+        .build()
+
+      result <- bigQueryService.use(_.query(queryJobConfiguration)).unsafeToFuture()
+    } yield {
+      result.getValues.asScala.toList match {
+        case Nil => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"no spend data found for billing project ${billingProjectName.value} between dates $startDate and $endDate"))
+        case rows => extractWorkspaceSpendReportingResults(rows, startDate, endDate, workspaceProjects)
       }
     }
   }

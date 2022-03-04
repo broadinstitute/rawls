@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, GoogleProject}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
@@ -19,7 +20,9 @@ case class SpendReportingForDateRange(
                                        credits: String,
                                        currency: String,
                                        startTime: DateTime,
-                                       endTime: DateTime
+                                       endTime: DateTime,
+                                       workspace: Option[WorkspaceName] = None,
+                                       googleProjectId: Option[GoogleProject] = None
                                      )
 
 // Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
@@ -52,7 +55,7 @@ class SpendReportingJsonSupport extends JsonSupport {
 
   implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
 
-  implicit val SpendReportingForDateRangeFormat = jsonFormat5(SpendReportingForDateRange)
+  implicit val SpendReportingForDateRangeFormat = jsonFormat7(SpendReportingForDateRange)
 
   implicit val SpendReportingAggregationFormat = jsonFormat2(SpendReportingAggregation)
 

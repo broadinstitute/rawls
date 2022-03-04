@@ -74,9 +74,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                       parsedStartDate,
                       parsedEndDate,
                       aggregationKey
-                    ).map {
-                      sr => StatusCodes.OK -> sr
-                    }
+                    )
                   }
                 }
               }
