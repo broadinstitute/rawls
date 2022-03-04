@@ -82,8 +82,8 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getReferencedGcpResourceApi(accessToken).createDataRepoSnapshotReference(request, workspaceId)
   }
 
-  override def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
-    getReferencedGcpResourceApi(accessToken).updateDataRepoSnapshotReference(updateInfo, workspaceId, referenceId)
+  override def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataRepoSnapshotReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
+    getReferencedGcpResourceApi(accessToken).updateDataRepoSnapshotReferenceResource(updateInfo, workspaceId, referenceId)
   }
 
   override def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {
