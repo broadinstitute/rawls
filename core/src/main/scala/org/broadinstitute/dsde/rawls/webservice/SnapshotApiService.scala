@@ -6,7 +6,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, SnapshotListResponse, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{NamedDataRepoSnapshot, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 
@@ -58,8 +58,10 @@ trait SnapshotApiService extends UserInfoDirectives {
       }
     } ~
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / "name" / Segment) { (workspaceNamespace, workspaceName, referenceName) =>
-      complete {
-        snapshotServiceConstructor(userInfo).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName), referenceName)
+      get {
+        complete {
+          snapshotServiceConstructor(userInfo).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName), referenceName)
+        }
       }
     } ~
     path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
