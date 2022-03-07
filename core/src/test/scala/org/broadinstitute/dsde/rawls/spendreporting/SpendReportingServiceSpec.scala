@@ -1,14 +1,16 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
 
+import java.util.UUID
+
 import akka.http.scaladsl.model.StatusCodes
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery.{Field, FieldValue, FieldValueList, Schema, StandardSQLTypeName, TableResult}
+import com.google.cloud.bigquery.{Option => _, _}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamResourceAction, SamResourceTypeNames}
+import org.broadinstitute.dsde.rawls.dataaccess.{MockBigQueryServiceFactory, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
@@ -24,31 +26,59 @@ import scala.jdk.CollectionConverters._
 
 
 class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with Matchers with MockitoTestUtils {
-  val fields: List[Field] = List(
+  val dailyFields: List[Field] = List(
     Field.of("cost", StandardSQLTypeName.STRING),
     Field.of("credits", StandardSQLTypeName.STRING),
     Field.of("currency", StandardSQLTypeName.STRING),
     Field.of("date", StandardSQLTypeName.STRING)
   )
-  val firstRow: List[FieldValue] = List(
+  val firstDailyRow: List[FieldValue] = List(
     FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // cost
     FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
     FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
     FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}") // date
   )
-  val secondRow: List[FieldValue] = List(
+  val secondDailyRow: List[FieldValue] = List(
     FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.10111"), // cost
     FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
     FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
     FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}") // date
   )
-  val defaultFieldValues: List[FieldValueList] = List(
-    FieldValueList.of(firstRow.asJava, fields:_*),
-    FieldValueList.of(secondRow.asJava, fields:_*)
+  val dailyFieldValues: List[FieldValueList] = List(
+    FieldValueList.of(firstDailyRow.asJava, dailyFields:_*),
+    FieldValueList.of(secondDailyRow.asJava, dailyFields:_*)
   )
-  val defaultPage: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, defaultFieldValues.asJava)
-  val schema: Schema = Schema.of(fields:_*)
-  val defaultTableResult: TableResult = new TableResult(schema, 2, defaultPage)
+  val dailyPage: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, dailyFieldValues.asJava)
+  val dailySchema: Schema = Schema.of(dailyFields:_*)
+  val dailyTableResult: TableResult = new TableResult(dailySchema, 2, dailyPage)
+
+  val workspaceGoogleProject1 = "project1"
+  val workspaceGoogleProject2 = "project2"
+  val workspaceFields: List[Field] = List(
+    Field.of("cost", StandardSQLTypeName.STRING),
+    Field.of("credits", StandardSQLTypeName.STRING),
+    Field.of("currency", StandardSQLTypeName.STRING),
+    Field.of("googleProjectId", StandardSQLTypeName.STRING)
+  )
+  val firstWorkspaceRow: List[FieldValue] = List(
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // cost
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject1) // googleProjectId
+  )
+  val secondWorkspaceRow: List[FieldValue] = List(
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.10111"), // cost
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
+    FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject2) // googleProjectId
+  )
+  val workspaceFieldValues: List[FieldValueList] = List(
+    FieldValueList.of(firstWorkspaceRow.asJava, workspaceFields:_*),
+    FieldValueList.of(secondWorkspaceRow.asJava, workspaceFields:_*)
+  )
+  val workspacePage: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, workspaceFieldValues.asJava)
+  val workspaceSchema: Schema = Schema.of(workspaceFields:_*)
+  val workspaceTableResult: TableResult = new TableResult(workspaceSchema, 2, workspacePage)
   val defaultServiceProject: GoogleProject = GoogleProject("project")
   val spendReportingServiceConfig: SpendReportingServiceConfig = SpendReportingServiceConfig("table", 90)
 
@@ -56,7 +86,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   def createSpendReportingService(
                                    dataSource: SlickDataSource,
                                    samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
-                                   tableResult: TableResult = defaultTableResult
+                                   tableResult: TableResult = dailyTableResult
                                  ): SpendReportingService = {
     when(samDAO.userHasAction(SamResourceTypeNames.managedGroup, "Alpha_Spend_Report_Users", SamResourceAction("use"), userInfo))
       .thenReturn(Future.successful(true))
@@ -67,16 +97,33 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     new SpendReportingService(userInfo, dataSource, mockServiceFactory.getServiceFromJson("json", defaultServiceProject), samDAO, spendReportingServiceConfig)
   }
 
-  "SpendReportingService" should "unmarshal results from Google" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+  "SpendReportingService" should "break down results from Google by day" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource)
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), SpendReportingAggregationKeys.Daily), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe "0.10" // sum of costs in defaultTable
+    reportingResults.spendDetails.headOption.getOrElse(fail("daily results not parsed correctly"))
+      .aggregationKey shouldBe SpendReportingAggregationKeys.Daily
+  }
+
+  it should "break down results from Google by workspace" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource, tableResult = workspaceTableResult)
+
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(Workspace(testData.billingProject.projectName.value, "workspace1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject1), None, None, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)))
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(Workspace(testData.billingProject.projectName.value, "workspace2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject2), None, None, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)))
+
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), SpendReportingAggregationKeys.Workspace), Duration.Inf)
+    reportingResults.spendSummary.cost shouldBe "0.10" // sum of costs in defaultTable
+    val workspaceAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("workspace results not parsed correctly"))
+
+    workspaceAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+    workspaceAggregation.spendData.headOption.getOrElse(fail("workspace results not parsed correctly")).googleProjectId shouldBe defined
+    workspaceAggregation.spendData.headOption.getOrElse(fail("workspace results not parsed correctly")).workspace shouldBe defined
   }
 
   it should "throw an exception when BQ returns zero rows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val emptyPage = new PageImpl[FieldValueList](null, null, List[FieldValueList]().asJava)
-    val emptyTableResult = new TableResult(schema, 0, emptyPage)
+    val emptyTableResult = new TableResult(dailySchema, 0, emptyPage)
     val service = createSpendReportingService(dataSource, tableResult = emptyTableResult)
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -157,8 +204,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}")
     )
 
-    val internationalPage = new PageImpl[FieldValueList](null, null, (FieldValueList.of(cadRow.asJava, fields:_*) :: defaultFieldValues).asJava)
-    val internationalTable = new TableResult(schema, 3, internationalPage)
+    val internationalPage = new PageImpl[FieldValueList](null, null, (FieldValueList.of(cadRow.asJava, dailyFields:_*) :: dailyFieldValues).asJava)
+    val internationalTable = new TableResult(dailySchema, 3, internationalPage)
 
     val service = createSpendReportingService(dataSource, tableResult = internationalTable)
 
