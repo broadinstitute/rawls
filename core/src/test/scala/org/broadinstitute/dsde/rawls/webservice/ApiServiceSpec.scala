@@ -181,10 +181,11 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       gcsDAO
     )_
 
-    val spendReportingServiceConfig = SpendReportingServiceConfig("test", GoogleProject("test-project"), 90)
+    val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
+    val spendReportingServiceConfig = SpendReportingServiceConfig("test", 90)
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
-      bigQueryDAO,
+      spendReportingBigQueryService,
       samDAO,
       spendReportingServiceConfig
     )
