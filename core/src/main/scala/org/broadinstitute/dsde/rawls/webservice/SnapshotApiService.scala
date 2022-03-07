@@ -45,9 +45,9 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       } ~
       patch {
-        entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
+        entity(as[UpdateDataRepoSnapshotReferenceRequestBody]) { updateDataRepoSnapshotReferenceRequestBody =>
           complete {
-            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
+            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataRepoSnapshotReferenceRequestBody).map(_ => StatusCodes.NoContent)
           }
         }
       } ~
@@ -61,25 +61,6 @@ trait SnapshotApiService extends UserInfoDirectives {
       get {
         complete {
           snapshotServiceConstructor(userInfo).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName), referenceName)
-        }
-      }
-    } ~
-    path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
-      get {
-        complete {
-          snapshotServiceConstructor(userInfo).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
-        }
-      } ~
-      patch {
-        entity(as[UpdateDataReferenceRequestBody]) { updateDataReferenceRequestBody =>
-          complete {
-            snapshotServiceConstructor(userInfo).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataReferenceRequestBody).map(_ => StatusCodes.NoContent)
-          }
-        }
-      } ~
-      delete {
-        complete {
-          snapshotServiceConstructor(userInfo).deleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(_ => StatusCodes.NoContent)
         }
       }
     }
