@@ -25,7 +25,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     description = Option(DataReferenceDescriptionField("bar")),
     snapshotId = UUID.randomUUID()
   ))
-  val defaultSnapshotUpdateBodyJson = httpJson(new UpdateDataReferenceRequestBody().name("foo2").description("bar2"))
+  val defaultSnapshotUpdateBodyJson = httpJson(new UpdateDataRepoSnapshotReferenceRequestBody().name("foo2").description("bar2"))
 
   // base MockWorkspaceManagerDAO always returns a value for enumerateDataReferences.
   // this version, used inside this spec, throws errors on specific workspaces,
