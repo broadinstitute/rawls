@@ -54,8 +54,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
 
   val workspaceGoogleProject1 = "project1"
   val workspaceGoogleProject2 = "project2"
-  val workspace1: Workspace = Workspace(testData.billingProject.projectName.value, "workspace1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject1), None, None, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
-  val workspace2: Workspace = Workspace(testData.billingProject.projectName.value, "workspace2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject2), None, None, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
+  val workspace1: Workspace = Workspace(testData.billingProject.projectName.value, "workspace1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject1), None, None, None, None, WorkspaceType.RawlsWorkspace)
+  val workspace2: Workspace = Workspace(testData.billingProject.projectName.value, "workspace2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject2), None, None, None, None, WorkspaceType.RawlsWorkspace)
   val workspaceFields: List[Field] = List(
     Field.of("cost", StandardSQLTypeName.STRING),
     Field.of("credits", StandardSQLTypeName.STRING),
