@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SlickDataSource}
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, RemoveAttribute}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueList, Entity, RawlsUser, UserInfo, Workspace, WorkspaceShardStates}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueList, Entity, RawlsUser, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.AttributeSupport
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
@@ -50,7 +50,7 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
 
   val testWorkspace = new EmptyWorkspace
   val testWorkspaceName = testWorkspace.workspace.toWorkspaceName
-  val testWorkspaceShardId = determineShard(testWorkspace.workspace.workspaceIdAsUUID, WorkspaceShardStates.Sharded)
+  val testWorkspaceShardId = determineShard(testWorkspace.workspace.workspaceIdAsUUID)
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeString("c")))
   val s1 = Entity("s1", "samples", Map(
@@ -70,9 +70,9 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
     testCode(apiService)
   }
 
-  // checks row counts for each shard, plus the _archived table
+  // checks row counts for each shard
   def checkShardCounts(expected: Map[ShardId, Int] = Map()): Unit = {
-    // default to 0 for all shards plus the archive table
+    // default to 0 for all shards
     val default: Map[ShardId, Int] = (allShards).map(_ -> 0).toMap
     val combined = default ++ expected
     combined.foreach {
@@ -134,11 +134,11 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
     // the empty workspace was created with a random uuid. find another uuid that does not have the same
     // shard identifier.
     var tempId: UUID = UUID.randomUUID()
-    while (determineShard(tempId, WorkspaceShardStates.Sharded) == testWorkspaceShardId) {
+    while (determineShard(tempId) == testWorkspaceShardId) {
       tempId = UUID.randomUUID()
     }
     val secondWorkspaceId = UUID.fromString(tempId.toString)
-    val secondShardId = determineShard(secondWorkspaceId, WorkspaceShardStates.Sharded)
+    val secondShardId = determineShard(secondWorkspaceId)
     secondShardId should not be testWorkspaceShardId
     val anotherWorkspace = Workspace("secondnamespace", "secondname", secondWorkspaceId.toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 

@@ -52,8 +52,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
       val destinationBucketName = "destinationBucket"
       val copyFilesWithPrefix = "prefix"
       val objectToCopy = new StorageObject().setName("copy-me")
-      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
-      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
+      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceType.RawlsWorkspace)
+      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceType.RawlsWorkspace)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(sourceWorkspace))
@@ -86,8 +86,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
       val sourceBucketName = "sourceBucket"
       val destinationBucketName = "destinationBucket"
       val copyFilesWithPrefix = "prefix"
-      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
-      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
+      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceType.RawlsWorkspace)
+      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceType.RawlsWorkspace)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(sourceWorkspace))
@@ -121,8 +121,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
       val destinationBucketName = "destinationBucket"
       val copyFilesWithPrefix = "prefix"
       val objectToCopy = new StorageObject().setName("copy-me")
-      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
-      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
+      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceType.RawlsWorkspace)
+      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceType.RawlsWorkspace)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(sourceWorkspace))
@@ -159,8 +159,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
       val copyFilesWithPrefix = "prefix"
       val badObjectToCopy = new StorageObject().setName("you-cant-copy-me")
       val goodObjectToCopy = new StorageObject().setName("copy-me")
-      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
-      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
+      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceType.RawlsWorkspace)
+      val destWorkspace = Workspace(billingProject.projectName.value, "destination", UUID.randomUUID().toString, destinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceType.RawlsWorkspace)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(sourceWorkspace))
@@ -200,9 +200,9 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem) extends TestKi
       val goodDestinationBucketName = "goodBucket"
       val copyFilesWithPrefix = "prefix"
       val objectToCopy = new StorageObject().setName("copy-me")
-      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
-      val badDestWorkspace = Workspace(billingProject.projectName.value, "badDestination", UUID.randomUUID().toString, badDestinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
-      val goodDestWorkspace = Workspace(billingProject.projectName.value, "goodDestination", UUID.randomUUID().toString, goodDestinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("another-project"), Option(GoogleProjectNumber("45")), billingProject.billingAccount, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
+      val sourceWorkspace = Workspace(billingProject.projectName.value, "source", UUID.randomUUID().toString, sourceBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("some-project"), Option(GoogleProjectNumber("43")), billingProject.billingAccount, None, Option(DateTime.now), WorkspaceType.RawlsWorkspace)
+      val badDestWorkspace = Workspace(billingProject.projectName.value, "badDestination", UUID.randomUUID().toString, badDestinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("different-project"), Option(GoogleProjectNumber("44")), billingProject.billingAccount, None, None, WorkspaceType.RawlsWorkspace)
+      val goodDestWorkspace = Workspace(billingProject.projectName.value, "goodDestination", UUID.randomUUID().toString, goodDestinationBucketName, None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V2, GoogleProjectId("another-project"), Option(GoogleProjectNumber("45")), billingProject.billingAccount, None, None, WorkspaceType.RawlsWorkspace)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(sourceWorkspace))

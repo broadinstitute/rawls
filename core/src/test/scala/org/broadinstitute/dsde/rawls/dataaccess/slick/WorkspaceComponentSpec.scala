@@ -37,7 +37,6 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     Option(workspaceBillingAccount),
     None,
     Option(currentTime()),
-    WorkspaceShardStates.Sharded,
     WorkspaceType.RawlsWorkspace
   )
 
