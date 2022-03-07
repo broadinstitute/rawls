@@ -61,7 +61,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                 "endDate".as[String],
                 "aggregationKey"
                   .as[SpendReportingAggregationKey](spendReportingAggregationKeyUnmarshaller)
-                  .withDefault(SpendReportingAggregationKeys.Daily))
+                  .?)
               { (startDate, endDate, aggregationKey) =>
                 complete {
                   Try {

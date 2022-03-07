@@ -45,16 +45,17 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }
   }
 
-  def extractSpendReportingResults(rows: List[FieldValueList], startTime: DateTime, endTime: DateTime, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName], aggregationKey: SpendReportingAggregationKey): SpendReportingResults = {
+  def extractSpendReportingResults(rows: List[FieldValueList], startTime: DateTime, endTime: DateTime, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName], aggregationKey: Option[SpendReportingAggregationKey]): SpendReportingResults = {
     val currency = getCurrency(rows)
 
     val spendAggregation = aggregationKey match {
-      case SpendReportingAggregationKeys.Daily => extractDailySpendAggregation(rows, currency, startTime, endTime)
-      case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(rows, currency, startTime, endTime, workspaceProjectsToNames)
+      case Some(SpendReportingAggregationKeys.Daily) => Seq(extractDailySpendAggregation(rows, currency, startTime, endTime))
+      case Some(SpendReportingAggregationKeys.Workspace) => Seq(extractWorkspaceSpendAggregation(rows, currency, startTime, endTime, workspaceProjectsToNames))
+      case None => Seq.empty
     }
     val spendSummary = extractSpendSummary(rows, currency, startTime, endTime)
 
-    SpendReportingResults(Seq(spendAggregation), spendSummary)
+    SpendReportingResults(spendAggregation, spendSummary)
   }
 
   private def extractWorkspaceSpendAggregation(rows: List[FieldValueList], currency: Currency, startTime: DateTime, endTime: DateTime, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName]): SpendReportingAggregation = {
@@ -173,7 +174,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
       .build()
 }
 
-  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime, aggregationKey: SpendReportingAggregationKey = SpendReportingAggregationKeys.Daily): Future[SpendReportingResults] = {
+  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime, aggregationKey: Option[SpendReportingAggregationKey]): Future[SpendReportingResults] = {
     validateReportParameters(startDate, endDate)
     requireAlphaUser() {
       requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReport) {
@@ -202,33 +203,36 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }
   }
 
-
-  private def getQuery(aggregationKey: SpendReportingAggregationKey, tableName: String): String = {
-    aggregationKey match {
-      case SpendReportingAggregationKeys.Daily => s"""
-                                                     | SELECT
-                                                     |  SUM(cost) as cost,
-                                                     |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-                                                     |  currency,
-                                                     |  DATE(_PARTITIONTIME) as date
-                                                     | FROM `$tableName`
-                                                     | WHERE billing_account_id = @billingAccountId
-                                                     | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
-                                                     | AND project.id in UNNEST(@projects)
-                                                     | GROUP BY currency, date
-                                                     |""".stripMargin
-      case SpendReportingAggregationKeys.Workspace => s"""
-                                                         | SELECT
-                                                         |  SUM(cost) as cost,
-                                                         |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-                                                         |  currency,
-                                                         |  project.id as googleProjectId
-                                                         | FROM `$tableName`
-                                                         | WHERE billing_account_id = @billingAccountId
-                                                         | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
-                                                         | AND project.id in UNNEST(@projects)
-                                                         | GROUP BY currency, googleProjectId
-                                                         |""".stripMargin
+  case class AggregationKeyQueryField(bigQueryFieldOpt: Option[String], aliasOpt: Option[String]) {
+    def aliased(): String = (bigQueryFieldOpt, aliasOpt) match {
+      case (Some(bq), Some(key)) => s""",
+                                       |  $bq as $key""".stripMargin
+      case _ => ""
     }
+
+    def groupBy(): String = (bigQueryFieldOpt, aliasOpt) match {
+      case (Some(_), Some(key)) => s""", $key"""
+      case _ => ""
+    }
+  }
+
+  private def getQuery(aggregationKey: Option[SpendReportingAggregationKey], tableName: String): String = {
+    val aggregationKeyQueryField = aggregationKey match {
+      case Some(SpendReportingAggregationKeys.Daily) => AggregationKeyQueryField(Option("DATE(_PARTITIONTIME)"), Option("date"))
+      case Some(SpendReportingAggregationKeys.Workspace) => AggregationKeyQueryField(Option("project.id"), Option("googleProjectId"))
+      case None => AggregationKeyQueryField(None, None)
+    }
+
+    s"""
+       | SELECT
+       |  SUM(cost) as cost,
+       |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+       |  currency ${aggregationKeyQueryField.aliased()}
+       | FROM `$tableName`
+       | WHERE billing_account_id = @billingAccountId
+       | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
+       | AND project.id in UNNEST(@projects)
+       | GROUP BY currency ${aggregationKeyQueryField.groupBy()}
+       |""".stripMargin
   }
 }
