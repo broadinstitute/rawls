@@ -54,6 +54,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
 
   val workspaceGoogleProject1 = "project1"
   val workspaceGoogleProject2 = "project2"
+  val workspace1: Workspace = Workspace(testData.billingProject.projectName.value, "workspace1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject1), None, None, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
+  val workspace2: Workspace = Workspace(testData.billingProject.projectName.value, "workspace2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject2), None, None, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)
   val workspaceFields: List[Field] = List(
     Field.of("cost", StandardSQLTypeName.STRING),
     Field.of("credits", StandardSQLTypeName.STRING),
@@ -109,8 +111,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   it should "break down results from Google by workspace" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource, tableResult = workspaceTableResult)
 
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(Workspace(testData.billingProject.projectName.value, "workspace1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject1), None, None, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)))
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(Workspace(testData.billingProject.projectName.value, "workspace2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject2), None, None, None, None, WorkspaceShardStates.Sharded, WorkspaceType.RawlsWorkspace)))
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(workspace1))
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(workspace2))
 
     val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), SpendReportingAggregationKeys.Workspace), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe "0.10" // sum of costs in defaultTable
@@ -211,6 +213,27 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()), Duration.Inf)
+    }
+    e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
+  }
+
+  it should "throw an exception if BigQuery results include an unexpected Google project" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val badRow = List(
+      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.10111"),
+      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"),
+      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"),
+      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "fakeProject")
+    )
+
+    val badPage = new PageImpl[FieldValueList](null, null, (FieldValueList.of(badRow.asJava, workspaceFields:_*) :: workspaceFieldValues).asJava)
+    val badTable = new TableResult(workspaceSchema, 3, badPage)
+
+    val service = createSpendReportingService(dataSource, tableResult = badTable)
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(workspace1))
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(workspace2))
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), SpendReportingAggregationKeys.Workspace), Duration.Inf)
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
   }
