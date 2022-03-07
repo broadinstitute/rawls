@@ -499,7 +499,7 @@ paths:
             format: date
         - name: aggregationKey
           in: query
-          description: Key indicating how to aggregate spend data in results
+          description: Key indicating how to aggregate spend data in results. Will return only summary data (spendDetails is empty) if aggregationKey is not present
           required: false
           schema:
             type: string
@@ -6354,6 +6354,11 @@ components:
           type: string
           format: timestamp
           description: timestamp (UTC) marking the end of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
+        googleProjectId:
+          type: string
+          description: if present, Google project of workspace where cost was generated
+        workspace:
+          $ref: '#/components/schemas/WorkspaceName'
     SpendReportConfiguration:
       required:
         - datasetGoogleProject
