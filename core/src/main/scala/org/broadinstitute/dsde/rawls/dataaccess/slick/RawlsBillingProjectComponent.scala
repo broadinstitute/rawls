@@ -149,6 +149,10 @@ trait RawlsBillingProjectComponent {
       setBillingProjectSpendConfiguration(billingProjectName, None, None, None)
     }
 
+    def getBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): ReadAction[Option[BillingProjectSpendExport]] = {
+      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(billingProjectName)).map(_.map(unmarshalBillingProjectSpendExport))
+    }
+
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] = {
       (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())
     }
@@ -175,6 +179,16 @@ trait RawlsBillingProjectComponent {
 
     private def findBillingProjectsByBillingAccount(billingAccount: RawlsBillingAccountName): RawlsBillingProjectQuery = {
       filter(_.billingAccount === billingAccount.value)
+    }
+
+    private def unmarshalBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
+      val table = (projectRecord.spendReportDatasetGoogleProject, projectRecord.spendReportDataset, projectRecord.spendReportTable) match {
+        case (Some(googleProjectId), Some(datasetName), Some(tableName)) =>  Option(s"$googleProjectId.$datasetName.$tableName")
+        case _ => None
+      }
+      val billingAccount = RawlsBillingAccountName(projectRecord.billingAccount.getOrElse(throw new RawlsException(s"billing account not set on project ${projectRecord.projectName}")))
+
+      BillingProjectSpendExport(RawlsBillingProjectName(projectRecord.projectName), billingAccount, table)
     }
   }
 }

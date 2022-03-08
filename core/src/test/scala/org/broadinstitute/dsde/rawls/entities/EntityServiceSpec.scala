@@ -3,14 +3,14 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddListMember, AddUpdateAttribute, CreateAttributeEntityReferenceList, CreateAttributeValueList, RemoveAttribute, RemoveListMember}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, RawlsUser, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, EntityQuery, RawlsUser, SortDirections, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
@@ -20,7 +20,8 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.{Duration, SECONDS}
+import scala.concurrent.{Await, ExecutionContext}
 
 class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll {
 
@@ -72,7 +73,8 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
-      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO(mockServer.mockServerBaseUrl), samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO(mockServer.mockServerBaseUrl), samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled")),
+      7 // <-- specifically chosen to be lower than the number of samples in "workspace" within testData
     )_
   }
 
@@ -186,6 +188,53 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
       )).attributes.get(AttributeName.withDefaultNS("newAttribute"))
     }
   }
+
+  it should "respect page size limits for listEntities"  in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+
+    // the entityServiceConstructor inside TestApiService sets a pageSizeLimit of 7, so:
+    // these should pass
+    List(testData.aliquot1.entityType, testData.pair1.entityType) foreach { entityType =>
+      withClue(s"for entity type '$entityType':") {
+        val queryResult = Await.result(services.entityService.listEntities(testData.wsName, entityType), waitDuration)
+        queryResult.size should be < 7
+      }
+    }
+    // this should fail
+    List(testData.sample1.entityType).foreach { entityType =>
+      withClue(s"for entity type '$entityType':") {
+        val ex = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(services.entityService.listEntities(testData.wsName, entityType), waitDuration)
+        }
+        ex.errorReport.message shouldBe "Result set size of 8 cannot exceed 7. Use the paginated entityQuery API instead."
+      }
+    }
+  }
+
+  it should "respect page size limits for queryEntities"  in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+
+    // the entityServiceConstructor inside TestApiService sets a pageSizeLimit of 7, so:
+    // these should pass
+    List(1, 5, 6, 7) foreach { pageSize =>
+      withClue(s"for page size '$pageSize':") {
+        val entityQuery = EntityQuery(1, pageSize, "name", SortDirections.Ascending, None)
+        val queryResult = Await.result(services.entityService.queryEntities(testData.wsName, None, testData.sample1.entityType, entityQuery, None), waitDuration)
+        queryResult.results should not be (empty)
+      }
+    }
+    // these should fail
+    List(8, 100, 250000, Int.MaxValue) foreach { pageSize =>
+      withClue(s"for page size '$pageSize':") {
+        val entityQuery = EntityQuery(1, pageSize, "name", SortDirections.Ascending, None)
+        val ex = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(services.entityService.queryEntities(testData.wsName, None, testData.sample1.entityType, entityQuery, None), waitDuration)
+        }
+        ex.errorReport.message shouldBe "Page size cannot exceed 7"
+      }
+    }
+  }
+
 
 
 }

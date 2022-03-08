@@ -191,7 +191,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) { status }
         // TODO: why is this result returned out of order?
-        sortAndAssertWorkspaceResult(testData.allWorkspaces) { responseAs[Seq[WorkspaceDetails]].map(_.copy(shardState = Some(WorkspaceShardStates.Sharded)).toWorkspace) }
+        sortAndAssertWorkspaceResult(testData.allWorkspaces) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
       }
   }
 
@@ -200,7 +200,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.copy(shardState = Some(WorkspaceShardStates.Sharded)).toWorkspace) }
+        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
       }
   }
 
@@ -209,7 +209,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.copy(shardState = Some(WorkspaceShardStates.Sharded)).toWorkspace) }
+        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
       }
   }
 
@@ -218,7 +218,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(testData.workspacePublished)) { responseAs[Seq[WorkspaceDetails]].map(_.copy(shardState = Some(WorkspaceShardStates.Sharded)).toWorkspace) }
+        assertWorkspaceResult(Seq(testData.workspacePublished)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
       }
   }
 
@@ -273,4 +273,45 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+
+  it should "get and set feature flags for a workspace" in withConstantTestDataApiServices { services =>
+    val flagApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/${constantData.workspace.name}/flags"
+    // workspace should start with zero flags
+    Get(flagApiUrl) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assertResult(List.empty[String]) { responseAs[List[String]] }
+      }
+
+    // we will put and then get a few sets of flags, in order
+    val flagAttempts = List(
+      List("foo"),
+      List("foo", "bar"),
+      List("baz", "foo", "qux"),
+      List.empty[String],
+      List("something", "else", "entirely", "different")
+    )
+
+    flagAttempts foreach { flags =>
+      withClue(s"when attempting to put feature flags $flags ... ") {
+        Put(flagApiUrl, flags) ~>
+          sealRoute(services.adminRoutes) ~>
+          check {
+            assertResult(StatusCodes.OK) { status }
+            responseAs[List[String]] should contain theSameElementsAs flags
+          }
+      }
+
+      withClue(s"when attempting to get feature flags, expecting $flags ... ") {
+        Get(flagApiUrl) ~>
+          sealRoute(services.adminRoutes) ~>
+          check {
+            assertResult(StatusCodes.OK) { status }
+            responseAs[List[String]] should contain theSameElementsAs flags
+          }
+      }
+    }
+  }
+
 }

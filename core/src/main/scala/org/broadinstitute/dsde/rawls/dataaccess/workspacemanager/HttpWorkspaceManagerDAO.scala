@@ -41,6 +41,35 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
   }
 
+  override def createWorkspaceWithSpendProfile(workspaceId: UUID,
+                                               displayName: String,
+                                               spendProfileId: String,
+                                               accessToken: OAuth2BearerToken): CreatedWorkspace = {
+    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody()
+      .id(workspaceId)
+      .displayName(displayName)
+      .spendProfile(spendProfileId)
+      .stage(WorkspaceStageModel.MC_WORKSPACE))
+  }
+
+  override def createAzureWorkspaceCloudContext(workspaceId: UUID,
+                                                azureTenantId: String,
+                                                azureResourceGroupId: String,
+                                                azureSubscriptionId: String,
+                                                accessToken: OAuth2BearerToken): CreateCloudContextResult = {
+    val jobControlId = UUID.randomUUID().toString
+    val azureContext = new AzureContext().tenantId(azureTenantId).subscriptionId(azureSubscriptionId).resourceGroupId(azureResourceGroupId)
+    getWorkspaceApi(accessToken).createCloudContext(
+      new CreateCloudContextRequest()
+        .cloudPlatform(CloudPlatform.AZURE)
+        .jobControl(new JobControl().id(jobControlId))
+        .azureContext(azureContext), workspaceId)
+  }
+
+  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateCloudContextResult = {
+    getWorkspaceApi(accessToken).getCreateCloudContextResult(workspaceId, jobControlId)
+  }
+
   override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = {
     getWorkspaceApi(accessToken).deleteWorkspace(workspaceId)
   }
@@ -53,8 +82,8 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getReferencedGcpResourceApi(accessToken).createDataRepoSnapshotReference(request, workspaceId)
   }
 
-  override def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
-    getReferencedGcpResourceApi(accessToken).updateDataRepoSnapshotReference(updateInfo, workspaceId, referenceId)
+  override def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataRepoSnapshotReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
+    getReferencedGcpResourceApi(accessToken).updateDataRepoSnapshotReferenceResource(updateInfo, workspaceId, referenceId)
   }
 
   override def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {

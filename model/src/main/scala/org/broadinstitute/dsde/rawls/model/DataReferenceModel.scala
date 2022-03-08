@@ -20,77 +20,6 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     case Some(notStr) => JsString(notStr.toString)
   }
 
-  implicit object DataRepoSnapshotFormat extends RootJsonFormat[DataRepoSnapshot] {
-    val INSTANCE_NAME = "instanceName"
-    val SNAPSHOT = "snapshot"
-
-    override def write(snap: DataRepoSnapshot) = JsObject(
-      INSTANCE_NAME -> stringOrNull(snap.getInstanceName),
-      SNAPSHOT -> stringOrNull(snap.getSnapshot)
-    )
-
-    override def read(json: JsValue) = {
-      json.asJsObject.getFields(INSTANCE_NAME, SNAPSHOT) match {
-        case Seq(JsString(instanceName), JsString(snapshot)) =>
-          new DataRepoSnapshot().instanceName(instanceName).snapshot(snapshot)
-        case _ => throw DeserializationException("DataRepoSnapshot expected")
-      }
-    }
-  }
-
-  // Only handling supported fields for now, resourceDescription and credentialId aren't used currently
-  implicit object DataReferenceDescriptionFormat extends RootJsonFormat[DataReferenceDescription] {
-    val REFERENCE_ID = "referenceId"
-    val NAME = "name"
-    val DESCRIPTION = "description"
-    val WORKSPACE_ID = "workspaceId"
-    val REFERENCE_TYPE = "referenceType"
-    val REFERENCE = "reference"
-    val CLONING_INSTRUCTIONS = "cloningInstructions"
-
-    override def write(description: DataReferenceDescription) = JsObject(
-      REFERENCE_ID -> stringOrNull(description.getReferenceId),
-      NAME -> stringOrNull(description.getName),
-      DESCRIPTION -> stringOrNull(description.getDescription),
-      WORKSPACE_ID -> stringOrNull(description.getWorkspaceId),
-      REFERENCE_TYPE -> stringOrNull(description.getReferenceType),
-      REFERENCE -> description.getReference.toJson,
-      CLONING_INSTRUCTIONS -> stringOrNull(description.getCloningInstructions)
-    )
-
-    override def read(json: JsValue): DataReferenceDescription = {
-      json.asJsObject.getFields(REFERENCE_ID, NAME, DESCRIPTION, WORKSPACE_ID, REFERENCE_TYPE, REFERENCE, CLONING_INSTRUCTIONS) match {
-        case Seq(referenceId, JsString(name), JsString(description), workspaceId, JsString(referenceType), reference, JsString(cloningInstructions)) =>
-          new DataReferenceDescription()
-            .referenceId(referenceId.convertTo[UUID])
-            .name(name)
-            .description(description)
-            .workspaceId(workspaceId.convertTo[UUID])
-            .referenceType(ReferenceTypeEnum.fromValue(referenceType))
-            .reference(reference.convertTo[DataRepoSnapshot])
-            .cloningInstructions(CloningInstructionsEnum.fromValue(cloningInstructions))
-        case _ => throw DeserializationException("DataReferenceDescription expected")
-      }
-    }
-  }
-
-  implicit object DataReferenceListFormat extends RootJsonFormat[DataReferenceList] {
-    val RESOURCES = "resources"
-
-    override def write(refList: DataReferenceList) = JsObject(
-      RESOURCES -> refList.getResources.asScala.toList.toJson
-    )
-
-    override def read(json: JsValue): DataReferenceList = {
-      json.asJsObject.getFields(RESOURCES) match {
-        case Seq(JsArray(resources)) =>
-          new DataReferenceList().resources(resources.map(_.convertTo[DataReferenceDescription]).asJava)
-        case _ => throw DeserializationException("DataReferenceList expected")
-      }
-    }
-  }
-
-
   implicit object ResourceMetadataFormat extends RootJsonFormat[ResourceMetadata] {
     val WORKSPACE_ID = "workspaceId"
     val RESOURCE_ID = "resourceId"
@@ -168,16 +97,20 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     }
   }
 
-  implicit object UpdateDataReferenceRequestFormat extends RootJsonFormat[UpdateDataReferenceRequestBody] {
+  implicit object UpdateDataRepoSnapshotReferenceRequestBodyFormat extends RootJsonFormat[UpdateDataRepoSnapshotReferenceRequestBody] {
     val NAME = "name"
     val DESCRIPTION = "description"
+    val INSTANCE_NAME = "instanceName"
+    val SNAPSHOT = "snapshot"
 
-    override def write(request: UpdateDataReferenceRequestBody) = JsObject(
+    override def write(request: UpdateDataRepoSnapshotReferenceRequestBody) = JsObject(
       NAME -> stringOrNull(request.getName),
       DESCRIPTION -> stringOrNull(request.getDescription),
+      INSTANCE_NAME -> stringOrNull(request.getInstanceName),
+      SNAPSHOT -> stringOrNull(request.getSnapshot)
     )
 
-    override def read(json: JsValue): UpdateDataReferenceRequestBody = {
+    override def read(json: JsValue): UpdateDataRepoSnapshotReferenceRequestBody = {
       val jsObject = json.asJsObject
 
       def getOptionalStringField(fieldName: String): Option[String] = {
@@ -187,19 +120,20 @@ object DataReferenceModelJsonSupport extends JsonSupport {
         }
       }
 
-      jsObject.getFields(NAME, DESCRIPTION) match {
-        case Seq() => throw DeserializationException("UpdateDataReferenceRequestBody expected")
-        case _ => // both fields are optional, as long as one is present we can proceed
-          val updateRequest = new UpdateDataReferenceRequestBody()
+      jsObject.getFields(NAME, DESCRIPTION, INSTANCE_NAME, SNAPSHOT) match {
+        case Seq() => throw DeserializationException("UpdateDataRepoSnapshotReferenceRequestBody expected")
+        case _ => // all fields are optional, as long as one is present we can proceed
+          val updateRequest = new UpdateDataRepoSnapshotReferenceRequestBody()
 
           getOptionalStringField(NAME).map(updateRequest.name)
           getOptionalStringField(DESCRIPTION).map(updateRequest.description)
+          getOptionalStringField(INSTANCE_NAME).map(updateRequest.instanceName)
+          getOptionalStringField(SNAPSHOT).map(updateRequest.snapshot)
 
           updateRequest
       }
     }
   }
-
 
   implicit object ResourceAttributesUnionFormat extends RootJsonFormat[ResourceAttributesUnion] {
     val GCP_DATA_REPO_SNAPSHOT = "gcpDataRepoSnapshot"
@@ -251,10 +185,6 @@ object DataReferenceModelJsonSupport extends JsonSupport {
       }
     }
   }
-
-
-
-
 
   implicit val DataReferenceNameFormat = ValueObjectFormat(DataReferenceName)
   implicit val dataReferenceDescriptionFieldFormat = ValueObjectFormat(DataReferenceDescriptionField)

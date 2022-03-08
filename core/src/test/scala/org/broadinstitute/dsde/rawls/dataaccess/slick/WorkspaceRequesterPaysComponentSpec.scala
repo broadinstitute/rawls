@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.dataaccess.BondServiceAccountEmail
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUserEmail, Workspace, WorkspaceShardStates, WorkspaceType, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUserEmail, Workspace, WorkspaceType, WorkspaceVersions}
 
 import java.util.UUID
 
@@ -26,7 +26,6 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       None,
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded,
       WorkspaceType.RawlsWorkspace
     )
 

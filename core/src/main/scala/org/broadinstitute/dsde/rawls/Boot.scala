@@ -33,12 +33,13 @@ import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
+import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
@@ -107,6 +108,13 @@ object Boot extends IOApp with LazyLogging {
                 statsDConf.getInt("port"),
                 statsDConf.getDuration("period"),
                 apiKey = statsDConf.getStringOption("apiKey"))
+            case ("statsd-sidecar", conf: ConfigObject) =>
+              // Capability for apiKey-less additional statsd target, intended for statsd-exporter sidecar
+              val statsDConf = conf.toConfig
+              startStatsDReporter(
+                statsDConf.getString("host"),
+                statsDConf.getInt("port"),
+                statsDConf.getDuration("period"))
             case (other, _) =>
               logger.warn(s"Unknown metrics backend: $other")
           }
@@ -356,6 +364,7 @@ object Boot extends IOApp with LazyLogging {
         StatusService.constructor(healthMonitor)
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(conf)
+      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
 
       val bondConfig = conf.getConfig("bond")
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
@@ -371,6 +380,12 @@ object Boot extends IOApp with LazyLogging {
       val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
+
+      val multiCloudWorkspaceServiceConstructor: (UserInfo) => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
+        slickDataSource,
+        workspaceManagerDAO,
+        multiCloudWorkspaceConfig
+      )
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
@@ -404,7 +419,8 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         samDAO,
         workbenchMetricBaseName = metricsPrefix,
-        entityManager
+        entityManager,
+        conf.getInt("entities.pageSizeLimit")
       )
 
       val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(
@@ -414,12 +430,27 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("dataRepo.terraInstanceName")
       )
 
+      val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(gcsConfig.getString("bigQueryJson"), GoogleProject(gcsConfig.getString("serviceProject")))
+      val spendReportingServiceConfig = SpendReportingServiceConfig(
+        gcsConfig.getString("billingExportTableName"),
+        gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
+      )
+
+      val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
+        slickDataSource,
+        spendReportingBigQueryService,
+        samDAO,
+        spendReportingServiceConfig
+      )
+
       val service = new RawlsApiServiceImpl(
+        multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
         entityServiceConstructor,
         userServiceConstructor,
         genomicsServiceConstructor,
         snapshotServiceConstructor,
+        spendReportingServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(

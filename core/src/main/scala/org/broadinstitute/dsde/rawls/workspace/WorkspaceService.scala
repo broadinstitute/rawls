@@ -1865,6 +1865,32 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  def adminListWorkspaceFeatureFlags(workspaceName: WorkspaceName): Future[Seq[WorkspaceFeatureFlag]] = {
+    asFCAdmin {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          dataAccess.workspaceFeatureFlagQuery.listAllForWorkspace(workspaceContext.workspaceIdAsUUID)
+        }
+      }
+    }
+  }
+
+  def adminOverwriteWorkspaceFeatureFlags(workspaceName: WorkspaceName, flagNames: List[String]): Future[Seq[WorkspaceFeatureFlag]] = {
+    asFCAdmin {
+      val flags = flagNames.map(WorkspaceFeatureFlag)
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          for {
+            _ <- dataAccess.workspaceFeatureFlagQuery.deleteAllForWorkspace(workspaceContext.workspaceIdAsUUID)
+            _ <- dataAccess.workspaceFeatureFlagQuery.saveAll(workspaceContext.workspaceIdAsUUID, flags)
+          } yield {
+            flags
+          }
+        }
+      }
+    }
+  }
+
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] = {
     //don't do the sam REST call inside the db transaction.
     getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
@@ -1995,10 +2021,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
 
       _ = logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing the RBS billing account.")
-      _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { _ =>
+      _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { s =>
         // Since we don't necessarily know what the RBS Billing Account is, we need to bypass the "oldBillingAccount"
         // check when updating the Billing Account on the project
-        gcsDAO.setBillingAccountName(googleProjectId, billingAccount)
+        s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
+        s.putAttribute("googleProjectId", OpenCensusAttributeValue.stringAttributeValue(googleProjectId.value))
+        s.putAttribute("billingAccount", OpenCensusAttributeValue.stringAttributeValue(billingAccount.value))
+        gcsDAO.setBillingAccountName(googleProjectId, billingAccount, s)
       }
 
       _ = logger.info(s"Creating labels for ${googleProjectId}.")
@@ -2261,7 +2290,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
       currentBillingAccountOnWorkspace,
       billingAccountErrorMessage = None,
       completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
-      shardState = WorkspaceShardStates.Sharded,
       workspaceType
     )
     traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))

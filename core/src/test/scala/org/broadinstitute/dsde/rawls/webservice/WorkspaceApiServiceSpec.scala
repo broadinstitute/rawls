@@ -746,7 +746,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Option(RawlsBillingAccountName("fakeBillingAcct")),
       None,
       Option(currentTime()),
-      WorkspaceShardStates.Sharded,
       WorkspaceType.RawlsWorkspace
     )
 
@@ -1302,8 +1301,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     // mock(ito) out the workspace creation
     when(services.gcsDAO.testDMBillingAccountAccess(any[RawlsBillingAccountName])).thenReturn(Future.successful(true))
-    when(services.gcsDAO.setBillingAccountName(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), any[RawlsBillingAccountName]))
-      .thenReturn(Future.successful(new ProjectBillingInfo().setBillingAccountName(testData.workspace.currentBillingAccountOnGoogleProject.map(_.value).getOrElse("")).setProjectId(testData.workspace.googleProjectId.value)))
+    doReturn(
+      Future.successful(
+        new ProjectBillingInfo()
+          .setBillingAccountName(testData.workspace.currentBillingAccountOnGoogleProject.map(_.value).getOrElse(""))
+          .setProjectId(testData.workspace.googleProjectId.value)),
+      null)
+      .when(services.gcsDAO).setBillingAccountName(ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")), any[RawlsBillingAccountName], any[Span])
     when(services.gcsDAO.getGoogleProject(any[GoogleProjectId])).thenReturn(Future.successful(new Project().setProjectNumber(null)))
     when(services.gcsDAO.labelSafeMap(any[Map[String, String]], any[String])).thenReturn(Map.empty[String, String])
     when(services.gcsDAO.updateGoogleProject(any[GoogleProjectId], any[Project])).thenReturn(Future.successful(new Project()))

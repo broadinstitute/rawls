@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
@@ -24,6 +24,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
+  val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService
 
   val workspaceRoutes: server.Route = requireUserInfo() { userInfo =>
     path("workspaces") {
@@ -43,6 +44,22 @@ trait WorkspaceApiService extends UserInfoDirectives {
             traceRequest { span =>
               complete {
                 workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+              }
+            }
+          }
+        }
+    } ~
+      path("workspaces" / "mc" ) {
+        post {
+          entity(as[MultiCloudWorkspaceRequest]) { workspace =>
+            addLocationHeader(workspace.path) {
+              traceRequest { span =>
+                complete {
+                  multiCloudWorkspaceServiceConstructor(userInfo)
+                    .createMultiCloudWorkspace(workspace, span).map {
+                      w => StatusCodes.Created -> WorkspaceDetails(w, Set.empty)
+                  }
+                }
               }
             }
           }

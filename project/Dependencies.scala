@@ -2,7 +2,7 @@ import sbt._
 
 object Dependencies {
   val akkaV = "2.6.17"
-  val akkaHttpV = "10.2.6"
+  val akkaHttpV = "10.2.9"
   val slickV = "3.3.2"
 
   val googleV = "1.22.0"
@@ -71,7 +71,7 @@ object Dependencies {
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.1"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
-  val swaggerUI: ModuleID =       "org.webjars.npm"               % "swagger-ui-dist"       % "3.37.2"
+  val swaggerUI: ModuleID =       "org.webjars.npm"               % "swagger-ui-dist"       % "4.6.1"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
@@ -103,8 +103,7 @@ object Dependencies {
    */
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
-
-  val workbenchLibsHash = "95fdde6"
+  val workbenchLibsHash = "11a45ad"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
@@ -128,7 +127,7 @@ object Dependencies {
   def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
   def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.5-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.195-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
   val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")

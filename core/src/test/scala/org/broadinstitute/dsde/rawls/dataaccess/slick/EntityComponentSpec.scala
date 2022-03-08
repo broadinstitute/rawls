@@ -322,7 +322,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
-      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded))
+      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID))
       assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
       desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
@@ -364,7 +364,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
     //so we test the existence of all keys correctly here...
-    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID, WorkspaceShardStates.Sharded))
+    val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID))
     assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
     desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
@@ -395,72 +395,14 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       // now attempt to calculate attr names and types, with a timeout of 1 second
       withClue("This test is potentially flaky, failures should be reviewed: ") {
         intercept[MySQLTimeoutException] {
-          runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, WorkspaceShardStates.Sharded, 1))
+          runAndWait(entityQuery.getAttrNamesAndEntityTypes(context.workspaceIdAsUUID, 1))
         }
       }
     }
   }
 
-  it should "list all entity type metadata" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
 
-      val desiredTypeMetadata = Map[String, EntityTypeMetadata](
-        "Sample" -> EntityTypeMetadata(8, "sample_id", Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle", "foo_id")),
-        "Aliquot" -> EntityTypeMetadata(2, "aliquot_id", Seq()),
-        "Pair" -> EntityTypeMetadata(2, "pair_id", Seq("case", "control", "whatsit")),
-        "SampleSet" -> EntityTypeMetadata(5, "sampleset_id", Seq("samples", "hasSamples")),
-        "PairSet" -> EntityTypeMetadata(1, "pairset_id", Seq("pairs")),
-        "Individual" -> EntityTypeMetadata(2, "individual_id", Seq("sset"))
-      )
-
-      //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
-      //so we test the existence of all keys correctly here...
-      val testTypeMetadata = runAndWait(entityQuery.getEntityTypeMetadata(context))
-      assertSameElements(testTypeMetadata.keys, desiredTypeMetadata.keys)
-
-      testTypeMetadata foreach { case (eType, testMetadata) =>
-        val desiredMetadata = desiredTypeMetadata(eType)
-
-        //...and test that count and the list of attribute names are correct here.
-        assert(testMetadata.count == desiredMetadata.count)
-        assertSameElements(testMetadata.attributeNames, desiredMetadata.attributeNames)
-      }
-    }
-  }
-
-  // GAWB-870
   val testWorkspace = new EmptyWorkspace
-  it should "list all entity type metadata when all_attribute_values is null" in withCustomTestDatabase(testWorkspace) { dataSource =>
-    withWorkspaceContext(testWorkspace.workspace) { context =>
-
-      val id1 = 1
-      val id2 = 2   // arbitrary
-
-      // count distinct misses rows with null columns, like this one
-      runAndWait(entityQueryWithInlineAttributes += EntityRecordWithInlineAttributes(id1, "test1", "null_attrs_type", context.workspaceIdAsUUID, 0, None, deleted = false, None))
-
-      runAndWait(entityQueryWithInlineAttributes += EntityRecordWithInlineAttributes(id2, "test2", "blank_attrs_type", context.workspaceIdAsUUID, 0, Some(""), deleted = false, None))
-
-      val desiredTypeMetadata = Map[String, EntityTypeMetadata](
-        "null_attrs_type" -> EntityTypeMetadata(1, "null_attrs_type_id", Seq()),
-        "blank_attrs_type" -> EntityTypeMetadata(1, "blank_attrs_type", Seq())
-      )
-
-      //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
-      //so we test the existence of all keys correctly here...
-      val testTypeMetadata = runAndWait(entityQuery.getEntityTypeMetadata(context))
-      assertSameElements(testTypeMetadata.keys, desiredTypeMetadata.keys)
-
-      testTypeMetadata foreach { case (eType, testMetadata) =>
-        val desiredMetadata = desiredTypeMetadata(eType)
-
-        //...and test that count and the list of attribute names are correct here.
-        assert(testMetadata.count == desiredMetadata.count)
-        assertSameElements(testMetadata.attributeNames, desiredMetadata.attributeNames)
-      }
-    }
-  }
-
 
   it should "trim giant all_attribute_values strings so they don't overflow" in withCustomTestDatabase(testWorkspace) { dataSource =>
     //it'll be longer than this (and thus will need trimming) because it'll get the entity name too

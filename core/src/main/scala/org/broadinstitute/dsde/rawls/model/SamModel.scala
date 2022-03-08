@@ -77,6 +77,7 @@ object SamBillingProjectActions {
   val addToServicePerimeter = SamResourceAction("add_to_service_perimeter")
   val alterSpendReportConfiguration = SamResourceAction("alter_spend_report_configuration")
   val readSpendReportConfiguration = SamResourceAction("read_spend_report_configuration")
+  val readSpendReport = SamResourceAction("read_spend_report")
   val updateBillingAccount = SamResourceAction("update_billing_account")
   val deleteBillingProject = SamResourceAction("delete")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")

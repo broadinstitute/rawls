@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
-import org.broadinstitute.dsde.rawls.model.WorkspaceShardStates
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import slick.jdbc.JdbcProfile
 
@@ -42,7 +41,7 @@ trait DataAccess
     (0L to 15L) map { secondLong =>
       val first = firstLong.toHexString
       val second = secondLong.toHexString
-      determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000"), shardState = WorkspaceShardStates.Sharded).toString
+      determineShard(java.util.UUID.fromString(s"$first${second}000000-0000-0000-0000-000000000000")).toString
     }
   }).toSet
 

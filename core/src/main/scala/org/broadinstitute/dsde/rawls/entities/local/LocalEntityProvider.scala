@@ -13,11 +13,10 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, D
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent}
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
 
-import java.sql.Timestamp
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -28,79 +27,58 @@ import scala.util.{Failure, Success, Try}
 class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource, cacheEnabled: Boolean)
                          (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with LazyLogging
-    with EntitySupport with AttributeSupport with ExpressionEvaluationSupport {
+    with EntitySupport with AttributeSupport with ExpressionEvaluationSupport with EntityStatisticsCacheSupport {
 
   import dataSource.dataAccess.driver.api._
 
   override val entityStoreId: Option[String] = None
 
-  private val workspaceContext = workspace
+  override val workspaceContext = workspace
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
+    // start performance tracing
     trace("LocalEntityProvider.entityTypeMetadata") { rootSpan =>
       rootSpan.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspace.toWorkspaceName.toString))
+      rootSpan.putAttribute("useCache", OpenCensusAttributeValue.booleanAttributeValue(useCache))
+      rootSpan.putAttribute("cacheEnabled", OpenCensusAttributeValue.booleanAttributeValue(cacheEnabled))
+      // start transaction
       dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("isEntityCacheCurrent", rootSpan) { outerSpan =>
-          dataAccess.entityCacheQuery.isEntityCacheCurrent(workspaceContext.workspaceIdAsUUID).flatMap { isEntityCacheCurrent =>
-            //If the cache is current, and the user wants to use it, and we have it enabled at the app-level: return the cached metadata
-            if(isEntityCacheCurrent && useCache && cacheEnabled) {
-              traceDBIOWithParent("retrieve-cached-results", outerSpan) { _ =>
-                logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
-                val typesAndCountsQ = dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
-                val typesAndAttrsQ = dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
-
-                dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ)
-              }
-            }
-            //Else return the full query results
-            else {
-              val missReason = if (!cacheEnabled)
-                "cache disabled at system level"
-              else if (!useCache)
-                "user request specified cache bypass"
-              else if (!isEntityCacheCurrent)
-                "cache is out of date"
-              else
-                "unknown reason - this should be unreachable"
-
-              logger.info(s"entity statistics cache: miss ($missReason) [${workspaceContext.workspaceIdAsUUID}]")
-
-              traceDBIOWithParent("retrieve-uncached-results", outerSpan) { _ =>
-                dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext) flatMap { metadata =>
-                  val saveCacheAction = if (cacheEnabled && !isEntityCacheCurrent) {
-                    // if the entity cache is not current, AND we have the metadata result, save it to the cache!
-                    // the user has done us the favor of waiting for the result, let's take advantage of that result.
-                    // if saving the cache here fails, ignore the failure and still get the metadata to the user
-                    opportunisticSaveEntityCache(metadata, dataAccess)
-                  } else {
-                    DBIO.successful(())
-                  }
-                  saveCacheAction.map(_ => metadata)
-                }
-              }
-            }
+        if (!useCache || !cacheEnabled) {
+          if (!cacheEnabled) {
+            logger.info(s"entity statistics cache: miss (cache disabled at system level) [${workspaceContext.workspaceIdAsUUID}]")
+          } else if (!useCache) {
+            logger.info(s"entity statistics cache: miss (user request specified cache bypass) [${workspaceContext.workspaceIdAsUUID}]")
           }
-        }
-      }
-    }
-  }
-
-  private def opportunisticSaveEntityCache(metadata: Map[String, EntityTypeMetadata], dataAccess: DataAccess) = {
-    val entityTypesWithCounts: Map[String, Int] = metadata.map {
-      case (typeName, typeMetadata) => typeName -> typeMetadata.count
-    }
-    val entityTypesWithAttrNames: Map[String, Seq[AttributeName]] = metadata.map {
-      case (typeName, typeMetadata) => typeName -> typeMetadata.attributeNames.map(AttributeName.fromDelimitedName)
-    }
-    val timestamp: Timestamp = new Timestamp(workspaceContext.lastModified.getMillis)
-
-    dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceContext.workspaceIdAsUUID,
-      entityTypesWithCounts, entityTypesWithAttrNames, timestamp).asTry.map {
-      case Success(_) => // noop
-      case Failure(ex) =>
-        logger.warn(s"failed to opportunistically update the entity statistics cache: ${ex.getMessage}. " +
-          s"The user's request was not impacted.")
-    }
+          // retrieve metadata, bypassing cache
+          calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, rootSpan)
+        } else {
+          // system and request both have cache enabled. Check for existence and staleness of cache
+          cacheStaleness(dataAccess, rootSpan).flatMap {
+            case None =>
+              // cache does not exist - return uncached
+              logger.info(s"entity statistics cache: miss (cache does not exist) [${workspaceContext.workspaceIdAsUUID}]")
+              calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, rootSpan)
+            case Some(0) =>
+              // cache is up to date - return cached
+              logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
+              calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, rootSpan)
+            case Some(stalenessSeconds) =>
+              // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
+              cacheFeatureFlags(dataAccess, rootSpan).flatMap { flags =>
+                if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
+                  rootSpan.putAttribute("alwaysCacheTypeCountsFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts))
+                  rootSpan.putAttribute("alwaysCacheAttributesFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes))
+                  logger.info(s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]")
+                } else {
+                  logger.info(s"entity statistics cache: miss (cache is out of date, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]")
+                  // and opportunistically save
+                }
+                calculateMetadataResponse(dataAccess, countsFromCache = flags.alwaysCacheTypeCounts, attributesFromCache = flags.alwaysCacheAttributes, rootSpan)
+              } // end feature-flags lookup
+          } // end staleness lookup
+        } // end if useCache/cacheEnabled check
+      } // end transaction
+    } // end root trace
   }
 
   override def createEntity(entity: Entity): Future[Entity] = {
