@@ -102,7 +102,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   "SpendReportingService" should "break down results from Google by day" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource)
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), SpendReportingAggregationKeys.Daily), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Daily)), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe "0.10" // sum of costs in defaultTable
     reportingResults.spendDetails.headOption.getOrElse(fail("daily results not parsed correctly"))
       .aggregationKey shouldBe SpendReportingAggregationKeys.Daily
@@ -114,7 +114,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(workspace1))
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(workspace2))
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), SpendReportingAggregationKeys.Workspace), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Workspace)), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe "0.10" // sum of costs in defaultTable
     val workspaceAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("workspace results not parsed correctly"))
 
@@ -233,7 +233,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(workspace2))
 
     val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), SpendReportingAggregationKeys.Workspace), Duration.Inf)
+      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Workspace)), Duration.Inf)
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
   }
