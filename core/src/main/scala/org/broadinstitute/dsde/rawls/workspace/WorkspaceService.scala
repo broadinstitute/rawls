@@ -142,7 +142,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        googleIamDao: GoogleIamDAO,
                        terraBillingProjectOwnerRole: String,
                        terraWorkspaceCanComputeRole: String)
-                      (implicit protected val executionContext: ExecutionContext) extends RoleSupport
+                      (implicit protected val executionContext: ExecutionContext, system: ActorSystem) extends RoleSupport
   with LibraryPermissionsSupport
   with FutureSupport
   with MethodWiths
@@ -2033,26 +2033,33 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] = {
-    // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
-      // billing project owner
-    // organizations/$ORG_ID/roles/terra-workspace-can-compute
-      // workspace owner
-      // workspace can-compute
+  private def updateGoogleProjectIam(googleProject: GoogleProjectId,
+                                     policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
+                                     terraBillingProjectOwnerRole: String,
+                                     terraWorkspaceCanComputeRole: String,
+                                     billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] =
+  // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
+  // billing project owner
+  // organizations/$ORG_ID/roles/terra-workspace-can-compute
+  // workspace owner
+  // workspace can-compute
 
-
-    val policyGroupsToRoles = Map(
+  // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
+  // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
+    List(
       billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole),
       policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole),
       policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole)
     )
-
-    // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
-    // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
-    policyGroupsToRoles.toList.traverse_{ case (email, roles) =>
-      googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles, retryIfGroupDoesNotExist = true)
-    }
-  }
+      .traverse_ { case (email, roles) =>
+        googleIamDao.addIamRoles(
+          GoogleProject(googleProject.value),
+          email,
+          MemberType.Group,
+          roles,
+          retryIfGroupDoesNotExist = true
+        )
+      }
 
   /**
     * Update google project with the labels and google project name to reduce the number of calls made to google so we can avoid quota issues

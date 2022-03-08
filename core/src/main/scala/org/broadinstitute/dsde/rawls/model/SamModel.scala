@@ -103,6 +103,10 @@ object SamWorkspacePolicyNames {
   val canCatalog = SamResourcePolicyName("can-catalog")
 }
 
+object SamGoogleProjectPolicyNames {
+  val owner = SamResourcePolicyName("owner")
+}
+
 object SamBillingProjectPolicyNames {
   val owner = SamResourcePolicyName("owner")
   val workspaceCreator = SamResourcePolicyName("workspace-creator")
