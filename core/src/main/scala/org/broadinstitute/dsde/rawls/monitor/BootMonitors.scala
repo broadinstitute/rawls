@@ -25,7 +25,7 @@ import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.Try
+import scala.util.{Success, Try}
 
 //noinspection ScalaUnnecessaryParentheses,ScalaUnusedSymbol,TypeAnnotation
 // handles monitors which need to be started at boot time
@@ -261,19 +261,21 @@ object BootMonitors extends LazyLogging {
     val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
     val rawlsUserInfo = UserInfo.buildFromTokens(credential)
 
-    system.spawn(
-      WorkspaceMigrationActor(
-        pollingInterval = 10.seconds,
-        dataSource,
-        googleProjectToBill = serviceProject, // todo: figure out who pays for this
-        workspaceService(rawlsUserInfo),
-        storageService,
-        storageTransferService,
-        sam,
-        rawlsUserInfo
-      ).behavior,
-      "WorkspaceMigrationActor"
-    )
+    if (Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
+      system.spawn(
+        WorkspaceMigrationActor(
+          pollingInterval = 10.seconds,
+          dataSource,
+          googleProjectToBill = serviceProject, // todo: figure out who pays for this
+          workspaceService(rawlsUserInfo),
+          storageService,
+          storageTransferService,
+          sam,
+          rawlsUserInfo
+        ).behavior,
+        "WorkspaceMigrationActor"
+      )
+    }
   }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) = {
