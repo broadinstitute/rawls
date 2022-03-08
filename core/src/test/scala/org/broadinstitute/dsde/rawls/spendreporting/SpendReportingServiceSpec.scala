@@ -31,7 +31,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     object Daily {
       val firstRowCost = 2.4
       val secondRowCost = 0.10111
-      val totalCost: BigDecimal = BigDecimal(firstRowCost + secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val firstRowCostRounded: BigDecimal = BigDecimal(firstRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val secondRowCostRounded: BigDecimal = BigDecimal(secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val totalCostRounded: BigDecimal = BigDecimal(firstRowCost + secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val firstRowDate = DateTime.now().minusDays(1)
+      val secondRowDate = DateTime.now()
       val fields: List[Field]= List(
         Field.of("cost", StandardSQLTypeName.STRING),
         Field.of("credits", StandardSQLTypeName.STRING),
@@ -42,13 +46,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
         FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$firstRowCost"), // cost
         FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
         FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}") // date
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${firstRowDate.toString}") // date
       )
       val secondRow: List[FieldValue] = List(
         FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$secondRowCost"), // cost
         FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
         FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}") // date
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${secondRowDate.toString}") // date
       )
       val fieldValues: List[FieldValueList] = List(
         FieldValueList.of(firstRow.asJava, fields:_*),
@@ -67,7 +71,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
 
       val firstRowCost = 100.582
       val secondRowCost = 0.10111
-      val totalCost: BigDecimal = BigDecimal(firstRowCost + secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val firstRowCostRounded: BigDecimal = BigDecimal(firstRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val secondRowCostRounded: BigDecimal = BigDecimal(secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val totalCostRounded: BigDecimal = BigDecimal(firstRowCost + secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val fields: List[Field] = List(
         Field.of("cost", StandardSQLTypeName.STRING),
         Field.of("credits", StandardSQLTypeName.STRING),
@@ -118,9 +124,19 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.Daily.tableResult)
 
     val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Daily)), Duration.Inf)
-    reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Daily.totalCost.toString
-    reportingResults.spendDetails.headOption.getOrElse(fail("daily results not parsed correctly"))
-      .aggregationKey shouldBe SpendReportingAggregationKeys.Daily
+    reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Daily.totalCostRounded.toString
+    val dailyAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("daily results not parsed correctly"))
+    dailyAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Daily
+
+    dailyAggregation.spendData.map { spendForDay =>
+      if (spendForDay.startTime.toLocalDate.equals(SpendReportingTestData.Daily.firstRowDate.toLocalDate)) {
+        spendForDay.cost shouldBe SpendReportingTestData.Daily.firstRowCostRounded.toString
+      } else if (spendForDay.startTime.toLocalDate.equals(SpendReportingTestData.Daily.secondRowDate.toLocalDate)) {
+        spendForDay.cost shouldBe SpendReportingTestData.Daily.secondRowCostRounded.toString
+      } else {
+        fail(s"unexpected day found in spend results - $spendForDay")
+      }
+    }
   }
 
   it should "break down results from Google by workspace" in withDefaultTestDatabase { dataSource: SlickDataSource =>
@@ -130,19 +146,31 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
 
     val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Workspace)), Duration.Inf)
-    reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Workspace.totalCost.toString
+    reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Workspace.totalCostRounded.toString
     val workspaceAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("workspace results not parsed correctly"))
 
     workspaceAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+
+    workspaceAggregation.spendData.map { spendForWorkspace =>
+      val workspaceGoogleProject = spendForWorkspace.googleProjectId.getOrElse(fail("workspace results not parsed correctly")).value
+
+      if (workspaceGoogleProject.equals(SpendReportingTestData.Workspace.workspace1.googleProjectId.value)) {
+        spendForWorkspace.cost shouldBe SpendReportingTestData.Workspace.firstRowCostRounded.toString
+      } else if (workspaceGoogleProject.equals(SpendReportingTestData.Workspace.workspace2.googleProjectId.value)) {
+        spendForWorkspace.cost shouldBe SpendReportingTestData.Workspace.secondRowCostRounded.toString
+      } else {
+        fail(s"unexpected workspace found in spend results - $spendForWorkspace")
+      }
+    }
     workspaceAggregation.spendData.headOption.getOrElse(fail("workspace results not parsed correctly")).googleProjectId shouldBe defined
     workspaceAggregation.spendData.headOption.getOrElse(fail("workspace results not parsed correctly")).workspace shouldBe defined
   }
 
   it should "return summary data only if aggregation key is omitted" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val service = createSpendReportingService(dataSource)
+    val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.Workspace.tableResult)
 
     val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), None), Duration.Inf)
-    reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Workspace.totalCost.toString
+    reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Workspace.totalCostRounded.toString
     reportingResults.spendDetails shouldBe empty
   }
 
