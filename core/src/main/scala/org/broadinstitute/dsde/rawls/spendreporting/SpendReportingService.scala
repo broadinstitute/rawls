@@ -49,7 +49,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     val currency = getCurrency(rows)
 
     val spendAggregation = aggregationKey match {
-      case Some(SpendReportingAggregationKeys.Daily) => Seq(extractDailySpendAggregation(rows, currency, startTime, endTime))
+      case Some(SpendReportingAggregationKeys.Daily) => Seq(extractDailySpendAggregation(rows, currency))
       case Some(SpendReportingAggregationKeys.Workspace) => Seq(extractWorkspaceSpendAggregation(rows, currency, startTime, endTime, workspaceProjectsToNames))
       case None => Seq.empty
     }
@@ -77,7 +77,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     )
   }
 
-  private def extractDailySpendAggregation(rows: List[FieldValueList], currency: Currency, startTime: DateTime, endTime: DateTime): SpendReportingAggregation = {
+  private def extractDailySpendAggregation(rows: List[FieldValueList], currency: Currency): SpendReportingAggregation = {
     val dailySpend = rows.map { row =>
       val rowCost = BigDecimal(row.get("cost").getDoubleValue).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
       val rowCredits = BigDecimal(row.get("credits").getDoubleValue).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
@@ -205,8 +205,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
 
   case class AggregationKeyQueryField(bigQueryFieldOpt: Option[String], aliasOpt: Option[String]) {
     def aliased(): String = (bigQueryFieldOpt, aliasOpt) match {
-      case (Some(bq), Some(key)) => s""",
-                                       |  $bq as $key""".stripMargin
+      case (Some(bq), Some(key)) => s""", $bq as $key""".stripMargin
       case _ => ""
     }
 
