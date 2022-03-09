@@ -3990,6 +3990,11 @@ paths:
           description: Query string
           schema:
             type: string
+        - name: limit
+          in: query
+          description: Maximum number of tags to return
+          schema:
+            type: integer
       responses:
         200:
           description: Successful Request

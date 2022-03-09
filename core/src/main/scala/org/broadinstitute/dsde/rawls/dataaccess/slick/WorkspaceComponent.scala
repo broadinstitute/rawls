@@ -161,8 +161,8 @@ trait WorkspaceComponent {
       }
     }
 
-    def getTags(queryString: Option[String]): ReadAction[Seq[WorkspaceTag]] = {
-      val tags = workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, queryString).result
+    def getTags(queryString: Option[String], limit: Option[Int] = None): ReadAction[Seq[WorkspaceTag]] = {
+      val tags = workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, queryString, limit).result
       tags map(_.map { rec =>
           WorkspaceTag(rec._1, rec._2)
         })

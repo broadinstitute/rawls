@@ -320,20 +320,27 @@ trait AttributeComponent {
       }
     }
 
-    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String]) = {
+    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String], limit: Option[Int] = None) = {
 
       val basicFilter = filter(rec =>
         rec.namespace === attrName.namespace &&
           rec.name === attrName.name &&
           rec.valueString.isDefined)
 
-      val res = (queryString match {
+      val baseQuery = (queryString match {
         case Some(query) => basicFilter.filter(_.valueString.like(s"%$query%"))
         case None => basicFilter
-      }).groupBy(_.valueString).map(queryThing =>
-        (queryThing._1, queryThing._2.length))
+      })
+        .groupBy(_.valueString)
+        .map(queryThing => (queryThing._1, queryThing._2.length))
+        .sortBy(r => (r._2.desc, r._1))
 
-      res.sortBy(r => (r._2.desc, r._1)).map(x => (x._1.get, x._2))
+      val res = limit match {
+        case Some(limit) => baseQuery.take(limit)
+        case None => baseQuery
+      }
+
+      res.map(x => (x._1.get, x._2))
     }
 
     def deleteAttributeRecordsById(attributeRecordIds: Seq[Long]): DBIOAction[Int, NoStream, Write] = {
