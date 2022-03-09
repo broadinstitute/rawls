@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
@@ -70,7 +69,7 @@ object WorkspaceService {
                   servicePerimeterService: ServicePerimeterService,
                   googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String)
                  (userInfo: UserInfo)
-                 (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
+                 (implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
     new WorkspaceService(userInfo, dataSource, entityManager, methodRepoDAO, cromiamDAO,
       executionServiceCluster, execServiceBatchSize, workspaceManagerDAO,
@@ -142,7 +141,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        googleIamDao: GoogleIamDAO,
                        terraBillingProjectOwnerRole: String,
                        terraWorkspaceCanComputeRole: String)
-                      (implicit protected val executionContext: ExecutionContext, system: ActorSystem) extends RoleSupport
+                      (implicit protected val executionContext: ExecutionContext) extends RoleSupport
   with LibraryPermissionsSupport
   with FutureSupport
   with MethodWiths
