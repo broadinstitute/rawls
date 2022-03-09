@@ -1529,6 +1529,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "not allow a no-access user to get a workspace by id" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspace.workspaceId}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
   // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
 
   it should "allow an project-owner-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
