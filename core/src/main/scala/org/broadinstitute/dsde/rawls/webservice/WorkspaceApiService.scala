@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import spray.json.DefaultJsonProtocol._
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 /**
@@ -70,6 +71,18 @@ trait WorkspaceApiService extends UserInfoDirectives {
           get {
             complete {
               workspaceServiceConstructor(userInfo).getTags(queryString)
+            }
+          }
+        }
+      } ~
+      path("workspaces" / Segment ) { workspaceId =>
+        get {
+          parameterSeq { allParams =>
+            traceRequest { span =>
+              complete {
+                workspaceServiceConstructor(userInfo).getWorkspaceById(workspaceId,
+                  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+              }
             }
           }
         }

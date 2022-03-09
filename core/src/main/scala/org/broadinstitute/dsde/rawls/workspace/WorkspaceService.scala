@@ -305,6 +305,26 @@ class WorkspaceService(protected val userInfo: UserInfo,
     })
   }
 
+  def getWorkspaceById(workspaceId: String, params: WorkspaceFieldSpecs, parentSpan: Span = null): Future[JsObject] = {
+    val workspaceUuid = Try(UUID.fromString(workspaceId)) match {
+      case Success(uid) => uid
+      case Failure(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "invalid UUID"))
+    }
+    // retrieve the namespace/name for this workspace and then delegate to getWorkspace(WorkspaceName).
+    // note that this id -> namespace/name lookup does not enforce security; that's enforced in getWorkspace(WorkspaceName).
+    val workspaceRecords = dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.findByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).result
+    }
+    workspaceRecords.flatMap { recsFound =>
+      if (recsFound.size == 1) {
+        val ws = recsFound.head
+        getWorkspace(WorkspaceName(ws._1, ws._2), params, parentSpan)
+      } else {
+        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceUuid)))
+      }
+    }
+  }
+
   def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
