@@ -72,7 +72,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     spendReportingConstructor(userInfo).getSpendForBillingProject(
                       RawlsBillingProjectName(projectId),
                       parsedStartDate,
-                      parsedEndDate,
+                      parsedEndDate.plusDays(1).minusMillis(1),
                       aggregationKey
                     )
                   }

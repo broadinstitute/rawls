@@ -85,7 +85,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         rowCredits.toString(),
         currency.getCurrencyCode,
         DateTime.parse(row.get("date").getStringValue),
-        DateTime.parse(row.get("date").getStringValue).plusDays(1).minusSeconds(1))
+        DateTime.parse(row.get("date").getStringValue).plusDays(1).minusMillis(1))
     }
     SpendReportingAggregation(
       SpendReportingAggregationKeys.Daily, dailySpend
