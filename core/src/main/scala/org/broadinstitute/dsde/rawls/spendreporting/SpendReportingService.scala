@@ -146,7 +146,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
 
   private def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit = {
     if (startDate.isAfter(endDate)) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"start date $startDate must be before end date $endDate"))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"start date ${dateTimeToISODateString(startDate)} must be before end date ${dateTimeToISODateString(endDate)}"))
     } else if (Days.daysBetween(startDate, endDate).getDays > spendReportingServiceConfig.maxDateRange) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"provided dates exceed maximum report date range of ${spendReportingServiceConfig.maxDateRange} days"))
     }
@@ -195,7 +195,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
           result <- bigQueryService.use(_.query(queryJobConfiguration)).unsafeToFuture()
         } yield {
           result.getValues.asScala.toList match {
-            case Nil => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"no spend data found for billing project ${billingProjectName.value} between dates $startDate and $endDate"))
+            case Nil => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"no spend data found for billing project ${billingProjectName.value} between dates ${dateTimeToISODateString(startDate)} and ${dateTimeToISODateString(endDate)}"))
             case rows => extractSpendReportingResults(rows, startDate, endDate, workspaceProjectsToNames, aggregationKey)
           }
         }
