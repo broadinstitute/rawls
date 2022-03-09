@@ -497,6 +497,15 @@ paths:
           schema:
             type: string
             format: date
+        - name: aggregationKey
+          in: query
+          description: Key indicating how to aggregate spend data in results. Will return only summary data (spendDetails is empty) if aggregationKey is not present
+          required: false
+          schema:
+            type: string
+            enum:
+              - Daily
+              - Workspace
       responses:
         200:
           description: Success
@@ -6310,12 +6319,11 @@ components:
       type: object
       properties:
         aggregationKey:
-          type: object
+          type: string
+          enum:
+            - Daily
+            - Workspace
           description: Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
-          properties:
-            key:
-              type: string
-              description: key
         spendData:
           type: array
           items:
@@ -6346,6 +6354,11 @@ components:
           type: string
           format: timestamp
           description: timestamp (UTC) marking the end of reported spend range (YYYY-MM-DDThh:mm:ss.fffZ)
+        googleProjectId:
+          type: string
+          description: if present, Google project of workspace where cost was generated
+        workspace:
+          $ref: '#/components/schemas/WorkspaceName'
     SpendReportConfiguration:
       required:
         - datasetGoogleProject
