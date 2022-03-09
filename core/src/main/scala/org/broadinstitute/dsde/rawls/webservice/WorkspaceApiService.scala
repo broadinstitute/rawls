@@ -65,6 +65,15 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
     } ~
+      path("workspaces" / "tags") {
+        parameter('q.?) { queryString =>
+          get {
+            complete {
+              workspaceServiceConstructor(userInfo).getTags(queryString)
+            }
+          }
+        }
+      } ~
       path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
@@ -207,15 +216,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
         get {
           complete {
             workspaceServiceConstructor(userInfo).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName))
-          }
-        }
-      } ~
-      path("workspaces" / "tags") {
-        parameter('q.?) { queryString =>
-          get {
-            complete {
-              workspaceServiceConstructor(userInfo).getTags(queryString)
-            }
           }
         }
       } ~
