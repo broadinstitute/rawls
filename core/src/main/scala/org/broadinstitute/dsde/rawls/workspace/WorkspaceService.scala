@@ -313,7 +313,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     // retrieve the namespace/name for this workspace and then delegate to getWorkspace(WorkspaceName).
     // note that this id -> namespace/name lookup does not enforce security; that's enforced in getWorkspace(WorkspaceName).
     val workspaceRecords = dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.findByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).result
+      dataAccess.workspaceQuery.findByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).take(1).result
     }
     workspaceRecords.flatMap { recsFound =>
       if (recsFound.size == 1) {
