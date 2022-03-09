@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationHistory._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.JobTransferSchedule
+import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
@@ -448,7 +449,21 @@ object WorkspaceMigrationActor {
               accessPolicies,
               billingProjectOwnerPolicyEmail
             )
+          } yield accessPolicies
+        }
 
+        // Now we'll update the workspace record with the new google project id.
+        // Why? Because the WorkspaceService does it in this order when creating the workspace.
+        _ <- inTransaction {
+          _.workspaceQuery
+            .filter(_.id === workspace.workspaceIdAsUUID)
+            .map(w => (w.googleProjectId, w.googleProjectNumber))
+            .update((googleProjectId.value, migration.newGoogleProjectNumber.map(_.toString)))
+        }
+
+        storageService <- MigrateAction.asks(_.storageService)
+        _ <- MigrateAction.fromFuture {
+          for {
             _ <- sam.createResourceFull(
               SamResourceTypeNames.googleProject,
               googleProjectId.value,
@@ -468,13 +483,6 @@ object WorkspaceMigrationActor {
               userInfo
             )
           } yield ()
-        }
-
-        _ <- inTransaction {
-          _.workspaceQuery
-            .filter(_.id === workspace.workspaceIdAsUUID)
-            .map(w => (w.googleProjectId, w.googleProjectNumber))
-            .update((googleProjectId.value, migration.newGoogleProjectNumber.map(_.toString)))
         }
 
         _ <- migrationFinished(migration.id, Success)
