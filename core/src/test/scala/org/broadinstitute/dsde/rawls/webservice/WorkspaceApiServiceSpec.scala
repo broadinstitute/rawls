@@ -1869,6 +1869,55 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "return the pending workspace file transfers for a recently cloned workspace" in withTestDataApiServices { services =>
+    val clonedWorkspaceName = WorkspaceName(testData.workspace.namespace, "test_copy")
+    val workspaceCopy = WorkspaceRequest(clonedWorkspaceName.namespace, clonedWorkspaceName.name, Map.empty, None, Some("/notebooks"), None, None)
+
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    val clonedWorkspace = runAndWait(workspaceQuery.findByName(clonedWorkspaceName)).get
+
+    Get(s"${clonedWorkspaceName.path}/fileTransfers") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Seq(PendingCloneWorkspaceFileTransfer(clonedWorkspace.workspaceIdAsUUID, testData.workspace.bucketName, clonedWorkspace.bucketName, workspaceCopy.copyFilesWithPrefix.get, clonedWorkspace.googleProjectId))) {
+          responseAs[Seq[PendingCloneWorkspaceFileTransfer]]
+        }
+      }
+  }
+
+  it should "return no pending workspace file transfers for a workspace that already exists" in withTestDataApiServices { services =>
+    Get(s"${testData.workspace.path}/fileTransfers") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Seq.empty) {
+          responseAs[Seq[PendingCloneWorkspaceFileTransfer]]
+        }
+      }
+  }
+
+  it should "require at least reader access on the workspace to query for active file transfers" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Get(s"${testWorkspaces.workspace.path}/fileTransfers") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
   it should "prevent user without compute permission from creating submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     testCreateSubmission(dataSource, userWriterNoCompute, StatusCodes.Forbidden)
   }
