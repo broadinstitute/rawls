@@ -264,6 +264,7 @@ object BootMonitors extends LazyLogging {
     if (Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
       system.spawn(
         WorkspaceMigrationActor(
+          // todo: Move `pollingInterval` into config [CA-1807]
           pollingInterval = 10.seconds,
           dataSource,
           googleProjectToBill = serviceProject, // todo: figure out who pays for this

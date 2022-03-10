@@ -472,6 +472,8 @@ object WorkspaceMigrationActor {
               Some(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
             )
 
+            // todo: update workspace bucket IAM policies [CA-1805]
+
             // The google project resource was created in sam with the actor's `userInfo`. We need
             // to remove that from set of owners.
             _ <- samDao.removeUserFromPolicy(
@@ -497,6 +499,29 @@ object WorkspaceMigrationActor {
                                      destBucketName: GcsBucketName)
   : MigrateAction[Unit] =
     MigrateAction { env =>
+
+      def pollForBucketToBeCreated(interval: FiniteDuration, deadline: Deadline): IO[Unit] =
+        IO.sleep(interval).whileM_ {
+          for {
+            _ <- IO.raiseWhen(deadline.isOverdue()) {
+              WorkspaceMigrationException(
+                message = "Workspace migration failed: timed out waiting for bucket creation",
+                data = Map(
+                  "migrationId" -> migration.id,
+                  "workspace" -> workspace.toWorkspaceName,
+                  "googleProject" -> destGoogleProject,
+                  "bucketName" -> destBucketName
+                )
+              )
+            }
+            bucket <- env.storageService.getBucket(
+              destGoogleProject,
+              destBucketName,
+              List(BucketGetOption.userProject(env.googleProjectToBill.value))
+            )
+          } yield bucket.isEmpty
+        }
+
       OptionT.liftF {
         for {
           sourceBucketOpt <- env.storageService.getBucket(
@@ -529,27 +554,7 @@ object WorkspaceMigrationActor {
           ).compile.drain
 
           // Poll for bucket to be created
-          deadline = 10.seconds.fromNow
-          _ <- IO.sleep(100.milliseconds).whileM_ {
-            for {
-              _ <- IO.raiseWhen(deadline.isOverdue()) {
-                WorkspaceMigrationException(
-                  message = "Workspace migration failed: timed out waiting for bucket creation",
-                  data = Map(
-                    "migrationId" -> migration.id,
-                    "workspace" -> workspace.toWorkspaceName,
-                    "googleProject" -> destGoogleProject,
-                    "bucketName" -> destBucketName
-                  )
-                )
-              }
-              bucket <- env.storageService.getBucket(
-                destGoogleProject,
-                destBucketName,
-                List(BucketGetOption.userProject(env.googleProjectToBill.value))
-              )
-            } yield bucket.isEmpty
-          }
+          _ <- pollForBucketToBeCreated(interval = 100.milliseconds, deadline = 10.seconds.fromNow)
         } yield ()
       }
     }

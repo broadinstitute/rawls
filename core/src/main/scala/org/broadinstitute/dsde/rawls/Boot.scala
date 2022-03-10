@@ -543,10 +543,15 @@ object Boot extends IOApp with LazyLogging {
   def initAppDependencies[F[_]: Logger: Async](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
+
+    // todo: load these credentials once [CA-1806]
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
     val jsonFileSource = scala.io.Source.fromFile(pathToCredentialJson)
     val jsonCreds = try jsonFileSource.mkString finally jsonFileSource.close()
-    val saCredentials = ServiceAccountCredentials.fromStream(new ByteArrayInputStream(jsonCreds.getBytes(StandardCharsets.UTF_8)))
+    val saCredentials = ServiceAccountCredentials.fromStream(
+      new ByteArrayInputStream(jsonCreds.getBytes(StandardCharsets.UTF_8))
+    )
+
     val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
     val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
