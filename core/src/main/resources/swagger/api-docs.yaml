@@ -3239,7 +3239,7 @@ paths:
       tags:
         - workspaces
       summary: List pending file transfers for this workspace
-      description: List pending file transfers for thsi workspace
+      description: List pending file transfers for this workspace
       operationId: listPendingFileTransfers
       parameters:
         - name: workspaceNamespace
