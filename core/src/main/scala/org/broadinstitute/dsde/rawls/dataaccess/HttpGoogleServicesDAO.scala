@@ -726,10 +726,11 @@ class HttpGoogleServicesDAO(
             case None => ""
           }))
 
-          val result = executeGoogleRequest(updater)
-
-          span.end()
-          result
+          try {
+            executeGoogleRequest(updater)
+          } finally {
+            span.end()
+          }
         }
       }) {
         case e: GoogleJsonResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue =>
