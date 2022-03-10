@@ -400,7 +400,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   // get-workspace-by-id delegates to get-workspace-by-name, so we test its option handling briefly, enough
   // to know we are passing the WorkspaceFieldSpecs along.
   it should "include multiple keys simultaneously when getting a workspace by id" in withTestWorkspacesApiServices { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.workspaceId}" + "?fields=canShare,workspace.attributes,accessLevel") ~>
+    Get(s"/workspaces/id/${testWorkspaces.workspace.workspaceId}" + "?fields=canShare,workspace.attributes,accessLevel") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
