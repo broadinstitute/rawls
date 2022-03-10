@@ -3234,6 +3234,31 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/fileTransfers:
+    get:
+      tags:
+        - workspaces
+      summary: List pending file transfers for this workspace
+      description: List pending file transfers for thsi workspace
+      operationId: listPendingFileTransfers
+      parameters:
+        - name: workspaceNamespace
+          in: path
+          description: Workspace Namespace
+          required: true
+          schema:
+            type: string
+        - name: workspaceName
+          in: path
+          description: Workspace Name
+          required: true
+          schema:
+            type: string
+      responses:
+        204:
+          description: Successful Request
+          content: {}
+
   /api/workspaces/{workspaceNamespace}/{workspaceName}/lock:
     put:
       tags:
