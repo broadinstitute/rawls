@@ -192,7 +192,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "fileTransfers") { (workspaceNamespace, workspaceName) =>
         get {
           complete {
-            workspaceServiceConstructor(userInfo).listPendingFileTransfersForWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(x => StatusCodes.OK -> x)
+            workspaceServiceConstructor(userInfo).listPendingFileTransfersForWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(pendingTransfers => StatusCodes.OK -> pendingTransfers)
           }
         }
       } ~
