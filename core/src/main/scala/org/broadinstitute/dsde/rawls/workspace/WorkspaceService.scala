@@ -759,7 +759,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   def listPendingFileTransfersForWorkspace(workspaceName: WorkspaceName): Future[Seq[PendingCloneWorkspaceFileTransfer]] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfersForWorkspaceId(workspaceContext.workspaceIdAsUUID)
+        dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers(Option(workspaceContext.workspaceIdAsUUID))
       }
     }
   }
