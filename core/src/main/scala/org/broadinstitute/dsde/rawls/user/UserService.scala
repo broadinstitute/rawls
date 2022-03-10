@@ -367,10 +367,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   private def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName, userInfoForSam: UserInfo, deleteGoogleProjectWithGoogle: Boolean = true) = {
-    def googleProjectExists(projectId: GoogleProjectId) =
+    def rawlsCreatedGoogleProjectExists(projectId: GoogleProjectId) =
       gcsDAO.getGoogleProject(projectId) transform {
         case Success(_) => Success(true)
-        case Failure(e: HttpResponseException) if e.getStatusCode == 404 => Success(false)
+        case Failure(e: HttpResponseException) if e.getStatusCode == 404 || e.getStatusCode == 403 => Success(false) //Either the Google project doesn't exist, or we don't have access to it because Rawls didn't create it.
         case Failure(t) => Failure(t)
       }
 
@@ -386,7 +386,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, userInfoForSam) flatMap { resourceChildren =>
       F.whenA(resourceChildren contains SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.googleProject.value))(
         for {
-          _ <- googleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit)
+          _ <- rawlsCreatedGoogleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit)
           _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, userInfoForSam)
         } yield ()
       )

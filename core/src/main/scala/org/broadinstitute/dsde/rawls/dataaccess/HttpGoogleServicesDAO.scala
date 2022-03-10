@@ -907,7 +907,8 @@ class HttpGoogleServicesDAO(
   override def getGoogleProject(googleProject: GoogleProjectId): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
     val cloudResManager = getCloudResourceManagerWithBillingServiceAccountCredential
-    retryExponentially(when500orNon404GoogleError)(() =>
+    val statusCodesExcludedFromRetry: Set[StatusCode] = Set(StatusCodes.NotFound, StatusCodes.Forbidden)
+    retryExponentially(throwable => when500orGoogleError(throwable) || whenGoogleStatusDoesntContain(throwable, statusCodesExcludedFromRetry))(() =>
       Future(blocking(executeGoogleRequest(cloudResManager.projects().get(googleProject.value))))
     )
   }
@@ -1367,7 +1368,7 @@ class HttpGoogleServicesDAO(
     val credential = getBillingServiceAccountCredential
     credential.refreshToken()
 
-    retryExponentially(when500orGoogleError)( () => {
+    retryExponentially(when500or400orGoogleError)(() => {
       new CloudResourceManagerV2DAO().getFolderId(folderName, OAuth2BearerToken(credential.getAccessToken))
     })
   }

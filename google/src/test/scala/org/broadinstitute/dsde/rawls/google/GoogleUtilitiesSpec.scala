@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.google
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.testkit.TestKit
 import com.google.api.client.googleapis.json.GoogleJsonError.ErrorInfo
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
@@ -70,11 +71,44 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
     }
   }
 
+  "when500or400orGoogleError" should "return true for 500 or Google errors" in {
+    when500or400orGoogleError(buildGoogleJsonResponseException(403)) shouldBe true
+    when500or400orGoogleError(buildGoogleJsonResponseException(429)) shouldBe true
+    when500or400orGoogleError(buildGoogleJsonResponseException(400)) shouldBe true
+    when500or400orGoogleError(buildGoogleJsonResponseException(404)) shouldBe true
+
+    when500or400orGoogleError(buildGoogleJsonResponseException(500)) shouldBe true
+    when500or400orGoogleError(buildGoogleJsonResponseException(502)) shouldBe true
+    when500or400orGoogleError(buildGoogleJsonResponseException(503)) shouldBe true
+
+    when500or400orGoogleError(buildHttpResponseException(500)) shouldBe true
+    when500or400orGoogleError(buildHttpResponseException(502)) shouldBe true
+    when500or400orGoogleError(buildHttpResponseException(503)) shouldBe true
+
+    when500or400orGoogleError(new IOException("boom")) shouldBe true
+  }
+
+  "when500orNon404GoogleError" should "return true for 500 or Google errors except 404s" in {
+    when500orNon404GoogleError(buildGoogleJsonResponseException(400)) shouldBe true
+    when500orNon404GoogleError(buildGoogleJsonResponseException(404)) shouldBe false
+    when500orNon404GoogleError(buildGoogleJsonResponseException(500)) shouldBe true
+    when500orNon404GoogleError(buildHttpResponseException(500)) shouldBe true
+    when500orNon404GoogleError(new IOException("boom")) shouldBe true
+  }
+
+  "whenStatusDoesntContain" should "return false for the specified Google status codes" in {
+    whenGoogleStatusDoesntContain(buildGoogleJsonResponseException(400), Set(StatusCodes.NotFound)) shouldBe true
+    whenGoogleStatusDoesntContain(buildGoogleJsonResponseException(404), Set(StatusCodes.NotFound)) shouldBe false
+    whenGoogleStatusDoesntContain(buildGoogleJsonResponseException(418), Set(StatusCodes.NotFound, StatusCodes.ImATeapot)) shouldBe false
+    whenGoogleStatusDoesntContain(buildHttpResponseException(500), Set(StatusCodes.Forbidden, StatusCodes.EnhanceYourCalm)) shouldBe true
+    whenGoogleStatusDoesntContain(new IOException("boom"), Set(StatusCodes.PreconditionFailed, StatusCodes.NotImplemented)) shouldBe true
+  }
+
   "when500orGoogleError" should "return true for 500 or Google errors" in {
-    when500orGoogleError(buildGoogleJsonResponseException(403)) shouldBe true
-    when500orGoogleError(buildGoogleJsonResponseException(429)) shouldBe true
-    when500orGoogleError(buildGoogleJsonResponseException(400)) shouldBe true
-    when500orGoogleError(buildGoogleJsonResponseException(404)) shouldBe true
+    when500orGoogleError(buildGoogleJsonResponseException(403)) shouldBe false
+    when500orGoogleError(buildGoogleJsonResponseException(429)) shouldBe false
+    when500orGoogleError(buildGoogleJsonResponseException(400)) shouldBe false
+    when500orGoogleError(buildGoogleJsonResponseException(404)) shouldBe false
 
     when500orGoogleError(buildGoogleJsonResponseException(500)) shouldBe true
     when500orGoogleError(buildGoogleJsonResponseException(502)) shouldBe true
@@ -85,14 +119,6 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
     when500orGoogleError(buildHttpResponseException(503)) shouldBe true
 
     when500orGoogleError(new IOException("boom")) shouldBe true
-  }
-
-  "when500orNon404GoogleError" should "return true for 500 or Google errors except 404s" in {
-    when500orNon404GoogleError(buildGoogleJsonResponseException(400)) shouldBe true
-    when500orNon404GoogleError(buildGoogleJsonResponseException(404)) shouldBe false
-    when500orNon404GoogleError(buildGoogleJsonResponseException(500)) shouldBe true
-    when500orNon404GoogleError(buildHttpResponseException(500)) shouldBe true
-    when500orNon404GoogleError(new IOException("boom")) shouldBe true
   }
 
   "retryWhen500orGoogleError" should "retry once per backoff interval and then fail" in {
