@@ -5979,7 +5979,7 @@ components:
           description: "The name of the bucket that the files will be copied to"
         copyFilesWithPrefix:
           type: string
-          description: "The file prefix that was supplied when the transfer was initiated"
+          description: "The file prefix indicating which files to copy to the destination workspace"
         destWorkspaceGoogleProjectId:
           type: string
           description: "The Google project that the destination workspace belongs to"

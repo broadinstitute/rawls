@@ -1871,7 +1871,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return the pending workspace file transfers for a recently cloned workspace" in withTestDataApiServices { services =>
     val clonedWorkspaceName = WorkspaceName(testData.workspace.namespace, "test_copy")
-    val workspaceCopy = WorkspaceRequest(clonedWorkspaceName.namespace, clonedWorkspaceName.name, Map.empty, None, Some("/notebooks"), None, None)
+    val workspaceCopy = WorkspaceRequest(
+      namespace = clonedWorkspaceName.namespace,
+      name = clonedWorkspaceName.name,
+      attributes = Map.empty,
+      authorizationDomain = None,
+      copyFilesWithPrefix = Some("/notebooks"),
+      noWorkspaceOwner = None,
+      bucketLocation = None
+    )
 
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -1881,7 +1889,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val clonedWorkspace = runAndWait(workspaceQuery.findByName(clonedWorkspaceName)).get
+    val clonedWorkspaceResult = runAndWait(workspaceQuery.findByName(clonedWorkspaceName)).get
+    val expected = Seq(
+      PendingCloneWorkspaceFileTransfer(
+        clonedWorkspaceResult.workspaceIdAsUUID,
+        testData.workspace.bucketName,
+        clonedWorkspaceResult.bucketName,
+        workspaceCopy.copyFilesWithPrefix.get,
+        clonedWorkspaceResult.googleProjectId
+      )
+    )
 
     Get(s"${clonedWorkspaceName.path}/fileTransfers") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -1889,7 +1906,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(Seq(PendingCloneWorkspaceFileTransfer(clonedWorkspace.workspaceIdAsUUID, testData.workspace.bucketName, clonedWorkspace.bucketName, workspaceCopy.copyFilesWithPrefix.get, clonedWorkspace.googleProjectId))) {
+        assertResult(expected) {
           responseAs[Seq[PendingCloneWorkspaceFileTransfer]]
         }
       }
