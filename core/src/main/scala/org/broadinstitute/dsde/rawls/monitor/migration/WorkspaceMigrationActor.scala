@@ -86,7 +86,7 @@ object WorkspaceMigrationActor {
                                  workspaceService: WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO],
-                                 sam: SamDAO,
+                                 samDao: SamDAO,
                                  userInfo: UserInfo)
 
 
@@ -417,8 +417,8 @@ object WorkspaceMigrationActor {
   final def restoreIamPoliciesAndUpdateWorkspaceRecord: MigrateAction[Unit] =
     withMigration(_.tmpBucketDeleted.isDefined) { (migration, workspace) =>
       for {
-        (workspaceService, sam, userInfo) <- MigrateAction.asks { env =>
-          (env.workspaceService, env.sam, env.userInfo)
+        (workspaceService, samDao, userInfo) <- MigrateAction.asks { env =>
+          (env.workspaceService, env.samDao, env.userInfo)
         }
 
         googleProjectId = migration.newGoogleProjectId.getOrElse(
@@ -427,7 +427,7 @@ object WorkspaceMigrationActor {
 
         _ <- MigrateAction.fromFuture {
           for {
-            accessPolicies <- sam
+            accessPolicies <- samDao
               .listPoliciesForResource(
                 SamResourceTypeNames.workspace,
                 workspace.workspaceId,
@@ -461,10 +461,9 @@ object WorkspaceMigrationActor {
             .update((googleProjectId.value, migration.newGoogleProjectNumber.map(_.toString)))
         }
 
-        storageService <- MigrateAction.asks(_.storageService)
         _ <- MigrateAction.fromFuture {
           for {
-            _ <- sam.createResourceFull(
+            _ <- samDao.createResourceFull(
               SamResourceTypeNames.googleProject,
               googleProjectId.value,
               Map.empty,
@@ -475,7 +474,7 @@ object WorkspaceMigrationActor {
 
             // The google project resource was created in sam with the actor's `userInfo`. We need
             // to remove that from set of owners.
-            _ <- sam.removeUserFromPolicy(
+            _ <- samDao.removeUserFromPolicy(
               SamResourceTypeNames.googleProject,
               googleProjectId.value,
               SamGoogleProjectPolicyNames.owner,
@@ -837,7 +836,7 @@ object WorkspaceMigrationActor {
             workspaceService: WorkspaceService,
             storageService: GoogleStorageService[IO],
             storageTransferService: GoogleStorageTransferService[IO],
-            sam: SamDAO,
+            samDao: SamDAO,
             userInfoForActor: UserInfo)
   : Behavior[Message] =
     Behaviors.setup { context =>
@@ -852,7 +851,7 @@ object WorkspaceMigrationActor {
                 workspaceService,
                 storageService,
                 storageTransferService,
-                sam,
+                samDao,
                 userInfoForActor
               )
             )

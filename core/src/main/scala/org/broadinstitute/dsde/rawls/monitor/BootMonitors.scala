@@ -257,7 +257,7 @@ object BootMonitors extends LazyLogging {
                                            workspaceService: UserInfo => WorkspaceService,
                                            storageService: GoogleStorageService[IO],
                                            storageTransferService: GoogleStorageTransferService[IO],
-                                           sam: SamDAO) = {
+                                           samDao: SamDAO) = {
     val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
     val rawlsUserInfo = UserInfo.buildFromTokens(credential)
 
@@ -270,7 +270,7 @@ object BootMonitors extends LazyLogging {
           workspaceService(rawlsUserInfo),
           storageService,
           storageTransferService,
-          sam,
+          samDao,
           rawlsUserInfo
         ).behavior,
         "WorkspaceMigrationActor"
