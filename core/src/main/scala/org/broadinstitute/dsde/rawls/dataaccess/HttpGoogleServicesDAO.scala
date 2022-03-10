@@ -16,7 +16,7 @@ import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import com.google.api.client.http.{HttpResponseException, InputStreamContent}
+import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
@@ -133,6 +133,7 @@ class HttpGoogleServicesDAO(
   implicit val log4CatsLogger = Slf4jLogger.getLogger[IO]
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
+  val cloudBillingInfoReadTimeout = 40 * 1000 // socket read timeout when updating billing info
 
   // modify these if we need more granular access in the future
   val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
@@ -1169,7 +1170,19 @@ class HttpGoogleServicesDAO(
   }
 
   def getCloudBillingManager(credential: Credential): Cloudbilling = {
-    new Cloudbilling.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+    def setReadTimeout(requestInitializer: HttpRequestInitializer) =
+      new HttpRequestInitializer {
+        override def initialize(request: HttpRequest): Unit = {
+          requestInitializer.initialize(request)
+          request.setReadTimeout(cloudBillingInfoReadTimeout)
+        }
+      }
+
+    new Cloudbilling.Builder(
+      httpTransport,
+      jsonFactory,
+      setReadTimeout(credential))
+      .setApplicationName(appName).build()
   }
 
   def getServicesManager(credential: Credential): ServiceManagement = {
