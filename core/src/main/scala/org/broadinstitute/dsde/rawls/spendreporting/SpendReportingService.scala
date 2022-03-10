@@ -51,6 +51,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     val spendAggregation = aggregationKey match {
       case Some(SpendReportingAggregationKeys.Daily) => Seq(extractDailySpendAggregation(rows, currency))
       case Some(SpendReportingAggregationKeys.Workspace) => Seq(extractWorkspaceSpendAggregation(rows, currency, startTime, endTime, workspaceProjectsToNames))
+      case Some(SpendReportingAggregationKeys.Category) => Seq(extractCategorySpendAggregation(rows, currency, startTime, endTime))
       case None => Seq.empty
     }
     val spendSummary = extractSpendSummary(rows, currency, startTime, endTime)
@@ -69,11 +70,29 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         currency.getCurrencyCode,
         startTime,
         endTime,
-        Option(rowWorkspaceName),
-        Option(rowGoogleProjectId))
+        workspace = Option(rowWorkspaceName),
+        googleProjectId = Option(rowGoogleProjectId))
     }
     SpendReportingAggregation(
       SpendReportingAggregationKeys.Workspace, workspaceSpend
+    )
+  }
+
+  private def extractCategorySpendAggregation(rows: List[FieldValueList], currency: Currency, startTime: DateTime, endTime: DateTime): SpendReportingAggregation = {
+    val categorySpend = rows.map { row =>
+      val rowCost = BigDecimal(row.get("cost").getDoubleValue).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+      val rowCredits = BigDecimal(row.get("credits").getDoubleValue).setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+      val rowService = TerraSpendCategories.categorize(row.get("service").getStringValue)
+
+      SpendReportingForDateRange(rowCost.toString(),
+        rowCredits.toString(),
+        currency.getCurrencyCode,
+        startTime,
+        endTime,
+        service = Option(rowService))
+    }
+    SpendReportingAggregation(
+      SpendReportingAggregationKeys.Category, categorySpend
     )
   }
 
@@ -219,6 +238,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     val aggregationKeyQueryField = aggregationKey match {
       case Some(SpendReportingAggregationKeys.Daily) => AggregationKeyQueryField(Option("DATE(_PARTITIONTIME)"), Option("date"))
       case Some(SpendReportingAggregationKeys.Workspace) => AggregationKeyQueryField(Option("project.id"), Option("googleProjectId"))
+      case Some(SpendReportingAggregationKeys.Category) => AggregationKeyQueryField(Option("service.description"), Option("service"))
       case None => AggregationKeyQueryField(None, None)
     }
 

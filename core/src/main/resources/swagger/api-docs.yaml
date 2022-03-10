@@ -506,6 +506,7 @@ paths:
             enum:
               - Daily
               - Workspace
+              - Category
       responses:
         200:
           description: Success
@@ -6323,6 +6324,7 @@ components:
           enum:
             - Daily
             - Workspace
+            - Category
           description: Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
         spendData:
           type: array
@@ -6359,6 +6361,25 @@ components:
           description: if present, Google project of workspace where cost was generated
         workspace:
           $ref: '#/components/schemas/WorkspaceName'
+        service:
+          $ref: '#/components/schemas/CategorizedGCPService'
+    CategorizedGCPService:
+      required:
+        - name
+        - category
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of GCP service
+        category:
+          type: string
+          enum:
+            - Storage
+            - Compute
+            - Other
+          description: Category that this service falls into
+      description: Present only when 'Category' is an aggregation key
     SpendReportConfiguration:
       required:
         - datasetGoogleProject
