@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 trait WorkspaceSupport {
@@ -153,5 +154,6 @@ trait WorkspaceSupport {
   }
 
   def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist or you do not have permission to use it"
+  def noSuchWorkspaceMessage(workspaceId: UUID) = s"workspace ${workspaceId} does not exist or you do not have permission to use it"
   def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 }

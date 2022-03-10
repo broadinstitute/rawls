@@ -485,6 +485,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "get a workspace by id" in withTestWorkspacesApiServices { services =>
+    Get(s"/workspaces/id/${testWorkspaces.workspace.workspaceId}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val dateTime = currentTime()
+        assertResult(
+          WorkspaceResponse(Option(WorkspaceAccessLevels.Owner), Option(true), Option(true), Option(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), Option(WorkspaceBucketOptions(false)), Option(Set.empty))
+        ){
+          val response = responseAs[WorkspaceResponse]
+          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)
+        }
+      }
+  }
+
   // see also WorkspaceApiGetOptionsSpec for additional tests related to get-workspace
 
   it should "return 404 getting a non-existent workspace" in withTestDataApiServices { services =>
@@ -492,6 +509,26 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 getting a non-existent workspace by id" in withTestDataApiServices { services =>
+    Get(s"/workspaces/id/${UUID.randomUUID()}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 getting a workspace by id with an invalid UUID" in withTestDataApiServices { services =>
+    Get("/workspaces/id/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
           status
         }
       }
@@ -1484,6 +1521,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow a no-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
     Get(testWorkspaces.workspace.path) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "not allow a no-access user to get a workspace by id" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Get(s"/workspaces/id/${testWorkspaces.workspace.workspaceId}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {

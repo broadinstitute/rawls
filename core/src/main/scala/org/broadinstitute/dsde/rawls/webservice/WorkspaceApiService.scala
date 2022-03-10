@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.webservice.CustomDirectives._
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import spray.json.DefaultJsonProtocol._
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 /**
@@ -65,7 +66,35 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
     } ~
+      path("workspaces" / "tags") {
+        parameter('q.?) { queryString =>
+          get {
+            complete {
+              workspaceServiceConstructor(userInfo).getTags(queryString)
+            }
+          }
+        }
+      } ~
+      path("workspaces" / "id" / Segment ) { workspaceId =>
+        get {
+          parameterSeq { allParams =>
+            traceRequest { span =>
+              complete {
+                workspaceServiceConstructor(userInfo).getWorkspaceById(workspaceId,
+                  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+              }
+            }
+          }
+        }
+      } ~
       path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
+        /* we enforce a 6-character minimum for workspaceNamespace, as part of billing project creation.
+           the previous "mc", "tags", and "id" paths rely on this convention to avoid path-matching conflicts.
+           we might want to change the first Segment above to a regex a la """[^/.]{6,}""".r
+           but note that would be a behavior change: if a user entered fewer than 6 chars it would result in an
+           unmatched path rejection instead of the custom error handling inside WorkspaceService.
+        */
+
         patch {
           entity(as[Array[AttributeUpdateOperation]]) { operations =>
             complete {
@@ -207,15 +236,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
         get {
           complete {
             workspaceServiceConstructor(userInfo).getBucketUsage(WorkspaceName(workspaceNamespace, workspaceName))
-          }
-        }
-      } ~
-      path("workspaces" / "tags") {
-        parameter('q.?) { queryString =>
-          get {
-            complete {
-              workspaceServiceConstructor(userInfo).getTags(queryString)
-            }
           }
         }
       } ~
