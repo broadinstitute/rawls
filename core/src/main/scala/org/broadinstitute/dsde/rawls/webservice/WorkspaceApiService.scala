@@ -67,10 +67,10 @@ trait WorkspaceApiService extends UserInfoDirectives {
         }
     } ~
       path("workspaces" / "tags") {
-        parameter('q.?) { queryString =>
+        parameters('q.?, "limit".as[Int].optional) { (queryString, limit) =>
           get {
             complete {
-              workspaceServiceConstructor(userInfo).getTags(queryString)
+              workspaceServiceConstructor(userInfo).getTags(queryString, limit)
             }
           }
         }

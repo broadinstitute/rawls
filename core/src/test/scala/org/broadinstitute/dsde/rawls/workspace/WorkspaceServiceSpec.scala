@@ -825,15 +825,21 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       res6
     }
 
+    // setting a limit should limit the number of tags returned
+    val res7 = Await.result(services.workspaceService.getTags(None, Some(2)), Duration.Inf)
+    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("buffalo", 1))) {
+      res7
+    }
+
     // remove tags
     Await.result(services.workspaceService.updateWorkspace(testData.wsName, Seq(RemoveAttribute(AttributeName.withTagsNS))), Duration.Inf)
     Await.result(services.workspaceService.updateWorkspace(testData.wsName7, Seq(RemoveAttribute(AttributeName.withTagsNS))), Duration.Inf)
 
 
     // make sure that tags no longer exists
-    val res7 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
+    val res8 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
     assertResult(Vector.empty[WorkspaceTag]) {
-      res7
+      res8
     }
 
   }

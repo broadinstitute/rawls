@@ -518,6 +518,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertResult(Vector(("cancer", 2), ("buffalo", 1), ("cantaloupe", 1))) {
       runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, None).result)
     }
+    assertResult(Vector(("cancer", 2), ("buffalo", 1))) {
+      runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, None, Some(2)).result)
+    }
     assertResult(Vector(("cant", 1))) {
       runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withDefaultNS("testString"), Some("can")).result)
     }

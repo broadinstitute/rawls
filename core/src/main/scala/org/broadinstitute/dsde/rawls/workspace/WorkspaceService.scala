@@ -597,9 +597,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def getTags(query: Option[String]): Future[Seq[WorkspaceTag]] =
+  def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.getTags(query)
+      dataAccess.workspaceQuery.getTags(query, limit)
     }
 
   def listWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span): Future[JsValue] = {
