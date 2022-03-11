@@ -997,6 +997,8 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceResponseFormat = jsonFormat8(WorkspaceResponse)
 
+  implicit val PendingCloneWorkspaceFileTransferFormat = jsonFormat5(PendingCloneWorkspaceFileTransfer)
+
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
   implicit val ValidatedMethodConfigurationFormat = jsonFormat7(ValidatedMethodConfiguration)

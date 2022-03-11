@@ -3243,6 +3243,41 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/fileTransfers:
+    get:
+      tags:
+        - workspaces
+      summary: List incoming file transfers that are pending for this workspace
+      description: List incoming file transfers that are pending for this workspace
+      operationId: listPendingFileTransfers
+      parameters:
+        - name: workspaceNamespace
+          in: path
+          description: Workspace Namespace
+          required: true
+          schema:
+            type: string
+        - name: workspaceName
+          in: path
+          description: Workspace Name
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingCloneWorkspaceFileTransfer'
+        404:
+          description: Workspace Not Found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/lock:
     put:
       tags:
@@ -5994,6 +6029,24 @@ components:
           type: integer
           description: The current storage bucket usage in bytes
       description: ""
+    PendingCloneWorkspaceFileTransfer:
+      type: object
+      properties:
+        destWorkspaceId:
+          type: string
+          description: "The ID of the workspace that the files will be copied to"
+        sourceWorkspaceBucketName:
+          type: string
+          description: "The name of the bucket that the files will be copied from"
+        destWorkspaceBucketName:
+          type: string
+          description: "The name of the bucket that the files will be copied to"
+        copyFilesWithPrefix:
+          type: string
+          description: "The file prefix indicating which files to copy to the destination workspace"
+        destWorkspaceGoogleProjectId:
+          type: string
+          description: "The Google project that the destination workspace belongs to"
     Attribute:
       type: object
       properties:

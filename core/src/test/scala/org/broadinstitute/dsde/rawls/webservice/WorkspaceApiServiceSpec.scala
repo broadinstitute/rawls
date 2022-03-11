@@ -1916,6 +1916,72 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "return the pending workspace file transfers for a recently cloned workspace" in withTestDataApiServices { services =>
+    val clonedWorkspaceName = WorkspaceName(testData.workspace.namespace, "test_copy")
+    val workspaceCopy = WorkspaceRequest(
+      namespace = clonedWorkspaceName.namespace,
+      name = clonedWorkspaceName.name,
+      attributes = Map.empty,
+      authorizationDomain = None,
+      copyFilesWithPrefix = Some("/notebooks"),
+      noWorkspaceOwner = None,
+      bucketLocation = None
+    )
+
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    val clonedWorkspaceResult = runAndWait(workspaceQuery.findByName(clonedWorkspaceName)).get
+    val expected = Seq(
+      PendingCloneWorkspaceFileTransfer(
+        clonedWorkspaceResult.workspaceIdAsUUID,
+        testData.workspace.bucketName,
+        clonedWorkspaceResult.bucketName,
+        workspaceCopy.copyFilesWithPrefix.get,
+        clonedWorkspaceResult.googleProjectId
+      )
+    )
+
+    Get(s"${clonedWorkspaceName.path}/fileTransfers") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(expected) {
+          responseAs[Seq[PendingCloneWorkspaceFileTransfer]]
+        }
+      }
+  }
+
+  it should "return no pending workspace file transfers for a workspace that already exists" in withTestDataApiServices { services =>
+    Get(s"${testData.workspace.path}/fileTransfers") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Seq.empty) {
+          responseAs[Seq[PendingCloneWorkspaceFileTransfer]]
+        }
+      }
+  }
+
+  it should "require at least reader access on the workspace to query for active file transfers" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Get(s"${testWorkspaces.workspace.path}/fileTransfers") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
   it should "prevent user without compute permission from creating submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     testCreateSubmission(dataSource, userWriterNoCompute, StatusCodes.Forbidden)
   }

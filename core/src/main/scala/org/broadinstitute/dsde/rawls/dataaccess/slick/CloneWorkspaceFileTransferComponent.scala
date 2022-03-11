@@ -35,9 +35,11 @@ trait CloneWorkspaceFileTransferComponent {
       }
     }
 
-    def listPendingTransfers(): ReadAction[Seq[PendingCloneWorkspaceFileTransfer]] = {
+    def listPendingTransfers(workspaceId: Option[UUID] = None): ReadAction[Seq[PendingCloneWorkspaceFileTransfer]] = {
       val query = for {
-        fileTransfer <- cloneWorkspaceFileTransferQuery
+        fileTransfer <- cloneWorkspaceFileTransferQuery.filterOpt(workspaceId) { case (table, workspaceId) =>
+                          table.destWorkspaceId === workspaceId
+                        }
         sourceWorkspace <- workspaceQuery if sourceWorkspace.id === fileTransfer.sourceWorkspaceId
         destWorkspace <- workspaceQuery if destWorkspace.id === fileTransfer.destWorkspaceId
       } yield (destWorkspace.id, sourceWorkspace.bucketName, destWorkspace.bucketName, fileTransfer.copyFilesWithPrefix, destWorkspace.googleProjectId)
