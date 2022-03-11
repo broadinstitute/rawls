@@ -3238,8 +3238,8 @@ paths:
     get:
       tags:
         - workspaces
-      summary: List pending file transfers for this workspace
-      description: List pending file transfers for this workspace
+      summary: List incoming file transfers that are pending for this workspace
+      description: List incoming file transfers that are pending for this workspace
       operationId: listPendingFileTransfers
       parameters:
         - name: workspaceNamespace
