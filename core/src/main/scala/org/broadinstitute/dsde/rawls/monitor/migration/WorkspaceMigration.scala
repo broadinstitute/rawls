@@ -22,9 +22,9 @@ final case class WorkspaceMigrationDetails(id: Long,
                                           )
 
 object WorkspaceMigrationDetails {
-  def fromWorkspaceMigration(m: WorkspaceMigration): WorkspaceMigrationDetails =
+  def fromWorkspaceMigration(m: WorkspaceMigration, index: Int): WorkspaceMigrationDetails =
     WorkspaceMigrationDetails(
-      m.id,
+      index,
       m.created.toInstant,
       m.started.map(_.toInstant),
       m.updated.toInstant,

@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
@@ -70,7 +69,7 @@ object WorkspaceService {
                   servicePerimeterService: ServicePerimeterService,
                   googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String)
                  (userInfo: UserInfo)
-                 (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
+                 (implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
     new WorkspaceService(userInfo, dataSource, entityManager, methodRepoDAO, cromiamDAO,
       executionServiceCluster, execServiceBatchSize, workspaceManagerDAO,
@@ -2074,36 +2073,43 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
     } yield (googleProjectId, googleProjectNumber)
 
-  private def setupGoogleProjectIam(googleProjectId : GoogleProjectId,
-                                    policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
-                                    billingProjectOwnerPolicyEmail: WorkbenchEmail,
-                                    span: Span = null): Future[Unit] = {
+  def setupGoogleProjectIam(googleProjectId : GoogleProjectId,
+                            policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
+                            billingProjectOwnerPolicyEmail: WorkbenchEmail,
+                            span: Span = null): Future[Unit] = {
     logger.info(s"Updating google project IAM ${googleProjectId}.")
     traceWithParent("updateGoogleProjectIam", span) { _ =>
       updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail)
     }
   }
 
-  private def updateGoogleProjectIam(googleProject: GoogleProjectId, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String, billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] = {
-    // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
-      // billing project owner
-    // organizations/$ORG_ID/roles/terra-workspace-can-compute
-      // workspace owner
-      // workspace can-compute
+  private def updateGoogleProjectIam(googleProject: GoogleProjectId,
+                                     policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
+                                     terraBillingProjectOwnerRole: String,
+                                     terraWorkspaceCanComputeRole: String,
+                                     billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] =
+  // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
+  // billing project owner
+  // organizations/$ORG_ID/roles/terra-workspace-can-compute
+  // workspace owner
+  // workspace can-compute
 
-
-    val policyGroupsToRoles = Map(
+  // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
+  // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
+    List(
       billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole),
       policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole),
       policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole)
     )
-
-    // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
-    // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
-    policyGroupsToRoles.toList.traverse_{ case (email, roles) =>
-      googleIamDao.addIamRoles(GoogleProject(googleProject.value), email, MemberType.Group, roles, retryIfGroupDoesNotExist = true)
-    }
-  }
+      .traverse_ { case (email, roles) =>
+        googleIamDao.addIamRoles(
+          GoogleProject(googleProject.value),
+          email,
+          MemberType.Group,
+          roles,
+          retryIfGroupDoesNotExist = true
+        )
+      }
 
   /**
     * Update google project with the labels and google project name to reduce the number of calls made to google so we can avoid quota issues
@@ -2164,7 +2170,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       attempts <- dataSource.inTransaction { _ =>
         WorkspaceMigrationActor.getMigrationAttempts(workspace)
       }
-    } yield attempts.map(WorkspaceMigrationDetails.fromWorkspaceMigration)
+    } yield attempts.mapWithIndex(WorkspaceMigrationDetails.fromWorkspaceMigration)
 
   def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = {
     logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")

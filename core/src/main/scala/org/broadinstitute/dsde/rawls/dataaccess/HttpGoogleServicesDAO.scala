@@ -201,7 +201,7 @@ class HttpGoogleServicesDAO(
                               labels: Map[String, String],
                               parentSpan: Span = null,
                               bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
-    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
+    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]) = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
       //
@@ -214,22 +214,33 @@ class HttpGoogleServicesDAO(
       val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
       val customTerraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
 
-      val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> customTerraBucketWriterRole, Owner -> customTerraBucketWriterRole, Write -> customTerraBucketWriterRole, Read -> customTerraBucketReaderRole)
-      val bucketRoles =
-        policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
-          (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
+      val workspaceAccessToStorageRole = Map(
+        ProjectOwner -> customTerraBucketWriterRole,
+        Owner -> customTerraBucketWriterRole,
+        Write -> customTerraBucketWriterRole,
+        Read -> customTerraBucketReaderRole
+      )
 
-      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role, identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList) }
+      val bucketRoles = policyGroupsByAccessLevel
+        .map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) }
+        .+(Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
 
-      for {
-        // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
-        // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
+      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect {
+        case (role, identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)
+      }
 
-        // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
-        // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
-        _ <- googleStorageService.overrideIamPolicy(GcsBucketName(bucketName), roleToIdentities,
-          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardGoogleRetryPredicate, RetryPredicates.whenStatusCode(400)))
-      } yield ()
+      // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
+      // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
+
+      // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
+      // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
+      googleStorageService.overrideIamPolicy(
+        GcsBucketName(bucketName),
+        roleToIdentities,
+        retryConfig = RetryPredicates.retryConfigWithPredicates(
+          RetryPredicates.standardGoogleRetryPredicate,
+          RetryPredicates.whenStatusCode(400))
+      )
     }
 
     def insertInitialStorageLog(bucketName: String): Future[Unit] = {

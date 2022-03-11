@@ -8,6 +8,7 @@ import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.auth.oauth2.ServiceAccountCredentials
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
@@ -46,8 +47,9 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
-import java.io.StringReader
+import java.io.{ByteArrayInputStream, StringReader}
 import java.net.InetAddress
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
@@ -477,13 +479,14 @@ object Boot extends IOApp with LazyLogging {
           importServicePubSubDAO,
           importServiceDAO,
           appDependencies.googleStorageService,
+          appDependencies.googleStorageTransferService,
           methodRepoDAO,
           marthaResolver,
           entityServiceConstructor,
+          workspaceServiceConstructor,
           shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,
           maxActiveWorkflowsPerUser,
-          userServiceConstructor,
           projectTemplate,
           metricsPrefix,
           requesterPaysRole,
@@ -540,9 +543,15 @@ object Boot extends IOApp with LazyLogging {
   def initAppDependencies[F[_]: Logger: Async](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
+
+    // todo: load these credentials once [CA-1806]
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
     val jsonFileSource = scala.io.Source.fromFile(pathToCredentialJson)
     val jsonCreds = try jsonFileSource.mkString finally jsonFileSource.close()
+    val saCredentials = ServiceAccountCredentials.fromStream(
+      new ByteArrayInputStream(jsonCreds.getBytes(StandardCharsets.UTF_8))
+    )
+
     val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
     val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
@@ -550,19 +559,21 @@ object Boot extends IOApp with LazyLogging {
 
     for {
       googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, None, Option(serviceProject))
+      googleStorageTransferService <- GoogleStorageTransferService.resource(saCredentials)
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
       bqServiceFactory = new GoogleBigQueryServiceFactory(pathToCredentialJson)(executionContext)
       httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(system, executionContext)
-    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO)
+    } yield AppDependencies[F](googleStorage, googleStorageTransferService, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO)
   }
 }
 
 // Any resources need clean up should be put in AppDependencies
-final case class AppDependencies[F[_]](
-  googleStorageService: GoogleStorageService[F],
-  googleServiceHttp: GoogleServiceHttp[F],
-  topicAdmin: GoogleTopicAdmin[F],
-  bigQueryServiceFactory: GoogleBigQueryServiceFactory,
-  httpGoogleIamDAO: HttpGoogleIamDAO)
+final case class AppDependencies[F[_]](googleStorageService: GoogleStorageService[F],
+                                       googleStorageTransferService: GoogleStorageTransferService[F],
+                                       googleServiceHttp: GoogleServiceHttp[F],
+                                       topicAdmin: GoogleTopicAdmin[F],
+                                       bigQueryServiceFactory: GoogleBigQueryServiceFactory,
+                                       httpGoogleIamDAO: HttpGoogleIamDAO
+                                      )
