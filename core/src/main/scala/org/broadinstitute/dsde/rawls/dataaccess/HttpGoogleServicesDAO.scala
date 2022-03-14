@@ -25,7 +25,7 @@ import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillin
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
-import com.google.api.services.deploymentmanager.DeploymentManagerV2Beta
+import com.google.api.services.deploymentmanager.DeploymentManager
 import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, TargetConfiguration}
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
@@ -1214,8 +1214,8 @@ class HttpGoogleServicesDAO(
     new IAMCredentials.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
-  def getDeploymentManager(credential: Credential): DeploymentManagerV2Beta = {
-    new DeploymentManagerV2Beta.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+  def getDeploymentManager(credential: Credential): DeploymentManager = {
+    new DeploymentManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
   def getStorage(credential: Credential) = {
