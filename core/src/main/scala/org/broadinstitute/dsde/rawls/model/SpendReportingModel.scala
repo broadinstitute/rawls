@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, GoogleProject}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
-import spray.json.{DeserializationException, JsString, JsValue, RootJsonFormat}
+import spray.json.{DeserializationException, JsString, JsValue, JsonFormat, RootJsonFormat}
 
 case class BillingProjectSpendConfiguration(datasetGoogleProject: GoogleProject, datasetName: BigQueryDatasetName)
 
@@ -24,7 +24,8 @@ case class SpendReportingForDateRange(
                                        endTime: DateTime,
                                        workspace: Option[WorkspaceName] = None,
                                        googleProjectId: Option[GoogleProject] = None,
-                                       service: Option[CategorizedGCPService] = None
+                                       service: Option[CategorizedGCPService] = None,
+                                       subAggregation: Option[SpendReportingAggregation] = None
                                      )
 
 // Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
@@ -97,9 +98,9 @@ class SpendReportingJsonSupport extends JsonSupport {
 
   implicit val CategorizedGCPServiceFormat = jsonFormat2(CategorizedGCPService)
 
-  implicit val SpendReportingForDateRangeFormat = jsonFormat8(SpendReportingForDateRange)
+  implicit val SpendReportingAggregationFormat: JsonFormat[SpendReportingAggregation] = lazyFormat(jsonFormat2(SpendReportingAggregation))
 
-  implicit val SpendReportingAggregationFormat = jsonFormat2(SpendReportingAggregation)
+  implicit val SpendReportingForDateRangeFormat: JsonFormat[SpendReportingForDateRange] = lazyFormat(jsonFormat9(SpendReportingForDateRange))
 
   implicit val SpendReportingResultsFormat = jsonFormat2(SpendReportingResults)
 }

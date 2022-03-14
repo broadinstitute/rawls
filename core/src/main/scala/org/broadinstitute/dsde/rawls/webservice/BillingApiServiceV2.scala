@@ -61,8 +61,11 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                 "endDate".as[String],
                 "aggregationKey"
                   .as[SpendReportingAggregationKey](spendReportingAggregationKeyUnmarshaller)
+                  .?,
+                "subAggregationKey"
+                  .as[SpendReportingAggregationKey](spendReportingAggregationKeyUnmarshaller)
                   .?)
-              { (startDate, endDate, aggregationKey) =>
+              { (startDate, endDate, aggregationKey, subAggregationKey) =>
                 complete {
                   Try {
                     (DateTime.parse(startDate), DateTime.parse(endDate))
@@ -73,7 +76,8 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                       RawlsBillingProjectName(projectId),
                       parsedStartDate,
                       parsedEndDate.plusDays(1).minusMillis(1),
-                      aggregationKey
+                      aggregationKey,
+                      subAggregationKey
                     )
                   }
                 }

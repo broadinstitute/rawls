@@ -507,6 +507,16 @@ paths:
               - Daily
               - Workspace
               - Category
+        - name: subAggregationKey
+          in: query
+          description: Key indicating how to aggregate spend data in results. Will return only summary data (spendDetails is empty) if aggregationKey is not present
+          required: false
+          schema:
+            type: string
+            enum:
+              - Daily
+              - Workspace
+              - Category
       responses:
         200:
           description: Success
