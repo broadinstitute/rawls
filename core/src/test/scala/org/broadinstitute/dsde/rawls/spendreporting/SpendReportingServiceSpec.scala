@@ -129,9 +129,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     dailyAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Daily
 
     dailyAggregation.spendData.map { spendForDay =>
-      if (spendForDay.startTime.toLocalDate.equals(SpendReportingTestData.Daily.firstRowDate.toLocalDate)) {
+      if (spendForDay.startTime.getOrElse(fail("daily results not parsed correctly"))
+        .toLocalDate.equals(SpendReportingTestData.Daily.firstRowDate.toLocalDate)) {
         spendForDay.cost shouldBe SpendReportingTestData.Daily.firstRowCostRounded.toString
-      } else if (spendForDay.startTime.toLocalDate.equals(SpendReportingTestData.Daily.secondRowDate.toLocalDate)) {
+      } else if (spendForDay.startTime.getOrElse(fail("daily results not parsed correctly"))
+        .toLocalDate.equals(SpendReportingTestData.Daily.secondRowDate.toLocalDate)) {
         spendForDay.cost shouldBe SpendReportingTestData.Daily.secondRowCostRounded.toString
       } else {
         fail(s"unexpected day found in spend results - $spendForDay")
