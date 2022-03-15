@@ -57,15 +57,15 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
 
     val spendAggregation = aggregationKey.map {
       case SpendReportingAggregationKeys.Daily => extractDailySpendAggregation(rows, currency)
-      case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(rows, currency, startTime, endTime, workspaceProjectsToNames)
-      case SpendReportingAggregationKeys.Category => extractCategorySpendAggregation(rows, currency, startTime, endTime)
+      case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(rows, currency, workspaceProjectsToNames)
+      case SpendReportingAggregationKeys.Category => extractCategorySpendAggregation(rows, currency)
     }.toList
 
     val fullyAggregatedSpend = spendAggregation.map { aggregation =>
       aggregation.copy(
         spendData = aggregation.spendData.map { data =>
           val relevantRows = aggregationKey match {
-            case Some(SpendReportingAggregationKeys.Daily) => rows.filter(row => DateTime.parse(row.get("date").getStringValue).equals(data.startTime))
+            case Some(SpendReportingAggregationKeys.Daily) => rows.filter(row => DateTime.parse(row.get("date").getStringValue).equals(data.startTime.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no")))))
             case Some(SpendReportingAggregationKeys.Workspace) => rows.filter(row => row.get("googleProjectId").getStringValue.equals(data.googleProjectId.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no"))).value))
             case Some(SpendReportingAggregationKeys.Category) => rows.filter(row => TerraSpendCategories.categorize(row.get("service").getStringValue) == data.category.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no"))))
             case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot return sub-aggregated data without a top-level aggregation key"))
@@ -73,8 +73,8 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
           data.copy(
             subAggregation = subAggregationKey.map {
               case SpendReportingAggregationKeys.Daily => extractDailySpendAggregation(relevantRows, currency)
-              case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(relevantRows, currency, startTime, endTime, workspaceProjectsToNames)
-              case SpendReportingAggregationKeys.Category => extractCategorySpendAggregation(relevantRows, currency, startTime, endTime)
+              case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(relevantRows, currency, workspaceProjectsToNames)
+              case SpendReportingAggregationKeys.Category => extractCategorySpendAggregation(relevantRows, currency)
             }
           )
         }
@@ -91,7 +91,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     )
   }
 
-  private def extractWorkspaceSpendAggregation(rows: List[FieldValueList], currency: Currency, startTime: DateTime, endTime: DateTime, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName]): SpendReportingAggregation = {
+  private def extractWorkspaceSpendAggregation(rows: List[FieldValueList], currency: Currency, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName]): SpendReportingAggregation = {
     val spendByGoogleProjectId = rows.groupBy(row => GoogleProject(row.get("googleProjectId").getStringValue))
     val workspaceSpend = spendByGoogleProjectId.map { case (googleProjectId, rowsForGoogleProjectId) =>
       val (cost, credits) = sumCostsAndCredits(rowsForGoogleProjectId, currency)
@@ -99,8 +99,6 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
       SpendReportingForDateRange(cost.toString(),
         credits.toString(),
         currency.getCurrencyCode,
-        startTime,
-        endTime,
         workspace = Option(workspaceName),
         googleProjectId = Option(googleProjectId))
     }.toList
@@ -110,7 +108,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     )
   }
 
-  private def extractCategorySpendAggregation(rows: List[FieldValueList], currency: Currency, startTime: DateTime, endTime: DateTime): SpendReportingAggregation = {
+  private def extractCategorySpendAggregation(rows: List[FieldValueList], currency: Currency): SpendReportingAggregation = {
     val spendByCategory = rows.groupBy(row => TerraSpendCategories.categorize(row.get("service").getStringValue))
     val categorySpend = spendByCategory.map { case (category, rowsForCategory) =>
       val cost = rowsForCategory.map(row => BigDecimal(row.get("cost").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
@@ -119,8 +117,6 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         cost.toString,
         credits.toString,
         currency.getCurrencyCode,
-        startTime,
-        endTime,
         category = Option(category)
       )
     }.toList
@@ -138,8 +134,8 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         cost.toString,
         credits.toString,
         currency.getCurrencyCode,
-        startTime,
-        endTime = startTime.plusDays(1).minusMillis(1)
+        Option(startTime),
+        endTime = Option(startTime.plusDays(1).minusMillis(1))
       )
     }.toList
 
@@ -155,8 +151,8 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
       cost.toString(),
       credits.toString(),
       currency.getCurrencyCode,
-      startTime,
-      endTime
+      Option(startTime),
+      Option(endTime)
     )
   }
 
