@@ -24,7 +24,7 @@ case class SpendReportingForDateRange(
                                        endTime: DateTime,
                                        workspace: Option[WorkspaceName] = None,
                                        googleProjectId: Option[GoogleProject] = None,
-                                       service: Option[CategorizedGCPService] = None,
+                                       category: Option[TerraSpendCategory] = None,
                                        subAggregation: Option[SpendReportingAggregation] = None
                                      )
 
@@ -77,11 +77,11 @@ object TerraSpendCategories {
     case _ => throw new RawlsException(s"invalid TerraSpendCategory [${name}]")
   }
 
-  def categorize(service: String): CategorizedGCPService = service.toLowerCase.replace(" ", "") match {
-    case "cloudstorage" => CategorizedGCPService(service, Storage)
-    case "computeengine" => CategorizedGCPService(service, Compute)
-    case "kubernetesengine" => CategorizedGCPService(service, Compute)
-    case _ => CategorizedGCPService(service, Other)
+  def categorize(service: String): TerraSpendCategory = service.toLowerCase.replace(" ", "") match {
+    case "cloudstorage" => Storage
+    case "computeengine" => Compute
+    case "kubernetesengine" => Compute
+    case _ => Other
   }
 
   case object Storage extends TerraSpendCategory

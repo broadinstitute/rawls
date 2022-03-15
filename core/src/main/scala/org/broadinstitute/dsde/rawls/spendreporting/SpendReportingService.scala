@@ -67,7 +67,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
           val relevantRows = aggregationKey match {
             case Some(SpendReportingAggregationKeys.Daily) => rows.filter(row => DateTime.parse(row.get("date").getStringValue).equals(data.startTime))
             case Some(SpendReportingAggregationKeys.Workspace) => rows.filter(row => row.get("googleProjectId").getStringValue.equals(data.googleProjectId.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no"))).value))
-            case Some(SpendReportingAggregationKeys.Category) => rows.filter(row => TerraSpendCategories.categorize(row.get("service").getStringValue) == data.service.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no"))))
+            case Some(SpendReportingAggregationKeys.Category) => rows.filter(row => TerraSpendCategories.categorize(row.get("service").getStringValue) == data.category.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no"))))
             case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot return sub-aggregated data without a top-level aggregation key"))
           }
           data.copy(
@@ -90,7 +90,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
       parentAggregation.copy(
         cost = categorySpend.cost,
         credits = categorySpend.credits,
-        service = categorySpend.service
+        category = categorySpend.category
       )
     }
 
@@ -161,17 +161,17 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
   }
 
   private def extractCategorySpendAggregation(rows: List[FieldValueList], currency: Currency, startTime: DateTime, endTime: DateTime): SpendReportingAggregation = {
-    val spendByService = rows.groupBy(row => TerraSpendCategories.categorize(row.get("service").getStringValue))
-    val categorySpend = spendByService.map { case (service, rowsForService) =>
-      val cost = rowsForService.map(row => BigDecimal(row.get("cost").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-      val credits = rowsForService.map(row => BigDecimal(row.get("credits").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+    val spendByCategory = rows.groupBy(row => TerraSpendCategories.categorize(row.get("service").getStringValue))
+    val categorySpend = spendByCategory.map { case (category, rowsForCategory) =>
+      val cost = rowsForCategory.map(row => BigDecimal(row.get("cost").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+      val credits = rowsForCategory.map(row => BigDecimal(row.get("credits").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
       SpendReportingForDateRange(
         cost.toString,
         credits.toString,
         currency.getCurrencyCode,
         startTime,
         endTime,
-        service = Option(service)
+        category = Option(category)
       )
     }.toList
 
