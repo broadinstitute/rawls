@@ -34,6 +34,12 @@ object SpendReportingAggregationKeys {
     override def toString = getClass.getSimpleName.stripSuffix("$")
 
     override def withName(name: String): SpendReportingAggregationKey = SpendReportingAggregationKeys.withName(name)
+
+    val bigQueryField: String
+    val bigQueryAlias: String
+
+    def bigQueryAliasClause(): String = s", $bigQueryField as $bigQueryAlias"
+    def bigQueryGroupByClause(): String = s", $bigQueryAlias"
   }
 
   def withName(name: String): SpendReportingAggregationKey = name.toLowerCase match {
@@ -43,9 +49,18 @@ object SpendReportingAggregationKeys {
     case _ => throw new RawlsException(s"invalid SpendReportingAggregationKey [${name}]")
   }
 
-  case object Daily extends SpendReportingAggregationKey
-  case object Workspace extends SpendReportingAggregationKey
-  case object Category extends SpendReportingAggregationKey
+  case object Daily extends SpendReportingAggregationKey {
+    override val bigQueryField: String = "DATE(_PARTITIONTIME)"
+    override val bigQueryAlias: String = "date"
+  }
+  case object Workspace extends SpendReportingAggregationKey {
+    override val bigQueryField: String = "project.id"
+    override val bigQueryAlias: String = "googleProjectId"
+  }
+  case object Category extends SpendReportingAggregationKey {
+    override val bigQueryField: String = "service.description"
+    override val bigQueryAlias: String = "service"
+  }
 }
 
 object TerraSpendCategories {

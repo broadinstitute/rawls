@@ -285,7 +285,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
           spendExportConf <- getSpendExportConfiguration(billingProjectName)
           workspaceProjectsToNames <- getWorkspaceGoogleProjects(billingProjectName)
 
-          query = getQuery(aggregationKey, subAggregationKey, spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName))
+          query = getQuery(List(aggregationKey, subAggregationKey).flatten, spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName))
 
           queryJobConfiguration = QueryJobConfiguration
             .newBuilder(query)
@@ -306,31 +306,17 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }
   }
 
-  case class AggregationKeyQueryField(bigQueryField: String, alias: String) {
-    def aliased(): String = s""", $bigQueryField as $alias"""
-
-    def groupBy(): String = s""", $alias"""
-  }
-
-  private def getQuery(aggregationKey: Option[SpendReportingAggregationKey], subAggregationKey: Option[SpendReportingAggregationKey], tableName: String): String = {
-    val aggregationKeyQueryFields = List(aggregationKey, subAggregationKey).flatten.map {
-      case SpendReportingAggregationKeys.Daily => AggregationKeyQueryField("DATE(_PARTITIONTIME)", "date")
-      case SpendReportingAggregationKeys.Workspace => AggregationKeyQueryField("project.id", "googleProjectId")
-      case SpendReportingAggregationKeys.Category => AggregationKeyQueryField("service.description", "service")
-    }
-
-    val query = s"""
+  private def getQuery(aggregationKeys: List[SpendReportingAggregationKey], tableName: String): String = {
+    s"""
        | SELECT
        |  SUM(cost) as cost,
        |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-       |  currency ${aggregationKeyQueryFields.map(_.aliased()).mkString}
+       |  currency ${aggregationKeys.map(_.bigQueryAliasClause()).mkString}
        | FROM `$tableName`
        | WHERE billing_account_id = @billingAccountId
        | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
        | AND project.id in UNNEST(@projects)
-       | GROUP BY currency ${aggregationKeyQueryFields.map(_.groupBy()).mkString}
+       | GROUP BY currency ${aggregationKeys.map(_.bigQueryGroupByClause()).mkString}
        |""".stripMargin
-    logger.info(query)
-    query
   }
 }
