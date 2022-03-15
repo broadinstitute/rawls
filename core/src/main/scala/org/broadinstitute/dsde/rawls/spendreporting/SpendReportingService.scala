@@ -64,11 +64,17 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     val fullyAggregatedSpend = spendAggregation.map { aggregation =>
       aggregation.copy(
         spendData = aggregation.spendData.map { data =>
+          val relevantRows = aggregationKey match {
+            case Some(SpendReportingAggregationKeys.Daily) => rows.filter(row => DateTime.parse(row.get("date").getStringValue).equals(data.startTime))
+            case Some(SpendReportingAggregationKeys.Workspace) => rows.filter(row => row.get("googleProjectId").getStringValue.equals(data.googleProjectId.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no"))).value))
+            case Some(SpendReportingAggregationKeys.Category) => rows.filter(row => TerraSpendCategories.categorize(row.get("service").getStringValue) == data.service.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no"))))
+            case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot return sub-aggregated data without a top-level aggregation key"))
+          }
           data.copy(
             subAggregation = subAggregationKey.map {
-              case SpendReportingAggregationKeys.Daily => extractDailySpendSubAggregation(rows, currency, data)
-              case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendSubAggregation(rows, currency, startTime, endTime, workspaceProjectsToNames, data)
-              case SpendReportingAggregationKeys.Category => extractCategorySpendSubAggregation(rows, currency, startTime, endTime, data)
+              case SpendReportingAggregationKeys.Daily => extractDailySpendSubAggregation(relevantRows, currency, data)
+              case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendSubAggregation(relevantRows, currency, startTime, endTime, workspaceProjectsToNames, data)
+              case SpendReportingAggregationKeys.Category => extractCategorySpendSubAggregation(relevantRows, currency, startTime, endTime, data)
             }
           )
         }
