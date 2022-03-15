@@ -72,9 +72,9 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
           }
           data.copy(
             subAggregation = subAggregationKey.map {
-              case SpendReportingAggregationKeys.Daily => extractDailySpendSubAggregation(relevantRows, currency, data)
-              case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendSubAggregation(relevantRows, currency, startTime, endTime, workspaceProjectsToNames, data)
-              case SpendReportingAggregationKeys.Category => extractCategorySpendSubAggregation(relevantRows, currency, startTime, endTime, data)
+              case SpendReportingAggregationKeys.Daily => extractDailySpendAggregation(relevantRows, currency)
+              case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(relevantRows, currency, startTime, endTime, workspaceProjectsToNames)
+              case SpendReportingAggregationKeys.Category => extractCategorySpendAggregation(relevantRows, currency, startTime, endTime)
             }
           )
         }
@@ -82,56 +82,6 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }
 
     SpendReportingResults(fullyAggregatedSpend, spendSummary)
-  }
-
-  private def extractCategorySpendSubAggregation(rows: List[FieldValueList], currency: Currency, startTime: DateTime, endTime: DateTime, parentAggregation: SpendReportingForDateRange): SpendReportingAggregation = {
-    val categoryAggregation = extractCategorySpendAggregation(rows, currency, startTime, endTime)
-    val subAggregatedCategorySpend = categoryAggregation.spendData.map { categorySpend =>
-      parentAggregation.copy(
-        cost = categorySpend.cost,
-        credits = categorySpend.credits,
-        category = categorySpend.category
-      )
-    }
-
-    SpendReportingAggregation(
-      SpendReportingAggregationKeys.Category,
-      subAggregatedCategorySpend
-    )
-  }
-
-  private def extractWorkspaceSpendSubAggregation(rows: List[FieldValueList], currency: Currency, startTime: DateTime, endTime: DateTime, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName], parentAggregation: SpendReportingForDateRange): SpendReportingAggregation = {
-    val workspaceAggregation = extractWorkspaceSpendAggregation(rows, currency, startTime, endTime, workspaceProjectsToNames)
-    val subAggregatedWorkspaceSpend = workspaceAggregation.spendData.map { workspaceSpend =>
-      parentAggregation.copy(
-        cost = workspaceSpend.cost,
-        credits = workspaceSpend.credits,
-        workspace = workspaceSpend.workspace,
-        googleProjectId = workspaceSpend.googleProjectId
-      )
-    }
-
-    SpendReportingAggregation(
-      SpendReportingAggregationKeys.Workspace,
-      subAggregatedWorkspaceSpend
-    )
-  }
-
-  private def extractDailySpendSubAggregation(rows: List[FieldValueList], currency: Currency, parentAggregation: SpendReportingForDateRange): SpendReportingAggregation = {
-    val dailyAggregation = extractDailySpendAggregation(rows, currency)
-    val subAggregatedDailySpend = dailyAggregation.spendData.map { dailySpend =>
-      parentAggregation.copy(
-        cost = dailySpend.cost,
-        credits = dailySpend.credits,
-        startTime = dailySpend.startTime,
-        endTime = dailySpend.endTime
-      )
-    }
-
-    SpendReportingAggregation(
-      SpendReportingAggregationKeys.Daily,
-      subAggregatedDailySpend
-    )
   }
 
   private def sumCostsAndCredits(rows: List[FieldValueList], currency: Currency): (BigDecimal, BigDecimal) = {
