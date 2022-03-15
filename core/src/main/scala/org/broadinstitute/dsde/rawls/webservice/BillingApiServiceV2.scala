@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.joda.time.DateTime
 
-import scala.collection.immutable
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 

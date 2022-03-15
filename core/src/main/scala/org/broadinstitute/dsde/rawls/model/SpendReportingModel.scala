@@ -14,6 +14,9 @@ case class BillingProjectSpendConfiguration(datasetGoogleProject: GoogleProject,
 
 case class BillingProjectSpendExport(billingProjectName: RawlsBillingProjectName, billingAccountId: RawlsBillingAccountName, spendExportTable: Option[String])
 
+case class SpendReportingAggregationKeyParameter(key: SpendReportingAggregationKey, subAggregationKey: Option[SpendReportingAggregationKeyParameter])
+case class SpendReportingParameters(startDate: DateTime, endDate: DateTime, aggregationKeys: Option[SpendReportingAggregationKeyParameter])
+
 case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], spendSummary: SpendReportingForDateRange)
 case class SpendReportingAggregation(aggregationKey: SpendReportingAggregationKey, spendData: Seq[SpendReportingForDateRange])
 case class SpendReportingForDateRange(
@@ -108,6 +111,10 @@ class SpendReportingJsonSupport extends JsonSupport {
       case _ => throw DeserializationException("could not deserialize spend category")
     }
   }
+
+  implicit val SpendReportingAggregationKeyParameterFormat: JsonFormat[SpendReportingAggregationKeyParameter] = lazyFormat(jsonFormat2(SpendReportingAggregationKeyParameter))
+
+  implicit val SpendReportingParametersFormat = jsonFormat3(SpendReportingParameters)
 
   implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
 
