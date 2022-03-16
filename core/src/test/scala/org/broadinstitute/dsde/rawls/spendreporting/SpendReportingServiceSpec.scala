@@ -356,4 +356,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
   }
+
+  it should "throw an exception if a sub aggregation key is provided without a top level aggregation key" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource)
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getSpendForBillingProject(RawlsBillingProjectName("fakeProject"), DateTime.now().minusDays(1), DateTime.now(), aggregationKey = None, subAggregationKey = Option(SpendReportingAggregationKeys.Category)), Duration.Inf)
+    }
+    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+  }
 }

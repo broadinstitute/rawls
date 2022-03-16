@@ -54,94 +54,17 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     val currency = getCurrency(rows)
 
     val spendSummary = extractSpendSummary(rows, currency, startTime, endTime)
+    val spendAggregation = extractSpendAggregation(rows, currency, aggregationKey, subAggregationKey, workspaceProjectsToNames).toList
 
-    val spendAggregation = aggregationKey.map {
-      case SpendReportingAggregationKeys.Daily => extractDailySpendAggregation(rows, currency)
-      case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(rows, currency, workspaceProjectsToNames)
-      case SpendReportingAggregationKeys.Category => extractCategorySpendAggregation(rows, currency)
-    }.toList
+    SpendReportingResults(spendAggregation, spendSummary)
+  }
 
-    val fullyAggregatedSpend = spendAggregation.map { aggregation =>
-      aggregation.copy(
-        spendData = aggregation.spendData.map { data =>
-          val relevantRows = aggregationKey match {
-            case Some(SpendReportingAggregationKeys.Daily) => rows.filter(row => DateTime.parse(row.get("date").getStringValue).equals(data.startTime.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no")))))
-            case Some(SpendReportingAggregationKeys.Workspace) => rows.filter(row => row.get("googleProjectId").getStringValue.equals(data.googleProjectId.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no"))).value))
-            case Some(SpendReportingAggregationKeys.Category) => rows.filter(row => TerraSpendCategories.categorize(row.get("service").getStringValue) == data.category.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "oh no"))))
-            case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot return sub-aggregated data without a top-level aggregation key"))
-          }
-          data.copy(
-            subAggregation = subAggregationKey.map {
-              case SpendReportingAggregationKeys.Daily => extractDailySpendAggregation(relevantRows, currency)
-              case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(relevantRows, currency, workspaceProjectsToNames)
-              case SpendReportingAggregationKeys.Category => extractCategorySpendAggregation(relevantRows, currency)
-            }
-          )
-        }
-      )
+  private def extractSpendAggregation(rows: List[FieldValueList], currency: Currency, aggregationKey: Option[SpendReportingAggregationKey] = None, subAggregationKey: Option[SpendReportingAggregationKey] = None, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName] = Map.empty): Option[SpendReportingAggregation] = {
+    aggregationKey.map {
+      case SpendReportingAggregationKeys.Category => extractCategorySpendAggregation(rows, currency, subAggregationKey, workspaceProjectsToNames)
+      case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(rows, currency, subAggregationKey, workspaceProjectsToNames)
+      case SpendReportingAggregationKeys.Daily => extractDailySpendAggregation(rows, currency, subAggregationKey, workspaceProjectsToNames)
     }
-
-    SpendReportingResults(fullyAggregatedSpend, spendSummary)
-  }
-
-  private def sumCostsAndCredits(rows: List[FieldValueList], currency: Currency): (BigDecimal, BigDecimal) = {
-    (
-      rows.map(row => BigDecimal(row.get("cost").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN),
-      rows.map(row => BigDecimal(row.get("credits").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-    )
-  }
-
-  private def extractWorkspaceSpendAggregation(rows: List[FieldValueList], currency: Currency, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName]): SpendReportingAggregation = {
-    val spendByGoogleProjectId = rows.groupBy(row => GoogleProject(row.get("googleProjectId").getStringValue))
-    val workspaceSpend = spendByGoogleProjectId.map { case (googleProjectId, rowsForGoogleProjectId) =>
-      val (cost, credits) = sumCostsAndCredits(rowsForGoogleProjectId, currency)
-      val workspaceName = workspaceProjectsToNames.getOrElse(googleProjectId, throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"unexpected project ${googleProjectId.value} returned by BigQuery")))
-      SpendReportingForDateRange(cost.toString(),
-        credits.toString(),
-        currency.getCurrencyCode,
-        workspace = Option(workspaceName),
-        googleProjectId = Option(googleProjectId))
-    }.toList
-
-    SpendReportingAggregation(
-      SpendReportingAggregationKeys.Workspace, workspaceSpend
-    )
-  }
-
-  private def extractCategorySpendAggregation(rows: List[FieldValueList], currency: Currency): SpendReportingAggregation = {
-    val spendByCategory = rows.groupBy(row => TerraSpendCategories.categorize(row.get("service").getStringValue))
-    val categorySpend = spendByCategory.map { case (category, rowsForCategory) =>
-      val cost = rowsForCategory.map(row => BigDecimal(row.get("cost").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-      val credits = rowsForCategory.map(row => BigDecimal(row.get("credits").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
-      SpendReportingForDateRange(
-        cost.toString,
-        credits.toString,
-        currency.getCurrencyCode,
-        category = Option(category)
-      )
-    }.toList
-
-    SpendReportingAggregation(
-      SpendReportingAggregationKeys.Category, categorySpend
-    )
-  }
-
-  private def extractDailySpendAggregation(rows: List[FieldValueList], currency: Currency): SpendReportingAggregation = {
-    val spendByStartTime = rows.groupBy(row => DateTime.parse(row.get("date").getStringValue))
-    val dailySpend = spendByStartTime.map { case (startTime, rowsForStartTime) =>
-      val (cost, credits) = sumCostsAndCredits(rowsForStartTime, currency)
-      SpendReportingForDateRange(
-        cost.toString,
-        credits.toString,
-        currency.getCurrencyCode,
-        Option(startTime),
-        endTime = Option(startTime.plusDays(1).minusMillis(1))
-      )
-    }.toList
-
-    SpendReportingAggregation(
-      SpendReportingAggregationKeys.Daily, dailySpend
-    )
   }
 
   private def extractSpendSummary(rows: List[FieldValueList], currency: Currency, startTime: DateTime, endTime: DateTime): SpendReportingForDateRange = {
@@ -153,6 +76,72 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
       currency.getCurrencyCode,
       Option(startTime),
       Option(endTime)
+    )
+  }
+
+  private def sumCostsAndCredits(rows: List[FieldValueList], currency: Currency): (BigDecimal, BigDecimal) = {
+    (
+      rows.map(row => BigDecimal(row.get("cost").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN),
+      rows.map(row => BigDecimal(row.get("credits").getDoubleValue)).sum.setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
+    )
+  }
+
+  private def extractWorkspaceSpendAggregation(rows: List[FieldValueList], currency: Currency, subAggregationKey: Option[SpendReportingAggregationKey] = None, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName]): SpendReportingAggregation = {
+    val spendByGoogleProjectId = rows.groupBy(row => GoogleProject(row.get("googleProjectId").getStringValue))
+    val workspaceSpend = spendByGoogleProjectId.map { case (googleProjectId, rowsForGoogleProjectId) =>
+      val (cost, credits) = sumCostsAndCredits(rowsForGoogleProjectId, currency)
+      val subAggregation = extractSpendAggregation(rowsForGoogleProjectId, currency, aggregationKey = subAggregationKey, workspaceProjectsToNames = workspaceProjectsToNames)
+      val workspaceName = workspaceProjectsToNames.getOrElse(googleProjectId, throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"unexpected project ${googleProjectId.value} returned by BigQuery")))
+      SpendReportingForDateRange(cost.toString(),
+        credits.toString(),
+        currency.getCurrencyCode,
+        workspace = Option(workspaceName),
+        googleProjectId = Option(googleProjectId),
+        subAggregation = subAggregation
+      )
+    }.toList
+
+    SpendReportingAggregation(
+      SpendReportingAggregationKeys.Workspace, workspaceSpend
+    )
+  }
+
+  private def extractCategorySpendAggregation(rows: List[FieldValueList], currency: Currency, subAggregationKey: Option[SpendReportingAggregationKey] = None, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName] = Map.empty): SpendReportingAggregation = {
+    val spendByCategory = rows.groupBy(row => TerraSpendCategories.categorize(row.get("service").getStringValue))
+    val categorySpend = spendByCategory.map { case (category, rowsForCategory) =>
+      val (cost, credits) = sumCostsAndCredits(rowsForCategory, currency)
+      val subAggregation = extractSpendAggregation(rowsForCategory, currency, aggregationKey = subAggregationKey, workspaceProjectsToNames = workspaceProjectsToNames)
+      SpendReportingForDateRange(
+        cost.toString,
+        credits.toString,
+        currency.getCurrencyCode,
+        category = Option(category),
+        subAggregation = subAggregation
+      )
+    }.toList
+
+    SpendReportingAggregation(
+      SpendReportingAggregationKeys.Category, categorySpend
+    )
+  }
+
+  private def extractDailySpendAggregation(rows: List[FieldValueList], currency: Currency, subAggregationKey: Option[SpendReportingAggregationKey] = None, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName] = Map.empty): SpendReportingAggregation = {
+    val spendByStartTime = rows.groupBy(row => DateTime.parse(row.get("date").getStringValue))
+    val dailySpend = spendByStartTime.map { case (startTime, rowsForStartTime) =>
+      val (cost, credits) = sumCostsAndCredits(rowsForStartTime, currency)
+      val subAggregation = extractSpendAggregation(rowsForStartTime, currency, aggregationKey = subAggregationKey, workspaceProjectsToNames = workspaceProjectsToNames)
+      SpendReportingForDateRange(
+        cost.toString,
+        credits.toString,
+        currency.getCurrencyCode,
+        Option(startTime),
+        endTime = Option(startTime.plusDays(1).minusMillis(1)),
+        subAggregation = subAggregation
+      )
+    }.toList
+
+    SpendReportingAggregation(
+      SpendReportingAggregationKeys.Daily, dailySpend
     )
   }
 
