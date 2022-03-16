@@ -165,7 +165,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   "SpendReportingService" should "break down results from Google by day" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.Daily.tableResult)
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Daily)), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily))), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Daily.totalCostRounded.toString
     val dailyAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("daily results not parsed correctly"))
     dailyAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Daily
@@ -189,7 +189,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Workspace)), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Workspace.totalCostRounded.toString
     val workspaceAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("workspace results not parsed correctly"))
 
@@ -213,7 +213,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   it should "break down results from Google by Terra spend category" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.Category.tableResult)
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Category)), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Category.totalCostRounded.toString
     val categoryAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("workspace results not parsed correctly"))
 
@@ -237,7 +237,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   it should "return summary data only if aggregation key is omitted" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.Workspace.tableResult)
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), None), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set.empty), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Workspace.totalCostRounded.toString
     reportingResults.spendDetails shouldBe empty
   }
@@ -352,17 +352,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
 
     val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Workspace)), Duration.Inf)
+      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))), Duration.Inf)
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
-  }
-
-  it should "throw an exception if a sub aggregation key is provided without a top level aggregation key" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val service = createSpendReportingService(dataSource)
-
-    val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getSpendForBillingProject(RawlsBillingProjectName("fakeProject"), DateTime.now().minusDays(1), DateTime.now(), aggregationKey = None, subAggregationKey = Option(SpendReportingAggregationKeys.Category)), Duration.Inf)
-    }
-    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
   }
 }

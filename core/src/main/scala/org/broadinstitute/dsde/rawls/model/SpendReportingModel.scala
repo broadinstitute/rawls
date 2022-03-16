@@ -14,8 +14,7 @@ case class BillingProjectSpendConfiguration(datasetGoogleProject: GoogleProject,
 
 case class BillingProjectSpendExport(billingProjectName: RawlsBillingProjectName, billingAccountId: RawlsBillingAccountName, spendExportTable: Option[String])
 
-case class SpendReportingAggregationKeyParameter(key: SpendReportingAggregationKey, subAggregationKey: Option[SpendReportingAggregationKeyParameter])
-case class SpendReportingParameters(startDate: DateTime, endDate: DateTime, aggregationKeys: Option[SpendReportingAggregationKeyParameter])
+case class SpendReportingAggregationKeyWithSub(key: SpendReportingAggregationKey, subAggregationKey: Option[SpendReportingAggregationKey] = None)
 
 case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], spendSummary: SpendReportingForDateRange)
 case class SpendReportingAggregation(aggregationKey: SpendReportingAggregationKey, spendData: Seq[SpendReportingForDateRange])
@@ -112,9 +111,7 @@ class SpendReportingJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val SpendReportingAggregationKeyParameterFormat: JsonFormat[SpendReportingAggregationKeyParameter] = lazyFormat(jsonFormat2(SpendReportingAggregationKeyParameter))
-
-  implicit val SpendReportingParametersFormat = jsonFormat3(SpendReportingParameters)
+  implicit val SpendReportingAggregationKeyParameterFormat = jsonFormat2(SpendReportingAggregationKeyWithSub)
 
   implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
 

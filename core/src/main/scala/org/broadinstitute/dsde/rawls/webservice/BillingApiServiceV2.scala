@@ -30,7 +30,17 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
   val userServiceConstructor: UserInfo => UserService
   val spendReportingConstructor: UserInfo => SpendReportingService
 
-  implicit def spendReportingAggregationKeyUnmarshaller: Unmarshaller[String, SpendReportingAggregationKey] = Unmarshaller.strict(SpendReportingAggregationKeys.withName)
+  implicit def aggregationKeyParameterUnmarshaller: Unmarshaller[String, SpendReportingAggregationKeyWithSub] = Unmarshaller.strict { parameter =>
+    val delimitedParameter = parameter.split("~").toList
+
+    delimitedParameter match {
+      case key :: subKey :: Nil => SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.withName(key), Option(SpendReportingAggregationKeys.withName(subKey)))
+      case key :: Nil => SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.withName(key))
+      case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Error parsing aggregation key(s). Found ${delimitedParameter.mkString(",")}"))
+    }
+  }
+
+  implicit def dateTimeUnmarshaller: Unmarshaller[String, DateTime] = Unmarshaller.strict(DateTime.parse)
 
   val billingRoutesV2: server.Route = requireUserInfo() { userInfo =>
     pathPrefix("billing" / "v2") {
@@ -56,29 +66,19 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
           pathEndOrSingleSlash {
             get {
               parameters(
-                "startDate".as[String],
-                "endDate".as[String],
+                "startDate".as[DateTime],
+                "endDate".as[DateTime],
                 "aggregationKey"
-                  .as[SpendReportingAggregationKey](spendReportingAggregationKeyUnmarshaller)
-                  .?,
-                "subAggregationKey"
-                  .as[SpendReportingAggregationKey](spendReportingAggregationKeyUnmarshaller)
-                  .?)
-              { (startDate, endDate, aggregationKey, subAggregationKey) =>
+                  .as[SpendReportingAggregationKeyWithSub](aggregationKeyParameterUnmarshaller)
+                  .repeated)
+              { (startDate, endDate, aggregationKeyParameters) =>
                 complete {
-                  Try {
-                    (DateTime.parse(startDate), DateTime.parse(endDate))
-                  }.recover {
-                    case _: IllegalArgumentException => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "invalid dates provided"))
-                  }.map { case (parsedStartDate, parsedEndDate) =>
-                    spendReportingConstructor(userInfo).getSpendForBillingProject(
-                      RawlsBillingProjectName(projectId),
-                      parsedStartDate,
-                      parsedEndDate.plusDays(1).minusMillis(1),
-                      aggregationKey,
-                      subAggregationKey
-                    )
-                  }
+                  spendReportingConstructor(userInfo).getSpendForBillingProject(
+                    RawlsBillingProjectName(projectId),
+                    startDate,
+                    endDate.plusDays(1).minusMillis(1),
+                    aggregationKeyParameters.toSet
+                  )
                 }
               }
             }

@@ -49,21 +49,37 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
                                    startTime: DateTime,
                                    endTime: DateTime,
                                    workspaceProjectsToNames: Map[GoogleProject, WorkspaceName],
-                                   aggregationKey: Option[SpendReportingAggregationKey],
-                                   subAggregationKey: Option[SpendReportingAggregationKey]): SpendReportingResults = {
+                                   aggregationKeys: Set[SpendReportingAggregationKeyWithSub]): SpendReportingResults = {
     val currency = getCurrency(rows)
 
     val spendSummary = extractSpendSummary(rows, currency, startTime, endTime)
-    val spendAggregation = extractSpendAggregation(rows, currency, aggregationKey, subAggregationKey, workspaceProjectsToNames).toList
+    val spendAggregations = aggregationKeys.map { aggregationKey =>
+      extractSpendAggregation(rows, currency, aggregationKey, workspaceProjectsToNames)
+    }
 
-    SpendReportingResults(spendAggregation, spendSummary)
+    SpendReportingResults(spendAggregations.toList, spendSummary)
   }
 
-  private def extractSpendAggregation(rows: List[FieldValueList], currency: Currency, aggregationKey: Option[SpendReportingAggregationKey] = None, subAggregationKey: Option[SpendReportingAggregationKey] = None, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName] = Map.empty): Option[SpendReportingAggregation] = {
-    aggregationKey.map {
-      case SpendReportingAggregationKeys.Category => extractCategorySpendAggregation(rows, currency, subAggregationKey, workspaceProjectsToNames)
-      case SpendReportingAggregationKeys.Workspace => extractWorkspaceSpendAggregation(rows, currency, subAggregationKey, workspaceProjectsToNames)
-      case SpendReportingAggregationKeys.Daily => extractDailySpendAggregation(rows, currency, subAggregationKey, workspaceProjectsToNames)
+  /**
+    * Ensure that BigQuery results only include one type of currency and return that currency.
+    */
+  private def getCurrency(rows: List[FieldValueList]): Currency = {
+    val currencies = rows.map(_.get("currency").getStringValue)
+
+    Currency.getInstance(currencies.reduce { (x, y) =>
+      if (x.equals(y)) {
+        x
+      } else {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Inconsistent currencies found while aggregating spend data: $x and $y cannot be combined"))
+      }
+    })
+  }
+
+  private def extractSpendAggregation(rows: List[FieldValueList], currency: Currency, aggregationKey: SpendReportingAggregationKeyWithSub, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName] = Map.empty): SpendReportingAggregation = {
+    aggregationKey match {
+      case SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category, subAggregationKey) => extractCategorySpendAggregation(rows, currency, subAggregationKey, workspaceProjectsToNames)
+      case SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, subAggregationKey) => extractWorkspaceSpendAggregation(rows, currency, subAggregationKey, workspaceProjectsToNames)
+      case SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily, subAggregationKey) => extractDailySpendAggregation(rows, currency, subAggregationKey, workspaceProjectsToNames)
     }
   }
 
@@ -90,7 +106,9 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     val spendByGoogleProjectId = rows.groupBy(row => GoogleProject(row.get("googleProjectId").getStringValue))
     val workspaceSpend = spendByGoogleProjectId.map { case (googleProjectId, rowsForGoogleProjectId) =>
       val (cost, credits) = sumCostsAndCredits(rowsForGoogleProjectId, currency)
-      val subAggregation = extractSpendAggregation(rowsForGoogleProjectId, currency, aggregationKey = subAggregationKey, workspaceProjectsToNames = workspaceProjectsToNames)
+      val subAggregation = subAggregationKey.map { key =>
+        extractSpendAggregation(rowsForGoogleProjectId, currency, aggregationKey = SpendReportingAggregationKeyWithSub(key), workspaceProjectsToNames = workspaceProjectsToNames)
+      }
       val workspaceName = workspaceProjectsToNames.getOrElse(googleProjectId, throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"unexpected project ${googleProjectId.value} returned by BigQuery")))
       SpendReportingForDateRange(cost.toString(),
         credits.toString(),
@@ -110,7 +128,9 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     val spendByCategory = rows.groupBy(row => TerraSpendCategories.categorize(row.get("service").getStringValue))
     val categorySpend = spendByCategory.map { case (category, rowsForCategory) =>
       val (cost, credits) = sumCostsAndCredits(rowsForCategory, currency)
-      val subAggregation = extractSpendAggregation(rowsForCategory, currency, aggregationKey = subAggregationKey, workspaceProjectsToNames = workspaceProjectsToNames)
+      val subAggregation = subAggregationKey.map { key =>
+        extractSpendAggregation(rowsForCategory, currency, aggregationKey = SpendReportingAggregationKeyWithSub(key), workspaceProjectsToNames = workspaceProjectsToNames)
+      }
       SpendReportingForDateRange(
         cost.toString,
         credits.toString,
@@ -129,7 +149,9 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     val spendByStartTime = rows.groupBy(row => DateTime.parse(row.get("date").getStringValue))
     val dailySpend = spendByStartTime.map { case (startTime, rowsForStartTime) =>
       val (cost, credits) = sumCostsAndCredits(rowsForStartTime, currency)
-      val subAggregation = extractSpendAggregation(rowsForStartTime, currency, aggregationKey = subAggregationKey, workspaceProjectsToNames = workspaceProjectsToNames)
+      val subAggregation = subAggregationKey.map { key =>
+        extractSpendAggregation(rowsForStartTime, currency, aggregationKey = SpendReportingAggregationKeyWithSub(key), workspaceProjectsToNames = workspaceProjectsToNames)
+      }
       SpendReportingForDateRange(
         cost.toString,
         credits.toString,
@@ -143,21 +165,6 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     SpendReportingAggregation(
       SpendReportingAggregationKeys.Daily, dailySpend
     )
-  }
-
-  /**
-    * Ensure that BigQuery results only include one type of currency and return that currency.
-    */
-  private def getCurrency(rows: List[FieldValueList]): Currency = {
-    val currencies = rows.map(_.get("currency").getStringValue)
-
-    Currency.getInstance(currencies.reduce { (x, y) =>
-      if (x.equals(y)) {
-        x
-      } else {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Inconsistent currencies found while aggregating spend data: $x and $y cannot be combined"))
-      }
-    })
   }
 
   private def dateTimeToISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
@@ -180,13 +187,11 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
     }
   }
 
-  private def validateReportParameters(startDate: DateTime, endDate: DateTime, aggregationKey: Option[SpendReportingAggregationKey], subAggregationKey: Option[SpendReportingAggregationKey]): Unit = {
+  private def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit = {
     if (startDate.isAfter(endDate)) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"start date ${dateTimeToISODateString(startDate)} must be before end date ${dateTimeToISODateString(endDate)}"))
     } else if (Days.daysBetween(startDate, endDate).getDays > spendReportingServiceConfig.maxDateRange) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"provided dates exceed maximum report date range of ${spendReportingServiceConfig.maxDateRange} days"))
-    } else if (subAggregationKey.isDefined && aggregationKey.isEmpty) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"cannot return sub-aggregated data without a top-level aggregation key"))
     }
   }
 
@@ -210,17 +215,31 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
       .setArrayType(StandardSQLTypeName.STRING)
       .setArrayValues(queryParameterArrayValues)
       .build()
-}
+  }
 
-  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime, aggregationKey: Option[SpendReportingAggregationKey] = None, subAggregationKey: Option[SpendReportingAggregationKey] = None): Future[SpendReportingResults] = {
-    validateReportParameters(startDate, endDate, aggregationKey, subAggregationKey)
+  private def getQuery(aggregationKeys: Set[SpendReportingAggregationKey], tableName: String): String = {
+    s"""
+       | SELECT
+       |  SUM(cost) as cost,
+       |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+       |  currency ${aggregationKeys.map(_.bigQueryAliasClause()).mkString}
+       | FROM `$tableName`
+       | WHERE billing_account_id = @billingAccountId
+       | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
+       | AND project.id in UNNEST(@projects)
+       | GROUP BY currency ${aggregationKeys.map(_.bigQueryGroupByClause()).mkString}
+       |""".stripMargin
+  }
+
+  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime, aggregationKeyParameters: Set[SpendReportingAggregationKeyWithSub] = Set.empty): Future[SpendReportingResults] = {
+    validateReportParameters(startDate, endDate)
     requireAlphaUser() {
       requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReport) {
         for {
           spendExportConf <- getSpendExportConfiguration(billingProjectName)
           workspaceProjectsToNames <- getWorkspaceGoogleProjects(billingProjectName)
-
-          query = getQuery(List(aggregationKey, subAggregationKey).flatten, spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName))
+          aggregationKeys = aggregationKeyParameters.flatMap(maybeKeys => Set(Option(maybeKeys.key), maybeKeys.subAggregationKey).flatten)
+          query = getQuery(aggregationKeys, spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName))
 
           queryJobConfiguration = QueryJobConfiguration
             .newBuilder(query)
@@ -234,24 +253,10 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         } yield {
           result.getValues.asScala.toList match {
             case Nil => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"no spend data found for billing project ${billingProjectName.value} between dates ${dateTimeToISODateString(startDate)} and ${dateTimeToISODateString(endDate)}"))
-            case rows => extractSpendReportingResults(rows, startDate, endDate, workspaceProjectsToNames, aggregationKey, subAggregationKey)
+            case rows => extractSpendReportingResults(rows, startDate, endDate, workspaceProjectsToNames, aggregationKeyParameters)
           }
         }
       }
     }
-  }
-
-  private def getQuery(aggregationKeys: List[SpendReportingAggregationKey], tableName: String): String = {
-    s"""
-       | SELECT
-       |  SUM(cost) as cost,
-       |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-       |  currency ${aggregationKeys.map(_.bigQueryAliasClause()).mkString}
-       | FROM `$tableName`
-       | WHERE billing_account_id = @billingAccountId
-       | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
-       | AND project.id in UNNEST(@projects)
-       | GROUP BY currency ${aggregationKeys.map(_.bigQueryGroupByClause()).mkString}
-       |""".stripMargin
   }
 }
