@@ -91,8 +91,6 @@ object TerraSpendCategories {
   case object Other extends TerraSpendCategory
 }
 
-case class CategorizedGCPService(name: String, category: TerraSpendCategory)
-
 class SpendReportingJsonSupport extends JsonSupport {
   implicit object SpendReportingAggregationKeyFormat extends RootJsonFormat[SpendReportingAggregationKeys.SpendReportingAggregationKey] {
     override def write(obj: SpendReportingAggregationKeys.SpendReportingAggregationKey): JsValue = JsString(obj.toString)
@@ -114,8 +112,6 @@ class SpendReportingJsonSupport extends JsonSupport {
   implicit val SpendReportingAggregationKeyParameterFormat = jsonFormat2(SpendReportingAggregationKeyWithSub)
 
   implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
-
-  implicit val CategorizedGCPServiceFormat = jsonFormat2(CategorizedGCPService)
 
   implicit val SpendReportingAggregationFormat: JsonFormat[SpendReportingAggregation] = lazyFormat(jsonFormat2(SpendReportingAggregation))
 
