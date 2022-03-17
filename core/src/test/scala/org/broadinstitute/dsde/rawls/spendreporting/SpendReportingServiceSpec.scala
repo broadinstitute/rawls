@@ -142,6 +142,77 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       val schema: Schema = Schema.of(fields:_*)
       val tableResult: TableResult = new TableResult(schema, fieldValues.length, page)
     }
+
+    object SubAggregation {
+      val workspaceGoogleProject1 = "project1"
+      val workspaceGoogleProject2 = "project2"
+      val workspace1: Workspace = model.Workspace(testData.billingProject.projectName.value, "workspace1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject1), None, None, None, None, WorkspaceType.RawlsWorkspace)
+      val workspace2: Workspace = model.Workspace(testData.billingProject.projectName.value, "workspace2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject2), None, None, None, None, WorkspaceType.RawlsWorkspace)
+
+      val workspace1OtherRowCost = 204.1025
+      val workspace1ComputeRowCost = 50.20
+      val workspace2StorageRowCost = 2.5
+      val workspace2OtherRowCost = 5.10245
+
+      val workspace1OtherRowCostRounded: BigDecimal = BigDecimal(workspace1OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val workspace1ComputeRowCostRounded: BigDecimal = BigDecimal(workspace1ComputeRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val workspace2StorageRowCostRounded: BigDecimal = BigDecimal(workspace2StorageRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val workspace2OtherRowCostRounded: BigDecimal = BigDecimal(workspace2OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+
+      val otherTotalCostRounded: BigDecimal = BigDecimal(workspace1OtherRowCost + workspace2OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val storageTotalCostRounded: BigDecimal = workspace2StorageRowCostRounded
+      val computeTotalCostRounded: BigDecimal = workspace1ComputeRowCostRounded
+
+      val workspace1TotalCostRounded: BigDecimal = BigDecimal(workspace1OtherRowCost + workspace1ComputeRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val workspace2TotalCostRounded: BigDecimal = BigDecimal(workspace2StorageRowCost + workspace2OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+
+      val totalCostRounded: BigDecimal = BigDecimal(workspace1OtherRowCost + workspace1ComputeRowCost + workspace2StorageRowCost + workspace2OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+
+      val fields: List[Field] = List(
+        Field.of("cost", StandardSQLTypeName.STRING),
+        Field.of("credits", StandardSQLTypeName.STRING),
+        Field.of("currency", StandardSQLTypeName.STRING),
+        Field.of("service", StandardSQLTypeName.STRING),
+        Field.of("googleProjectId", StandardSQLTypeName.STRING)
+      )
+      val workspace1OtherRow: List[FieldValue] = List(
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$workspace1OtherRowCost"), // cost
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Cloud DNS"), // service
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject1) // googleProjectId
+      )
+      val workspace1ComputeRow: List[FieldValue] = List(
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$workspace1ComputeRowCost"), // cost
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Kubernetes Engine"), // service
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject1) // googleProjectId
+      )
+      val workspace2ComputeRow: List[FieldValue] = List(
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$workspace2StorageRowCost"), // cost
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Cloud Storage"), // service
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject2) // googleProjectId
+      )
+      val workspace2OtherRow: List[FieldValue] = List(
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$workspace2OtherRowCost"), // cost
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Cloud Logging"), // service
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject2) // googleProjectId
+      )
+      val fieldValues: List[FieldValueList] = List(
+        FieldValueList.of(workspace1OtherRow.asJava, fields:_*),
+        FieldValueList.of(workspace1ComputeRow.asJava, fields:_*),
+        FieldValueList.of(workspace2ComputeRow.asJava, fields:_*),
+        FieldValueList.of(workspace2OtherRow.asJava, fields:_*)
+      )
+      val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValues.asJava)
+      val schema: Schema = Schema.of(fields:_*)
+      val tableResult: TableResult = new TableResult(schema, fieldValues.length, page)
+    }
   }
 
   val defaultServiceProject: GoogleProject = GoogleProject("project")
@@ -240,6 +311,145 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set.empty), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Workspace.totalCostRounded.toString
     reportingResults.spendDetails shouldBe empty
+  }
+
+  it should "support sub-aggregations" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.SubAggregation.tableResult)
+
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
+
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(SpendReportingAggregationKeys.Category)))), Duration.Inf)
+    val topLevelAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("spend results not parsed correctly"))
+
+    withClue("total cost was incorrect"){
+      reportingResults.spendSummary.cost shouldBe SpendReportingTestData.SubAggregation.totalCostRounded.toString
+    }
+    topLevelAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+
+    topLevelAggregation.spendData.map { spendData =>
+      val workspaceGoogleProject = spendData.googleProjectId.getOrElse(fail("spend results not parsed correctly")).value
+      val subAggregation = spendData.subAggregation.getOrElse(fail("spend results not parsed correctly"))
+      subAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+
+      if (workspaceGoogleProject.equals(SpendReportingTestData.SubAggregation.workspace1.googleProjectId.value)) {
+        withClue(s"cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
+          spendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1TotalCostRounded.toString
+        }
+        subAggregation.spendData.map { subAggregatedSpendData =>
+          if (subAggregatedSpendData.category == Option(TerraSpendCategories.Compute)) {
+            withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
+              subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1ComputeRowCostRounded.toString
+            }
+          } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
+            withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
+              subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1OtherRowCostRounded.toString
+            }
+          } else {
+            fail(s"unexpected category found in spend results - $subAggregatedSpendData")
+          }
+        }
+
+      } else if (workspaceGoogleProject.equals(SpendReportingTestData.SubAggregation.workspace2.googleProjectId.value)) {
+        withClue(s"cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
+          spendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2TotalCostRounded.toString
+        }
+        subAggregation.spendData.map { subAggregatedSpendData =>
+          if (subAggregatedSpendData.category == Option(TerraSpendCategories.Storage)) {
+            withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
+              subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2StorageRowCostRounded.toString
+            }
+          } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
+            withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
+              subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2OtherRowCostRounded.toString
+            }
+          } else {
+            fail(s"unexpected category found in spend results - $subAggregatedSpendData")
+          }
+        }
+      } else {
+        fail(s"unexpected workspace found in spend results - $spendData")
+      }
+    }
+  }
+
+  it should "support multiple aggregations" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.SubAggregation.tableResult)
+
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
+
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(SpendReportingAggregationKeys.Category)), SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))), Duration.Inf)
+    withClue("total cost was incorrect") {
+      reportingResults.spendSummary.cost shouldBe SpendReportingTestData.SubAggregation.totalCostRounded.toString
+    }
+
+    reportingResults.spendDetails.map {
+      case SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, spendDataForWorkspaces) => {
+        spendDataForWorkspaces.map { spendData =>
+          val workspaceGoogleProject = spendData.googleProjectId.getOrElse(fail("spend results not parsed correctly")).value
+          val subAggregation = spendData.subAggregation.getOrElse(fail("spend results not parsed correctly"))
+          subAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+
+          if (workspaceGoogleProject.equals(SpendReportingTestData.SubAggregation.workspace1.googleProjectId.value)) {
+            withClue(s"cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
+              spendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1TotalCostRounded.toString
+            }
+            subAggregation.spendData.map { subAggregatedSpendData =>
+              if (subAggregatedSpendData.category == Option(TerraSpendCategories.Compute)) {
+                withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
+                  subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1ComputeRowCostRounded.toString
+                }
+              } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
+                withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
+                  subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1OtherRowCostRounded.toString
+                }
+              } else {
+                fail(s"unexpected category found in spend results - $subAggregatedSpendData")
+              }
+            }
+
+          } else if (workspaceGoogleProject.equals(SpendReportingTestData.SubAggregation.workspace2.googleProjectId.value)) {
+            withClue(s"cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
+              spendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2TotalCostRounded.toString
+            }
+            subAggregation.spendData.map { subAggregatedSpendData =>
+              if (subAggregatedSpendData.category == Option(TerraSpendCategories.Storage)) {
+                withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
+                  subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2StorageRowCostRounded.toString
+                }
+              } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
+                withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
+                  subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2OtherRowCostRounded.toString
+                }
+              } else {
+                fail(s"unexpected category found in spend results - $subAggregatedSpendData")
+              }
+            }
+          } else {
+            fail(s"unexpected workspace found in spend results - $spendData")
+          }
+        }
+      }
+      case SpendReportingAggregation(SpendReportingAggregationKeys.Category, spendData) => {
+        spendData.map { spendDataForCategory =>
+          val category = spendDataForCategory.category.getOrElse(fail("workspace results not parsed correctly"))
+
+          withClue(s"total $category cost was incorrect") {
+            if (category.equals(TerraSpendCategories.Compute)) {
+              spendDataForCategory.cost shouldBe SpendReportingTestData.SubAggregation.computeTotalCostRounded.toString
+            } else if (category.equals(TerraSpendCategories.Storage)) {
+              spendDataForCategory.cost shouldBe SpendReportingTestData.SubAggregation.storageTotalCostRounded.toString
+            } else if (category.equals(TerraSpendCategories.Other)) {
+              spendDataForCategory.cost shouldBe SpendReportingTestData.SubAggregation.otherTotalCostRounded.toString
+            } else {
+              fail(s"unexpected workspace found in spend results - $spendData")
+            }
+          }
+        }
+      }
+      case _ => fail("unexpected aggregation key found")
+    }
   }
 
   it should "throw an exception when BQ returns zero rows" in withDefaultTestDatabase { dataSource: SlickDataSource =>

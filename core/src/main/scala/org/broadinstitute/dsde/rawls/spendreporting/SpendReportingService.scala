@@ -51,11 +51,10 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
                                    workspaceProjectsToNames: Map[GoogleProject, WorkspaceName],
                                    aggregationKeys: Set[SpendReportingAggregationKeyWithSub]): SpendReportingResults = {
     val currency = getCurrency(rows)
-
-    val spendSummary = extractSpendSummary(rows, currency, startTime, endTime)
     val spendAggregations = aggregationKeys.map { aggregationKey =>
       extractSpendAggregation(rows, currency, aggregationKey, workspaceProjectsToNames)
     }
+    val spendSummary = extractSpendSummary(rows, currency, startTime, endTime)
 
     SpendReportingResults(spendAggregations.toList, spendSummary)
   }
