@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.AzureContext
 import cats.implicits._
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.StorageObject
@@ -240,22 +241,22 @@ class WorkspaceService(protected val userInfo: UserInfo,
           val optionalAccessLevelForResponse = if (options.contains("accessLevel")) { Option(accessLevel) } else { None }
 
           // determine which functions to use for the various part of the response
-          def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
+          def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = noFuture /*if (options.contains("bucketOptions")) {
             traceWithParent("getBucketDetails",s1)(_ =>  gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId).map(Option(_)))
           } else {
             noFuture
-          }
-          def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
+          }*/
+          def canComputeFuture(): Future[Option[Boolean]] =  noFuture /*if (options.contains("canCompute")) {
             traceWithParent("getUserComputePermissions",s1)(_ =>  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel).map(Option(_)))
           } else {
             noFuture
-          }
-          def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
+          }*/
+          def canShareFuture(): Future[Option[Boolean]] = noFuture /*if (options.contains("canShare")) {
             //convoluted but accessLevel for both params because user could at most share with their own access level
             traceWithParent("getUserSharePermissions",s1)(_ =>  getUserSharePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel, accessLevel).map(Option(_)))
           } else {
             noFuture
-          }
+          }*/
           def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
             traceWithParent("getUserCatalogPermissions",s1)(_ =>  getUserCatalogPermissions(workspaceContext.workspaceIdAsUUID.toString).map(Option(_)))
           } else {
@@ -280,6 +281,15 @@ class WorkspaceService(protected val userInfo: UserInfo,
             DBIO.from(noFuture)
           }
 
+          def wsmInfoFuture(): Future[Option[Map[String, String]]] = if (workspaceContext.workspaceType == WorkspaceType.McWorkspace) {
+            Future({
+              val wsmInfo = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)
+              Some(Map("azureResourceGroupId" -> wsmInfo.getAzureContext.getResourceGroupId))
+            })
+          } else {
+            noFuture
+          }
+
           //run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
           val futuresInParallel = (
             catalogFuture(),
@@ -287,15 +297,17 @@ class WorkspaceService(protected val userInfo: UserInfo,
             canComputeFuture(),
             ownersFuture(),
             workspaceAuthorizationDomainFuture(),
-            bucketOptionsFuture()
+            bucketOptionsFuture(),
+            wsmInfoFuture()
           ).tupled
 
           for {
-            (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
+            (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails, wsmInfo) <- DBIO.from(futuresInParallel)
             stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s1)(_ => workspaceSubmissionStatsFuture())
           } yield {
             // post-process JSON to remove calculated-but-undesired keys
-            val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes), stats, bucketDetails, owners)
+
+            val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes), stats, bucketDetails, owners, wsmInfo)
             val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
             filteredJson
           }
