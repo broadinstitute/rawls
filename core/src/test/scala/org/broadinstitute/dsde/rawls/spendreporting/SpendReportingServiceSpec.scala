@@ -283,19 +283,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
 
     categoryAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
 
-    categoryAggregation.spendData.map { spendForCategory =>
-      val category = spendForCategory.category.getOrElse(fail("workspace results not parsed correctly"))
-
-      if (category.equals(TerraSpendCategories.Compute)) {
-        spendForCategory.cost shouldBe SpendReportingTestData.Category.computeRowCostRounded.toString
-      } else if (category.equals(TerraSpendCategories.Storage)) {
-        spendForCategory.cost shouldBe SpendReportingTestData.Category.storageRowCostRounded.toString
-      } else if (category.equals(TerraSpendCategories.Other)) {
-        spendForCategory.cost shouldBe SpendReportingTestData.Category.otherRowCostRounded.toString
-      } else {
-        fail(s"unexpected workspace found in spend results - $spendForCategory")
-      }
-    }
+    verifyCategoryAggregation(
+      categoryAggregation,
+      expectedComputeCost = SpendReportingTestData.Category.computeRowCostRounded,
+      expectedStorageCost = SpendReportingTestData.Category.storageRowCostRounded,
+      expectedOtherCost = SpendReportingTestData.Category.otherRowCostRounded
+    )
   }
 
   it should "return summary data only if aggregation key is omitted" in withDefaultTestDatabase { dataSource: SlickDataSource =>
@@ -318,6 +311,55 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     withClue("total cost was incorrect"){
       reportingResults.spendSummary.cost shouldBe SpendReportingTestData.SubAggregation.totalCostRounded.toString
     }
+    verifyWorkspaceCategorySubAggregation(topLevelAggregation)
+  }
+
+  it should "support multiple aggregations" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.SubAggregation.tableResult)
+
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
+
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(SpendReportingAggregationKeys.Category)), SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))), Duration.Inf)
+    withClue("total cost was incorrect") {
+      reportingResults.spendSummary.cost shouldBe SpendReportingTestData.SubAggregation.totalCostRounded.toString
+    }
+
+    reportingResults.spendDetails.map {
+      case workspaceAggregation@SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, _) => {
+        verifyWorkspaceCategorySubAggregation(workspaceAggregation)
+      }
+      case categoryAggregation@SpendReportingAggregation(SpendReportingAggregationKeys.Category, _) => {
+        verifyCategoryAggregation(
+          categoryAggregation,
+          expectedComputeCost = SpendReportingTestData.SubAggregation.computeTotalCostRounded,
+          expectedStorageCost = SpendReportingTestData.SubAggregation.storageTotalCostRounded,
+          expectedOtherCost = SpendReportingTestData.SubAggregation.otherTotalCostRounded
+        )
+      }
+      case _ => fail("unexpected aggregation key found")
+    }
+  }
+
+  private def verifyCategoryAggregation(categoryAggregation: SpendReportingAggregation, expectedComputeCost: BigDecimal, expectedStorageCost: BigDecimal, expectedOtherCost: BigDecimal) = {
+    categoryAggregation.spendData.map { spendDataForCategory =>
+      val category = spendDataForCategory.category.getOrElse(fail("results not parsed correctly"))
+
+      withClue(s"total $category cost was incorrect") {
+        if (category.equals(TerraSpendCategories.Compute)) {
+          spendDataForCategory.cost shouldBe expectedComputeCost.toString
+        } else if (category.equals(TerraSpendCategories.Storage)) {
+          spendDataForCategory.cost shouldBe expectedStorageCost.toString
+        } else if (category.equals(TerraSpendCategories.Other)) {
+          spendDataForCategory.cost shouldBe expectedOtherCost.toString
+        } else {
+          fail(s"unexpected category found in spend results - $spendDataForCategory")
+        }
+      }
+    }
+  }
+
+  private def verifyWorkspaceCategorySubAggregation(topLevelAggregation: SpendReportingAggregation) = {
     topLevelAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
 
     topLevelAggregation.spendData.map { spendData =>
@@ -363,85 +405,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       } else {
         fail(s"unexpected workspace found in spend results - $spendData")
       }
-    }
-  }
-
-  it should "support multiple aggregations" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.SubAggregation.tableResult)
-
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
-
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(SpendReportingAggregationKeys.Category)), SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))), Duration.Inf)
-    withClue("total cost was incorrect") {
-      reportingResults.spendSummary.cost shouldBe SpendReportingTestData.SubAggregation.totalCostRounded.toString
-    }
-
-    reportingResults.spendDetails.map {
-      case SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, spendDataForWorkspaces) => {
-        spendDataForWorkspaces.map { spendData =>
-          val workspaceGoogleProject = spendData.googleProjectId.getOrElse(fail("spend results not parsed correctly")).value
-          val subAggregation = spendData.subAggregation.getOrElse(fail("spend results not parsed correctly"))
-          subAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
-
-          if (workspaceGoogleProject.equals(SpendReportingTestData.SubAggregation.workspace1.googleProjectId.value)) {
-            withClue(s"cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
-              spendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1TotalCostRounded.toString
-            }
-            subAggregation.spendData.map { subAggregatedSpendData =>
-              if (subAggregatedSpendData.category == Option(TerraSpendCategories.Compute)) {
-                withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
-                  subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1ComputeRowCostRounded.toString
-                }
-              } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
-                withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
-                  subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1OtherRowCostRounded.toString
-                }
-              } else {
-                fail(s"unexpected category found in spend results - $subAggregatedSpendData")
-              }
-            }
-
-          } else if (workspaceGoogleProject.equals(SpendReportingTestData.SubAggregation.workspace2.googleProjectId.value)) {
-            withClue(s"cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
-              spendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2TotalCostRounded.toString
-            }
-            subAggregation.spendData.map { subAggregatedSpendData =>
-              if (subAggregatedSpendData.category == Option(TerraSpendCategories.Storage)) {
-                withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
-                  subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2StorageRowCostRounded.toString
-                }
-              } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
-                withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
-                  subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2OtherRowCostRounded.toString
-                }
-              } else {
-                fail(s"unexpected category found in spend results - $subAggregatedSpendData")
-              }
-            }
-          } else {
-            fail(s"unexpected workspace found in spend results - $spendData")
-          }
-        }
-      }
-      case SpendReportingAggregation(SpendReportingAggregationKeys.Category, spendData) => {
-        spendData.map { spendDataForCategory =>
-          val category = spendDataForCategory.category.getOrElse(fail("workspace results not parsed correctly"))
-
-          withClue(s"total $category cost was incorrect") {
-            if (category.equals(TerraSpendCategories.Compute)) {
-              spendDataForCategory.cost shouldBe SpendReportingTestData.SubAggregation.computeTotalCostRounded.toString
-            } else if (category.equals(TerraSpendCategories.Storage)) {
-              spendDataForCategory.cost shouldBe SpendReportingTestData.SubAggregation.storageTotalCostRounded.toString
-            } else if (category.equals(TerraSpendCategories.Other)) {
-              spendDataForCategory.cost shouldBe SpendReportingTestData.SubAggregation.otherTotalCostRounded.toString
-            } else {
-              fail(s"unexpected workspace found in spend results - $spendData")
-            }
-          }
-        }
-      }
-      case _ => fail("unexpected aggregation key found")
     }
   }
 
