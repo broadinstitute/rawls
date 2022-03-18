@@ -60,6 +60,7 @@ trait SwaggerRoutes extends LazyLogging {
                                         |        clientSecret: "${swaggerConfig.realm}",
                                         |        realm: "${swaggerConfig.realm}",
                                         |        appName: "rawls",
+                                        |        scopes: ["openid", "email", "profile"],
                                         |        scopeSeparator: " ",
                                         |        additionalQueryStringParams: {}
                                         |      })
