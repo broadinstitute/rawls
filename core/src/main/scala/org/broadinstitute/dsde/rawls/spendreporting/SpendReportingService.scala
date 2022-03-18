@@ -10,6 +10,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
+import org.broadinstitute.dsde.rawls.model.TerraSpendCategories.TerraSpendCategory
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -102,7 +103,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
   }
 
   private def extractWorkspaceSpendAggregation(rows: List[FieldValueList], currency: Currency, subAggregationKey: Option[SpendReportingAggregationKey] = None, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName]): SpendReportingAggregation = {
-    val spendByGoogleProjectId = rows.groupBy(row => GoogleProject(row.get("googleProjectId").getStringValue))
+    val spendByGoogleProjectId: Map[GoogleProject, List[FieldValueList]] = rows.groupBy(row => GoogleProject(row.get("googleProjectId").getStringValue))
     val workspaceSpend = spendByGoogleProjectId.map { case (googleProjectId, rowsForGoogleProjectId) =>
       val (cost, credits) = sumCostsAndCredits(rowsForGoogleProjectId, currency)
       val subAggregation = subAggregationKey.map { key =>
@@ -124,7 +125,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
   }
 
   private def extractCategorySpendAggregation(rows: List[FieldValueList], currency: Currency, subAggregationKey: Option[SpendReportingAggregationKey] = None, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName] = Map.empty): SpendReportingAggregation = {
-    val spendByCategory = rows.groupBy(row => TerraSpendCategories.categorize(row.get("service").getStringValue))
+    val spendByCategory: Map[TerraSpendCategory, List[FieldValueList]] = rows.groupBy(row => TerraSpendCategories.categorize(row.get("service").getStringValue))
     val categorySpend = spendByCategory.map { case (category, rowsForCategory) =>
       val (cost, credits) = sumCostsAndCredits(rowsForCategory, currency)
       val subAggregation = subAggregationKey.map { key =>
@@ -145,7 +146,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
   }
 
   private def extractDailySpendAggregation(rows: List[FieldValueList], currency: Currency, subAggregationKey: Option[SpendReportingAggregationKey] = None, workspaceProjectsToNames: Map[GoogleProject, WorkspaceName] = Map.empty): SpendReportingAggregation = {
-    val spendByStartTime = rows.groupBy(row => DateTime.parse(row.get("date").getStringValue))
+    val spendByStartTime: Map[DateTime, List[FieldValueList]] = rows.groupBy(row => DateTime.parse(row.get("date").getStringValue))
     val dailySpend = spendByStartTime.map { case (startTime, rowsForStartTime) =>
       val (cost, credits) = sumCostsAndCredits(rowsForStartTime, currency)
       val subAggregation = subAggregationKey.map { key =>
