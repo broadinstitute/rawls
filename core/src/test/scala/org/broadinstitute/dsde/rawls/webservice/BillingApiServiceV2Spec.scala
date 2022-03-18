@@ -10,10 +10,10 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
-import org.mockito.ArgumentMatchers
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
@@ -556,6 +556,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   "GET /billing/v2/{projectName}/spendReport" should "200 and return only summary information when aggregation key is not present" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     val mockSpendReportingService = mock[SpendReportingService](RETURNS_SMART_NULLS)
+    // if the API service does not parse parameters and call the spendReportingService correctly, test will fail
+    when(mockSpendReportingService.getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], any[Set[SpendReportingAggregationKeyWithSub]]))
+      .thenReturn(Future.failed(new RawlsException("parameters were not parsed correctly")))
     when(mockSpendReportingService.getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], ArgumentMatchers.eq(Set.empty)))
       .thenReturn(Future.successful(SpendReportingResults(Seq.empty, SpendReportingForDateRange("0.0", "0.0", "USD", Option(DateTime.now()), Option(DateTime.now())))))
 
@@ -569,7 +572,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
             status
           }
 
-          responseAs[SpendReportingResults].spendDetails shouldBe empty
+          verify(mockSpendReportingService, times(1)).getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], ArgumentMatchers.eq(Set.empty))
         }
     }
   }
@@ -581,6 +584,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category),
       SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category, Option(SpendReportingAggregationKeys.Category))
     )
+    // if the API service does not parse parameters and call the spendReportingService correctly, test will fail
+    when(mockSpendReportingService.getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], any[Set[SpendReportingAggregationKeyWithSub]]))
+      .thenReturn(Future.failed(new RawlsException("parameters were not parsed correctly")))
     // we don't care about what it actually returns in this test, just that the mocked service is called correctly
     when(mockSpendReportingService.getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], ArgumentMatchers.eq(expectedAggregationKeys)))
       .thenReturn(Future.successful(SpendReportingResults(Seq.empty, SpendReportingForDateRange("0.0", "0.0", "USD", Option(DateTime.now()), Option(DateTime.now())))))
@@ -594,6 +600,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           assertResult(StatusCodes.OK, responseAs[String]) {
             status
           }
+
+          verify(mockSpendReportingService, times(1)).getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], ArgumentMatchers.eq(expectedAggregationKeys))
         }
     }
   }
