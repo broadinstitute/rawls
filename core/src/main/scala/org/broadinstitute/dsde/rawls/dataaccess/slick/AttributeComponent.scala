@@ -320,6 +320,11 @@ trait AttributeComponent {
       }
     }
 
+    val caseSensitiveCollate = SimpleExpression.unary[Option[String], Option[String]] { (value, qb) => 
+      qb.expr(value)
+      qb.sqlBuilder += " collate utf8_bin"
+    }
+
     def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String], limit: Option[Int] = None) = {
 
       val basicFilter = filter(rec =>
@@ -331,7 +336,7 @@ trait AttributeComponent {
         case Some(query) => basicFilter.filter(_.valueString.like(s"%$query%"))
         case None => basicFilter
       })
-        .groupBy(_.valueString)
+        .groupBy(r => caseSensitiveCollate(r.valueString))
         .map(queryThing => (queryThing._1, queryThing._2.length))
         .sortBy(r => (r._2.desc, r._1))
 

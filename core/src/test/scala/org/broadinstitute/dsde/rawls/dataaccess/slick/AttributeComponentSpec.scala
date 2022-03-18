@@ -502,6 +502,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("testString"), AttributeString("cant")))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("cancer")))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("Buffalo")))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("cantaloupe")))
 
 
@@ -515,10 +516,10 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, Some("can")).result)
     }
 
-    assertResult(Vector(("cancer", 2), ("buffalo", 1), ("cantaloupe", 1))) {
+    assertResult(Vector(("cancer", 2), ("Buffalo", 1), ("buffalo", 1), ("cantaloupe", 1))) {
       runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, None).result)
     }
-    assertResult(Vector(("cancer", 2), ("buffalo", 1))) {
+    assertResult(Vector(("cancer", 2), ("Buffalo", 1))) {
       runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, None, Some(2)).result)
     }
     assertResult(Vector(("cant", 1))) {
