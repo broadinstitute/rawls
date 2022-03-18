@@ -9,10 +9,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectRecord
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
-import org.mockito.ArgumentMatchers
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
@@ -23,6 +24,7 @@ import scala.util.Random
 
 class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+  import org.broadinstitute.dsde.rawls.model.SpendReportingJsonSupport._
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
     override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
@@ -31,8 +33,22 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     when(samDAO.removeUserFromPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourcePolicyName], any[String], any[UserInfo])).thenReturn(Future.successful(()))
   }
 
+  case class TestApiServiceWithCustomSpendReporting(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, spendReportingService: SpendReportingService)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
+    override val spendReportingConstructor: UserInfo => SpendReportingService =
+      _ => spendReportingService
+  }
+
   def withApiServices[T](dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test"))(testCode: TestApiService =>  T): T = {
     val apiService = TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
+  def withApiServicesAndCustomSpendReporting[T](dataSource: SlickDataSource, spendReportingService: SpendReportingService)(testCode: TestApiServiceWithCustomSpendReporting =>  T): T = {
+    val apiService = TestApiServiceWithCustomSpendReporting(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO, spendReportingService)
     try {
       testCode(apiService)
     } finally {
@@ -538,10 +554,98 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  "GET /billing/v2/{projectName}/spendReport" should "400 when invalid dates are given" in withEmptyDatabaseAndApiServices { services =>
+  "GET /billing/v2/{projectName}/spendReport" should "200 and return only summary information when aggregation key is not present" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    val mockSpendReportingService = mock[SpendReportingService](RETURNS_SMART_NULLS)
+    // if the API service does not parse parameters and call the spendReportingService correctly, test will fail
+    when(mockSpendReportingService.getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], any[Set[SpendReportingAggregationKeyWithSub]]))
+      .thenReturn(Future.failed(new RawlsException("parameters were not parsed correctly")))
+    when(mockSpendReportingService.getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], ArgumentMatchers.eq(Set.empty)))
+      .thenReturn(Future.successful(SpendReportingResults(Seq.empty, SpendReportingForDateRange("0.0", "0.0", "USD", Option(DateTime.now()), Option(DateTime.now())))))
+
+    withApiServicesAndCustomSpendReporting(dataSource, mockSpendReportingService) { services =>
+      val project = createProject("project")
+
+      Get(s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-03-06&endDate=2022-03-07") ~>
+        sealRoute(services.billingRoutesV2) ~>
+        check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+
+          verify(mockSpendReportingService, times(1)).getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], ArgumentMatchers.eq(Set.empty))
+        }
+    }
+  }
+
+  it should "200 and parse aggregation keys" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    val mockSpendReportingService = mock[SpendReportingService](RETURNS_SMART_NULLS)
+    val expectedAggregationKeys = Set(
+      SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(SpendReportingAggregationKeys.Daily)),
+      SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category),
+      SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category, Option(SpendReportingAggregationKeys.Category))
+    )
+    // if the API service does not parse parameters and call the spendReportingService correctly, test will fail
+    when(mockSpendReportingService.getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], any[Set[SpendReportingAggregationKeyWithSub]]))
+      .thenReturn(Future.failed(new RawlsException("parameters were not parsed correctly")))
+    // we don't care about what it actually returns in this test, just that the mocked service is called correctly
+    when(mockSpendReportingService.getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], ArgumentMatchers.eq(expectedAggregationKeys)))
+      .thenReturn(Future.successful(SpendReportingResults(Seq.empty, SpendReportingForDateRange("0.0", "0.0", "USD", Option(DateTime.now()), Option(DateTime.now())))))
+
+    withApiServicesAndCustomSpendReporting(dataSource, mockSpendReportingService) { services =>
+      val project = createProject("project")
+
+      Get(s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-03-06&endDate=2022-03-07&aggregationKey=Workspace~Daily&aggregationKey=Category&aggregationKey=Category~Category") ~>
+        sealRoute(services.billingRoutesV2) ~>
+        check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+
+          verify(mockSpendReportingService, times(1)).getSpendForBillingProject(any[RawlsBillingProjectName], any[DateTime], any[DateTime], ArgumentMatchers.eq(expectedAggregationKeys))
+        }
+    }
+  }
+
+  it should "400 when invalid dates are given" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("project")
 
     Get(s"/billing/v2/${project.projectName.value}/spendReport?startDate=nothing&endDate=20-020-123556") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  it should "400 when unsupported aggregation keys are given" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+
+    Get(s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-02-03&endDate=2022-02-04&aggregationKey=Fake&aggregationKey=Workspace~bad") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  it should "400 when incorrectly formatted aggregation keys are given" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+
+    Get(s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-02-03&endDate=2022-02-04&aggregationKey=Category-Workspace") ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, responseAs[String]) {
+          status
+        }
+      }
+  }
+
+  it should "400 when too many sub aggregations are provided" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+
+    Get(s"/billing/v2/${project.projectName.value}/spendReport?startDate=2022-02-03&endDate=2022-02-04&aggregationKey=aggregationKey=Category~Workspace~Daily") ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {

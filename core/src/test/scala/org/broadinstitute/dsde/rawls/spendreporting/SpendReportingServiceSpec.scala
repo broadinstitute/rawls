@@ -34,33 +34,25 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       val firstRowCostRounded: BigDecimal = BigDecimal(firstRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val secondRowCostRounded: BigDecimal = BigDecimal(secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val totalCostRounded: BigDecimal = BigDecimal(firstRowCost + secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
-      val firstRowDate = DateTime.now().minusDays(1)
-      val secondRowDate = DateTime.now()
-      val fields: List[Field]= List(
-        Field.of("cost", StandardSQLTypeName.STRING),
-        Field.of("credits", StandardSQLTypeName.STRING),
-        Field.of("currency", StandardSQLTypeName.STRING),
-        Field.of("date", StandardSQLTypeName.STRING)
+      val firstRowDate: DateTime = DateTime.now().minusDays(1)
+      val secondRowDate: DateTime = DateTime.now()
+
+      val table: List[Map[String, String]] = List(
+        Map(
+          "cost" -> s"$firstRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "date" -> firstRowDate.toString
+        ),
+        Map(
+          "cost" -> s"$secondRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "date" -> secondRowDate.toString
+        )
       )
-      val firstRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$firstRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${firstRowDate.toString}") // date
-      )
-      val secondRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$secondRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${secondRowDate.toString}") // date
-      )
-      val fieldValues: List[FieldValueList] = List(
-        FieldValueList.of(firstRow.asJava, fields:_*),
-        FieldValueList.of(secondRow.asJava, fields:_*)
-      )
-      val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValues.asJava)
-      val schema: Schema = Schema.of(fields:_*)
-      val tableResult: TableResult = new TableResult(schema, 2, page)
+
+      val tableResult: TableResult = createTableResult(table)
     }
 
     object Workspace {
@@ -74,32 +66,146 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       val firstRowCostRounded: BigDecimal = BigDecimal(firstRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val secondRowCostRounded: BigDecimal = BigDecimal(secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val totalCostRounded: BigDecimal = BigDecimal(firstRowCost + secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
-      val fields: List[Field] = List(
-        Field.of("cost", StandardSQLTypeName.STRING),
-        Field.of("credits", StandardSQLTypeName.STRING),
-        Field.of("currency", StandardSQLTypeName.STRING),
-        Field.of("googleProjectId", StandardSQLTypeName.STRING)
+
+      val table: List[Map[String, String]] = List(
+        Map(
+          "cost" -> s"$firstRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "googleProjectId" -> workspaceGoogleProject1
+        ),
+        Map(
+          "cost" -> s"$secondRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "googleProjectId" -> workspaceGoogleProject2
+        )
       )
-      val firstRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$firstRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject1) // googleProjectId
-      )
-      val secondRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$secondRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject2) // googleProjectId
-      )
-      val fieldValues: List[FieldValueList] = List(
-        FieldValueList.of(firstRow.asJava, fields:_*),
-        FieldValueList.of(secondRow.asJava, fields:_*)
-      )
-      val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValues.asJava)
-      val schema: Schema = Schema.of(fields:_*)
-      val tableResult: TableResult = new TableResult(schema, 2, page)
+
+      val tableResult: TableResult = createTableResult(table)
     }
+
+    object Category {
+      val otherRowCost = 204.1025
+      val computeRowCost = 50.20
+      val storageRowCost = 2.5
+      val otherRowCostRounded: BigDecimal = BigDecimal(otherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val computeRowCostRounded: BigDecimal = BigDecimal(computeRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val storageRowCostRounded: BigDecimal = BigDecimal(storageRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val totalCostRounded: BigDecimal = BigDecimal(otherRowCost + computeRowCost + storageRowCost).setScale(2, RoundingMode.HALF_EVEN)
+
+      val table: List[Map[String, String]] = List(
+        Map(
+          "cost" -> s"$otherRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud DNS"
+        ),
+        Map(
+          "cost" -> s"$computeRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Kubernetes Engine"
+        ),
+        Map(
+          "cost" -> s"$storageRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud Storage"
+        )
+      )
+      val tableResult: TableResult = createTableResult(table)
+    }
+
+    object SubAggregation {
+      val workspaceGoogleProject1 = "project1"
+      val workspaceGoogleProject2 = "project2"
+      val workspace1: Workspace = model.Workspace(testData.billingProject.projectName.value, "workspace1", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject1), None, None, None, None, WorkspaceType.RawlsWorkspace)
+      val workspace2: Workspace = model.Workspace(testData.billingProject.projectName.value, "workspace2", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator", Map.empty, isLocked = false, WorkspaceVersions.V2, GoogleProjectId(workspaceGoogleProject2), None, None, None, None, WorkspaceType.RawlsWorkspace)
+
+      val workspace1OtherRowCost = 204.1025
+      val workspace1ComputeRowCost = 50.20
+      val workspace2StorageRowCost = 2.5
+      val workspace2OtherRowCost = 5.10245
+
+      val workspace1OtherRowCostRounded: BigDecimal = BigDecimal(workspace1OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val workspace1ComputeRowCostRounded: BigDecimal = BigDecimal(workspace1ComputeRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val workspace2StorageRowCostRounded: BigDecimal = BigDecimal(workspace2StorageRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val workspace2OtherRowCostRounded: BigDecimal = BigDecimal(workspace2OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+
+      val otherTotalCostRounded: BigDecimal = BigDecimal(workspace1OtherRowCost + workspace2OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val storageTotalCostRounded: BigDecimal = workspace2StorageRowCostRounded
+      val computeTotalCostRounded: BigDecimal = workspace1ComputeRowCostRounded
+
+      val workspace1TotalCostRounded: BigDecimal = BigDecimal(workspace1OtherRowCost + workspace1ComputeRowCost).setScale(2, RoundingMode.HALF_EVEN)
+      val workspace2TotalCostRounded: BigDecimal = BigDecimal(workspace2StorageRowCost + workspace2OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+
+      val totalCostRounded: BigDecimal = BigDecimal(workspace1OtherRowCost + workspace1ComputeRowCost + workspace2StorageRowCost + workspace2OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
+
+      val table: List[Map[String, String]] = List(
+        Map(
+          "cost" -> s"$workspace1OtherRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud DNS",
+          "googleProjectId" -> workspaceGoogleProject1
+        ),
+        Map(
+          "cost" -> s"$workspace1ComputeRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Kubernetes Engine",
+          "googleProjectId" -> workspaceGoogleProject1
+        ),
+        Map(
+          "cost" -> s"$workspace2StorageRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud Storage",
+          "googleProjectId" -> workspaceGoogleProject2
+        ),
+        Map(
+          "cost" -> s"$workspace2OtherRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud Logging",
+          "googleProjectId" -> workspaceGoogleProject2
+        )
+      )
+
+      val tableResult: TableResult = createTableResult(table)
+    }
+  }
+
+  def createTableResult(values: List[Map[String, String]]): TableResult = {
+    val rawSchemas: List[Set[String]] = values.map(_.keySet)
+    val rawFields: List[String] = if (rawSchemas.nonEmpty) {
+      rawSchemas.reduce { (x, y) =>
+        if (x.equals(y)) {
+          x
+        } else {
+          fail(s"inconsistent schema found when comparing rows $x and $y")
+        }
+      }.toList
+    } else {
+      List.empty
+    }
+    val fields: List[Field] = rawFields.map { field =>
+      Field.of(field, StandardSQLTypeName.STRING)
+    }
+    val schema: Schema = Schema.of(fields:_*)
+
+    val fieldValues: List[List[FieldValue]] = values.map { row =>
+      row.values.toList.map { value =>
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, value)
+      }
+    }
+    val fieldValueLists: List[FieldValueList] = fieldValues.map { row =>
+      FieldValueList.of(row.asJava, fields:_*)
+    }
+    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValueLists.asJava)
+
+    new TableResult(schema, fieldValueLists.length, page)
   }
 
   val defaultServiceProject: GoogleProject = GoogleProject("project")
@@ -123,15 +229,17 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   "SpendReportingService" should "break down results from Google by day" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.Daily.tableResult)
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Daily)), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily))), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Daily.totalCostRounded.toString
     val dailyAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("daily results not parsed correctly"))
     dailyAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Daily
 
     dailyAggregation.spendData.map { spendForDay =>
-      if (spendForDay.startTime.toLocalDate.equals(SpendReportingTestData.Daily.firstRowDate.toLocalDate)) {
+      if (spendForDay.startTime.getOrElse(fail("daily results not parsed correctly"))
+        .toLocalDate.equals(SpendReportingTestData.Daily.firstRowDate.toLocalDate)) {
         spendForDay.cost shouldBe SpendReportingTestData.Daily.firstRowCostRounded.toString
-      } else if (spendForDay.startTime.toLocalDate.equals(SpendReportingTestData.Daily.secondRowDate.toLocalDate)) {
+      } else if (spendForDay.startTime.getOrElse(fail("daily results not parsed correctly"))
+        .toLocalDate.equals(SpendReportingTestData.Daily.secondRowDate.toLocalDate)) {
         spendForDay.cost shouldBe SpendReportingTestData.Daily.secondRowCostRounded.toString
       } else {
         fail(s"unexpected day found in spend results - $spendForDay")
@@ -145,7 +253,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Workspace)), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Workspace.totalCostRounded.toString
     val workspaceAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("workspace results not parsed correctly"))
 
@@ -166,17 +274,142 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     workspaceAggregation.spendData.headOption.getOrElse(fail("workspace results not parsed correctly")).workspace shouldBe defined
   }
 
+  it should "break down results from Google by Terra spend category" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.Category.tableResult)
+
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))), Duration.Inf)
+    reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Category.totalCostRounded.toString
+    val categoryAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("workspace results not parsed correctly"))
+
+    categoryAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+
+    verifyCategoryAggregation(
+      categoryAggregation,
+      expectedComputeCost = SpendReportingTestData.Category.computeRowCostRounded,
+      expectedStorageCost = SpendReportingTestData.Category.storageRowCostRounded,
+      expectedOtherCost = SpendReportingTestData.Category.otherRowCostRounded
+    )
+  }
+
   it should "return summary data only if aggregation key is omitted" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.Workspace.tableResult)
 
-    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), None), Duration.Inf)
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set.empty), Duration.Inf)
     reportingResults.spendSummary.cost shouldBe SpendReportingTestData.Workspace.totalCostRounded.toString
     reportingResults.spendDetails shouldBe empty
   }
 
+  it should "support sub-aggregations" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.SubAggregation.tableResult)
+
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
+
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(SpendReportingAggregationKeys.Category)))), Duration.Inf)
+    val topLevelAggregation = reportingResults.spendDetails.headOption.getOrElse(fail("spend results not parsed correctly"))
+
+    withClue("total cost was incorrect"){
+      reportingResults.spendSummary.cost shouldBe SpendReportingTestData.SubAggregation.totalCostRounded.toString
+    }
+    verifyWorkspaceCategorySubAggregation(topLevelAggregation)
+  }
+
+  it should "support multiple aggregations" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val service = createSpendReportingService(dataSource, tableResult = SpendReportingTestData.SubAggregation.tableResult)
+
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
+    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
+
+    val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, Option(SpendReportingAggregationKeys.Category)), SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))), Duration.Inf)
+    withClue("total cost was incorrect") {
+      reportingResults.spendSummary.cost shouldBe SpendReportingTestData.SubAggregation.totalCostRounded.toString
+    }
+
+    reportingResults.spendDetails.map {
+      case workspaceAggregation@SpendReportingAggregation(SpendReportingAggregationKeys.Workspace, _) => {
+        verifyWorkspaceCategorySubAggregation(workspaceAggregation)
+      }
+      case categoryAggregation@SpendReportingAggregation(SpendReportingAggregationKeys.Category, _) => {
+        verifyCategoryAggregation(
+          categoryAggregation,
+          expectedComputeCost = SpendReportingTestData.SubAggregation.computeTotalCostRounded,
+          expectedStorageCost = SpendReportingTestData.SubAggregation.storageTotalCostRounded,
+          expectedOtherCost = SpendReportingTestData.SubAggregation.otherTotalCostRounded
+        )
+      }
+      case _ => fail("unexpected aggregation key found")
+    }
+  }
+
+  private def verifyCategoryAggregation(categoryAggregation: SpendReportingAggregation, expectedComputeCost: BigDecimal, expectedStorageCost: BigDecimal, expectedOtherCost: BigDecimal) = {
+    categoryAggregation.spendData.map { spendDataForCategory =>
+      val category = spendDataForCategory.category.getOrElse(fail("results not parsed correctly"))
+
+      withClue(s"total $category cost was incorrect") {
+        if (category.equals(TerraSpendCategories.Compute)) {
+          spendDataForCategory.cost shouldBe expectedComputeCost.toString
+        } else if (category.equals(TerraSpendCategories.Storage)) {
+          spendDataForCategory.cost shouldBe expectedStorageCost.toString
+        } else if (category.equals(TerraSpendCategories.Other)) {
+          spendDataForCategory.cost shouldBe expectedOtherCost.toString
+        } else {
+          fail(s"unexpected category found in spend results - $spendDataForCategory")
+        }
+      }
+    }
+  }
+
+  private def verifyWorkspaceCategorySubAggregation(topLevelAggregation: SpendReportingAggregation) = {
+    topLevelAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
+
+    topLevelAggregation.spendData.map { spendData =>
+      val workspaceGoogleProject = spendData.googleProjectId.getOrElse(fail("spend results not parsed correctly")).value
+      val subAggregation = spendData.subAggregation.getOrElse(fail("spend results not parsed correctly"))
+      subAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+
+      if (workspaceGoogleProject.equals(SpendReportingTestData.SubAggregation.workspace1.googleProjectId.value)) {
+        withClue(s"cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
+          spendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1TotalCostRounded.toString
+        }
+        subAggregation.spendData.map { subAggregatedSpendData =>
+          if (subAggregatedSpendData.category == Option(TerraSpendCategories.Compute)) {
+            withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
+              subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1ComputeRowCostRounded.toString
+            }
+          } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
+            withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace1.toWorkspaceName} was incorrect") {
+              subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace1OtherRowCostRounded.toString
+            }
+          } else {
+            fail(s"unexpected category found in spend results - $subAggregatedSpendData")
+          }
+        }
+
+      } else if (workspaceGoogleProject.equals(SpendReportingTestData.SubAggregation.workspace2.googleProjectId.value)) {
+        withClue(s"cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
+          spendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2TotalCostRounded.toString
+        }
+        subAggregation.spendData.map { subAggregatedSpendData =>
+          if (subAggregatedSpendData.category == Option(TerraSpendCategories.Storage)) {
+            withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
+              subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2StorageRowCostRounded.toString
+            }
+          } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
+            withClue(s"${subAggregatedSpendData.category} category cost for ${SpendReportingTestData.SubAggregation.workspace2.toWorkspaceName} was incorrect") {
+              subAggregatedSpendData.cost shouldBe SpendReportingTestData.SubAggregation.workspace2OtherRowCostRounded.toString
+            }
+          } else {
+            fail(s"unexpected category found in spend results - $subAggregatedSpendData")
+          }
+        }
+      } else {
+        fail(s"unexpected workspace found in spend results - $spendData")
+      }
+    }
+  }
+
   it should "throw an exception when BQ returns zero rows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val emptyPage = new PageImpl[FieldValueList](null, null, List[FieldValueList]().asJava)
-    val emptyTableResult = new TableResult(SpendReportingTestData.Daily.schema, 0, emptyPage)
+    val emptyTableResult = createTableResult(List[Map[String, String]]())
     val service = createSpendReportingService(dataSource, tableResult = emptyTableResult)
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -250,15 +483,14 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   }
 
   it should "throw an exception if BigQuery returns multiple kinds of currencies" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val cadRow = List(
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.10111"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "CAD"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}")
+    val cadRow = Map(
+      "cost" -> "0.10111",
+      "credits" -> "0.0",
+      "currency" -> "CAD",
+      "date" -> DateTime.now().toString
     )
 
-    val internationalPage = new PageImpl[FieldValueList](null, null, (FieldValueList.of(cadRow.asJava, SpendReportingTestData.Daily.fields:_*) :: SpendReportingTestData.Daily.fieldValues).asJava)
-    val internationalTable = new TableResult(SpendReportingTestData.Daily.schema, 3, internationalPage)
+    val internationalTable = createTableResult(cadRow :: SpendReportingTestData.Daily.table)
 
     val service = createSpendReportingService(dataSource, tableResult = internationalTable)
 
@@ -269,22 +501,21 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   }
 
   it should "throw an exception if BigQuery results include an unexpected Google project" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val badRow = List(
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.10111"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "fakeProject")
+    val badRow = Map(
+      "cost" -> "0.10111",
+      "credits" -> "0.0",
+      "currency" -> "USD",
+      "googleProjectId" -> "fakeProject"
     )
 
-    val badPage = new PageImpl[FieldValueList](null, null, (FieldValueList.of(badRow.asJava, SpendReportingTestData.Workspace.fields:_*) :: SpendReportingTestData.Workspace.fieldValues).asJava)
-    val badTable = new TableResult(SpendReportingTestData.Workspace.schema, 3, badPage)
+    val badTable = createTableResult(badRow :: SpendReportingTestData.Workspace.table)
 
     val service = createSpendReportingService(dataSource, tableResult = badTable)
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace2))
 
     val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Option(SpendReportingAggregationKeys.Workspace)), Duration.Inf)
+      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))), Duration.Inf)
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
   }

@@ -499,13 +499,12 @@ paths:
             format: date
         - name: aggregationKey
           in: query
-          description: Key indicating how to aggregate spend data in results. Will return only summary data (spendDetails is empty) if aggregationKey is not present
+          description: Key(s) indicating how to aggregate spend data in results. Will return only summary data (spendDetails is empty) if aggregationKey is not present. Aggregation can be sub-aggregated one level by appending a second aggregation key separated by a '~' as follows 'Aggregation~SubAggregation'. Aggregation key options are [Workspace, Category, Daily]
           required: false
           schema:
-            type: string
-            enum:
-              - Daily
-              - Workspace
+            type: array
+            items:
+              type: string
       responses:
         200:
           description: Success
@@ -6431,6 +6430,7 @@ components:
           enum:
             - Daily
             - Workspace
+            - Category
           description: Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
         spendData:
           type: array
@@ -6467,6 +6467,15 @@ components:
           description: if present, Google project of workspace where cost was generated
         workspace:
           $ref: '#/components/schemas/WorkspaceName'
+        category:
+          type: string
+          enum:
+            - Storage
+            - Compute
+            - Other
+          description: if present, Terra spend category that cost falls into
+        subAggregation:
+          $ref: '#/components/schemas/SpendReportingAggregation'
     SpendReportConfiguration:
       required:
         - datasetGoogleProject
