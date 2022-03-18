@@ -238,7 +238,10 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
         for {
           spendExportConf <- getSpendExportConfiguration(billingProjectName)
           workspaceProjectsToNames <- getWorkspaceGoogleProjects(billingProjectName)
+
+          // Unbox potentially many SpendReportingAggregationKeyWithSubs, all of which have optional subAggregationKeys and convert to Set[SpendReportingAggregationKey]
           aggregationKeys = aggregationKeyParameters.flatMap(maybeKeys => Set(Option(maybeKeys.key), maybeKeys.subAggregationKey).flatten)
+
           query = getQuery(aggregationKeys, spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName))
 
           queryJobConfiguration = QueryJobConfiguration
