@@ -34,33 +34,25 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       val firstRowCostRounded: BigDecimal = BigDecimal(firstRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val secondRowCostRounded: BigDecimal = BigDecimal(secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val totalCostRounded: BigDecimal = BigDecimal(firstRowCost + secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
-      val firstRowDate = DateTime.now().minusDays(1)
-      val secondRowDate = DateTime.now()
-      val fields: List[Field]= List(
-        Field.of("cost", StandardSQLTypeName.STRING),
-        Field.of("credits", StandardSQLTypeName.STRING),
-        Field.of("currency", StandardSQLTypeName.STRING),
-        Field.of("date", StandardSQLTypeName.STRING)
+      val firstRowDate: DateTime = DateTime.now().minusDays(1)
+      val secondRowDate: DateTime = DateTime.now()
+
+      val table: List[Map[String, String]] = List(
+        Map(
+          "cost" -> s"$firstRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "date" -> firstRowDate.toString
+        ),
+        Map(
+          "cost" -> s"$secondRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "date" -> secondRowDate.toString
+        )
       )
-      val firstRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$firstRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${firstRowDate.toString}") // date
-      )
-      val secondRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$secondRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${secondRowDate.toString}") // date
-      )
-      val fieldValues: List[FieldValueList] = List(
-        FieldValueList.of(firstRow.asJava, fields:_*),
-        FieldValueList.of(secondRow.asJava, fields:_*)
-      )
-      val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValues.asJava)
-      val schema: Schema = Schema.of(fields:_*)
-      val tableResult: TableResult = new TableResult(schema, fieldValues.length, page)
+
+      val tableResult: TableResult = createTableResult(table)
     }
 
     object Workspace {
@@ -74,31 +66,23 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       val firstRowCostRounded: BigDecimal = BigDecimal(firstRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val secondRowCostRounded: BigDecimal = BigDecimal(secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val totalCostRounded: BigDecimal = BigDecimal(firstRowCost + secondRowCost).setScale(2, RoundingMode.HALF_EVEN)
-      val fields: List[Field] = List(
-        Field.of("cost", StandardSQLTypeName.STRING),
-        Field.of("credits", StandardSQLTypeName.STRING),
-        Field.of("currency", StandardSQLTypeName.STRING),
-        Field.of("googleProjectId", StandardSQLTypeName.STRING)
+
+      val table: List[Map[String, String]] = List(
+        Map(
+          "cost" -> s"$firstRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "googleProjectId" -> workspaceGoogleProject1
+        ),
+        Map(
+          "cost" -> s"$secondRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "googleProjectId" -> workspaceGoogleProject2
+        )
       )
-      val firstRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$firstRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject1) // googleProjectId
-      )
-      val secondRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$secondRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject2) // googleProjectId
-      )
-      val fieldValues: List[FieldValueList] = List(
-        FieldValueList.of(firstRow.asJava, fields:_*),
-        FieldValueList.of(secondRow.asJava, fields:_*)
-      )
-      val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValues.asJava)
-      val schema: Schema = Schema.of(fields:_*)
-      val tableResult: TableResult = new TableResult(schema, fieldValues.length, page)
+
+      val tableResult: TableResult = createTableResult(table)
     }
 
     object Category {
@@ -109,38 +93,28 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       val computeRowCostRounded: BigDecimal = BigDecimal(computeRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val storageRowCostRounded: BigDecimal = BigDecimal(storageRowCost).setScale(2, RoundingMode.HALF_EVEN)
       val totalCostRounded: BigDecimal = BigDecimal(otherRowCost + computeRowCost + storageRowCost).setScale(2, RoundingMode.HALF_EVEN)
-      val fields: List[Field] = List(
-        Field.of("cost", StandardSQLTypeName.STRING),
-        Field.of("credits", StandardSQLTypeName.STRING),
-        Field.of("currency", StandardSQLTypeName.STRING),
-        Field.of("service", StandardSQLTypeName.STRING)
+
+      val table: List[Map[String, String]] = List(
+        Map(
+          "cost" -> s"$otherRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud DNS"
+        ),
+        Map(
+          "cost" -> s"$computeRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Kubernetes Engine"
+        ),
+        Map(
+          "cost" -> s"$storageRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud Storage"
+        )
       )
-      val otherRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$otherRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Cloud DNS") // service
-      )
-      val computeRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$computeRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Kubernetes Engine") // service
-      )
-      val storageRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$storageRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Cloud Storage") // service
-      )
-      val fieldValues: List[FieldValueList] = List(
-        FieldValueList.of(otherRow.asJava, fields:_*),
-        FieldValueList.of(computeRow.asJava, fields:_*),
-        FieldValueList.of(storageRow.asJava, fields:_*)
-      )
-      val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValues.asJava)
-      val schema: Schema = Schema.of(fields:_*)
-      val tableResult: TableResult = new TableResult(schema, fieldValues.length, page)
+      val tableResult: TableResult = createTableResult(table)
     }
 
     object SubAggregation {
@@ -168,51 +142,70 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
 
       val totalCostRounded: BigDecimal = BigDecimal(workspace1OtherRowCost + workspace1ComputeRowCost + workspace2StorageRowCost + workspace2OtherRowCost).setScale(2, RoundingMode.HALF_EVEN)
 
-      val fields: List[Field] = List(
-        Field.of("cost", StandardSQLTypeName.STRING),
-        Field.of("credits", StandardSQLTypeName.STRING),
-        Field.of("currency", StandardSQLTypeName.STRING),
-        Field.of("service", StandardSQLTypeName.STRING),
-        Field.of("googleProjectId", StandardSQLTypeName.STRING)
+      val table: List[Map[String, String]] = List(
+        Map(
+          "cost" -> s"$workspace1OtherRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud DNS",
+          "googleProjectId" -> workspaceGoogleProject1
+        ),
+        Map(
+          "cost" -> s"$workspace1ComputeRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Kubernetes Engine",
+          "googleProjectId" -> workspaceGoogleProject1
+        ),
+        Map(
+          "cost" -> s"$workspace2StorageRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud Storage",
+          "googleProjectId" -> workspaceGoogleProject2
+        ),
+        Map(
+          "cost" -> s"$workspace2OtherRowCost",
+          "credits" -> "0.0",
+          "currency" -> "USD",
+          "service" -> "Cloud Logging",
+          "googleProjectId" -> workspaceGoogleProject2
+        )
       )
-      val workspace1OtherRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$workspace1OtherRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Cloud DNS"), // service
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject1) // googleProjectId
-      )
-      val workspace1ComputeRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$workspace1ComputeRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Kubernetes Engine"), // service
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject1) // googleProjectId
-      )
-      val workspace2ComputeRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$workspace2StorageRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Cloud Storage"), // service
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject2) // googleProjectId
-      )
-      val workspace2OtherRow: List[FieldValue] = List(
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"$workspace2OtherRowCost"), // cost
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"), // credits
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"), // currency
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, "Cloud Logging"), // service
-        FieldValue.of(FieldValue.Attribute.PRIMITIVE, workspaceGoogleProject2) // googleProjectId
-      )
-      val fieldValues: List[FieldValueList] = List(
-        FieldValueList.of(workspace1OtherRow.asJava, fields:_*),
-        FieldValueList.of(workspace1ComputeRow.asJava, fields:_*),
-        FieldValueList.of(workspace2ComputeRow.asJava, fields:_*),
-        FieldValueList.of(workspace2OtherRow.asJava, fields:_*)
-      )
-      val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValues.asJava)
-      val schema: Schema = Schema.of(fields:_*)
-      val tableResult: TableResult = new TableResult(schema, fieldValues.length, page)
+
+      val tableResult: TableResult = createTableResult(table)
     }
+  }
+
+  def createTableResult(values: List[Map[String, String]]): TableResult = {
+    val rawSchemas: List[Set[String]] = values.map(_.keySet)
+    val rawFields: List[String] = if (rawSchemas.nonEmpty) {
+      rawSchemas.reduce { (x, y) =>
+        if (x.equals(y)) {
+          x
+        } else {
+          fail(s"inconsistent schema found when comparing rows $x and $y")
+        }
+      }.toList
+    } else {
+      List.empty
+    }
+    val fields: List[Field] = rawFields.map { field =>
+      Field.of(field, StandardSQLTypeName.STRING)
+    }
+    val schema: Schema = Schema.of(fields:_*)
+
+    val fieldValues: List[List[FieldValue]] = values.map { row =>
+      row.values.toList.map { value =>
+        FieldValue.of(FieldValue.Attribute.PRIMITIVE, value)
+      }
+    }
+    val fieldValueLists: List[FieldValueList] = fieldValues.map { row =>
+      FieldValueList.of(row.asJava, fields:_*)
+    }
+    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValueLists.asJava)
+
+    new TableResult(schema, fieldValueLists.length, page)
   }
 
   val defaultServiceProject: GoogleProject = GoogleProject("project")
@@ -453,8 +446,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   }
 
   it should "throw an exception when BQ returns zero rows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val emptyPage = new PageImpl[FieldValueList](null, null, List[FieldValueList]().asJava)
-    val emptyTableResult = new TableResult(SpendReportingTestData.Daily.schema, 0, emptyPage)
+    val emptyTableResult = createTableResult(List[Map[String, String]]())
     val service = createSpendReportingService(dataSource, tableResult = emptyTableResult)
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -528,15 +520,14 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   }
 
   it should "throw an exception if BigQuery returns multiple kinds of currencies" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val cadRow = List(
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.10111"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "CAD"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, s"${DateTime.now().toString}")
+    val cadRow = Map(
+      "cost" -> "0.10111",
+      "credits" -> "0.0",
+      "currency" -> "CAD",
+      "date" -> DateTime.now().toString
     )
 
-    val internationalPage = new PageImpl[FieldValueList](null, null, (FieldValueList.of(cadRow.asJava, SpendReportingTestData.Daily.fields:_*) :: SpendReportingTestData.Daily.fieldValues).asJava)
-    val internationalTable = new TableResult(SpendReportingTestData.Daily.schema, 3, internationalPage)
+    val internationalTable = createTableResult(cadRow :: SpendReportingTestData.Daily.table)
 
     val service = createSpendReportingService(dataSource, tableResult = internationalTable)
 
@@ -547,15 +538,14 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   }
 
   it should "throw an exception if BigQuery results include an unexpected Google project" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val badRow = List(
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.10111"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "0.0"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "USD"),
-      FieldValue.of(FieldValue.Attribute.PRIMITIVE, "fakeProject")
+    val badRow = Map(
+      "cost" -> "0.10111",
+      "credits" -> "0.0",
+      "currency" -> "USD",
+      "googleProjectId" -> "fakeProject"
     )
 
-    val badPage = new PageImpl[FieldValueList](null, null, (FieldValueList.of(badRow.asJava, SpendReportingTestData.Workspace.fields:_*) :: SpendReportingTestData.Workspace.fieldValues).asJava)
-    val badTable = new TableResult(SpendReportingTestData.Workspace.schema, 3, badPage)
+    val badTable = createTableResult(badRow :: SpendReportingTestData.Workspace.table)
 
     val service = createSpendReportingService(dataSource, tableResult = badTable)
     runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(SpendReportingTestData.Workspace.workspace1))
