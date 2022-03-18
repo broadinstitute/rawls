@@ -66,6 +66,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   override val driver: JdbcProfile = DbResource.dataConfig.profile
   override val batchSize: Int = DbResource.dataConfig.config.getInt("batchSize")
+  override val fetchSize: Int = DbResource.dataConfig.config.getInt("fetchSize")
   val slickDataSource = DbResource.dataSource
 
   val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))

@@ -189,28 +189,6 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  it should "respect page size limits for listEntities"  in withTestDataServices { services =>
-    val waitDuration = Duration(10, SECONDS)
-
-    // the entityServiceConstructor inside TestApiService sets a pageSizeLimit of 7, so:
-    // these should pass
-    List(testData.aliquot1.entityType, testData.pair1.entityType) foreach { entityType =>
-      withClue(s"for entity type '$entityType':") {
-        val queryResult = Await.result(services.entityService.listEntities(testData.wsName, entityType), waitDuration)
-        queryResult.size should be < 7
-      }
-    }
-    // this should fail
-    List(testData.sample1.entityType).foreach { entityType =>
-      withClue(s"for entity type '$entityType':") {
-        val ex = intercept[RawlsExceptionWithErrorReport] {
-          Await.result(services.entityService.listEntities(testData.wsName, entityType), waitDuration)
-        }
-        ex.errorReport.message shouldBe "Result set size of 8 cannot exceed 7. Use the paginated entityQuery API instead."
-      }
-    }
-  }
-
   it should "respect page size limits for queryEntities"  in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
 
