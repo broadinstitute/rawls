@@ -150,7 +150,17 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   val testTime = currentTime()
 
   // canonical full WorkspaceResponse to use in expectations below
-  val fullWorkspaceResponse = WorkspaceResponse(Option(WorkspaceAccessLevels.Owner), Option(true), Option(true), Option(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = testTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), Option(WorkspaceBucketOptions(false)), Option(Set.empty))
+  val fullWorkspaceResponse = WorkspaceResponse(
+    Option(WorkspaceAccessLevels.Owner),
+    Option(true),
+    Option(true),
+    Option(true),
+    WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = testTime), Set.empty),
+    Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
+    Option(WorkspaceBucketOptions(false)),
+    Option(Set.empty),
+    None
+  )
 
   // no includes, no excludes
   "WorkspaceApi" should "include all options when getting a workspace if no params specified" in withTestWorkspacesApiServices { services =>
@@ -172,7 +182,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   // START fields tests
 
   // canonical bare-minimum WorkspaceResponse to use in expectations below
-  val minimalWorkspaceResponse = WorkspaceResponse(None, None, None, None, WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = testTime), None, false), None, None, None)
+  val minimalWorkspaceResponse = WorkspaceResponse(None, None, None, None, WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = testTime), None, false), None, None, None, None)
 
   "WorkspaceApi, when using fields param" should "include accessLevel when asked to" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=accessLevel") ~>

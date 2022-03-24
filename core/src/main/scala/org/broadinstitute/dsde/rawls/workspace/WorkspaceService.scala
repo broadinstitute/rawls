@@ -6,7 +6,6 @@ import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import com.google.api.services.cloudresourcemanager.model.Project
-import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
@@ -219,8 +218,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
     span.setStatus(Status.OK)
     span.end()
 
-    traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(s1 => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap { workspaceContext =>
+
+    traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(
+      s1 => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
+
+        val azureInfo: Option[WorkspaceAzureCloudContext] = workspaceContext.workspaceType match {
+          case WorkspaceType.McWorkspace => {
+            val azureContext = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken).getAzureContext
+            Some(WorkspaceAzureCloudContext(azureContext.getTenantId, azureContext.getSubscriptionId, azureContext.getResourceGroupId))
+          }
+          case _ => None
+        }
 
         // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
         // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -241,7 +250,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
           // determine which functions to use for the various part of the response
           def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
-            traceWithParent("getBucketDetails",s1)(_ =>  gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId).map(Option(_)))
+            azureInfo match {
+              case None => traceWithParent("getBucketDetails", s1)(_ => gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId).map(Option(_)))
+              case _ => noFuture
+            }
           } else {
             noFuture
           }
@@ -295,7 +307,16 @@ class WorkspaceService(protected val userInfo: UserInfo,
             stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s1)(_ => workspaceSubmissionStatsFuture())
           } yield {
             // post-process JSON to remove calculated-but-undesired keys
-            val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes), stats, bucketDetails, owners)
+            val workspaceResponse = WorkspaceResponse(
+              optionalAccessLevelForResponse,
+              canShare,
+              canCompute,
+              canCatalog,
+              WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes),
+              stats,
+              bucketDetails,
+              owners,
+              azureInfo)
             val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
             filteredJson
           }
