@@ -26,8 +26,11 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |      tenantId = "fake_tenantid"
         |      subscriptionId = "fake_subid"
         |      resourceGroupId = "fake_mrgid"
+        |    },
+        |    workspaceManager {
+        |      cloudContextPollTimeoutSeconds = 30 seconds,
+        |      leonardoWsmApplicationId = fake_app_id
         |    }
-        |    cloudContextPollTimeoutSeconds = 30 seconds
         |}
         |""".stripMargin
     val parsed = ConfigFactory.parseString(enabledConfig)
@@ -38,6 +41,7 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
     config.azureConfig.get.azureTenantId shouldBe "fake_tenantid"
     config.azureConfig.get.azureSubscriptionId shouldBe "fake_subid"
     config.azureConfig.get.azureResourceGroupId shouldBe "fake_mrgid"
-    config.cloudContextPollTimeout shouldEqual 30.seconds
+    config.workspaceManager.get.cloudContextPollTimeout shouldEqual 30.seconds
+    config.workspaceManager.get.leonardoWsmApplcationId shouldEqual "fake_app_id"
   }
 }

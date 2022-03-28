@@ -5,10 +5,11 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model.{CreateCloudContextResult, JobReport}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.MockWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{MultiCloudWorkspaceRequest, RawlsUserEmail, RawlsUserSubjectId, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceType}
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -24,7 +25,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
   it should "throw an exception if creating a multi-cloud workspace is not enabled" in {
     val userInfo = UserInfo(RawlsUserEmail("example@example.com"), OAuth2BearerToken("fake_token"), 1234, RawlsUserSubjectId("ABCDEF"))
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, 2 seconds, None)
+    val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, config
     )(userInfo)
@@ -42,7 +43,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val name = "fake_name"
     val userInfo = UserInfo(RawlsUserEmail("example@example.com"), OAuth2BearerToken("fake_token"), 1234, RawlsUserSubjectId("ABCDEF"))
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = true, 60 seconds, Some(AzureConfig("fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id")))
+    val config = MultiCloudWorkspaceConfig(
+      multiCloudWorkspacesEnabled = true,
+      Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
+      Some(AzureConfig("fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id"))
+    )
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, config
     )(userInfo)
@@ -59,8 +64,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
 
   it should "create a workspace" in {
     val userInfo = UserInfo(RawlsUserEmail("example@example.com"), OAuth2BearerToken("fake_token"), 1234, RawlsUserSubjectId("ABCDEF"))
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = true, 60 seconds, Some(AzureConfig("fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id")))
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val config = MultiCloudWorkspaceConfig(
+      multiCloudWorkspacesEnabled = true,
+      Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
+      Some(AzureConfig("fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id")),
+    )
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, config
     )(userInfo)
@@ -73,13 +82,29 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     result.name shouldBe "fake_name"
     result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
+    Mockito.verify(workspaceManagerDAO).enableApplication(
+      ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+      ArgumentMatchers.eq("fake_app_id"),
+      ArgumentMatchers.eq( userInfo.accessToken)
+    )
+    Mockito.verify(workspaceManagerDAO).createAzureWorkspaceCloudContext(
+      ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+      ArgumentMatchers.eq("fake_tenant_id"),
+      ArgumentMatchers.eq("fake_mrg_id"),
+      ArgumentMatchers.eq("fake_sub_id"),
+      ArgumentMatchers.eq( userInfo.accessToken)
+    )
   }
 
   it should "fail on cloud context creation failure" in {
     val userInfo = UserInfo(RawlsUserEmail("example@example.com"), OAuth2BearerToken("fake_token"), 1234, RawlsUserSubjectId("ABCDEF"))
     val cloudContextResult = new CreateCloudContextResult().jobReport(new JobReport().status(JobReport.StatusEnum.FAILED))
     val workspaceManagerDAO = MockWorkspaceManagerDAO.buildWithCloudContextResult(cloudContextResult)
-    val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = true, 60 seconds, Some(AzureConfig("fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id")))
+    val config = MultiCloudWorkspaceConfig(
+      multiCloudWorkspacesEnabled = true,
+      Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
+      Some(AzureConfig("fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id")),
+    )
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, config
     )(userInfo)

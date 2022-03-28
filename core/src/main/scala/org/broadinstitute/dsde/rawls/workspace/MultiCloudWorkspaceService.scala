@@ -60,7 +60,9 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
   }
 
   private def createWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span): Future[Workspace] = {
-    val azureConfig = multiCloudWorkspaceConfig.azureConfig.getOrElse(throw new RawlsException("Config not present"))
+    val azureConfig = multiCloudWorkspaceConfig.azureConfig.getOrElse(throw new RawlsException("Azure config not present"))
+    val wsmConfig = multiCloudWorkspaceConfig.workspaceManager.getOrElse(throw new RawlsException("WSM app config not present"))
+
     // TODO these will come from the spend profile service in the future
     val spendProfileId = azureConfig.spendProfileId
     val azureTenantId = azureConfig.azureTenantId
@@ -83,7 +85,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       jobControlId = cloudContextCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on cloud context in WSM [jobControlId = ${jobControlId}]")
       _ <- traceWithParent("pollCreateAzureCloudContextInWSM", parentSpan)(_ =>
-        pollCloudContext(workspaceId, cloudContextCreateResult.getJobReport.getId, userInfo.accessToken)
+        pollCloudContext(workspaceId, cloudContextCreateResult.getJobReport.getId, userInfo.accessToken, wsmConfig.cloudContextPollTimeout)
       )
       _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
       savedWorkspace: Workspace <- traceWithParent("saveMultiCloudWorkspaceToDB", parentSpan)(_ => dataSource.inTransaction({ dataAccess =>
@@ -93,6 +95,10 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
           dataAccess,
           parentSpan)
       }, TransactionIsolation.ReadCommitted)
+      )
+      _ = logger.info(s"Enabling leonardo app in WSM [workspaceId = ${workspaceId}]")
+      _ <- traceWithParent("enableLeoInWSM", parentSpan)(_ =>
+        Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplcationId, userInfo.accessToken))
       )
     } yield {
       savedWorkspace
@@ -118,9 +124,9 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
     }
   }
 
-  private def pollCloudContext(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): Future[Unit] = {
+  private def pollCloudContext(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken, pollTimeout: FiniteDuration): Future[Unit] = {
     for {
-      result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate)(2 seconds, multiCloudWorkspaceConfig.cloudContextPollTimeout) {
+      result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate)(2 seconds, pollTimeout) {
         () => getCloudContextCreationStatus(workspaceId, jobControlId, accessToken)
       }
     } yield {

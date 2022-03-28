@@ -100,6 +100,10 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
                                                     jobControlId: String,
                                                     accessToken: OAuth2BearerToken): CreateCloudContextResult = mockCreateAzureCloudContextResult()
+
+  override def enableApplication(workspaceId: UUID, applicationId: String, accessToken: OAuth2BearerToken): WorkspaceApplicationDescription = {
+    new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
+  }
 }
 
 
