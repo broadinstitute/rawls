@@ -218,18 +218,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
     span.setStatus(Status.OK)
     span.end()
 
-
-    traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(
-      s1 => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap { workspaceContext =>
+    traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(s1 => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-
-        val azureInfo: Option[WorkspaceAzureCloudContext] = workspaceContext.workspaceType match {
-          case WorkspaceType.McWorkspace => {
-            val azureContext = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken).getAzureContext
-            Some(WorkspaceAzureCloudContext(azureContext.getTenantId, azureContext.getSubscriptionId, azureContext.getResourceGroupId))
-          }
-          case _ => None
-        }
+        val azureInfo: Option[WorkspaceAzureCloudContext] = getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
 
         // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
         // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -323,6 +314,42 @@ class WorkspaceService(protected val userInfo: UserInfo,
         }
       }
     })
+  }
+
+  private def getAzureCloudContextFromWorkspaceManager(workspaceContext: Workspace, parentSpan: Span = null) = {
+    workspaceContext.workspaceType match {
+      case WorkspaceType.McWorkspace => {
+        val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", parentSpan)
+
+        try {
+          val wsmInfo = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)
+
+          Option(wsmInfo.getAzureContext) match {
+            case Some(azureContext) => Some(WorkspaceAzureCloudContext(
+              azureContext.getTenantId,
+              azureContext.getSubscriptionId,
+              azureContext.getResourceGroupId)
+            )
+            case None => None
+          }
+          // todo pull in GCP context here
+        } catch {
+          case e: ApiException =>
+            logger.warn(s"Error retrieving MC workspace from workspace manager [id=${workspaceContext.workspaceId}, code=${e.getCode}]")
+
+            if (e.getCode == StatusCodes.NotFound.intValue) {
+              span.setStatus(Status.NOT_FOUND)
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, e))
+            } else {
+              span.setStatus(Status.INTERNAL)
+            }
+            throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, e))
+        } finally {
+          span.end()
+        }
+      }
+      case _ => None
+    }
   }
 
   def getWorkspaceById(workspaceId: String, params: WorkspaceFieldSpecs, parentSpan: Span = null): Future[JsObject] = {

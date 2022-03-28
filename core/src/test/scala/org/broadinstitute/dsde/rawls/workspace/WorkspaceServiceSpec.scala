@@ -4,7 +4,8 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import bio.terra.workspace.model.{AzureContext, CreateCloudContextResult, JobReport, WorkspaceDescription}
+import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.{AzureContext, WorkspaceDescription}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
@@ -22,8 +23,8 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
-import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
@@ -43,7 +44,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
-import org.scalatest.{BeforeAndAfterAll, OptionValues}
+import org.scalatest.{AppendedClues, BeforeAndAfterAll, OptionValues}
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -55,7 +56,7 @@ import scala.util.Try
 
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
-class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll with TableDrivenPropertyChecks with OptionValues {
+class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll with TableDrivenPropertyChecks with OptionValues with AppendedClues{
   import driver.api._
 
   val workspace = Workspace(
@@ -97,7 +98,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new MockGooglePubSubDAO
-    val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO()) //[MockWorkspaceManagerDAO] //mock(classOf[MockWorkspaceManagerDAO], RETURN_SMART_NULLS) // MockWorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
@@ -1735,7 +1736,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
   }
 
-  "getWorkspace" should "get the details for a GCP workspace" in withTestDataServices { services =>
+  behavior of "getWorkspace"
+
+  it should "get the details for a GCP workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value, workspaceName, Map.empty
@@ -1749,8 +1752,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val response = readWorkspace.convertTo[WorkspaceResponse]
 
-    response.workspace.name shouldEqual workspaceName
-    response.workspace.namespace shouldEqual testData.testProject1Name.value
+    response.workspace.name shouldBe workspaceName
+    response.workspace.namespace shouldBe testData.testProject1Name.value
+    response.bucketOptions shouldBe Some(WorkspaceBucketOptions(false))
     response.azureContext shouldEqual None
   }
 
@@ -1779,5 +1783,29 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     response.azureContext.get.tenantId shouldEqual "fake_tenant_id"
     response.azureContext.get.subscriptionId shouldEqual "fake_sub_id"
     response.azureContext.get.managedResourceGroupId shouldEqual "fake_mrg_id"
+  }
+
+  it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceRequest = MultiCloudWorkspaceRequest(
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure
+    )
+    // ApiException is a checked exception so we need to use thenAnswer rather than thenThrow
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenAnswer(
+      _ => throw new ApiException(StatusCodes.NotFound.intValue, "not found")
+    )
+    val workspace = Await.result(
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf
+    )
+
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.getWorkspace(
+          WorkspaceName(workspace.namespace, workspace.name), WorkspaceFieldSpecs()
+        ),
+        Duration.Inf)
+    }
+
+    err.errorReport.statusCode shouldBe Some(StatusCodes.NotFound) withClue "MC workspace not present in WSM should result in 404"
   }
 }
