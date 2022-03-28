@@ -56,7 +56,7 @@ import scala.util.Try
 
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
-class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll with TableDrivenPropertyChecks with OptionValues with AppendedClues{
+class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll with TableDrivenPropertyChecks with OptionValues {
   import driver.api._
 
   val workspace = Workspace(
@@ -1806,6 +1806,33 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
         Duration.Inf)
     }
 
-    err.errorReport.statusCode shouldBe Some(StatusCodes.NotFound) withClue "MC workspace not present in WSM should result in 404"
+    withClue("MC workspace not present in WSM should result in 404") {
+      err.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+    }
+  }
+
+  it should "return an error if an MC workspace does not have an Azure context" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceRequest = MultiCloudWorkspaceRequest(
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure
+    )
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
+      new WorkspaceDescription() // no azureContext, should be an error
+    )
+    val workspace = Await.result(
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf
+    )
+
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        services.workspaceService.getWorkspace(
+          WorkspaceName(workspace.namespace, workspace.name), WorkspaceFieldSpecs()
+        ),
+        Duration.Inf)
+    }
+
+    withClue("MC workspace with no azure context should result in not implemented") {
+      err.errorReport.statusCode shouldBe Some(StatusCodes.NotImplemented)
+    }
   }
 }

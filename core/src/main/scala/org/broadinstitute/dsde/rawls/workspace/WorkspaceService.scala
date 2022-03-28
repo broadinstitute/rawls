@@ -330,9 +330,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
               azureContext.getSubscriptionId,
               azureContext.getResourceGroupId)
             )
-            case None => None
+            case None => {
+                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(
+                  StatusCodes.NotImplemented, s"Non-azure MC workspaces not supported [id=${workspaceContext.workspaceId}]"
+              ))
+            }
           }
-          // todo pull in GCP context here
         } catch {
           case e: ApiException =>
             logger.warn(s"Error retrieving MC workspace from workspace manager [id=${workspaceContext.workspaceId}, code=${e.getCode}]")
@@ -342,8 +345,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
               throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, e))
             } else {
               span.setStatus(Status.INTERNAL)
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, e))
             }
-            throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, e))
         } finally {
           span.end()
         }
