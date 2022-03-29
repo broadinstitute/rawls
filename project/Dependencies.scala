@@ -36,7 +36,10 @@ object Dependencies {
   // 2.13 version, note my sneakiness on the second coordinate as this is a 2.12 code base
   // This artifact is nothing but OpenAPI generated Java files, there's nothing really "2.12" or "2.13" about it.
   // It's only Cromwell's sbt-based publishing that names it that way.
-  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.13" % "0.1-e07a865b8-SNAP"
+  // Rawls is not happy with the 2.13 version
+  // val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.13" % "0.1-e07a865b8-SNAP"
+  // Let's try a 2.12 version built the same way the 2.12 version was built
+  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.12" % "0.1-b7108d4d3-SNAP"
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev20210322-" + googleV))
