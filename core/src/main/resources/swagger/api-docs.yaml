@@ -1585,18 +1585,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
-        - name: entityName
-          in: path
-          description: Entity Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/entityNamePathParam'
       requestBody:
         description: New entity name
         content:
@@ -1637,18 +1627,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
-        - name: entityName
-          in: path
-          description: Entity Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/entityNamePathParam'
       requestBody:
         description: Expression
         content:
@@ -1780,12 +1760,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/entityTypePathParam'
       responses:
         200:
           description: Successful Request
@@ -1885,18 +1860,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
-        - name: entityName
-          in: path
-          description: Entity Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/entityNamePathParam'
       requestBody:
         description: Update operations for attributes
         content:
