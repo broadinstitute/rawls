@@ -1122,7 +1122,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       entityType -> entities.flatMap(_.attributes.keys)
     }
 
-    val workspaceEntityTypeCacheEntries = workspaceEntities.groupBy(_.entityType).mapValues(_.length)
+    val workspaceEntityTypeCacheEntries = workspaceEntities.groupBy(_.entityType).view.mapValues(_.length).toMap
 
     override def save() = {
       DBIO.seq(

@@ -18,7 +18,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     serviceAccountDomain.pattern.matcher(email).matches
   }
 
-  def requireUserInfo: Directive1[UserInfo] = (
+  def requireUserInfo(): Directive1[UserInfo] = (
     headerValueByName("OIDC_access_token") &
       headerValueByName("OIDC_CLAIM_user_id") &
       headerValueByName("OIDC_CLAIM_expires_in") &

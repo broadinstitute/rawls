@@ -212,7 +212,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     val expectedResultWhenUsingCache = localEntityProviderTestData.workspaceEntityTypeCacheEntries.map { case (entityType, entityTypeCount) =>
       entityType -> EntityTypeMetadata(entityTypeCount, s"${entityType}_id", localEntityProviderTestData.workspaceAttrNameCacheEntries(entityType).map(attrName => toDelimitedName(attrName)))
-    }
+    }.toMap
 
     val expectedResultWhenUsingFullQueries = expectedResultWhenUsingCache - localEntityProviderTestData.sample1.entityType
 

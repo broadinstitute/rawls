@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, RelationshipTermModel, TableModel}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 // test data for Data Repo Expression Validation
 trait DataRepoExpressionFixture {

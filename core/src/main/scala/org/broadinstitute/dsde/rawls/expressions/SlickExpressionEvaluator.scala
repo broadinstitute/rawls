@@ -156,7 +156,7 @@ private[expressions] class SlickExpressionEvaluator protected(val dataAccess: Da
   }
 
   private def buildPipelineQueryForRelations(rootStep: Option[RootFunc], relations: java.util.List[RelationContext], finalStep: FinalFunc, finalEntityOpt: Option[AttributeNameContext] = None): ExpressionEvaluationPipeline = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
 
     val steps: List[RelationFunc] = (relations.asScala.toList.map(_.attributeName) ++ finalEntityOpt).map { attributeNameCtx =>
       dataAccess.entityExpressionQuery.entityNameAttributeRelationQuery(toAttributeName(attributeNameCtx)) _

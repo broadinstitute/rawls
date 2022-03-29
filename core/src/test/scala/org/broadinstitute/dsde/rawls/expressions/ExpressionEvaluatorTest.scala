@@ -545,7 +545,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
   test("workspace library attribute expression") {
     withTestWorkspace { workspaceContext =>
 
-      val series = Seq(
+      val series = List(
         AttributeString("The Fellowship of the Ring"),
         AttributeString("The Two Towers"),
         AttributeString("The Return of the King")
@@ -685,7 +685,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       }
 
       assertResult(Set("sample2")) {
-        val reflist = AttributeEntityReferenceList(Seq(testData.sample2.toReference))
+        val reflist = AttributeEntityReferenceList(List(testData.sample2.toReference))
         val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("samplerefs") -> reflist)
         runAndWait(workspaceQuery.createOrUpdate(testData.workspace.copy(attributes = attributesPlusReference)))
 
@@ -705,7 +705,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       }
 
       assertResult(Set("sample2")) {
-        val reflist = AttributeEntityReferenceList(Seq(testData.sample2.toReference))
+        val reflist = AttributeEntityReferenceList(List(testData.sample2.toReference))
         val attributesPlusReference = testData.workspace.attributes + (AttributeName("library", "srefs") -> reflist)
         runAndWait(workspaceQuery.createOrUpdate(testData.workspace.copy(attributes = attributesPlusReference)))
 
