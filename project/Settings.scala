@@ -12,7 +12,6 @@ import sbtassembly.AssemblyPlugin.autoImport._
 
 //noinspection TypeAnnotation
 object Settings {
-
   val proxyResolvers = List(
     "internal-maven-proxy" at artifactory + "maven-central"
   )
@@ -85,8 +84,8 @@ object Settings {
   val commonSettings =
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
     organization  := "org.broadinstitute.dsde",
-    scalaVersion  := scala213, // `cromwell-client` needs to support 2.13 for rawls to be able to upgrade
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
+    scalaVersion  := scala213, // `cromwell-client` needs to support 2.13 for rawls to be able to upgrade
     scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
   )
 
