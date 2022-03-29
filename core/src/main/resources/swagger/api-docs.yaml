@@ -128,12 +128,7 @@ paths:
       description: list members of billing project the caller owns
       operationId: listBillingProjectMembers
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: Success
@@ -163,12 +158,7 @@ paths:
       description: add user or group to billing project the caller owns
       operationId: addUserToBillingProject
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
         - name: workbenchRole
           in: path
           description: role of user for project
@@ -213,12 +203,7 @@ paths:
       description: remove user or group from billing project the caller owns
       operationId: removeUserFromBillingProject
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
         - name: workbenchRole
           in: path
           description: role of user for project
@@ -303,12 +288,7 @@ paths:
       description: get billing project
       operationId: getBillingProject
       parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: OK
@@ -335,12 +315,7 @@ paths:
       description: delete billing project
       operationId: deleteBillingProject
       parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         204:
           description: OK
@@ -364,12 +339,7 @@ paths:
       description: update billing account on billing project
       operationId: updateBillingProjectBillingAccount
       parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       requestBody:
         description: update billing account request
         content:
@@ -409,12 +379,7 @@ paths:
       description: removes the billing account from the billing project
       operationId: removeBillingProjectBillingAccount
       parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: OK
@@ -442,12 +407,7 @@ paths:
       description: list members of billing project the caller owns
       operationId: listBillingProjectMembers
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: Success
@@ -477,12 +437,7 @@ paths:
       description: get spend report for the billing project
       operationId: getSpendReport
       parameters:
-        - name: projectId
-          in: path
-          description: Billing Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
         - name: startDate
           in: query
           description: start date of report (YYYY-MM-DD). Data included in report will start at 12 AM UTC on this date.
@@ -546,12 +501,7 @@ paths:
       description: get the spend report configuration for the billing project
       operationId: getSpendReportConfiguration
       parameters:
-        - name: projectId
-          in: path
-          description: Billing Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: Successfully retrieved spend report configuration
@@ -586,12 +536,7 @@ paths:
       description: set the spend configuration for the billing project
       operationId: setSpendReportConfiguration
       parameters:
-        - name: projectId
-          in: path
-          description: Billing Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       requestBody:
         description: billing project spend configuration information
         content:
@@ -632,12 +577,7 @@ paths:
       description: clear the spend configuration for the billing project
       operationId: clearSpendReportConfiguration
       parameters:
-        - name: projectId
-          in: path
-          description: Billing Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         204:
           description: Successfully cleared spend configuration
@@ -661,12 +601,7 @@ paths:
       description: add user or group to billing project the caller owns
       operationId: addUserToBillingProject
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
         - name: workbenchRole
           in: path
           description: role of user for project
@@ -710,12 +645,7 @@ paths:
       description: remove user or group from billing project the caller owns
       operationId: removeUserFromBillingProject
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
         - name: workbenchRole
           in: path
           description: role of user for project
@@ -6239,6 +6169,13 @@ components:
             type: string
       description: status of a subsystem Rawls depends on
   parameters:
+    billingProjectIdPathParam:
+      name: projectId
+      in: path
+      description: Billing Project ID
+      required: true
+      schema:
+        type: string
     billingProjectQueryParam:
       name: billingProject
       in: query
