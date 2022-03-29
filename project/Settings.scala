@@ -12,7 +12,6 @@ import sbtassembly.AssemblyPlugin.autoImport._
 
 //noinspection TypeAnnotation
 object Settings {
-
   val proxyResolvers = List(
     "internal-maven-proxy" at artifactory + "maven-central"
   )
@@ -87,6 +86,7 @@ object Settings {
     organization  := "org.broadinstitute.dsde",
     scalaVersion  := scala213,
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
+    scalaVersion  := scala213,
     scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
   )
 
