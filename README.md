@@ -34,7 +34,7 @@ Spin up mysql locally and validate that it is working:
 Run tests.
 
 ```sh
-export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310"
+export JAVA_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310"
 sbt clean compile test
 ```
 
