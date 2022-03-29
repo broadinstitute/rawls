@@ -267,11 +267,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing_v2
@@ -290,11 +286,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/billingAccount:
     put:
       tags:
@@ -331,11 +323,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing_v2
@@ -358,11 +346,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/members:
     get:
       tags:
@@ -1392,8 +1376,7 @@ paths:
           description: Workspace or entity type does not exist
           content: {}
         500:
-          description: Internal Server Error
-          content: {}
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename:
     post:
       tags:
