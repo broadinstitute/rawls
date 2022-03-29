@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, E
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNull, AttributeNumber, AttributeString, Entity, EntityQuery, EntityQueryResultMetadata, SortDirections}
 import org.scalatest.freespec.AnyFreeSpec
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /* see also the unit tests in DataRepoEntityProviderSpec
  */

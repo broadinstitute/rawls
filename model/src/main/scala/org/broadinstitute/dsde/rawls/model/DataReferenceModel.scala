@@ -6,7 +6,7 @@ import spray.json.DefaultJsonProtocol._
 import spray.json.{DeserializationException, JsArray, JsNull, JsObject, JsString, JsValue, RootJsonFormat, enrichAny}
 
 import java.util.UUID
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 case class DataReferenceName(value: String) extends ValueObject
 case class DataReferenceDescriptionField(value: String = "") extends ValueObject

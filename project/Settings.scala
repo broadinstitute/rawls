@@ -43,17 +43,11 @@ object Settings {
       "-Xfatal-warnings"
     )
 
-    val scala212CompilerSettings = Seq(
-      "-Ypartial-unification",
-//      "-Ywarn-unused-import"    // re-enable when imports optimised
-    )
-
     val scala213CompilerSettings = Seq(
 //      "-Ywarn-unused:imports"   // re-enable when imports optimised
     )
 
     commonCompilerSettings ++ (CrossVersion.partialVersion(scalaVersion) match {
-      case Some((2, 12)) => scala212CompilerSettings
       case Some((2, 13)) => scala213CompilerSettings
       case _ => Nil
     })
@@ -67,7 +61,7 @@ object Settings {
     //  [error] /Users/qi/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/com/typesafe/akka/akka-protobuf-v3_2.12/2.6.1/akka-protobuf-v3_2.12-2.6.1.jar:google/protobuf/field_mask.proto
     assemblyExcludedJars in assembly := {
       val cp = (fullClasspath in assembly).value
-      cp filter {_.data.getName == "akka-protobuf-v3_2.12-2.6.3.jar"}
+      cp filter {_.data.getName == "akka-protobuf-v3_2.13-2.6.3.jar"}
     },
     test in assembly := {}
   )
@@ -82,6 +76,7 @@ object Settings {
     }
   )
 
+  val scala213 = "2.13.8"
   val cross212and213 = Seq(
     crossScalaVersions := List("2.12.15", "2.13.2")
   )
@@ -90,7 +85,7 @@ object Settings {
   val commonSettings =
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
     organization  := "org.broadinstitute.dsde",
-    scalaVersion  := "2.12.15", // `cromwell-client` needs to support 2.13 for rawls to be able to upgrade
+    scalaVersion  := scala213, // `cromwell-client` needs to support 2.13 for rawls to be able to upgrade
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
     scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
   )

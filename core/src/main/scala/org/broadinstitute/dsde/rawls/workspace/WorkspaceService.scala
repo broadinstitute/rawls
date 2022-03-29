@@ -48,7 +48,7 @@ import spray.json._
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters.{mapAsJavaMapConverter, mapAsScalaMapConverter}
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
@@ -2129,7 +2129,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
       combinedLabels = existingLabels ++ newLabels
 
-      updatedProject <- gcsDAO.updateGoogleProject(googleProjectId, googleProject.setName(googleProjectName).setLabels(combinedLabels.asJava))
+      updatedProject <- gcsDAO.updateGoogleProject(googleProjectId, googleProject.setName(googleProjectName).setLabels(combinedLabels.toMap.asJava))
     } yield (updatedProject)
   }
 
@@ -2475,6 +2475,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     Try(submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName)) match {
       case Success(failureMode) => Future.successful(failureMode)
       case Failure(NonFatal(e)) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, e.getMessage)))
+      case Failure(e) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, e.getMessage)))
     }
   }
 

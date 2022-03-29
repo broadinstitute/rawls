@@ -693,6 +693,8 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
           s"a new attribute when $description1 changes to $description2" in {
           attributeTestFunction.run(attribute1, attribute2)
         }
+      case x =>
+         throw new Exception("this is unexpected")
     }
   }
 

@@ -20,7 +20,6 @@ object Dependencies {
 
   val excludeBouncyCastle =     ExclusionRule(organization = "org.bouncycastle", name = s"bcprov-jdk15on")
   val excludeProtobufJavalite = ExclusionRule(organization = "com.google.protobuf", name = "protobuf-javalite")
-  val excludeScalaCache =       ExclusionRule(organization = "com.github.cb372")
 
   val akkaActor: ModuleID =             "com.typesafe.akka" %% "akka-actor"               % akkaV
   val akkaActorTyped: ModuleID =        "com.typesafe.akka" %% "akka-actor-typed"         % akkaV
@@ -33,7 +32,7 @@ object Dependencies {
   val akkaTestKit: ModuleID =           "com.typesafe.akka" %% "akka-testkit"             % akkaV     % "test"
   val akkaHttpTestKit: ModuleID =       "com.typesafe.akka" %% "akka-http-testkit"        % akkaHttpV % "test"
 
-  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" %% "cromwell-client" % "0.1-8b413b45f-SNAP"
+  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" %% "cromwell-client" % "0.1-e07a865b8-SNAP"
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev20210322-" + googleV))
@@ -78,15 +77,14 @@ object Dependencies {
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.13" // upgrading a transitive dependency to avoid security warnings
   val jerseyClient: ModuleID =    "org.glassfish.jersey.core"     % "jersey-client"         % "2.35"   // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
-  val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
+  val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "2.1.1"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.10"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-3-4"          % "3.2.10.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.11.2" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
-  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
-  val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
+  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.1"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
@@ -113,8 +111,8 @@ object Dependencies {
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogle: ModuleID =       "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
   val workbenchGoogleMocks: ModuleID =  "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests"
-  val workbenchGoogle2: ModuleID =      "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V excludeAll(excludeScalaCache)
-  val workbenchGoogle2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests" excludeAll(excludeScalaCache)
+  val workbenchGoogle2: ModuleID =      "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
+  val workbenchGoogle2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests"
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.122.11" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
@@ -227,7 +225,7 @@ object Dependencies {
 
   val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
     typesafeConfig,
-    parserCombinators,
+//    parserCombinators,
     sentryLogback,
     slick,
     slickHikariCP,
@@ -256,7 +254,6 @@ object Dependencies {
     workbenchGoogleMocks,
     workbenchUtil,
     ficus,
-    scalaCache,
     apacheCommonsIO,
     workspaceManager,
     jerseyClient,
