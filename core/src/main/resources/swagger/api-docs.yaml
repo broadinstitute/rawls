@@ -798,12 +798,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: submissionId
-          in: path
-          description: id of the submission
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/submissionIdPathParam'
       responses:
         204:
           description: Successful Request
@@ -1269,12 +1264,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/submissionIdPathParam'
       responses:
         200:
           description: Successful Request
@@ -1303,12 +1293,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/submissionIdPathParam'
       requestBody:
         description: User comment to be updated
         content:
@@ -1340,12 +1325,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/submissionIdPathParam'
       responses:
         204:
           description: Submission successfully aborted
@@ -1378,12 +1358,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/submissionIdPathParam'
         - name: workflowId
           in: path
           description: Workflow Id
@@ -1419,12 +1394,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/submissionIdPathParam'
         - name: workflowId
           in: path
           description: Workflow Id
@@ -1466,12 +1436,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/submissionIdPathParam'
         - name: workflowId
           in: path
           description: Workflow Id
@@ -6213,6 +6178,13 @@ components:
       name: referenceName
       in: path
       description: The snapshot reference's name
+      required: true
+      schema:
+        type: string
+    submissionIdPathParam:
+      name: submissionId
+      in: path
+      description: Submission Id
       required: true
       schema:
         type: string
