@@ -5270,7 +5270,6 @@ components:
           default: false
         bucketLocation:
           type: string
-          required: false
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
       description: ""
     WorkspaceRequestClone:
@@ -5304,7 +5303,6 @@ components:
           default: false
         bucketLocation:
           type: string
-          required: false
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
       description: ""
     BucketUsageResponse:
