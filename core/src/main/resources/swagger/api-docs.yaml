@@ -159,15 +159,7 @@ paths:
       operationId: addUserToBillingProject
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
-        - name: workbenchRole
-          in: path
-          description: role of user for project
-          required: true
-          schema:
-            type: string
-            enum:
-              - user
-              - owner
+        - $ref: '#/components/parameters/workbenchRolePathParam'
         - name: email
           in: path
           description: email of user or group to add
@@ -204,15 +196,7 @@ paths:
       operationId: removeUserFromBillingProject
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
-        - name: workbenchRole
-          in: path
-          description: role of user for project
-          required: true
-          schema:
-            type: string
-            enum:
-              - user
-              - owner
+        - $ref: '#/components/parameters/workbenchRolePathParam'
         - name: email
           in: path
           description: email of user or group to remove
@@ -602,15 +586,7 @@ paths:
       operationId: addUserToBillingProject
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
-        - name: workbenchRole
-          in: path
-          description: role of user for project
-          required: true
-          schema:
-            type: string
-            enum:
-              - user
-              - owner
+        - $ref: '#/components/parameters/workbenchRolePathParam'
         - name: email
           in: path
           description: email of user or group to add
@@ -646,15 +622,7 @@ paths:
       operationId: removeUserFromBillingProject
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
-        - name: workbenchRole
-          in: path
-          description: role of user for project
-          required: true
-          schema:
-            type: string
-            enum:
-              - user
-              - owner
+        - $ref: '#/components/parameters/workbenchRolePathParam'
         - name: email
           in: path
           description: email of user or group to remove
@@ -1359,12 +1327,7 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
         - $ref: '#/components/parameters/submissionIdPathParam'
-        - name: workflowId
-          in: path
-          description: Workflow Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workflowIdPathParam'
       responses:
         200:
           description: Successful Request
@@ -1395,12 +1358,7 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
         - $ref: '#/components/parameters/submissionIdPathParam'
-        - name: workflowId
-          in: path
-          description: Workflow Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workflowIdPathParam'
       responses:
         200:
           description: Successful Request
@@ -1437,12 +1395,7 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
         - $ref: '#/components/parameters/submissionIdPathParam'
-        - name: workflowId
-          in: path
-          description: Workflow Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workflowIdPathParam'
         - name: includeKey
           in: query
           description: |
@@ -3500,12 +3453,7 @@ paths:
       description: retrieve operations info from Google Genomics API
       operationId: genomics_operations_get
       parameters:
-        - name: workflowId
-          in: path
-          description: Workflow Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workflowIdPathParam'
         - name: operationId
           in: path
           description: operations job id; for PAPIv1 in the form of "operations/{id}",
@@ -6104,6 +6052,23 @@ components:
       name: submissionId
       in: path
       description: Submission Id
+      required: true
+      schema:
+        type: string
+    workbenchRolePathParam:
+      name: workbenchRole
+      in: path
+      description: role of user for project
+      required: true
+      schema:
+        type: string
+        enum:
+          - user
+          - owner
+    workflowIdPathParam:
+      name: workflowId
+      in: path
+      description: Workflow Id
       required: true
       schema:
         type: string
