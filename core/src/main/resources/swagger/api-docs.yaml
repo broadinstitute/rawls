@@ -108,11 +108,7 @@ paths:
           description: project already exists in rawls or google
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       security:
         - authorization:
             - openid
@@ -145,11 +141,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/{projectId}/{workbenchRole}/{email}:
     put:
       tags:
@@ -183,11 +175,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing
@@ -220,11 +208,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2:
     post:
       tags:
@@ -252,11 +236,7 @@ paths:
           description: project already exists in rawls
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       security:
         - authorization:
             - openid
@@ -408,11 +388,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/spendReport:
     get:
       tags:
@@ -470,13 +446,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-
-
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/spendReportConfiguration:
     get:
       tags:
@@ -508,11 +478,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     put:
       tags:
         - billing_v2
@@ -549,11 +515,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing_v2
@@ -572,11 +534,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/members/{workbenchRole}/{email}:
     put:
       tags:
@@ -609,11 +567,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing_v2
@@ -645,11 +599,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/project/registration:
     post:
       tags:
@@ -744,11 +694,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Trouble talking to Google
           content:
@@ -778,11 +724,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Trouble talking to Google or Cromwell
           content:
@@ -808,11 +750,7 @@ paths:
           description: Successful Request
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - admin
@@ -831,11 +769,7 @@ paths:
           description: Successful Request
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/workspaces:
     get:
       tags:
@@ -881,11 +815,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/flags:
     get:
       tags:
@@ -913,11 +843,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     put:
       tags:
         - admin
@@ -953,11 +879,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/refreshToken/{userSubjectId}:
     delete:
       deprecated: true
@@ -978,11 +900,7 @@ paths:
           description: user's refresh token revoked and removed
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
@@ -1005,11 +923,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/servicePerimeters/{servicePerimeterName}/projects/{projectName}:
     put:
       tags:
@@ -1056,11 +970,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions:
     get:
       tags:
@@ -1087,11 +997,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - submissions
@@ -1129,11 +1035,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Trouble talking to Agora
           content:
@@ -1167,11 +1069,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate:
     post:
       tags:
@@ -1210,11 +1108,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Trouble talking to Agora
           content:
@@ -1247,11 +1141,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - submissions
@@ -1279,11 +1169,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - submissions
@@ -1305,11 +1191,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Unable to abort all workflows in this submission
           content:
@@ -1342,11 +1224,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs:
     get:
       tags:
@@ -1373,11 +1251,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Unable to retrieve outputs or logs from Cromwell
           content:
@@ -1434,11 +1308,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/submissions/queueStatus:
     get:
       tags:
@@ -1454,11 +1324,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowQueueStatusResponse'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entityQuery/{entityType}:
     get:
       tags:
@@ -1564,11 +1430,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newEntityNameJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate:
     post:
@@ -1606,11 +1468,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: expression
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities:
     get:
@@ -1645,11 +1503,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - entities
@@ -1697,11 +1551,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entityJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}:
     get:
@@ -1730,11 +1580,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - entities
@@ -1766,11 +1612,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}:
     get:
       tags:
@@ -1799,11 +1641,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - entities
@@ -1848,11 +1686,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: attributeUpdateJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete:
     post:
@@ -1893,11 +1727,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/AttributeEntityReference'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entities
   /api/workspaces/entities/copy:
     post:
@@ -1950,11 +1780,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entityCopyDefinition
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert:
     post:
@@ -1999,11 +1825,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: batchUpsertJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate:
     post:
@@ -2046,11 +1868,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: batchUpdateJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs:
     get:
@@ -2108,11 +1926,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - methodconfigs
@@ -2192,11 +2006,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: methodConfigJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate:
     get:
@@ -2224,11 +2034,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}:
     get:
       tags:
@@ -2255,11 +2061,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     put:
       tags:
         - methodconfigs
@@ -2301,11 +2103,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newMethodConfigJson
     post:
       tags:
@@ -2356,11 +2154,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newMethodConfigJson
     delete:
       tags:
@@ -2384,11 +2178,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename:
     post:
       tags:
@@ -2434,11 +2224,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newMethodConfigurationName
   /api/methodconfigs/copy:
     post:
@@ -2485,11 +2271,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: methodConfigurationNamePair
   /api/methodconfigs/copyFromMethodRepo:
     post:
@@ -2542,11 +2324,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: methodRepoImport
   /api/methodconfigs/copyToMethodRepo:
     post:
@@ -2576,11 +2354,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: methodRepoExport
   /api/methodconfigs/template:
     post:
@@ -2679,11 +2453,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/checkIamActionWithLock/{samActionName}:
     get:
       tags:
@@ -2710,11 +2480,7 @@ paths:
             if it doesn't exist)
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/fileTransfers:
     get:
       tags:
@@ -2773,11 +2539,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/unlock:
     put:
       tags:
@@ -2805,11 +2567,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/acl:
     get:
       tags:
@@ -2840,11 +2598,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - workspaces
@@ -2897,11 +2651,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: aclUpdates
   /api/workspaces/{workspaceNamespace}/{workspaceName}/bucketOptions:
     get:
@@ -2927,11 +2677,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/catalog:
     get:
       tags:
@@ -2959,11 +2705,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - workspaces
@@ -2996,11 +2738,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: catalogUpdates
   /api/workspaces:
     get:
@@ -3037,11 +2775,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - workspaces
@@ -3087,11 +2821,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: workspaceJson
   /api/workspaces/id/{workspaceId}:
     get:
@@ -3138,11 +2868,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -3184,11 +2910,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - workspaces
@@ -3216,11 +2938,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - workspaces
@@ -3263,11 +2981,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entityUpdateJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/clone:
     post:
@@ -3331,11 +3045,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: workspaceRequest
   /api/workspaces/{workspaceNamespace}/{workspaceName}/bucketUsage:
     get:
@@ -3384,11 +3094,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/WorkspaceTag'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/enableRequesterPaysForLinkedServiceAccounts:
     put:
       tags:
@@ -3418,11 +3124,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/disableRequesterPaysForLinkedServiceAccounts:
     put:
       tags:
@@ -3440,11 +3142,7 @@ paths:
             In all cases whether or not the workspace exists or user has access. If there were linked service accounts they were removed from the workspace but this api does not indicate that anything was done (for security reasons).
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workflows/{workflowId}/genomics/{operationId}:
     get:
       tags:
@@ -3472,11 +3170,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/refreshToken:
     put:
       deprecated: true
@@ -3497,11 +3191,7 @@ paths:
           description: Successful Request
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: refreshToken
   /api/user/refreshTokenDate:
     get:
@@ -3531,11 +3221,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/role/admin:
     get:
       tags:
@@ -3551,11 +3237,7 @@ paths:
           description: User is not an admin
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/role/curator:
     get:
       tags:
@@ -3571,11 +3253,7 @@ paths:
           description: User is not a curator
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/billing:
     get:
       tags:
@@ -3601,11 +3279,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/billing/{projectName}:
     get:
       tags:
@@ -3664,11 +3338,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/billingAccounts:
     get:
       tags:
@@ -3695,11 +3365,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       security:
         - authorization:
             - openid
@@ -3752,11 +3418,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - snapshots_v2
@@ -3784,11 +3446,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/{snapshotId}:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -3814,11 +3472,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
       operationId: updateDataRepoSnapshot_v2
@@ -3840,11 +3494,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - snapshots_v2
@@ -3862,11 +3512,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/name/{referenceName}:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -3892,14 +3538,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-
-
-
+          $ref: '#/components/responses/RawlsInternalError'
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -6084,6 +5723,13 @@ components:
       required: true
       schema:
         type: string
+  responses:
+    RawlsInternalError:
+      description: Rawls Internal Error
+      content:
+        'application/json':
+          schema:
+            $ref: '#/components/schemas/ErrorReport'
   securitySchemes:
     authorization:
       type: oauth2
