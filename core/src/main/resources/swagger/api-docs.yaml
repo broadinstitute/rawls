@@ -297,7 +297,7 @@ paths:
         - billing_v2
       summary: delete billing project
       description: delete billing project
-      operationId: deleteBillingProject
+      operationId: deleteBillingProjectV2
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
@@ -389,7 +389,7 @@ paths:
         - billing_v2
       summary: list members of billing project the caller owns
       description: list members of billing project the caller owns
-      operationId: listBillingProjectMembers
+      operationId: listBillingProjectMembersV2
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
@@ -583,7 +583,7 @@ paths:
         - billing_v2
       summary: add user or group to billing project the caller owns
       description: add user or group to billing project the caller owns
-      operationId: addUserToBillingProject
+      operationId: addUserToBillingProjectV2
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
         - $ref: '#/components/parameters/workbenchRolePathParam'
@@ -619,7 +619,7 @@ paths:
         - billing_v2
       summary: remove user or group from billing project the caller owns
       description: remove user or group from billing project the caller owns
-      operationId: removeUserFromBillingProject
+      operationId: removeUserFromBillingProjectV2
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
         - $ref: '#/components/parameters/workbenchRolePathParam'
