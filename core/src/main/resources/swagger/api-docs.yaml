@@ -2290,18 +2290,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -2331,18 +2321,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -2373,18 +2353,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       requestBody:
         description: New Method Configuration contents
         content:
@@ -2433,18 +2403,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       requestBody:
         description: New Method Configuration contents
         content:
@@ -2493,18 +2453,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       responses:
         204:
           description: Successful Request
@@ -2534,18 +2484,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       requestBody:
         description: New Method Configuration Name
         content:
@@ -6145,6 +6085,20 @@ components:
       name: billingProject
       in: query
       description: Billing project to use for queries to the data reference
+      schema:
+        type: string
+    configNamespacePathParam:
+      name: configNamespace
+      in: path
+      description: Method Configuration Namespace
+      required: true
+      schema:
+        type: string
+    configNamePathParam:
+      name: configName
+      in: path
+      description: Method Configuration Name
+      required: true
       schema:
         type: string
     dataReferenceQueryParam:
