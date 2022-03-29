@@ -8,8 +8,6 @@ object Dependencies {
   val googleV = "1.31.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
-  val cromwellVersion = "40-2754783"
-
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
   val slick: ModuleID =         "com.typesafe.slick" %% "slick"           % slickV
@@ -33,7 +31,12 @@ object Dependencies {
   val akkaTestKit: ModuleID =           "com.typesafe.akka" %% "akka-testkit"             % akkaV     % "test"
   val akkaHttpTestKit: ModuleID =       "com.typesafe.akka" %% "akka-http-testkit"        % akkaHttpV % "test"
 
-  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.12" % "0.1-8b413b45f-SNAP"
+  // 2.12 version
+  // val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" %% "cromwell-client" % "0.1-8b413b45f-SNAP"
+  // 2.13 version, note my sneakiness on the second coordinate as this is a 2.12 code base
+  // This artifact is nothing but OpenAPI generated Java files, there's nothing really "2.12" or "2.13" about it.
+  // It's only Cromwell's sbt-based publishing that names it that way.
+  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.13" % "0.1-e07a865b8-SNAP"
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev20210322-" + googleV))
