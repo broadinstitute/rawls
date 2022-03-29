@@ -553,230 +553,6 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  it should "delete a workspace with linked bond service account" in withTestDataServices { services =>
-    //check that the workspace to be deleted exists
-    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
-
-    // add a bond sa link
-    Await.result(services.requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, testData.workspaceNoSubmissions), Duration.Inf)
-
-    //delete the workspace
-    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
-
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
-
-    //check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
-
-
-  }
-
-  it should "delete a workspace with no submissions" in withTestDataServices { services =>
-    //check that the workspace to be deleted exists
-    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
-
-    //delete the workspace
-    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
-
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
-
-    //check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName3))
-    }
-
-
-  }
-
-  it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
-    //check that the workspace to be deleted exists
-    assertWorkspaceResult(Option(testData.workspaceSuccessfulSubmission)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName4))
-    }
-
-    //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("myNamespace","method-a",1),"dsde"),
-      MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSuccessfulSubmission))
-    }
-
-    //Check if submissions on workspace exist
-    assertResult(List(testData.submissionSuccessful1)) {
-      runAndWait(submissionQuery.list(testData.workspaceSuccessfulSubmission))
-    }
-
-    //Check if entities on workspace exist
-    assertResult(20) {
-      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
-    }
-
-    //delete the workspace
-    Await.result(services.workspaceService.deleteWorkspace(testData.wsName4), Duration.Inf)
-
-    //check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName4))
-    }
-
-    //check if method configs have been deleted
-    assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSuccessfulSubmission))
-    }
-
-    //Check if submissions on workspace have been deleted
-    assertResult(Vector()) {
-      runAndWait(submissionQuery.list(testData.workspaceSuccessfulSubmission))
-    }
-
-    //Check if entities on workspace have been deleted
-    assertResult(0) {
-      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
-    }
-  }
-
-  it should "delete a workspace with failed submission" in withTestDataServices { services =>
-    //check that the workspace to be deleted exists
-    assertWorkspaceResult(Option(testData.workspaceFailedSubmission)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName5))
-    }
-
-    //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.listActive(testData.workspaceFailedSubmission))
-    }
-
-    //Check if submissions on workspace exist
-    assertResult(List(testData.submissionFailed)) {
-      runAndWait(submissionQuery.list(testData.workspaceFailedSubmission))
-    }
-
-    //Check if entities on workspace exist
-    assertResult(20) {
-      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
-    }
-
-    //delete the workspace
-    Await.result(services.workspaceService.deleteWorkspace(testData.wsName5), Duration.Inf)
-
-    //check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName5))
-    }
-
-    //check if method configs have been deleted
-    assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.listActive(testData.workspaceFailedSubmission))
-    }
-
-    //Check if submissions on workspace have been deleted
-    assertResult(Vector()) {
-      runAndWait(submissionQuery.list(testData.workspaceFailedSubmission))
-    }
-
-
-    //Check if entities on workspace exist
-    assertResult(0) {
-      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
-    }
-  }
-
-  it should "delete a workspace with submitted submission" in withTestDataServices { services =>
-    //check that the workspace to be deleted exists
-    assertWorkspaceResult(Option(testData.workspaceSubmittedSubmission)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName6))
-    }
-
-    //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSubmittedSubmission))
-    }
-
-    //Check if submissions on workspace exist
-    assertResult(List(testData.submissionSubmitted)) {
-      runAndWait(submissionQuery.list(testData.workspaceSubmittedSubmission))
-    }
-
-    //Check if entities on workspace exist
-    assertResult(20) {
-      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
-    }
-
-    //delete the workspace
-    Await.result(services.workspaceService.deleteWorkspace(testData.wsName6), Duration.Inf)
-
-    //check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName6))
-    }
-
-    //check if method configs have been deleted
-    assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSubmittedSubmission))
-    }
-
-    //Check if submissions on workspace have been deleted
-    assertResult(Vector()) {
-      runAndWait(submissionQuery.list(testData.workspaceSubmittedSubmission))
-    }
-
-    //Check if entities on workspace exist
-    assertResult(0) {
-      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
-    }
-  }
-
-  it should "delete a workspace with mixed submissions" in withTestDataServices { services =>
-    //check that the workspace to be deleted exists
-    assertWorkspaceResult(Option(testData.workspaceMixedSubmissions)) {
-      runAndWait(workspaceQuery.findByName(testData.wsName7))
-    }
-
-    //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.listActive(testData.workspaceMixedSubmissions))
-    }
-
-    //Check if submissions on workspace exist
-    assertResult(2) {
-      runAndWait(submissionQuery.list(testData.workspaceMixedSubmissions)).length
-    }
-
-    //Check if entities on workspace exist
-    assertResult(20) {
-      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
-    }
-
-    //delete the workspace
-    Await.result(services.workspaceService.deleteWorkspace(testData.wsName7), Duration.Inf)
-
-    //check that the workspace has been deleted
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.wsName7))
-    }
-
-    //check if method configs have been deleted
-    assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.listActive(testData.workspaceMixedSubmissions))
-    }
-
-    //Check if submissions on workspace have been deleted
-    assertResult(Vector()) {
-      runAndWait(submissionQuery.list(testData.workspaceMixedSubmissions))
-    }
-
-    //Check if entities on workspace exist
-    assertResult(0) {
-      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
-    }
-
-  }
-
   it should "return the correct tags from autocomplete" in withTestDataServices { services =>
 
     // when no tags, return empty set
@@ -1700,6 +1476,291 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     // verify that we set the folder for the perimeter
     verify(services.gcsDAO).addProjectToFolder(ArgumentMatchers.eq(workspace.googleProjectId), any[String])
+  }
+
+  "deleteWorkspace" should "delete a workspace with linked bond service account" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    // add a bond sa link
+    Await.result(services.requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, testData.workspaceNoSubmissions), Duration.Inf)
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+
+  }
+
+  it should "delete a workspace with no submissions" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+
+  }
+
+  it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceSuccessfulSubmission)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName4))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("myNamespace","method-a",1),"dsde"),
+      MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSuccessfulSubmission))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(List(testData.submissionSuccessful1)) {
+      runAndWait(submissionQuery.list(testData.workspaceSuccessfulSubmission))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName4), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName4))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSuccessfulSubmission))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(testData.workspaceSuccessfulSubmission))
+    }
+
+    //Check if entities on workspace have been deleted
+    assertResult(0) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "delete a workspace with failed submission" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceFailedSubmission)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName5))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceFailedSubmission))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(List(testData.submissionFailed)) {
+      runAndWait(submissionQuery.list(testData.workspaceFailedSubmission))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName5), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName5))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceFailedSubmission))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(testData.workspaceFailedSubmission))
+    }
+
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "delete a workspace with submitted submission" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceSubmittedSubmission)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName6))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSubmittedSubmission))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(List(testData.submissionSubmitted)) {
+      runAndWait(submissionQuery.list(testData.workspaceSubmittedSubmission))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName6), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName6))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceSubmittedSubmission))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(testData.workspaceSubmittedSubmission))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "delete a workspace with mixed submissions" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceMixedSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName7))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceMixedSubmissions))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(2) {
+      runAndWait(submissionQuery.list(testData.workspaceMixedSubmissions)).length
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName7), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName7))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.listActive(testData.workspaceMixedSubmissions))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(testData.workspaceMixedSubmissions))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
+    }
+
+  }
+
+  it should "handle 404s from Sam when deleting a workspace" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    when(
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])
+    ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "404 from Sam"))))
+
+    when(
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection), any[String], any[UserInfo])
+    ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "404 from Sam"))))
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+  }
+
+  it should "fail if Sam throws a 403 in delete workspace" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    when(
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])
+    ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "403 from Sam"))))
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+    }
+    assertResult(Some(StatusCodes.Forbidden)) {
+      error.errorReport.statusCode
+    }
+  }
+
+  it should "fail if Sam throws a 500 in delete workflowCollection" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    when(
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection), any[String], any[UserInfo])
+    ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "500 from Sam"))))
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+    }
+    assertResult(Some(StatusCodes.InternalServerError)) {
+      error.errorReport.statusCode
+    }
   }
 
   "getSpendReportTableName" should "return the correct fully formatted BigQuery table name if the spend report config is set" in withTestDataServices { services =>
