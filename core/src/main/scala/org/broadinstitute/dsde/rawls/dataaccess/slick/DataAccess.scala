@@ -87,7 +87,7 @@ trait DataAccess
   }
 
   private def clear(ctx: DirContext, dn: String): Unit = Try {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     ctx.list(dn).asScala.foreach { nameClassPair =>
       val fullName = if (nameClassPair.isRelative) s"${nameClassPair.getName},$dn" else nameClassPair.getName
       clear(ctx, fullName)

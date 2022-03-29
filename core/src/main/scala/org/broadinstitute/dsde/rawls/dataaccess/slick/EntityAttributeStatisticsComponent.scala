@@ -42,7 +42,7 @@ trait EntityAttributeStatisticsComponent {
       entityAttributeStatisticsQuery.filter(_.workspaceId === workspaceId).map { res =>
         (res.entityType, res.attributeNamespace, res.attributeName)
       }.result map { result =>
-        result.groupBy(_._1).mapValues(_.map(x => AttributeName(x._2, x._3)))
+        result.groupBy(_._1).view.mapValues(_.map(x => AttributeName(x._2, x._3))).toMap
       }
     }
 

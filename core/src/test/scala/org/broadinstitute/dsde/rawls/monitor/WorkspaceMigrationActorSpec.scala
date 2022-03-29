@@ -23,7 +23,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, W
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
-import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google._
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
@@ -108,6 +108,8 @@ class WorkspaceMigrationActorSpec
       IO.pure {
         Seq(Operation.newBuilder.setDone(true).build)
       }
+
+    override def getTransferOperation(operationName: GoogleStorageTransferService.OperationName): IO[Operation] = IO.pure(Operation.newBuilder().build())
   }
 
 

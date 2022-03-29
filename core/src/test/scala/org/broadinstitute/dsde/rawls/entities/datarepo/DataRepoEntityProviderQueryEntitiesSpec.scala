@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
 

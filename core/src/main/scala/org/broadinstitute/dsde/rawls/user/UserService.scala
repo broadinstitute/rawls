@@ -544,6 +544,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case Some(billingAccount) if billingAccount.firecloudHasAccess => Future.successful(billingAccount)
         case None => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))))
         case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
+        case Some(billingAccount) => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unexpected billing account ${billingAccount}")))
       }
     }
   }
@@ -661,8 +662,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   private def deleteRefreshTokenInternal(rawlsUserRef: RawlsUserRef): Future[Unit] = {
     for {
       _ <- gcsDAO.revokeToken(rawlsUserRef)
-      _ <- gcsDAO.deleteToken(rawlsUserRef).recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
-    } yield { Unit }
+      _ <- gcsDAO.deleteToken(rawlsUserRef).recover { case e: HttpResponseException if e.getStatusCode == 404 => () }
+    } yield ()
   }
 
 
