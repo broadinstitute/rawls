@@ -1206,18 +1206,8 @@ paths:
       description: Submit a new job
       operationId: createSubmission
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Description of a submission.
         content:
@@ -1381,18 +1371,8 @@ paths:
       description: Update user comment for a submission
       operationId: updateSubmissionUserComment
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: submissionId
           in: path
           description: Submission Id
@@ -1428,18 +1408,8 @@ paths:
       description: Abort a currently running submission
       operationId: abortSubmission
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: submissionId
           in: path
           description: Submission Id
@@ -1859,18 +1829,8 @@ paths:
       description: Create entity
       operationId: create_entity
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Entity data
         content:
@@ -2028,18 +1988,8 @@ paths:
       description: Update an entity
       operationId: update_entity
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: entityType
           in: path
           description: Entity Type
@@ -2389,18 +2339,8 @@ paths:
         The system is specified to check for a URI first before falling back to the legacy fields. Unsupported repos will return a 400 Bad Request.
       operationId: create_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Method Configuration contents
         content:
@@ -2536,18 +2476,8 @@ paths:
         The method configuration name and namespace in the URI must match the values in the JSON.
       operationId: overwrite_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: configNamespace
           in: path
           description: Method Configuration Namespace
@@ -2606,18 +2536,8 @@ paths:
         If the location in the request body is different to the location in the URI, and there is a method config already at that location, 409 is returned.
       operationId: update_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: configNamespace
           in: path
           description: Method Configuration Namespace
@@ -2676,18 +2596,8 @@ paths:
       description: Delete a method configuration
       operationId: delete_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: configNamespace
           in: path
           description: Method Configuration Namespace
@@ -3189,18 +3099,8 @@ paths:
       description: Edit access control list for a workspace
       operationId: updateACL
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: inviteUsersNotFound
           in: query
           description: true to invite unregistered users, false to ignore
@@ -3318,18 +3218,8 @@ paths:
       description: Edit catalog permissions for a workspace
       operationId: updateCatalog
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Series of Catalog updates for workspace
         content:
@@ -3553,18 +3443,8 @@ paths:
       description: Delete a workspace
       operationId: delete_workspace
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         202:
           description: Delete request accepted. Workspace bucket will be deleted within
@@ -3595,18 +3475,8 @@ paths:
       description: Update workspace attributes
       operationId: update_workspace
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Update operations
         content:
