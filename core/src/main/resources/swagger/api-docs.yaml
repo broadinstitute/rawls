@@ -124,8 +124,8 @@ paths:
     get:
       tags:
         - billing
-      summary: list members of billing project the caller owns
-      description: list members of billing project the caller owns
+      summary: list members of billing project
+      description: list members of billing project. owners can view all members, users will only be able to view owners
       operationId: listBillingProjectMembers
       parameters:
         - name: projectId
@@ -144,7 +144,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/RawlsBillingProjectMember'
         403:
-          description: You must be a project owner to view the members of a project
+          description: You must be a project member to view the members of a project
           content:
             'application/json':
               schema:
@@ -438,8 +438,8 @@ paths:
     get:
       tags:
         - billing_v2
-      summary: list members of billing project the caller owns
-      description: list members of billing project the caller owns
+      summary: list members of billing project
+      description: list members of billing project. owners can view all members, users will only be able to view owners
       operationId: listBillingProjectMembers
       parameters:
         - name: projectId
@@ -458,7 +458,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/RawlsBillingProjectMember'
         403:
-          description: You must be a project owner to view the members of a project
+          description: You must be a project member to view the members of a project
           content:
             'application/json':
               schema:
