@@ -786,19 +786,16 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
 
     when(
-      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(testData.workspaceNoSubmissions.workspaceId), any[UserInfo])
     ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "404 from Sam"))))
 
     when(
       services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection), any[String], any[UserInfo])
     ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "404 from Sam"))))
 
-    //delete the workspace
+    //delete the workspace and verify it has been deleted
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
-
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
-
-    //check that the workspace has been deleted
     assertResult(None) {
       runAndWait(workspaceQuery.findByName(testData.wsName3))
     }
@@ -811,7 +808,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
 
     when(
-      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[UserInfo])
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(testData.workspaceNoSubmissions.workspaceId), any[UserInfo])
     ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "403 from Sam"))))
 
     val error = intercept[RawlsExceptionWithErrorReport] {
