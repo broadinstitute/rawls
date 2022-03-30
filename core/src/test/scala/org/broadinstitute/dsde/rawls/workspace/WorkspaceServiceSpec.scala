@@ -553,6 +553,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
+  behavior of "deleteWorkspace"
+
   it should "delete a workspace with linked bond service account" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
@@ -777,6 +779,67 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   }
 
+  it should "handle 404s from Sam when deleting a workspace" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    when(
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(testData.workspaceNoSubmissions.workspaceId), any[UserInfo])
+    ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "404 from Sam"))))
+
+    when(
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection), any[String], any[UserInfo])
+    ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "404 from Sam"))))
+
+    //delete the workspace and verify it has been deleted
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+  }
+
+  it should "fail if Sam throws a 403 in delete workspace" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    when(
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(testData.workspaceNoSubmissions.workspaceId), any[UserInfo])
+    ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "403 from Sam"))))
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+    }
+    assertResult(Some(StatusCodes.Forbidden)) {
+      error.errorReport.statusCode
+    }
+  }
+
+  it should "fail if Sam throws a 500 in delete workflowCollection" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    when(
+      services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection), any[String], any[UserInfo])
+    ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "500 from Sam"))))
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+    }
+    assertResult(Some(StatusCodes.InternalServerError)) {
+      error.errorReport.statusCode
+    }
+  }
+
+  behavior of "getTags"
+
   it should "return the correct tags from autocomplete" in withTestDataServices { services =>
 
     // when no tags, return empty set
@@ -844,6 +907,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   }
 
+  behavior of "maybeShareProjectComputePolicy"
+
   for ((policyName, shouldShare) <- Seq((SamWorkspacePolicyNames.writer, false), (SamWorkspacePolicyNames.canCompute, true), (SamWorkspacePolicyNames.reader, false))) {
     it should s"${if (!shouldShare) "not " else ""}share billing compute when workspace $policyName access granted" in withTestDataServicesCustomSam { services =>
       val email = s"${UUID.randomUUID}@bar.com"
@@ -897,6 +962,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       case WorkspaceACLUpdate(_, WorkspaceAccessLevels.NoAccess, _, _) => Right(Set.empty)
     }
   }
+
+  behavior of "aclUpdate"
 
   for (aclUpdate <- allWorkspaceAclUpdatePermutations(aclTestUser.userEmail.value)) {
     it should s"add correct policies for $aclUpdate" in withTestDataServicesCustomSam { services =>
@@ -1025,7 +1092,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   }
 
 
-  it should "parse workflow metadata" in {
+  "extractOperationIdsFromCromwellMetadata" should "parse workflow metadata" in {
     val jsonString = """{
                        |  "calls": {
                        |    "hello_and_goodbye.goodbye": [
@@ -1077,6 +1144,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     )
   }
 
+  behavior of "getTerminalStatusDate"
+
   // test getTerminalStatusDate
   private val workflowFinishingTomorrow = testData.submissionMixed.workflows.head.copy(statusLastChangedDate = testDate.plusDays(1))
   private val submissionMixedDates = testData.submissionMixed.copy(
@@ -1113,6 +1182,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
+  behavior of "RequesterPays"
 
   it should "return Unit when adding linked service accounts to workspace" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>

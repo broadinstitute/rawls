@@ -6,7 +6,6 @@ import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import com.google.api.services.cloudresourcemanager.model.Project
-import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
@@ -473,10 +472,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
       // Delete workflowCollection resource in sam outside of DB transaction
       _ <- traceWithParent("deleteWorkflowCollectionSamResource", parentSpan)(_ =>
         workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
-          case t:Throwable => {
-            logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
+          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+            logger.warn(s"Received 404 from delete workflowCollection resource in Sam (while deleting workspace) for workspace `${workspaceName}`: [${t.errorReport.message}]")
+            Future.successful()
+          case t: RawlsExceptionWithErrorReport =>
+            logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`.", t)
             Future.failed(t)
-          }
         }
       )
 
@@ -495,10 +496,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       _ <- traceWithParent("deleteWorkspaceSamResource", parentSpan)(_ =>
         samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
-          case t:Throwable => {
-            logger.warn(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`", t)
+          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+            logger.warn(s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspaceName}`: [${t.errorReport.message}]")
+            Future.successful()
+          case t: RawlsExceptionWithErrorReport =>
+            logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`.", t)
             Future.failed(t)
-          }
         }
       )
     } yield {
