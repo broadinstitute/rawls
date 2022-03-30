@@ -7,21 +7,15 @@ import bio.terra.datarepo.api.RepositoryApi
 import bio.terra.datarepo.client.ApiClient
 import bio.terra.datarepo.model.{EnumerateSnapshotModel, SnapshotModel}
 import bio.terra.workspace.model._
-import cats.effect.IO
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
-import com.google.auth.oauth2.{AccessToken, GoogleCredentials}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.userLoginScopes
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
-import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll
@@ -32,9 +26,6 @@ import spray.json._
 
 import java.util.UUID
 import scala.jdk.CollectionConverters._
-import scala.concurrent.ExecutionContext
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -233,11 +224,11 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           val submissionId = response.parseJson.convertTo[SubmissionReport].submissionId
 
           // wait for submission to complete
-          Submission.waitUntilSubmissionComplete(billingProject, workspaceName, submissionId)
+          org.broadinstitute.dsde.test.api.Submission.waitUntilSubmissionComplete(billingProject, workspaceName, submissionId)
 
           // verify submission status is done
           val expectedSubmissionStatus = "Done"
-          val actualSubmissionStatus = Submission.getSubmissionStatus(billingProject, workspaceName, submissionId)
+          val actualSubmissionStatus = org.broadinstitute.dsde.test.api.Submission.getSubmissionStatus(billingProject, workspaceName, submissionId)
           withClue(s"Submission $billingProject/$workspaceName/$submissionId status should be $expectedSubmissionStatus") {
             actualSubmissionStatus shouldBe expectedSubmissionStatus
           }
