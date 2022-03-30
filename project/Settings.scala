@@ -76,9 +76,6 @@ object Settings {
   )
 
   val scala213 = "2.13.8"
-  val cross212and213 = Seq(
-    crossScalaVersions := List("2.12.15", "2.13.2")
-  )
 
   //common settings for all sbt subprojects
   val commonSettings =
@@ -101,7 +98,7 @@ object Settings {
   //the full list of settings for the rawlsModel project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
   //thus commonSettings needs to be added first.
-  val modelSettings = cross212and213 ++ commonSettings ++ List(
+  val modelSettings = commonSettings ++ List(
     name := "rawls-model",
     javacOptions ++= Seq("--release", "8"), // has to publish a java 8 artifact
     libraryDependencies ++= modelDependencies
