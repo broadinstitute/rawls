@@ -345,7 +345,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
               throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, e))
             } else {
               span.setStatus(Status.INTERNAL)
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, e))
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(e.getCode, e))
             }
         } finally {
           span.end()
