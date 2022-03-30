@@ -63,7 +63,10 @@ object InputExpressionReassembler {
         "102" -> Try(Seq(AttributeValueRawJson("{"exampleRef1":"gs://def", "exampleIndex":456}")))
       )
      */
-    mapOfEntityToInputExpr.map { case (entityName, exprTry) => entityName -> JsonExpressionEvaluator.evaluate(exprTry) }
+    mapOfEntityToInputExpr.map { case (entityName, exprTry) =>
+      val exprValue = JsonExpressionEvaluator.evaluate(exprTry)
+      entityName ->  exprValue
+    }
 
   }
 
@@ -226,13 +229,15 @@ object InputExpressionReassembler {
        */
       val updatedEvaluatedRefMap: Try[JsValue] = inputOption match {
         case Some(input) => input.workflowInput.getValueType.getTypeName match {
-          case TypeNameEnum.OBJECT => inputExprWithEvaluatedRef.map(x => updateInputExprValueMapForObjectInput(x, input.workflowInput.getValueType.getObjectFieldTypes.asScala))
-          case _ => inputExprWithEvaluatedRef
+          case TypeNameEnum.OBJECT =>
+            val objectFields = Option(input.workflowInput.getValueType.getObjectFieldTypes).map(_.asScala).getOrElse(mutable.Seq.empty[ValueTypeObjectFieldTypes])
+            inputExprWithEvaluatedRef.map(x => updateInputExprValueMapForObjectInput(x, objectFields))
+          case _ =>
+            inputExprWithEvaluatedRef
         }
         case None => inputExprWithEvaluatedRef
       }
-
-      entityName -> updatedEvaluatedRefMap
+      (entityName -> updatedEvaluatedRefMap)
     }.toMap
   }
 }

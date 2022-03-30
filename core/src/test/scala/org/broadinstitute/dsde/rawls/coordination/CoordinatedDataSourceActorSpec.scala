@@ -57,7 +57,7 @@ class CoordinatedDataSourceActorSpec
         Thread.sleep(10.seconds.toMillis)
         "i'm running a bit late"
       },
-      Failure(new TimeoutException("Futures timed out after [5 seconds]")),
+      Failure(new TimeoutException("Future timed out after [5 seconds]")),
     ),
   )
 
