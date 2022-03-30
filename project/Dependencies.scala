@@ -31,6 +31,10 @@ object Dependencies {
   val akkaTestKit: ModuleID =           "com.typesafe.akka" %% "akka-testkit"             % akkaV     % "test"
   val akkaHttpTestKit: ModuleID =       "com.typesafe.akka" %% "akka-http-testkit"        % akkaHttpV % "test"
 
+  // This version of `cromwell-client` was packaged by `sbt` running on Scala 2.12 but actually contains only Java
+  // classes (generated from OpenAPI YAML) that were not compiled against any version of the Scala library.
+  // `cromwell-client` is therefore referenced here as a Java artifact with "_2.12" incorporated into its name,
+  // allowing for Rawls to upgrade its Scala version without requiring any changes to this artifact.
   val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.12" % "0.1-8b413b45f-SNAP"
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
