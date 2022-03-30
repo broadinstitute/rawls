@@ -16,7 +16,7 @@ ENV=${2:-dev}
 
 printf "Generating the Rawls jar...\n\n"
 sbt -Dsbt.log.noformat=true clean assembly
-RAWLS_JAR_PATH=$(ls target/scala-2.12/rawls-assembly*)
+RAWLS_JAR_PATH=$(ls target/scala-2.13/rawls-assembly*)
 
 printf "\n\nJar successfully generated."
 

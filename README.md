@@ -114,7 +114,7 @@ Build Rawls jar and docker image
 
 ## Publish rawls-model
 
-Supported Scala versions: 2.12, 2.13
+Supported Scala versions: 2.13
 
 Running the `publishRelease.sh` script publishes a release of rawls-model, workbench-util and workbench-google to Artifactory. You should do this manually from the base directory of the repo when you change something in `model/src`, `util/src` or `google/src`.
 - [Jenkins runs `publishSnapshot.sh` on every dev build](https://fc-jenkins.dsp-techops.broadinstitute.org/job/rawls-build/), but that makes "unofficial" `-SNAP` versions.
