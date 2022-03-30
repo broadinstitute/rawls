@@ -69,13 +69,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def requireOneOfProjectAction[T](projectName: RawlsBillingProjectName, acceptableActions: Set[SamResourceAction])(op: => Future[T]): Future[T] = {
-    samDAO.listUserActionsForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo).flatMap {
-      case actions if actions.intersect(acceptableActions).nonEmpty => op
-      case _ => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have the required actions to perform this, or the resource may not exist.")))
-    }
-  }
-
   def requireServicePerimeterAction[T](servicePerimeterName: ServicePerimeterName, action: SamResourceAction)(op: => Future[T]): Future[T] = {
     samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeterName.value, UTF_8.name), action, userInfo).flatMap {
       case true => op
