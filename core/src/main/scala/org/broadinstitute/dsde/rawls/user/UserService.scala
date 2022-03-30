@@ -209,14 +209,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[Set[RawlsBillingProjectMember]] = {
     samDAO.listUserActionsForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo).flatMap {
-      // the JSON response for listPoliciesForResource and getPolicy are shaped slightly differently, the initial 2 cases
-      // here will coerce the data into the same shape so the final yield can be re-used for both cases.
+      // the JSON responses for listPoliciesForResource and getPolicy are shaped slightly differently.
+      // the initial 2 cases will coerce the data into the same shape so the final yield can be re-used for both cases.
+      // only project owners can call listPoliciesForResource, whereas project users must call getPolicy directly on the owner policy
       case actions if actions.contains(SamBillingProjectActions.readPolicies) =>
         samDAO.listPoliciesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policiesWithNameAndEmail =>
           policiesWithNameAndEmail.map(policyWithNameAndEmail => policyWithNameAndEmail.policyName -> policyWithNameAndEmail.policy)
         }
       case actions if actions.contains(SamBillingProjectActions.readPolicy(SamBillingProjectPolicyNames.owner)) =>
-        samDAO.getPolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.owner, userInfo).map{ policy =>
+        samDAO.getPolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.owner, userInfo).map { policy =>
           Set(SamBillingProjectPolicyNames.owner -> policy)
         }
       case _ => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have the required actions to perform this, or the resource may not exist.")))
