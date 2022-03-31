@@ -220,6 +220,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
     traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(s1 => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
+        val azureInfo: Option[WorkspaceAzureCloudContext] = getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
 
         // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
         // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -240,7 +241,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
           // determine which functions to use for the various part of the response
           def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
-            traceWithParent("getBucketDetails",s1)(_ =>  gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId).map(Option(_)))
+            azureInfo match {
+              case None => traceWithParent("getBucketDetails", s1)(_ => gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId).map(Option(_)))
+              case _ => noFuture
+            }
           } else {
             noFuture
           }
@@ -294,13 +298,61 @@ class WorkspaceService(protected val userInfo: UserInfo,
             stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s1)(_ => workspaceSubmissionStatsFuture())
           } yield {
             // post-process JSON to remove calculated-but-undesired keys
-            val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes), stats, bucketDetails, owners)
+            val workspaceResponse = WorkspaceResponse(
+              optionalAccessLevelForResponse,
+              canShare,
+              canCompute,
+              canCatalog,
+              WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes),
+              stats,
+              bucketDetails,
+              owners,
+              azureInfo)
             val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
             filteredJson
           }
         }
       }
     })
+  }
+
+  private def getAzureCloudContextFromWorkspaceManager(workspaceContext: Workspace, parentSpan: Span = null) = {
+    workspaceContext.workspaceType match {
+      case WorkspaceType.McWorkspace => {
+        val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", parentSpan)
+
+        try {
+          val wsmInfo = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)
+
+          Option(wsmInfo.getAzureContext) match {
+            case Some(azureContext) => Some(WorkspaceAzureCloudContext(
+              azureContext.getTenantId,
+              azureContext.getSubscriptionId,
+              azureContext.getResourceGroupId)
+            )
+            case None => {
+                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(
+                  StatusCodes.NotImplemented, s"Non-azure MC workspaces not supported [id=${workspaceContext.workspaceId}]"
+              ))
+            }
+          }
+        } catch {
+          case e: ApiException =>
+            logger.warn(s"Error retrieving MC workspace from workspace manager [id=${workspaceContext.workspaceId}, code=${e.getCode}]")
+
+            if (e.getCode == StatusCodes.NotFound.intValue) {
+              span.setStatus(Status.NOT_FOUND)
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, e))
+            } else {
+              span.setStatus(Status.INTERNAL)
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(e.getCode, e))
+            }
+        } finally {
+          span.end()
+        }
+      }
+      case _ => None
+    }
   }
 
   def getWorkspaceById(workspaceId: String, params: WorkspaceFieldSpecs, parentSpan: Span = null): Future[JsObject] = {

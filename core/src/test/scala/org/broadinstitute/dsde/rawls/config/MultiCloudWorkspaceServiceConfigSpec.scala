@@ -10,7 +10,7 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
   val testConf: Config = ConfigFactory.load()
 
   it should "default to not enabled if no config is present" in {
-    val config = MultiCloudWorkspaceConfig.apply(testConf)
+    val config = MultiCloudWorkspaceConfig.apply(ConfigFactory.empty())
 
     config.multiCloudWorkspacesEnabled shouldBe false
     config.azureConfig shouldBe None
