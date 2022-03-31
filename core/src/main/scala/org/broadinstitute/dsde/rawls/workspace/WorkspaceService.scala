@@ -6,7 +6,6 @@ import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import cats.implicits._
 import com.google.api.services.cloudresourcemanager.model.Project
-import com.google.api.services.storage.model.StorageObject
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
@@ -221,6 +220,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
     traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(s1 => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
+        val azureInfo: Option[WorkspaceAzureCloudContext] = getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
 
         // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
         // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -241,7 +241,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
           // determine which functions to use for the various part of the response
           def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
-            traceWithParent("getBucketDetails",s1)(_ =>  gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId).map(Option(_)))
+            azureInfo match {
+              case None => traceWithParent("getBucketDetails", s1)(_ => gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId).map(Option(_)))
+              case _ => noFuture
+            }
           } else {
             noFuture
           }
@@ -295,13 +298,61 @@ class WorkspaceService(protected val userInfo: UserInfo,
             stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s1)(_ => workspaceSubmissionStatsFuture())
           } yield {
             // post-process JSON to remove calculated-but-undesired keys
-            val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes), stats, bucketDetails, owners)
+            val workspaceResponse = WorkspaceResponse(
+              optionalAccessLevelForResponse,
+              canShare,
+              canCompute,
+              canCatalog,
+              WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes),
+              stats,
+              bucketDetails,
+              owners,
+              azureInfo)
             val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
             filteredJson
           }
         }
       }
     })
+  }
+
+  private def getAzureCloudContextFromWorkspaceManager(workspaceContext: Workspace, parentSpan: Span = null) = {
+    workspaceContext.workspaceType match {
+      case WorkspaceType.McWorkspace => {
+        val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", parentSpan)
+
+        try {
+          val wsmInfo = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)
+
+          Option(wsmInfo.getAzureContext) match {
+            case Some(azureContext) => Some(WorkspaceAzureCloudContext(
+              azureContext.getTenantId,
+              azureContext.getSubscriptionId,
+              azureContext.getResourceGroupId)
+            )
+            case None => {
+                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(
+                  StatusCodes.NotImplemented, s"Non-azure MC workspaces not supported [id=${workspaceContext.workspaceId}]"
+              ))
+            }
+          }
+        } catch {
+          case e: ApiException =>
+            logger.warn(s"Error retrieving MC workspace from workspace manager [id=${workspaceContext.workspaceId}, code=${e.getCode}]")
+
+            if (e.getCode == StatusCodes.NotFound.intValue) {
+              span.setStatus(Status.NOT_FOUND)
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, e))
+            } else {
+              span.setStatus(Status.INTERNAL)
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(e.getCode, e))
+            }
+        } finally {
+          span.end()
+        }
+      }
+      case _ => None
+    }
   }
 
   def getWorkspaceById(workspaceId: String, params: WorkspaceFieldSpecs, parentSpan: Span = null): Future[JsObject] = {
@@ -473,10 +524,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
       // Delete workflowCollection resource in sam outside of DB transaction
       _ <- traceWithParent("deleteWorkflowCollectionSamResource", parentSpan)(_ =>
         workspaceContext.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(())) recoverWith {
-          case t:Throwable => {
-            logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`", t)
+          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+            logger.warn(s"Received 404 from delete workflowCollection resource in Sam (while deleting workspace) for workspace `${workspaceName}`: [${t.errorReport.message}]")
+            Future.successful()
+          case t: RawlsExceptionWithErrorReport =>
+            logger.error(s"Unexpected failure deleting workspace (while deleting workflowCollection in Sam) for workspace `${workspaceName}`.", t)
             Future.failed(t)
-          }
         }
       )
 
@@ -495,10 +548,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       _ <- traceWithParent("deleteWorkspaceSamResource", parentSpan)(_ =>
         samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
-          case t:Throwable => {
-            logger.warn(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`", t)
+          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+            logger.warn(s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspaceName}`: [${t.errorReport.message}]")
+            Future.successful()
+          case t: RawlsExceptionWithErrorReport =>
+            logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`.", t)
             Future.failed(t)
-          }
         }
       )
     } yield {

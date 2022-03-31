@@ -400,7 +400,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     // if the WorkspaceResponse or WorkspaceDetails case classes change shape, these tests will fail.
     "should introspect WorkspaceResponse correctly" in {
       val expected = List("accessLevel", "canShare", "canCompute", "catalog", "workspace", "workspaceSubmissionStats",
-        "bucketOptions", "owners")
+        "bucketOptions", "owners", "azureContext")
       WorkspaceFieldNames.workspaceResponseClassNames should contain theSameElementsAs expected
     }
     "should introspect WorkspaceDetails correctly" in {
@@ -411,7 +411,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       WorkspaceFieldNames.workspaceDetailClassNames should contain theSameElementsAs expected
     }
     "should collate WorkspaceResponse and WorkspaceDetails correctly" in {
-      val expected = List("accessLevel", "canShare", "canCompute", "catalog", "workspace", "workspaceSubmissionStats",
+      val expected = List("azureContext", "accessLevel", "canShare", "canCompute", "catalog", "workspace", "workspaceSubmissionStats",
         "bucketOptions", "owners", "workspace.namespace", "workspace.name", "workspace.workspaceId",
         "workspace.bucketName", "workspace.workflowCollectionName", "workspace.createdDate", "workspace.lastModified",
         "workspace.createdBy", "workspace.attributes", "workspace.isLocked", "workspace.authorizationDomain",
