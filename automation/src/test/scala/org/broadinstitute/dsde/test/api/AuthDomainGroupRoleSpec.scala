@@ -1,17 +1,28 @@
 package org.broadinstitute.dsde.test.api
 
+import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.config.UserPool
-import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
+import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
+import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtures}
+import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
+import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.{Rawls, Sam}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 
 
-class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with BillingFixtures with GroupFixtures with Matchers {
+class AuthDomainGroupRoleSpec
+  extends AnyFreeSpec
+    with WorkspaceFixtures
+    with GroupFixtures
+    with Matchers
+    with CleanUp {
+
+  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
 
   "removing permissions from workspace with auth domain" - {
 
@@ -25,7 +36,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner, List(student.email)) { projectName =>
+      withTemporaryBillingProject(billingAccountName, owners = List(student.email).some) { projectName =>
         withGroup("group", List(student.email)) { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -38,7 +49,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
 
           }(projectOwnerToken)
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
     "+ project owner, + group member, create workspace, - project owner" in {
@@ -51,7 +62,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner, ownerEmails = List(student.email)) { projectName =>
+      withTemporaryBillingProject(billingAccountName, owners = List(student.email).some) { projectName =>
         withGroup("group", List(student.email)) { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -64,7 +75,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
 
           }(projectOwnerToken)
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
     "+ project owner, create workspace, + group member, - group member" in {
@@ -77,7 +88,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner, List(student.email)) { projectName =>
+      withTemporaryBillingProject(billingAccountName, owners = List(student.email).some) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -93,7 +104,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
 
           }(projectOwnerToken)
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
     "+ project owner, + group member, - project owner" in {
@@ -106,7 +117,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner, ownerEmails = List(student.email)) { projectName =>
+      withTemporaryBillingProject(billingAccountName, owners = List(student.email).some) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -122,7 +133,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
 
           }(projectOwnerToken)
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
     "+ group member, + project owner, - group member" in {
@@ -135,7 +146,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner) { projectName =>
+      withTemporaryBillingProject(billingAccountName) { projectName =>
         withGroup("group", memberEmails = List(student.email)) { groupName =>
           withCleanUp {
             withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
@@ -153,7 +164,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
             }(projectOwnerToken)
           }
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
     "+ group member, + project owner, - project owner" in {
@@ -166,7 +177,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner) { projectName =>
+      withTemporaryBillingProject(billingAccountName) { projectName =>
         withGroup("group", memberEmails = List(student.email)) { groupName =>
           withCleanUp {
             withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
@@ -183,7 +194,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
             }(projectOwnerToken)
           }
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
     "create workspace, + project owner, + group member, - group member" in {
@@ -195,7 +206,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner) { projectName =>
+      withTemporaryBillingProject(billingAccountName) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -214,7 +225,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
 
           }(projectOwnerToken)
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
     "create workspace, + project owner, + group member, - project owner" in {
@@ -226,7 +237,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner) { projectName =>
+      withTemporaryBillingProject(billingAccountName) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -246,7 +257,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
 
           }(projectOwnerToken)
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
     "create workspace, + group member, + project owner, - group member" in {
@@ -258,7 +269,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner) { projectName =>
+      withTemporaryBillingProject(billingAccountName) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -278,7 +289,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
 
           }(projectOwnerToken)
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
     "create workspace, + group member, + project owner, - project owner" in {
@@ -290,7 +301,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withCleanBillingProject(billingProjectOwner) { projectName =>
+      withTemporaryBillingProject(billingAccountName) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -310,7 +321,7 @@ class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with Bi
 
           }(projectOwnerToken)
         }(projectOwnerToken)
-      }
+      }(billingProjectOwner.makeAuthToken(billingScopes))
     }
 
   }

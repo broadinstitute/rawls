@@ -1,13 +1,16 @@
 package org.broadinstitute.dsde.test.api
 
+import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceResponse
 import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.serviceAccountScopes
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.{billingScopes, serviceAccountScopes}
+import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
+import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
+import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service._
+import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -16,7 +19,13 @@ import spray.json._
 
 import scala.util.Try
 
-class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures with Eventually {
+class AuthDomainGroupApiSpec
+  extends AnyFreeSpec
+    with Matchers
+    with WorkspaceFixtures
+    with GroupFixtures
+    with Eventually
+    with CleanUp {
 
   /*
   * Unless otherwise declared, this auth token will be used for API calls.
@@ -26,7 +35,8 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
 
   val defaultUser: Credentials = UserPool.chooseCurator
   val authTokenDefault: AuthToken = defaultUser.makeAuthToken()
-  
+  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
+
   "A workspace" - {
     "with one group in its auth domain" - {
 
@@ -35,16 +45,16 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
         implicit val authToken: AuthToken = authTokenDefault
 
         withGroup("authDomain", List(user.email)) { authDomainName =>
-          withCleanBillingProject(user) { projectName =>
+          withTemporaryBillingProject(billingAccountName) { projectName =>
             withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
               // user is one of the authdomain group members
-              groupNameToMembersEmails(authDomainName) should contain (user.email)
+              groupNameToMembersEmails(authDomainName) should contain(user.email)
               // user can access workspace and see the authdomain group
               AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(authDomainName))(user.makeAuthToken())
 
             }(user.makeAuthToken())
-          }
+          }(user.makeAuthToken(billingScopes))
         }
       }
 
@@ -53,7 +63,7 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
         implicit val authToken: AuthToken = authTokenDefault
 
         withGroup("authDomain", List(user.email)) { authDomainName =>
-          withCleanBillingProject(defaultUser, userEmails = List(user.email)) { projectName =>
+          withTemporaryBillingProject(billingAccountName, users = List(user.email).some) { projectName =>
             withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName),
               List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
@@ -70,7 +80,7 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
 
               Rawls.workspaces.delete(projectName, workspaceCloneName)(user.makeAuthToken())
             }
-          }
+          }(defaultUser.makeAuthToken(billingScopes))
         }
       }
 
@@ -84,14 +94,14 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
             implicit val authToken: AuthToken = authTokenDefault
 
             withGroup("authDomain") { authDomainName =>
-              withCleanBillingProject(defaultUser) { projectName =>
+              withTemporaryBillingProject(billingAccountName) { projectName =>
                 withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName),
                   List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
                   // user can see workspace but cannot access workspace
                   AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                 }
-              }
+              }(defaultUser.makeAuthToken(billingScopes))
             }
           }
         }
@@ -103,13 +113,13 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
             implicit val authToken: AuthToken = authTokenDefault
 
             withGroup("authDomain") { authDomainName =>
-              withCleanBillingProject(defaultUser) { projectName =>
+              withTemporaryBillingProject(billingAccountName) { projectName =>
                 withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
                   // user cannot see workspace and user cannot access workspace
                   AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                 }
-              }
+              }(defaultUser.makeAuthToken(billingScopes))
             }
           }
         }
@@ -124,14 +134,14 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
             implicit val authToken: AuthToken = authTokenDefault
 
             withGroup("authDomain", List(user.email)) { authDomainName =>
-              withCleanBillingProject(defaultUser) { projectName =>
+              withTemporaryBillingProject(billingAccountName) { projectName =>
                 withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName),
                   List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
                   // user can see workspace and user can access workspace
                   AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(authDomainName))(user.makeAuthToken())
                 }
-              }
+              }(defaultUser.makeAuthToken(billingScopes))
             }
           }
         }
@@ -143,13 +153,13 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
             implicit val authToken: AuthToken = authTokenDefault
 
             withGroup("AuthDomain", List(user.email)) { authDomainName =>
-              withCleanBillingProject(defaultUser) { projectName =>
+              withTemporaryBillingProject(billingAccountName) { projectName =>
                 withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
                   // user cannot see workspace and user cannot access workspace
                   AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                 }
-              }
+              }(defaultUser.makeAuthToken(billingScopes))
             }
           }
         }
@@ -169,7 +179,7 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
       val userBToken: AuthToken = userB.makeAuthToken(serviceAccountScopes)
 
       withGroup("AuthDomain") { authDomainName =>
-        withCleanBillingProject(userA, List(userA.email), List(userB.email)) { projectName =>
+        withTemporaryBillingProject(billingAccountName, owners = List(userA.email).some, users = List(userB.email).some) { projectName =>
           withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
             val bucketName = Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(userBToken).parseJson.convertTo[WorkspaceResponse].workspace.bucketName
@@ -185,7 +195,7 @@ class AuthDomainGroupApiSpec extends AnyFreeSpec with Matchers with WorkspaceFix
             }
 
           }(userBToken)
-        }
+        }(userA.makeAuthToken(billingScopes))
       }(userBToken)
     }
 
