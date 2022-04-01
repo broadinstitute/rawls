@@ -16,8 +16,8 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
-import org.broadinstitute.dsde.workbench.fixture.WorkspaceFixtures
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
+import org.broadinstitute.dsde.workbench.fixture.WorkspaceFixtures
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll

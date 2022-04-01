@@ -10,8 +10,8 @@ import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
-import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
+import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO, HttpGoogleProjectDAO}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.service._
@@ -25,10 +25,10 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
+import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.collection.JavaConverters._
 
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation

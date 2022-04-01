@@ -5,8 +5,8 @@ import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
-import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
+import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
