@@ -2,10 +2,10 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.workspace.api.WorkspaceApplicationApi
 import bio.terra.workspace.client.ApiClient
 import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
-import org.mockito.Mockito.when
+import org.mockito.Mockito.verify
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
@@ -21,15 +21,19 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
   behavior of "enableApplication"
 
   it should "call the WSM app API" in {
+    val workspaceApplicationApi = mock[WorkspaceApplicationApi]
     val provider = new WorkspaceManagerApiClientProvider {
-      override def getApiClient(accessToken: String): ApiClient = {
-        mock[ApiClient]
+      override def getApiClient(accessToken: String): ApiClient = ???
+
+      override def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi = {
+        workspaceApplicationApi
       }
     }
     val wsmDao = new HttpWorkspaceManagerDAO(provider)
     val workspaceId = UUID.randomUUID()
 
     wsmDao.enableApplication(workspaceId, "leo", OAuth2BearerToken("fake_token"))
-  }
 
+    verify(workspaceApplicationApi).enableWorkspaceApplication(workspaceId, "leo")
+  }
 }
