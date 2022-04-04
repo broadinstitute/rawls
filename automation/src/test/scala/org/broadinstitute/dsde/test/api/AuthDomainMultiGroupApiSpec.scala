@@ -135,7 +135,7 @@ class AuthDomainMultiGroupApiSpec
             withGroup("AuthDomainOne") { groupOne =>
               withGroup("AuthDomainTwo") { groupTwo =>
 
-                withTemporaryBillingProject(billingAccountName) { projectName =>
+                withTemporaryBillingProject(billingAccountName, users = List(defaultUser.email).some) { projectName =>
 
                   val authDomain = Set(groupOne, groupTwo)
                   withWorkspace(projectName, "GroupsApiSpec_workspace", authDomain, List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
@@ -143,7 +143,7 @@ class AuthDomainMultiGroupApiSpec
                     // user can see workspace but user cannot access workspace
                     AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
-                }(defaultUser.makeAuthToken(billingScopes))
+                }(UserPool.chooseProjectOwner.makeAuthToken(billingScopes))
               }
             }
           }
@@ -178,13 +178,13 @@ class AuthDomainMultiGroupApiSpec
             withGroup("AuthDomainOne") { groupOne =>
               withGroup("AuthDomainTwo") { groupTwo =>
 
-                withTemporaryBillingProject(billingAccountName) { projectName =>
+                withTemporaryBillingProject(billingAccountName, users = List(defaultUser.email).some) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
 
                     // user cannot see workspace and user cannot access workspace
                     AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
-                }(defaultUser.makeAuthToken(billingScopes))
+                }(UserPool.chooseProjectOwner.makeAuthToken(billingScopes))
               }
             }
           }
@@ -197,19 +197,17 @@ class AuthDomainMultiGroupApiSpec
           "can be seen but is not accessible" in {
 
             val user = UserPool.chooseStudent
-            implicit val authToken: AuthToken = authTokenDefault
+            implicit val authToken: AuthToken =
+              UserPool.chooseProjectOwner.makeAuthToken(billingScopes)
 
             withGroup("AuthDomainOne") { groupOne =>
               withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
-
                 withTemporaryBillingProject(billingAccountName) { projectName =>
-
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
-
                     // user can see workspace but user cannot access workspace
                     AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
-                }(defaultUser.makeAuthToken(billingScopes))
+                }
               }
             }
           }
@@ -218,19 +216,14 @@ class AuthDomainMultiGroupApiSpec
             "can be seen but is not accessible" in {
 
               val user = UserPool.chooseProjectOwner
-              implicit val authToken: AuthToken = authTokenDefault
 
               withGroup("AuthDomainOne") { groupOne =>
-                withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
-                  withTemporaryBillingProject(billingAccountName, owners = List(user.email).some) { projectName =>
-                    withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne)) { workspaceName =>
-
-                      // user can see workspace but user cannot access workspace
-                      AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(defaultUser.makeAuthToken())
-
-                    }(user.makeAuthToken())
-                  }(defaultUser.makeAuthToken(billingScopes))
-                }(user.makeAuthToken())
+                withTemporaryBillingProject(billingAccountName, owners = List(defaultUser.email).some) { projectName =>
+                  withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne)) { workspaceName =>
+                    // default user can see workspace but cannot access workspace
+                    AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(defaultUser.makeAuthToken())
+                  }(user.makeAuthToken())
+                }(user.makeAuthToken(billingScopes))
               }(user.makeAuthToken())
             }
           }
@@ -240,7 +233,8 @@ class AuthDomainMultiGroupApiSpec
           "cannot be seen and is not accessible" in {
 
             val user = UserPool.chooseStudent
-            implicit val authToken: AuthToken = authTokenDefault
+            implicit val authToken: AuthToken =
+              UserPool.chooseProjectOwner.makeAuthToken(billingScopes)
 
             withGroup("AuthDomainOne") { groupOne =>
               withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
@@ -251,7 +245,7 @@ class AuthDomainMultiGroupApiSpec
                     // user cannot see workspace and user cannot access workspace
                     AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
-                }(defaultUser.makeAuthToken(billingScopes))
+                }
               }
             }
           }
@@ -265,18 +259,18 @@ class AuthDomainMultiGroupApiSpec
           "can be seen and is accessible" in {
 
             val user = UserPool.chooseStudent
-            implicit val authToken: AuthToken = authTokenDefault
+            implicit val authToken: AuthToken =
+              UserPool.chooseProjectOwner.makeAuthToken(billingScopes)
 
             withGroup("AuthDomainOne", List(user.email)) { groupOne =>
               withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
-
                 withTemporaryBillingProject(billingAccountName) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
                     // user can see workspace and user can access workspace
                     AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                   }
-                }(defaultUser.makeAuthToken(billingScopes))
+                }
               }
             }
           }
@@ -285,11 +279,11 @@ class AuthDomainMultiGroupApiSpec
             "the user has correct permissions" in {
 
               val user = UserPool.chooseStudent
-              implicit val authToken: AuthToken = authTokenDefault
+              implicit val authToken: AuthToken =
+                UserPool.chooseProjectOwner.makeAuthToken(billingScopes)
 
               withGroup("AuthDomainOne", List(user.email)) { groupOne =>
                 withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
-
                   withTemporaryBillingProject(billingAccountName) { projectName =>
                     withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(user.email, WorkspaceAccessLevel.Writer))) { workspaceName =>
                       eventually {
@@ -298,7 +292,7 @@ class AuthDomainMultiGroupApiSpec
                       }
                       AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                     }
-                  }(defaultUser.makeAuthToken(billingScopes))
+                  }
                 }
               }
             }
@@ -331,25 +325,26 @@ class AuthDomainMultiGroupApiSpec
           "can be seen and is accessible by group member who is a member of both auth domain groups" in {
 
             val user = UserPool.chooseStudent
-            implicit val authToken: AuthToken = authTokenDefault
+            implicit val authToken: AuthToken =
+              UserPool.chooseProjectOwner.makeAuthToken(billingScopes)
 
             withGroup("AuthDomainOne", List(user.email)) { groupOne =>
               withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
-
                 withTemporaryBillingProject(billingAccountName) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(groupNameToEmail(groupOne), WorkspaceAccessLevel.Reader))) { workspaceName =>
-
                     // user can see workspace and user can access workspace
                     AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                   }
-                }(defaultUser.makeAuthToken(billingScopes))
+                }
               }
             }
           }
 
           "can be seen but is not accessible by group member who is a member of only one auth domain group" in {
             val user = UserPool.chooseStudent
-            implicit val authToken: AuthToken = authTokenDefault
+            implicit val authToken: AuthToken =
+              UserPool.chooseProjectOwner.makeAuthToken(billingScopes)
+
             withGroup("AuthDomainOne", List(user.email)) { groupOne =>
               withGroup("AuthDomainTwo") { groupTwo =>
                 withTemporaryBillingProject(billingAccountName) { projectName =>
@@ -358,7 +353,7 @@ class AuthDomainMultiGroupApiSpec
                     // user can see workspace but user cannot access workspace
                     AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
-                }(defaultUser.makeAuthToken(billingScopes))
+                }
               }
             }
           }
@@ -367,18 +362,17 @@ class AuthDomainMultiGroupApiSpec
         "when not shared with them" - {
           "cannot be seen and is not accessible" in {
             val user = UserPool.chooseStudent
-            implicit val authToken: AuthToken = authTokenDefault
+            implicit val authToken: AuthToken =
+              UserPool.chooseProjectOwner.makeAuthToken(billingScopes)
 
             withGroup("AuthDomainOne", List(user.email)) { groupOne =>
               withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
-
                 withTemporaryBillingProject(billingAccountName) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
-
                     // user cannot see workspace and user cannot access workspace
                     AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
-                }(defaultUser.makeAuthToken(billingScopes))
+                }
               }
             }
           }

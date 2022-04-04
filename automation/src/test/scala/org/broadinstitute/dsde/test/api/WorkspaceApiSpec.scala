@@ -398,9 +398,8 @@ class WorkspaceApiSpec
       "to clone a requester-pays workspace from a different project into their own project" in {
         implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
 
-        implicit val ownerToken: AuthToken = ownerAuthToken
-        implicit val user: Credentials = UserPool.chooseAdmin
-        implicit val userToken: AuthToken = user.makeAuthToken()
+        val user: Credentials = UserPool.chooseCampaignManager
+        val userToken: AuthToken = user.makeAuthToken()
 
         val workspaceName = prependUUID("requester-pays")
         val workspaceCloneName = s"$workspaceName-copy"
@@ -410,20 +409,21 @@ class WorkspaceApiSpec
           withTemporaryBillingProject(billingAccountName) { destProjectName =>
             // The original workspace is in the source project. The user is a Reader on this workspace
             withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
-              withCleanUp {
-                // Enable requester pays on the original workspace and wait for the change to propagate
-                val bucketName = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(ownerToken)).workspace.bucketName
-                googleStorageDAO.setRequesterPays(GcsBucketName(bucketName), true).futureValue
-                eventually {
-                  workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)).bucketOptions should contain(WorkspaceBucketOptions(true))
-                }
-
-                // The user clones the workspace into their project
-                Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(userToken)
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken)).workspace.name should be (workspaceCloneName)
-                register cleanUp Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
+              // Enable requester pays on the original workspace and wait for the change to propagate
+              val bucketName = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(ownerAuthToken)).workspace.bucketName
+              googleStorageDAO.setRequesterPays(GcsBucketName(bucketName), true).futureValue
+              eventually {
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)).bucketOptions should contain(WorkspaceBucketOptions(true))
               }
-            }(ownerToken)
+
+              // The user clones the workspace into their project
+              Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(userToken)
+              try
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken))
+                  .workspace.name should be(workspaceCloneName)
+              finally
+                Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
+            }(ownerAuthToken)
           }(user.makeAuthToken(billingScopes))
         }(owner.makeAuthToken(billingScopes))
       }
