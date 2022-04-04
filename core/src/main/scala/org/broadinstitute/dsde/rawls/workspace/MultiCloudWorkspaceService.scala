@@ -98,7 +98,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       )
       _ = logger.info(s"Enabling leonardo app in WSM [workspaceId = ${workspaceId}]")
       _ <- traceWithParent("enableLeoInWSM", parentSpan)(_ =>
-        Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplcationId, userInfo.accessToken))
+        Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, userInfo.accessToken))
       )
     } yield {
       savedWorkspace

@@ -42,6 +42,6 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
     config.azureConfig.get.azureSubscriptionId shouldBe "fake_subid"
     config.azureConfig.get.azureResourceGroupId shouldBe "fake_mrgid"
     config.workspaceManager.get.cloudContextPollTimeout shouldEqual 30.seconds
-    config.workspaceManager.get.leonardoWsmApplcationId shouldEqual "fake_app_id"
+    config.workspaceManager.get.leonardoWsmApplicationId shouldEqual "fake_app_id"
   }
 }

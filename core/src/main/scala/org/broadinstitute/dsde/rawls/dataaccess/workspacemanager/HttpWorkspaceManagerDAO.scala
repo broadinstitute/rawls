@@ -11,14 +11,24 @@ import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataR
 import java.util.UUID
 import scala.concurrent.ExecutionContext
 
-class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO {
+trait WorkspaceManagerApiClientProvider {
+  def getApiClient(accessToken: String): ApiClient
+}
 
-  private def getApiClient(accessToken: String): ApiClient = {
+class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extends WorkspaceManagerApiClientProvider {
+  def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()
     client.setBasePath(baseWorkspaceManagerUrl)
     client.setAccessToken(accessToken)
 
     client
+  }
+}
+
+class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvider)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO {
+
+  private def getApiClient(accessToken: String): ApiClient = {
+    apiClientProvider.getApiClient(accessToken)
   }
 
   private def getWorkspaceApi(accessToken: OAuth2BearerToken): WorkspaceApi = {
@@ -34,6 +44,7 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
   }
 
   private def getWorkspaceApplicationApi(accessToken: OAuth2BearerToken) = {
+
     new WorkspaceApplicationApi(getApiClient(accessToken.token))
   }
 

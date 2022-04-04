@@ -14,7 +14,7 @@ final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            azureConfig: Option[AzureConfig])
 
 
-final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplcationId: String,
+final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String,
                                                   cloudContextPollTimeout: FiniteDuration)
 
 final case class AzureConfig(spendProfileId: String,

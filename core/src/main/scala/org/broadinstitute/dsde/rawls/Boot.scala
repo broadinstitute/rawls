@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{HttpWorkspaceManagerClientProvider, HttpWorkspaceManagerDAO}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
@@ -310,7 +310,7 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.baseUrl"))
+      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(new HttpWorkspaceManagerClientProvider(conf.getString("workspaceManager.baseUrl")))
 
       val dataRepoDAO = new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"), conf.getString("dataRepo.terraInstance"))
 
