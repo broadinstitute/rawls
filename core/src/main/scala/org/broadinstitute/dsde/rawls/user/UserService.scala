@@ -220,7 +220,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         samDAO.getPolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.owner, userInfo).map { policy =>
           Set(SamBillingProjectPolicyNames.owner -> policy)
         }
-      case _ => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have the required actions to perform this, or the resource may not exist.")))
+      case _ => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have the required actions to perform this.")))
     }.map { policies =>
       for {
         (role, policy) <- policies.collect {
