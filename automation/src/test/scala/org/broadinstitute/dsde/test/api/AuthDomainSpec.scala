@@ -6,7 +6,6 @@ import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture.{GroupFixtures, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
-import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, RestException, WorkspaceAccessLevel}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
@@ -16,7 +15,6 @@ import org.scalatest.time.{Seconds, Span}
 class AuthDomainSpec
   extends AnyFlatSpec
     with Matchers
-    with CleanUp
     with WorkspaceFixtures
     with GroupFixtures
     with Eventually  {
@@ -172,8 +170,7 @@ class AuthDomainSpec
             withWorkspace(projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
               val clone = "AuthDomainsClone_" + makeRandomId()
               Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain)(projectUser.makeAuthToken())
-              withCleanUp {
-                register cleanUp Orchestration.workspaces.delete(projectName, clone)(projectUser.makeAuthToken())
+              try {
                 Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
 
                 Orchestration.groups.removeUserFromGroup(realmGroup2, projectUser.email, GroupRole.Member)(authToken)
@@ -185,6 +182,8 @@ class AuthDomainSpec
                 // add users back so the cleanup part of withGroup doesn't have a fit
                 Orchestration.groups.addUserToGroup(realmGroup2, projectUser.email, GroupRole.Member)(authToken)
               }
+              finally
+                Orchestration.workspaces.delete(projectName, clone)(projectUser.makeAuthToken())
             }(authToken)
           }(projectOwner.makeAuthToken(billingScopes))
         } (authToken)
@@ -203,10 +202,11 @@ class AuthDomainSpec
             withWorkspace(projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
               val clone = "AuthDomainsClone_" + makeRandomId()
               Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain + realmGroup3)(projectUser.makeAuthToken())
-              withCleanUp {
-                register cleanUp Orchestration.workspaces.delete(projectName, clone)(projectUser.makeAuthToken())
+              try
                 Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
-              }
+              finally
+                Orchestration.workspaces.delete(projectName, clone)(projectUser.makeAuthToken())
+
             }(authToken)
           }(projectOwner.makeAuthToken(billingScopes))
         } (authToken)

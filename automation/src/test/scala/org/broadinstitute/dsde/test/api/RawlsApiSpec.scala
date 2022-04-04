@@ -2,17 +2,17 @@ package org.broadinstitute.dsde.test.api
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
+import cats.implicits.catsSyntaxOptionId
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
-import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
+import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
@@ -28,7 +28,7 @@ import spray.json._
 import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.language.postfixOps
 import scala.util.Random
 
@@ -57,11 +57,6 @@ class RawlsApiSpec
   val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
   val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
-
-  def findPetInGoogle(project: String, petEmail: WorkbenchEmail): Option[ServiceAccount] = {
-    val find = googleIamDAO.findServiceAccount(GoogleProject(project), petEmail)
-    Await.result(find, 1.minute)
-  }
 
   def parseCallsFromMetadata(metadata: String): List[JsonNode] = {
     val mapper = new ObjectMapper()
@@ -157,7 +152,7 @@ class RawlsApiSpec
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 3, scatterCount = 3)
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountName, users = List(studentB.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
@@ -247,7 +242,7 @@ class RawlsApiSpec
             }
           }
         }
-      }(studentB.makeAuthToken(billingScopes))
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should be able to create workspace and run sub-workflow tasks in non-US regions" in {
@@ -258,7 +253,7 @@ class RawlsApiSpec
 
       val europeNorth1ZonesPrefix = "europe-north1-"
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountName, users = List(studentB.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
@@ -357,7 +352,7 @@ class RawlsApiSpec
             workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
           }
         }
-      }(studentB.makeAuthToken(billingScopes))
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" in {
@@ -368,7 +363,7 @@ class RawlsApiSpec
 
       val europeNorth1ZonesPrefix = "europe-north1-"
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountName, users = List(studentB.email).some) { projectName =>
         // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
         withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
@@ -471,7 +466,7 @@ class RawlsApiSpec
             workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
           }
         }
-      }(studentB.makeAuthToken(billingScopes))
+      }(owner.makeAuthToken(billingScopes))
     }
 
 //    Disabling this test until we decide what to do with it. See AP-177
@@ -484,7 +479,7 @@ class RawlsApiSpec
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountName, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
           Orchestration.methodConfigurations.createMethodConfigInWorkspace(
             projectName, workspaceName,
@@ -567,21 +562,21 @@ class RawlsApiSpec
           // wait on the future's execution
           abortOrGiveUp.futureValue
         }
-      }(studentA.makeAuthToken(billingScopes))
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should label low security bucket" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountName, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
           val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
           val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
 
           bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "low")
         }
-      }(studentA.makeAuthToken(billingScopes))
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should label high security bucket" in {
@@ -590,7 +585,7 @@ class RawlsApiSpec
 
       withGroup("ad") { realmGroup =>
         withGroup("ad2") { realmGroup2 =>
-          withTemporaryBillingProject(billingAccountName) { projectName =>
+          withTemporaryBillingProject(billingAccountName, users = List(studentA.email).some) { projectName =>
             withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
               val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
               val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
@@ -598,7 +593,7 @@ class RawlsApiSpec
               bucketName should startWith("fc-secure-")
               bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase -> "", "ad-" + realmGroup2.toLowerCase -> "")
             }
-          }(studentA.makeAuthToken(billingScopes))
+          }(owner.makeAuthToken(billingScopes))
         }
       }
     }
@@ -656,7 +651,7 @@ class RawlsApiSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
       implicit val token: AuthToken = studentAToken
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountName, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
           withCleanUp {
             val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
@@ -689,7 +684,7 @@ class RawlsApiSpec
             logger.info(s"Copied bucket files visible after ${finish - start} milliseconds")
           }
         }
-      }(studentA.makeAuthToken(billingScopes))
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should support running workflows with private docker images" in {

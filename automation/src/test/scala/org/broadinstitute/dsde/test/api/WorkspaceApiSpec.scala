@@ -399,7 +399,7 @@ class WorkspaceApiSpec
         implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
 
         implicit val ownerToken: AuthToken = ownerAuthToken
-        implicit val user: Credentials = UserPool.chooseStudent
+        implicit val user: Credentials = UserPool.chooseAdmin
         implicit val userToken: AuthToken = user.makeAuthToken()
 
         val workspaceName = prependUUID("requester-pays")
