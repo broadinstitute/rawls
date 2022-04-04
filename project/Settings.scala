@@ -90,7 +90,7 @@ object Settings {
   val commonSettings =
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
     organization  := "org.broadinstitute.dsde",
-    scalaVersion  := "2.12.15", // `cromwell-client` needs to support 2.13 for rawls to be able to upgrade
+    scalaVersion  := "2.12.15",
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
     scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
   )

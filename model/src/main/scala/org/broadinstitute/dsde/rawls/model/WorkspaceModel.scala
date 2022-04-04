@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
+import bio.terra.workspace.model.AzureContext
 import cats.implicits._
 import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -651,6 +652,12 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                                  public: Boolean)
 
+
+case class WorkspaceAzureCloudContext(tenantId: String,
+                                      subscriptionId: String,
+                                      managedResourceGroupId: String
+                                     )
+
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
                              canCompute: Option[Boolean],
@@ -658,7 +665,9 @@ case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              workspace: WorkspaceDetails,
                              workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                              bucketOptions: Option[WorkspaceBucketOptions],
-                             owners: Option[Set[String]])
+                             owners: Option[Set[String]],
+                             azureContext: Option[WorkspaceAzureCloudContext]
+                            )
 
 case class WorkspaceDetails(namespace: String,
                             name: String,
@@ -995,7 +1004,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceResponseFormat = jsonFormat8(WorkspaceResponse)
+  implicit val WorkspaceAzureCloudContextFormat = jsonFormat3(WorkspaceAzureCloudContext)
+
+  implicit val WorkspaceResponseFormat = jsonFormat9(WorkspaceResponse)
 
   implicit val PendingCloneWorkspaceFileTransferFormat = jsonFormat5(PendingCloneWorkspaceFileTransfer)
 

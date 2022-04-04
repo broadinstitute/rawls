@@ -108,11 +108,7 @@ paths:
           description: project already exists in rawls or google
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       security:
         - authorization:
             - openid
@@ -128,12 +124,7 @@ paths:
       description: list members of billing project. owners can view all members, users will only be able to view owners
       operationId: listBillingProjectMembers
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: Success
@@ -150,11 +141,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/{projectId}/{workbenchRole}/{email}:
     put:
       tags:
@@ -163,21 +150,8 @@ paths:
       description: add user or group to billing project the caller owns
       operationId: addUserToBillingProject
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
-        - name: workbenchRole
-          in: path
-          description: role of user for project
-          required: true
-          schema:
-            type: string
-            enum:
-              - user
-              - owner
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+        - $ref: '#/components/parameters/workbenchRolePathParam'
         - name: email
           in: path
           description: email of user or group to add
@@ -201,11 +175,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing
@@ -213,21 +183,8 @@ paths:
       description: remove user or group from billing project the caller owns
       operationId: removeUserFromBillingProject
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
-        - name: workbenchRole
-          in: path
-          description: role of user for project
-          required: true
-          schema:
-            type: string
-            enum:
-              - user
-              - owner
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+        - $ref: '#/components/parameters/workbenchRolePathParam'
         - name: email
           in: path
           description: email of user or group to remove
@@ -251,11 +208,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2:
     post:
       tags:
@@ -283,11 +236,7 @@ paths:
           description: project already exists in rawls
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       security:
         - authorization:
             - openid
@@ -303,12 +252,7 @@ paths:
       description: get billing project
       operationId: getBillingProject
       parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: OK
@@ -323,24 +267,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing_v2
       summary: delete billing project
       description: delete billing project
-      operationId: deleteBillingProject
+      operationId: deleteBillingProjectV2
       parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         204:
           description: OK
@@ -351,11 +286,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/billingAccount:
     put:
       tags:
@@ -364,12 +295,7 @@ paths:
       description: update billing account on billing project
       operationId: updateBillingProjectBillingAccount
       parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       requestBody:
         description: update billing account request
         content:
@@ -397,11 +323,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing_v2
@@ -409,12 +331,7 @@ paths:
       description: removes the billing account from the billing project
       operationId: removeBillingProjectBillingAccount
       parameters:
-        - name: projectId
-          in: path
-          description: Id of the billing project
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: OK
@@ -429,25 +346,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Internal Server Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/members:
     get:
       tags:
         - billing_v2
       summary: list members of billing project
       description: list members of billing project. owners can view all members, users will only be able to view owners
-      operationId: listBillingProjectMembers
+      operationId: listBillingProjectMembersV2
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: Success
@@ -464,11 +372,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/spendReport:
     get:
       tags:
@@ -477,12 +381,7 @@ paths:
       description: get spend report for the billing project
       operationId: getSpendReport
       parameters:
-        - name: projectId
-          in: path
-          description: Billing Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
         - name: startDate
           in: query
           description: start date of report (YYYY-MM-DD). Data included in report will start at 12 AM UTC on this date.
@@ -531,13 +430,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-
-
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/spendReportConfiguration:
     get:
       tags:
@@ -546,12 +439,7 @@ paths:
       description: get the spend report configuration for the billing project
       operationId: getSpendReportConfiguration
       parameters:
-        - name: projectId
-          in: path
-          description: Billing Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         200:
           description: Successfully retrieved spend report configuration
@@ -574,11 +462,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     put:
       tags:
         - billing_v2
@@ -586,12 +470,7 @@ paths:
       description: set the spend configuration for the billing project
       operationId: setSpendReportConfiguration
       parameters:
-        - name: projectId
-          in: path
-          description: Billing Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       requestBody:
         description: billing project spend configuration information
         content:
@@ -620,11 +499,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing_v2
@@ -632,12 +507,7 @@ paths:
       description: clear the spend configuration for the billing project
       operationId: clearSpendReportConfiguration
       parameters:
-        - name: projectId
-          in: path
-          description: Billing Project ID
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
       responses:
         204:
           description: Successfully cleared spend configuration
@@ -648,34 +518,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/members/{workbenchRole}/{email}:
     put:
       tags:
         - billing_v2
       summary: add user or group to billing project the caller owns
       description: add user or group to billing project the caller owns
-      operationId: addUserToBillingProject
+      operationId: addUserToBillingProjectV2
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
-        - name: workbenchRole
-          in: path
-          description: role of user for project
-          required: true
-          schema:
-            type: string
-            enum:
-              - user
-              - owner
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+        - $ref: '#/components/parameters/workbenchRolePathParam'
         - name: email
           in: path
           description: email of user or group to add
@@ -698,33 +551,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - billing_v2
       summary: remove user or group from billing project the caller owns
       description: remove user or group from billing project the caller owns
-      operationId: removeUserFromBillingProject
+      operationId: removeUserFromBillingProjectV2
       parameters:
-        - name: projectId
-          in: path
-          description: Project ID
-          required: true
-          schema:
-            type: string
-        - name: workbenchRole
-          in: path
-          description: role of user for project
-          required: true
-          schema:
-            type: string
-            enum:
-              - user
-              - owner
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+        - $ref: '#/components/parameters/workbenchRolePathParam'
         - name: email
           in: path
           description: email of user or group to remove
@@ -747,11 +583,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/project/registration:
     post:
       tags:
@@ -846,11 +678,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Trouble talking to Google
           content:
@@ -866,24 +694,9 @@ paths:
       description: Administratively abort an active submission
       operationId: adminAbortSubmission
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: workspaceNamespace of the submission
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: workspaceName of the submission
-          required: true
-          schema:
-            type: string
-        - name: submissionId
-          in: path
-          description: id of the submission
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/submissionIdPathParam'
       responses:
         204:
           description: Successful Request
@@ -895,11 +708,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Trouble talking to Google or Cromwell
           content:
@@ -925,11 +734,7 @@ paths:
           description: Successful Request
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - admin
@@ -948,11 +753,7 @@ paths:
           description: Successful Request
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/workspaces:
     get:
       tags:
@@ -998,11 +799,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/flags:
     get:
       tags:
@@ -1030,11 +827,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     put:
       tags:
         - admin
@@ -1070,11 +863,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/refreshToken/{userSubjectId}:
     delete:
       deprecated: true
@@ -1095,11 +884,7 @@ paths:
           description: user's refresh token revoked and removed
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
@@ -1122,11 +907,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/servicePerimeters/{servicePerimeterName}/projects/{projectName}:
     put:
       tags:
@@ -1173,11 +954,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions:
     get:
       tags:
@@ -1186,18 +963,8 @@ paths:
       description: List all submissions run in this workspace
       operationId: listSubmissions
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -1214,11 +981,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - submissions
@@ -1226,18 +989,8 @@ paths:
       description: Submit a new job
       operationId: createSubmission
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Description of a submission.
         content:
@@ -1266,11 +1019,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Trouble talking to Agora
           content:
@@ -1287,18 +1036,8 @@ paths:
         Returns a map of status:count.
       operationId: countSubmissions
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -1314,11 +1053,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate:
     post:
       tags:
@@ -1327,18 +1062,8 @@ paths:
       description: Validate expression syntax for a submission
       operationId: validateSubmission
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Description of a submission.
         content:
@@ -1367,11 +1092,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Trouble talking to Agora
           content:
@@ -1387,24 +1108,9 @@ paths:
       description: Monitor submission status
       operationId: getSubmissionStatus
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/submissionIdPathParam'
       responses:
         200:
           description: Successful Request
@@ -1419,11 +1125,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - submissions
@@ -1431,24 +1133,9 @@ paths:
       description: Update user comment for a submission
       operationId: updateSubmissionUserComment
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/submissionIdPathParam'
       requestBody:
         description: User comment to be updated
         content:
@@ -1466,11 +1153,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - submissions
@@ -1478,24 +1161,9 @@ paths:
       description: Abort a currently running submission
       operationId: abortSubmission
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/submissionIdPathParam'
       responses:
         204:
           description: Submission successfully aborted
@@ -1507,11 +1175,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Unable to abort all workflows in this submission
           content:
@@ -1526,30 +1190,10 @@ paths:
       description: Retrieve workflow cost, if available
       operationId: getWorkflowCost
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
-        - name: workflowId
-          in: path
-          description: Workflow Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/submissionIdPathParam'
+        - $ref: '#/components/parameters/workflowIdPathParam'
       responses:
         200:
           description: Successful Request
@@ -1564,11 +1208,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs:
     get:
       tags:
@@ -1577,30 +1217,10 @@ paths:
       description: Retrieve outputs for a workflow
       operationId: getWorkflowOutputs
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
-        - name: workflowId
-          in: path
-          description: Workflow Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/submissionIdPathParam'
+        - $ref: '#/components/parameters/workflowIdPathParam'
       responses:
         200:
           description: Successful Request
@@ -1615,11 +1235,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
         502:
           description: Unable to retrieve outputs or logs from Cromwell
           content:
@@ -1634,30 +1250,10 @@ paths:
       description: Get call-level metadata for workflow
       operationId: workflowMetadata
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: submissionId
-          in: path
-          description: Submission Id
-          required: true
-          schema:
-            type: string
-        - name: workflowId
-          in: path
-          description: Workflow Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/submissionIdPathParam'
+        - $ref: '#/components/parameters/workflowIdPathParam'
         - name: includeKey
           in: query
           description: |
@@ -1696,11 +1292,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/submissions/queueStatus:
     get:
       tags:
@@ -1716,11 +1308,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowQueueStatusResponse'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entityQuery/{entityType}:
     get:
       tags:
@@ -1788,8 +1376,7 @@ paths:
           description: Workspace or entity type does not exist
           content: {}
         500:
-          description: Internal Server Error
-          content: {}
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename:
     post:
       tags:
@@ -1798,30 +1385,10 @@ paths:
       description: Rename an entity
       operationId: renameEntity
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
-        - name: entityName
-          in: path
-          description: Entity Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/entityNamePathParam'
       requestBody:
         description: New entity name
         content:
@@ -1846,11 +1413,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newEntityNameJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate:
     post:
@@ -1860,30 +1423,10 @@ paths:
       description: Evaluates an attribute expression taking the given entity as root
       operationId: evaluateExpression
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
-        - name: entityName
-          in: path
-          description: Entity Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/entityNamePathParam'
       requestBody:
         description: Expression
         content:
@@ -1908,11 +1451,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: expression
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities:
     get:
@@ -1947,11 +1486,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - entities
@@ -1959,18 +1494,8 @@ paths:
       description: Create entity
       operationId: create_entity
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Entity data
         content:
@@ -2009,11 +1534,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entityJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}:
     get:
@@ -2023,24 +1544,9 @@ paths:
       description: List all entities of a given type
       operationId: list_entities
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
       responses:
         200:
           description: Successful Request
@@ -2057,11 +1563,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - entities
@@ -2093,11 +1595,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}:
     get:
       tags:
@@ -2126,11 +1624,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - entities
@@ -2138,30 +1632,10 @@ paths:
       description: Update an entity
       operationId: update_entity
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: entityType
-          in: path
-          description: Entity Type
-          required: true
-          schema:
-            type: string
-        - name: entityName
-          in: path
-          description: Entity Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/entityNamePathParam'
       requestBody:
         description: Update operations for attributes
         content:
@@ -2195,11 +1669,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: attributeUpdateJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete:
     post:
@@ -2240,11 +1710,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/AttributeEntityReference'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entities
   /api/workspaces/entities/copy:
     post:
@@ -2297,11 +1763,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entityCopyDefinition
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert:
     post:
@@ -2312,18 +1774,8 @@ paths:
         a workspace
       operationId: batch_upsert_entities
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Entity update definitions
         content:
@@ -2356,11 +1808,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: batchUpsertJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate:
     post:
@@ -2371,18 +1819,8 @@ paths:
         must already exist.
       operationId: batch_update_entities
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Entity update definitions
         content:
@@ -2413,11 +1851,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: batchUpdateJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs:
     get:
@@ -2451,18 +1885,8 @@ paths:
         If you are only working with Agora methods, the fields `"sourceRepo"` and `"methodUri"` can be considered informational and do not need to be round-tripped (see the corresponding `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details).
       operationId: list_method_configurations
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: allRepos
           in: query
           description: Configs for all repos, not just Agora
@@ -2485,11 +1909,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - methodconfigs
@@ -2529,18 +1949,8 @@ paths:
         The system is specified to check for a URI first before falling back to the legacy fields. Unsupported repos will return a 400 Bad Request.
       operationId: create_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Method Configuration contents
         content:
@@ -2579,11 +1989,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: methodConfigJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate:
     get:
@@ -2593,30 +1999,10 @@ paths:
       description: Validate a method configuration
       operationId: validate_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -2631,11 +2017,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}:
     get:
       tags:
@@ -2644,30 +2026,10 @@ paths:
       description: Get a method configuration
       operationId: get_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -2682,11 +2044,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     put:
       tags:
         - methodconfigs
@@ -2696,30 +2054,10 @@ paths:
         The method configuration name and namespace in the URI must match the values in the JSON.
       operationId: overwrite_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       requestBody:
         description: New Method Configuration contents
         content:
@@ -2748,11 +2086,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newMethodConfigJson
     post:
       tags:
@@ -2766,30 +2100,10 @@ paths:
         If the location in the request body is different to the location in the URI, and there is a method config already at that location, 409 is returned.
       operationId: update_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       requestBody:
         description: New Method Configuration contents
         content:
@@ -2823,11 +2137,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newMethodConfigJson
     delete:
       tags:
@@ -2836,30 +2146,10 @@ paths:
       description: Delete a method configuration
       operationId: delete_method_configuration
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       responses:
         204:
           description: Successful Request
@@ -2871,11 +2161,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename:
     post:
       tags:
@@ -2887,30 +2173,10 @@ paths:
         409 may be returned if there's already a method configuration at the target location.
       operationId: rename_method_config
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
-        - name: configNamespace
-          in: path
-          description: Method Configuration Namespace
-          required: true
-          schema:
-            type: string
-        - name: configName
-          in: path
-          description: Method Configuration Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/configNamespacePathParam'
+        - $ref: '#/components/parameters/configNamePathParam'
       requestBody:
         description: New Method Configuration Name
         content:
@@ -2941,11 +2207,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newMethodConfigurationName
   /api/methodconfigs/copy:
     post:
@@ -2992,11 +2254,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: methodConfigurationNamePair
   /api/methodconfigs/copyFromMethodRepo:
     post:
@@ -3049,11 +2307,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: methodRepoImport
   /api/methodconfigs/copyToMethodRepo:
     post:
@@ -3083,11 +2337,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: methodRepoExport
   /api/methodconfigs/template:
     post:
@@ -3167,18 +2417,8 @@ paths:
       description: Read a workspace bucket
       operationId: readBucket
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -3196,11 +2436,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/checkIamActionWithLock/{samActionName}:
     get:
       tags:
@@ -3210,18 +2446,8 @@ paths:
         Sam. Takes into account if the workspace is locked too.
       operationId: checkIamActionWithLock
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: samActionName
           in: path
           description: Sam action
@@ -3237,11 +2463,7 @@ paths:
             if it doesn't exist)
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/fileTransfers:
     get:
       tags:
@@ -3250,18 +2472,8 @@ paths:
       description: List incoming file transfers that are pending for this workspace
       operationId: listPendingFileTransfers
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -3285,18 +2497,8 @@ paths:
       description: Lock a workspace
       operationId: lockWorkspace
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         204:
           description: Successful Request
@@ -3320,11 +2522,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/unlock:
     put:
       tags:
@@ -3333,18 +2531,8 @@ paths:
       description: Unlock a workspace
       operationId: unlockWorkspace
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         204:
           description: Successful Request
@@ -3362,11 +2550,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/acl:
     get:
       tags:
@@ -3375,18 +2559,8 @@ paths:
       description: Get access control list for a workspace
       operationId: getACL
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -3407,11 +2581,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - workspaces
@@ -3419,18 +2589,8 @@ paths:
       description: Edit access control list for a workspace
       operationId: updateACL
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: inviteUsersNotFound
           in: query
           description: true to invite unregistered users, false to ignore
@@ -3474,11 +2634,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: aclUpdates
   /api/workspaces/{workspaceNamespace}/{workspaceName}/bucketOptions:
     get:
@@ -3488,18 +2644,8 @@ paths:
       description: Returns metadata about the workspace bucket.
       operationId: getWorkspaceBucketOptions
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -3514,11 +2660,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/catalog:
     get:
       tags:
@@ -3528,18 +2670,8 @@ paths:
         the permission for the workspace
       operationId: getCatalog
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -3556,11 +2688,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - workspaces
@@ -3568,18 +2696,8 @@ paths:
       description: Edit catalog permissions for a workspace
       operationId: updateCatalog
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Series of Catalog updates for workspace
         content:
@@ -3603,11 +2721,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: catalogUpdates
   /api/workspaces:
     get:
@@ -3644,11 +2758,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - workspaces
@@ -3694,11 +2804,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: workspaceJson
   /api/workspaces/id/{workspaceId}:
     get:
@@ -3745,11 +2851,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -3759,18 +2861,8 @@ paths:
         Get a single workspace's details, optionally filtered to only the specified fields. See additional GET methods in this section to retrieve additional details about the workspace. For instance, this API only returns the workspace's owners; use the GET .../acl method to retrieve the full list of all users at all permission levels.
       operationId: listWorkspaceDetails
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
         - name: fields
           in: query
           description: |
@@ -3801,11 +2893,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - workspaces
@@ -3813,18 +2901,8 @@ paths:
       description: Delete a workspace
       operationId: delete_workspace
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         202:
           description: Delete request accepted. Workspace bucket will be deleted within
@@ -3843,11 +2921,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - workspaces
@@ -3855,18 +2929,8 @@ paths:
       description: Update workspace attributes
       operationId: update_workspace
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Update operations
         content:
@@ -3900,11 +2964,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entityUpdateJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/clone:
     post:
@@ -3914,18 +2974,8 @@ paths:
       description: Clone a workspace
       operationId: clone
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
         description: Request for new workspace
         content:
@@ -3978,11 +3028,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: workspaceRequest
   /api/workspaces/{workspaceNamespace}/{workspaceName}/bucketUsage:
     get:
@@ -3992,18 +3038,8 @@ paths:
       description: Get the storage bucket usage
       operationId: getBucketUsage
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Successful Request
@@ -4041,11 +3077,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/WorkspaceTag'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/enableRequesterPaysForLinkedServiceAccounts:
     put:
       tags:
@@ -4055,18 +3087,8 @@ paths:
         Enable Requester Pays for the user's linked service accounts in a workspace. Grants the serviceusage.services.use permission in the project associated to the workspace to each service account linked in the account linking service (Bond).
       operationId: enableRequesterPaysForLinkedServiceAccounts
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         204:
           description: Successful Request
@@ -4085,11 +3107,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/disableRequesterPaysForLinkedServiceAccounts:
     put:
       tags:
@@ -4099,29 +3117,15 @@ paths:
         a workspace
       operationId: disableRequesterPaysForLinkedServiceAccounts
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: Workspace Namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: Workspace Name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         204:
           description: |
             In all cases whether or not the workspace exists or user has access. If there were linked service accounts they were removed from the workspace but this api does not indicate that anything was done (for security reasons).
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workflows/{workflowId}/genomics/{operationId}:
     get:
       tags:
@@ -4130,12 +3134,7 @@ paths:
       description: retrieve operations info from Google Genomics API
       operationId: genomics_operations_get
       parameters:
-        - name: workflowId
-          in: path
-          description: Workflow Id
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workflowIdPathParam'
         - name: operationId
           in: path
           description: operations job id; for PAPIv1 in the form of "operations/{id}",
@@ -4154,11 +3153,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/refreshToken:
     put:
       deprecated: true
@@ -4179,11 +3174,7 @@ paths:
           description: Successful Request
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: refreshToken
   /api/user/refreshTokenDate:
     get:
@@ -4213,11 +3204,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/role/admin:
     get:
       tags:
@@ -4233,11 +3220,7 @@ paths:
           description: User is not an admin
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/role/curator:
     get:
       tags:
@@ -4253,11 +3236,7 @@ paths:
           description: User is not a curator
           content: {}
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/billing:
     get:
       tags:
@@ -4283,11 +3262,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/billing/{projectName}:
     get:
       tags:
@@ -4346,11 +3321,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/user/billingAccounts:
     get:
       tags:
@@ -4377,11 +3348,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
       security:
         - authorization:
             - openid
@@ -4434,11 +3401,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - snapshots_v2
@@ -4466,11 +3429,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/{snapshotId}:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -4496,11 +3455,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     patch:
       summary: Update name or description of a reference to a snapshot in the Terra Data Repo.
       operationId: updateDataRepoSnapshot_v2
@@ -4522,11 +3477,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
     delete:
       tags:
         - snapshots_v2
@@ -4544,11 +3495,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/snapshots/v2/name/{referenceName}:
     parameters:
       - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -4574,14 +3521,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
-          description: Rawls Internal Error
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-
-
-
+          $ref: '#/components/responses/RawlsInternalError'
   /api/notifications/workspace/{workspaceNamespace}/{workspaceName}:
     get:
       tags:
@@ -4589,18 +3529,8 @@ paths:
       summary: Gets the notifications available for a workspace
       operationId: workspaceNotifications
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: workspace namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: workspace name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Success
@@ -4617,18 +3547,8 @@ paths:
       summary: Get access instructions for the workspace
       operationId: getWorkspaceAccessInstructions
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: workspace namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: workspace name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Success
@@ -4645,18 +3565,8 @@ paths:
       summary: Send Notification of data added to Workspace
       operationId: sendChangeNotification
       parameters:
-        - name: workspaceNamespace
-          in: path
-          description: workspace namespace
-          required: true
-          schema:
-            type: string
-        - name: workspaceName
-          in: path
-          description: workspace name
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
         200:
           description: Success
@@ -5982,7 +4892,6 @@ components:
           default: false
         bucketLocation:
           type: string
-          required: false
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
       description: ""
     WorkspaceRequestClone:
@@ -6016,7 +4925,6 @@ components:
           default: false
         bucketLocation:
           type: string
-          required: false
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
       description: ""
     BucketUsageResponse:
@@ -6699,10 +5607,31 @@ components:
             type: string
       description: status of a subsystem Rawls depends on
   parameters:
+    billingProjectIdPathParam:
+      name: projectId
+      in: path
+      description: Billing Project ID
+      required: true
+      schema:
+        type: string
     billingProjectQueryParam:
       name: billingProject
       in: query
       description: Billing project to use for queries to the data reference
+      schema:
+        type: string
+    configNamespacePathParam:
+      name: configNamespace
+      in: path
+      description: Method Configuration Namespace
+      required: true
+      schema:
+        type: string
+    configNamePathParam:
+      name: configName
+      in: path
+      description: Method Configuration Name
+      required: true
       schema:
         type: string
     dataReferenceQueryParam:
@@ -6739,6 +5668,30 @@ components:
       required: true
       schema:
         type: string
+    submissionIdPathParam:
+      name: submissionId
+      in: path
+      description: Submission Id
+      required: true
+      schema:
+        type: string
+    workbenchRolePathParam:
+      name: workbenchRole
+      in: path
+      description: role of user for project
+      required: true
+      schema:
+        type: string
+        enum:
+          - user
+          - owner
+    workflowIdPathParam:
+      name: workflowId
+      in: path
+      description: Workflow Id
+      required: true
+      schema:
+        type: string
     workspaceNamespacePathParam:
       name: workspaceNamespace
       in: path
@@ -6753,6 +5706,13 @@ components:
       required: true
       schema:
         type: string
+  responses:
+    RawlsInternalError:
+      description: Rawls Internal Error
+      content:
+        'application/json':
+          schema:
+            $ref: '#/components/schemas/ErrorReport'
   securitySchemes:
     authorization:
       type: oauth2
