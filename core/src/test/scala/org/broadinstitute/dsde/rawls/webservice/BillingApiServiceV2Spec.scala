@@ -270,6 +270,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   "GET /billing/v2/{projectName}/members" should "return 200 when listing billing project members as owner" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("test_good")
 
+    when(services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[UserInfo])).thenReturn(Future.successful(Set(SamBillingProjectActions.readPolicies)))
+
     when(services.samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[UserInfo])).thenReturn(Future.successful(
       Set(
         model.SamPolicyWithNameAndEmail(SamBillingProjectPolicyNames.owner, SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set.empty, Set.empty), WorkbenchEmail("")),
@@ -288,16 +290,21 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
-  it should "return 403 when listing billing project members as non-owner" in withEmptyDatabaseAndApiServices { services =>
+  it should "return 200 when listing billing project members as non-owner" in withEmptyDatabaseAndApiServices { services =>
     val project = createProject("no_access")
 
+    when(services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[UserInfo])).thenReturn(Future.successful(Set(SamBillingProjectActions.readPolicy(SamBillingProjectPolicyNames.owner))))
     when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
+    when(services.samDAO.getPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner), any[UserInfo])).thenReturn(Future.successful(SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set.empty, Set.empty)))
 
     Get(s"/billing/v2/${project.projectName.value}/members") ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.OK) {
           status
+        }
+        assertResult(Seq(RawlsBillingProjectMember(testData.userOwner.userEmail, ProjectRoles.Owner))) {
+          responseAs[Seq[RawlsBillingProjectMember]]
         }
       }
   }

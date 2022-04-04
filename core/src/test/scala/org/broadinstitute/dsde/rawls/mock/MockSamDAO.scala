@@ -89,6 +89,8 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamResourceRole]] = Future.successful(Set(SamWorkspaceRoles.owner))
 
+  override def listUserActionsForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamResourceAction]] = Future.successful(Set(SamBillingProjectActions.readSpendReport))
+
   override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = Future.successful(SamPolicySyncStatus("", WorkbenchEmail("foo@bar.com")))
 
   override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[String]] = Future.successful(Seq.empty)
