@@ -34,7 +34,7 @@ object Dependencies {
   // classes (generated from OpenAPI YAML) that were not compiled against any version of the Scala library.
   // `cromwell-client` is therefore referenced here as a Java artifact with "_2.12" incorporated into its name,
   // allowing for Rawls to upgrade its Scala version without requiring any changes to this artifact.
-  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.12" % "0.1-8b413b45f-SNAP"
+  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" % "cromwell-client_2.13" % "0.1-e07a865b8-SNAP"
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev20210322-" + googleV))
