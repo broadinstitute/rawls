@@ -1973,9 +1973,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.write) {
         //if we get here, we passed all the hoops, otherwise an exception would have been thrown
 
-        gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName).map { usage =>
-          BucketUsageResponse(usage)
-        }
+        gcsDAO.getBucketUsage(workspaceContext.googleProjectId, workspaceContext.bucketName)
       }
     }
   }

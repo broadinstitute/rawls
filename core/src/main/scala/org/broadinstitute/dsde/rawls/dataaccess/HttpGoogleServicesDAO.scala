@@ -61,6 +61,7 @@ import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
+import org.joda.time.DateTime
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import spray.json._
 
@@ -384,19 +385,19 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BigInt] = {
+  override def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BucketUsageResponse] = {
     implicit val service = GoogleInstrumentedService.Storage
 
-    def usageFromLogObject(o: StorageObject): Future[BigInt] = {
+    def usageFromLogObject(o: StorageObject): Future[BucketUsageResponse] = {
       streamObject(o.getBucket, o.getName) { inputStream =>
         val content = Source.fromInputStream(inputStream).mkString
         val byteHours = BigInt(content.split('\n')(1).split(',')(1).replace("\"", ""))
         // convert byte/hours to byte/days to better match the billing unit of GB/days
-        byteHours / 24
+        BucketUsageResponse(byteHours / 24, new DateTime(o.getUpdated.getValue))
       }
     }
 
-    def recurse(pageToken: Option[String] = None): Future[BigInt] = {
+    def recurse(pageToken: Option[String] = None): Future[BucketUsageResponse] = {
       // Fetch objects with a prefix of "${bucketName}_storage_", (ignoring "_usage_" logs)
       val fetcher = getStorage(getBucketServiceAccountCredential).
         objects().
@@ -415,7 +416,7 @@ class HttpGoogleServicesDAO(
           retryWhen500orGoogleError(() => {
             Option(executeGoogleRequest(fetcher).getItems)
           }) flatMap {
-            case None => Future.successful(BigInt(0))
+            case None => Future.successful(BucketUsageResponse(BigInt(0), DateTime.now()))
             case Some(_) => Future.failed(new GoogleStorageLogException("Not Available"))
           }
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))

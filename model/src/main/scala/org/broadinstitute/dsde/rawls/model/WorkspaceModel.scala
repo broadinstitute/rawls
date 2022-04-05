@@ -777,7 +777,7 @@ case class WorkspacePermissionsPair(workspaceId: String,
 
 case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
 
-case class BucketUsageResponse(usageInBytes: BigInt)
+case class BucketUsageResponse(usageInBytes: BigInt, lastUpdated: DateTime)
 
 case class ErrorReport(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])
 
@@ -925,7 +925,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceStatusFormat = jsonFormat2(WorkspaceStatus)
 
-  implicit val BucketUsageResponseFormat = jsonFormat1(BucketUsageResponse)
+  implicit val BucketUsageResponseFormat = jsonFormat2(BucketUsageResponse)
 
   implicit val MethodConfigurationNameFormat = jsonFormat3(MethodConfigurationName)
 

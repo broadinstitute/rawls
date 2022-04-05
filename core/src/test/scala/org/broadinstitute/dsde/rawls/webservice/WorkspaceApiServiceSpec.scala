@@ -1909,8 +1909,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(BucketUsageResponse(BigInt(42))) {
-            responseAs[BucketUsageResponse]
+          assertResult(BigInt(42)) {
+            responseAs[BucketUsageResponse].usageInBytes
           }
         }
     }
