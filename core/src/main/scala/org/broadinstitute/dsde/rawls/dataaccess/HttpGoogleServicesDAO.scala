@@ -701,6 +701,22 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def maybeUpdateBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[Unit] = {
+    for {
+      projectBillingInfo <- getBillingInfoForGoogleProject(googleProjectId)
+      currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
+      _ <- if (newBillingAccount != currentBillingAccountOnGoogle) {
+        newBillingAccount match {
+          case Some(billingAccount) => setBillingAccountName(googleProjectId, billingAccount)
+          case None => disableBillingOnGoogleProject(googleProjectId)
+        }
+      } else {
+        logger.info(s"Not updating Billing Account on Google Project ${googleProjectId} because currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle} is the same as the newBillingAccount:${newBillingAccount}")
+        Future.successful()
+      }
+    } yield ()
+  }
+
   /**
     * Explicitly sets the Billing Account on a Google Project to the value given, even if it is empty.  Callers should
     * ensure that the new Billing Account value is valid and non-empty as this method will not perform any input

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import com.google.api.client.http.{HttpHeaders, HttpResponseException}
+import com.google.api.client.http.{HttpHeaders, HttpResponse, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -522,7 +522,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
-      
+
       runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccountName, isInvalid = true))
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
@@ -530,7 +530,10 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockSamDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, billingProject.projectName.value, userInfo)).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      val failureMessage = "because I feel like it"
+      val exception = new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).build
       when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
+      when(mockGcsDAO.getGoogleProject(GoogleProjectId(billingProject.projectName.value))).thenReturn(Future.failed(exception))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
 
@@ -547,6 +550,41 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     }
   }
 
+  it should "update the billing account for a billing project including v1 google project" in {
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = minimalTestData.billingProject
+      val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
+      val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
+
+      runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccountName, isInvalid = true))
+
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, billingProject.projectName.value, SamBillingProjectActions.updateBillingAccount, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, billingProject.projectName.value, userInfo)).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
+
+      val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      val googleProjectNumber = GoogleProjectNumber("42")
+      val googleProject = new Project().setProjectNumber(googleProjectNumber.value.toLong)
+      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo])).thenReturn(Future.successful(true))
+      when(mockGcsDAO.getGoogleProject(GoogleProjectId(billingProject.projectName.value))).thenReturn(Future.successful(googleProject))
+      when(mockGcsDAO.maybeUpdateBillingAccount(GoogleProjectId(billingProject.projectName.value), Some(billingAccountName))).thenReturn(Future.successful())
+
+      val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
+
+      Await.result(userService.updateBillingProjectBillingAccount(billingProject.projectName, newBillingAccountRequest), Duration.Inf)
+
+      val spendReportDatasetInDb = runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).map(row => (row.spendReportDataset, row.spendReportTable)).result)
+
+      //assert that the spend report configuration has been fully cleared
+      spendReportDatasetInDb.head shouldEqual (None, None)
+      val project = runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
+        .getOrElse(fail("project not found"))
+      project.billingAccount shouldEqual Option(billingAccountName)
+      project.invalidBillingAccount shouldBe false
+      verify(mockGcsDAO).maybeUpdateBillingAccount(GoogleProjectId(billingProject.projectName.value), Some(billingAccountName))
+    }
+  }
+
   it should "remove the billing account for a billing project" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
       val billingProject = minimalTestData.billingProject
@@ -556,6 +594,9 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockSamDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, billingProject.projectName.value, userInfo)).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+      val failureMessage = "because I feel like it"
+      val exception = new HttpResponseException.Builder(403, failureMessage, new HttpHeaders()).build
+      when(mockGcsDAO.getGoogleProject(GoogleProjectId(billingProject.projectName.value))).thenReturn(Future.failed(exception))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
 

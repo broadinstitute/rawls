@@ -79,16 +79,7 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
   }
 
   private def updateBillingAccountOnGoogle(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[Unit] = {
-    val updateGoogleResult = for {
-      projectBillingInfo <- gcsDAO.getBillingInfoForGoogleProject(googleProjectId)
-      currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
-      _ <- if (newBillingAccount != currentBillingAccountOnGoogle) {
-        setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount)
-      } else {
-        logger.info(s"Not updating Billing Account on Google Project ${googleProjectId} because currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle} is the same as the newBillingAccount:${newBillingAccount}")
-        Future.successful()
-      }
-    } yield ()
+    val updateGoogleResult = gcsDAO.maybeUpdateBillingAccount(googleProjectId, newBillingAccount)
 
     updateGoogleResult.recoverWith {
       case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
@@ -110,20 +101,6 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
   }
 
   /**
-    * Explicitly sets the Billing Account value on the given Google Project.  Any logic or conditionals controlling
-    * whether this update gets called should be written in the calling method(s).
- *
-    * @param googleProjectId
-    * @param newBillingAccount
-    */
-  private def setBillingAccountOnGoogleProject(googleProjectId: GoogleProjectId,
-                                               newBillingAccount: Option[RawlsBillingAccountName]): Future[ProjectBillingInfo] =
-    newBillingAccount match {
-      case Some(billingAccount) => gcsDAO.setBillingAccountName(googleProjectId, billingAccount)
-      case None => gcsDAO.disableBillingOnGoogleProject(googleProjectId)
-    }
-
-  /**
     * Explicitly sets the Billing Account value for all Workspaces that are in the given Project.  Any logic or
     * conditionals controlling whether this update gets called should be written in the calling method(s).
     * @param googleProjectId
@@ -135,19 +112,6 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
     dataSource.inTransaction({ dataAccess =>
       dataAccess.workspaceQuery.updateWorkspaceBillingAccount(googleProjectId, newBillingAccount)
     })
-
-  /**
-    * Gets the Billing Account name out of a ProjectBillingInfo object wrapped in an Option[RawlsBillingAccountName] and
-    * appropriately converts `null` or `empty` String into a None.
-    * @param projectBillingInfo
-    * @return
-    */
-  private def getBillingAccountOption(projectBillingInfo: ProjectBillingInfo): Option[RawlsBillingAccountName] = {
-    if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
-      None
-    else
-      Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
-  }
 }
 
 final case class WorkspaceBillingAccountMonitorConfig(pollInterval: FiniteDuration, initialDelay: FiniteDuration)

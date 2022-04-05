@@ -365,15 +365,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       ))
     }
 
+  def rawlsCreatedGoogleProjectExists(projectId: GoogleProjectId) =
+    gcsDAO.getGoogleProject(projectId) transform {
+      case Success(_) => Success(true)
+      case Failure(e: HttpResponseException) if e.getStatusCode == 404 || e.getStatusCode == 403 => Success(false) //Either the Google project doesn't exist, or we don't have access to it because Rawls didn't create it.
+      case Failure(t) => Failure(t)
+    }
+
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   private def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName, userInfoForSam: UserInfo, deleteGoogleProjectWithGoogle: Boolean = true) = {
-    def rawlsCreatedGoogleProjectExists(projectId: GoogleProjectId) =
-      gcsDAO.getGoogleProject(projectId) transform {
-        case Success(_) => Success(true)
-        case Failure(e: HttpResponseException) if e.getStatusCode == 404 || e.getStatusCode == 403 => Success(false) //Either the Google project doesn't exist, or we don't have access to it because Rawls didn't create it.
-        case Failure(t) => Failure(t)
-      }
-
     def F = Applicative[Future]
 
     def deleteResourcesInGoogle(projectId: GoogleProjectId) =
@@ -622,12 +622,38 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def updateBillingAccountInternal(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): Future[Option[RawlsBillingProjectResponse]] = {
     for {
+      _ <- maybeUpdateBillingAccountInGoogle(projectName, billingAccount)
       maybeBillingProject <- updateBillingAccountInDatabase(projectName, billingAccount)
       projectRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
         .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
     } yield {
       constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject, projectRoles)
     }
+  }
+
+  private def maybeUpdateBillingAccountInGoogle(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName])
+      : Future[Unit] = {
+    val googleProjectId = GoogleProjectId(projectName.value)
+    for {
+      googleProjectExists <- rawlsCreatedGoogleProjectExists(googleProjectId)
+    } yield (if (googleProjectExists) gcsDAO.maybeUpdateBillingAccount(googleProjectId, billingAccount).recoverWith {
+      // TODO: Move this to a method (duplicated with monitor code)
+      case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && billingAccount.isDefined =>
+        val message = s"Rawls does not have permission to set the Billing Account on ${googleProjectId} to ${billingAccount.get}"
+        dataSource.inTransaction({ dataAccess =>
+          dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccount.get, isInvalid = true) >>
+            dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, s"${message} ${e.getMessage}")
+        }).flatMap { _ =>
+          logger.warn(message, e)
+          Future.failed(e)
+        }
+      case e: Throwable =>
+        dataSource.inTransaction { dataAccess =>
+          dataAccess.workspaceQuery.updateWorkspaceBillingAccountErrorMessages(googleProjectId, e.getMessage)
+        }.flatMap { _ =>
+          Future.failed(e)
+        }
+    } else None)
   }
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName, maybeBillingAccountName: Option[RawlsBillingAccountName]): Future[Option[RawlsBillingProject]] = {

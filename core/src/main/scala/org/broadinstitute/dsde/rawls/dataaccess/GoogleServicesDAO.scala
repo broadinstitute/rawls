@@ -130,6 +130,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
 
+  def maybeUpdateBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[Unit]
+
   def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: Span = null): Future[ProjectBillingInfo]
 
   def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo]
@@ -217,6 +219,19 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
     import cats.implicits._
     existingPolicies |+| policiesToAdd
+  }
+
+  /**
+    * Gets the Billing Account name out of a ProjectBillingInfo object wrapped in an Option[RawlsBillingAccountName] and
+    * appropriately converts `null` or `empty` String into a None.
+    * @param projectBillingInfo
+    * @return
+    */
+  def getBillingAccountOption(projectBillingInfo: ProjectBillingInfo): Option[RawlsBillingAccountName] = {
+    if (projectBillingInfo.getBillingAccountName == null || projectBillingInfo.getBillingAccountName.isBlank)
+      None
+    else
+      Option(RawlsBillingAccountName(projectBillingInfo.getBillingAccountName))
   }
 
   /**
