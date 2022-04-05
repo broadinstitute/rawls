@@ -65,6 +65,7 @@ class AuthDomainGroupApiSpec
               // Note: this is not a passthrough to Rawls is because library needs to overwrite any publish and discoverableByGroups values
               Orchestration.workspaces.clone(projectName, workspaceName, projectName, workspaceCloneName, Set(authDomainName))(user.makeAuthToken())
               try {
+                // the authdomain group should be found in cloned workspace
                 val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
                 groups should contain theSameElementsAs List(authDomainName)
               }
