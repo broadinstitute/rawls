@@ -392,8 +392,10 @@ class HttpGoogleServicesDAO(
       streamObject(o.getBucket, o.getName) { inputStream =>
         val content = Source.fromInputStream(inputStream).mkString
         val byteHours = BigInt(content.split('\n')(1).split(',')(1).replace("\"", ""))
+        val timestampOpt = Option(o.getUpdated.getValue)
+        val dateLastUpdated = timestampOpt.map(timestamp => new DateTime(timestamp))
         // convert byte/hours to byte/days to better match the billing unit of GB/days
-        BucketUsageResponse(byteHours / 24, Option(new DateTime(o.getUpdated.getValue)))
+        BucketUsageResponse(byteHours / 24, dateLastUpdated)
       }
     }
 
