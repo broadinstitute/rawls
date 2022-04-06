@@ -4930,7 +4930,6 @@ components:
     BucketUsageResponse:
       required:
         - usageInBytes
-        - lastUpdated
       type: object
       properties:
         usageInBytes:
