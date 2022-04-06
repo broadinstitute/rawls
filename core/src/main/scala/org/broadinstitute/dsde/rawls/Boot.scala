@@ -273,9 +273,10 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("notifications.topicName")
       )
 
-      val marthaBaseUrl: String = conf.getString("martha.baseUrl")
-      val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-      val marthaResolver = new MarthaResolver(marthaUrl)
+      val maybeMarthaUrl = conf.getStringOption("martha.baseUrl").map(_ + "/martha_v3")
+      val maybeDrsHubUrl = conf.getStringOption("drshub.server").map(_ + "/api/v4/drs/resolve")
+      val drsResolverUrl = maybeMarthaUrl.orElse(maybeDrsHubUrl).getOrElse(throw new RawlsException("neither martha.baseUrl nor drshub.server configured"))
+      val marthaResolver = new MarthaResolver(drsResolverUrl)
 
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
