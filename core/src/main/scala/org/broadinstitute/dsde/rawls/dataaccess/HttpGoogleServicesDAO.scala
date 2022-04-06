@@ -393,7 +393,7 @@ class HttpGoogleServicesDAO(
         val content = Source.fromInputStream(inputStream).mkString
         val byteHours = BigInt(content.split('\n')(1).split(',')(1).replace("\"", ""))
         // convert byte/hours to byte/days to better match the billing unit of GB/days
-        BucketUsageResponse(byteHours / 24, new DateTime(o.getUpdated.getValue))
+        BucketUsageResponse(byteHours / 24, Option(new DateTime(o.getUpdated.getValue)))
       }
     }
 
@@ -416,7 +416,7 @@ class HttpGoogleServicesDAO(
           retryWhen500orGoogleError(() => {
             Option(executeGoogleRequest(fetcher).getItems)
           }) flatMap {
-            case None => Future.successful(BucketUsageResponse(BigInt(0), DateTime.now()))
+            case None => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
             case Some(_) => Future.failed(new GoogleStorageLogException("Not Available"))
           }
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))

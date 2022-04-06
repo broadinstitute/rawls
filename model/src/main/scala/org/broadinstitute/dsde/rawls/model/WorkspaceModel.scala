@@ -777,7 +777,7 @@ case class WorkspacePermissionsPair(workspaceId: String,
 
 case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
 
-case class BucketUsageResponse(usageInBytes: BigInt, lastUpdated: DateTime)
+case class BucketUsageResponse(usageInBytes: BigInt, lastUpdated: Option[DateTime])
 
 case class ErrorReport(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])
 

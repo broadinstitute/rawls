@@ -177,7 +177,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] = Future.successful(Some(new Group))
 
-  def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BucketUsageResponse] = Future.successful(BucketUsageResponse(42, new DateTime(0)))
+  def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long]): Future[BucketUsageResponse] = Future.successful(BucketUsageResponse(42, Option(new DateTime(0))))
 
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     googleGroups(groupEmail) += emailToAdd
