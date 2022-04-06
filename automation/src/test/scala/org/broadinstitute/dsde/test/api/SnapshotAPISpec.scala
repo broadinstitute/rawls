@@ -173,7 +173,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       withCleanBillingProject(owner) { billingProject =>
         withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
 
-          val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)
+          val drSnapshot = listDataRepoSnapshots(1, owner, "SnapshotSimpleWSM1")(ownerAuthToken)
           val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
 
           val snapshotName = "snapshotReferenceForAnalysis"
@@ -298,7 +298,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
   }
 
   // ==================== Data Repo helpers ====================
-  private def listDataRepoSnapshots(numSnapshots: Int, credentials: Credentials)(implicit authToken: AuthToken): EnumerateSnapshotModel = {
+  private def listDataRepoSnapshots(numSnapshots: Int, credentials: Credentials, filter: String = "")(implicit authToken: AuthToken): EnumerateSnapshotModel = {
     // call data repo to list snapshots
     // this gets the most recent snapshots in TDR (to which we have read access). This can cause tests to change
     // over time, if the snapshots keep changing. It's here for convenience - we can always add/remove snapshots from
@@ -308,7 +308,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
     logger.info(s"calling data repo at $dataRepoBaseUrl as user ${credentials.email} ... ")
     val drSnapshots = Try(dataRepoApi.enumerateSnapshots(
-      0, numSnapshots, "created_date", "desc", "", java.util.Collections.emptyList() )) match {
+      0, numSnapshots, "created_date", "desc", filter, java.util.Collections.emptyList() )) match {
       case Success(s) => s
       case Failure(ex) =>
         logger.error(s"data repo call as user ${credentials.email} failed: ${ex.getMessage}", ex)
