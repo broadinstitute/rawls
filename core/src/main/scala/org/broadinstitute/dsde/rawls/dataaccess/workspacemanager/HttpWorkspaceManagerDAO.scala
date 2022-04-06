@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
+import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
@@ -11,14 +11,10 @@ import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataR
 import java.util.UUID
 import scala.concurrent.ExecutionContext
 
-class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO {
+class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvider)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO {
 
   private def getApiClient(accessToken: String): ApiClient = {
-    val client: ApiClient = new ApiClient()
-    client.setBasePath(baseWorkspaceManagerUrl)
-    client.setAccessToken(accessToken)
-
-    client
+    apiClientProvider.getApiClient(accessToken)
   }
 
   private def getWorkspaceApi(accessToken: OAuth2BearerToken): WorkspaceApi = {
@@ -31,6 +27,10 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
 
   private def getResourceApi(accessToken: OAuth2BearerToken): ResourceApi = {
     new ResourceApi(getApiClient(accessToken.token))
+  }
+
+  private def getWorkspaceApplicationApi(accessToken: OAuth2BearerToken) = {
+    apiClientProvider.getWorkspaceApplicationApi(accessToken.token)
   }
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = {
@@ -100,5 +100,11 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
 
   override def enumerateDataRepoSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): ResourceList = {
     getResourceApi(accessToken).enumerateResources(workspaceId, offset, limit, ResourceType.DATA_REPO_SNAPSHOT, StewardshipType.REFERENCED)
+  }
+
+  def enableApplication(workspaceId: UUID, applicationId: String, accessToken: OAuth2BearerToken): WorkspaceApplicationDescription = {
+    getWorkspaceApplicationApi(accessToken).enableWorkspaceApplication(
+      workspaceId, applicationId
+    )
   }
 }
