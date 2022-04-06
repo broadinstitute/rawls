@@ -1910,7 +1910,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(BigInt(42), new DateTime(0)) {
+          assertResult(BucketUsageResponse(BigInt(42), new DateTime(0))) {
             responseAs[BucketUsageResponse]
           }
         }
