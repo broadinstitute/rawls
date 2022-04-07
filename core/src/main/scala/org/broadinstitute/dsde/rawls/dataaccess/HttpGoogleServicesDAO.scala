@@ -42,7 +42,6 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
-import fs2.Stream
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
@@ -699,22 +698,6 @@ class HttpGoogleServicesDAO(
     listBillingAccounts(billingSvcCred) map { accountList =>
       accountList.map(acct => RawlsBillingAccount(RawlsBillingAccountName(acct.getName), true, acct.getDisplayName))
     }
-  }
-
-  override def maybeUpdateBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[Unit] = {
-    for {
-      projectBillingInfo <- getBillingInfoForGoogleProject(googleProjectId)
-      currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
-      _ <- if (newBillingAccount != currentBillingAccountOnGoogle) {
-        newBillingAccount match {
-          case Some(billingAccount) => setBillingAccountName(googleProjectId, billingAccount)
-          case None => disableBillingOnGoogleProject(googleProjectId)
-        }
-      } else {
-        logger.info(s"Not updating Billing Account on Google Project ${googleProjectId} because currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle} is the same as the newBillingAccount:${newBillingAccount}")
-        Future.successful()
-      }
-    } yield ()
   }
 
   /**

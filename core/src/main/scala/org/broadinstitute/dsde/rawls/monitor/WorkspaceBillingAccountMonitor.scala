@@ -5,14 +5,12 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
-import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsBillingAccountName, RawlsBillingProjectName}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName}
 import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
 
-import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -79,7 +77,19 @@ class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: Google
   }
 
   private def updateBillingAccountOnGoogle(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): Future[Unit] = {
-    val updateGoogleResult = gcsDAO.maybeUpdateBillingAccount(googleProjectId, newBillingAccount)
+    val updateGoogleResult = for {
+      projectBillingInfo <- gcsDAO.getBillingInfoForGoogleProject(googleProjectId)
+      currentBillingAccountOnGoogle = gcsDAO.getBillingAccountOption(projectBillingInfo)
+      _ <- if (newBillingAccount != currentBillingAccountOnGoogle) {
+        newBillingAccount match {
+          case Some(billingAccount) => gcsDAO.setBillingAccountName(googleProjectId, billingAccount)
+          case None => gcsDAO.disableBillingOnGoogleProject(googleProjectId)
+        }
+      } else {
+        logger.info(s"Not updating Billing Account on Google Project ${googleProjectId} because currentBillingAccountOnGoogle:${currentBillingAccountOnGoogle} is the same as the newBillingAccount:${newBillingAccount}")
+        Future.successful()
+      }
+    } yield ()
 
     updateGoogleResult.recoverWith {
       case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode == Option(StatusCodes.Forbidden) && newBillingAccount.isDefined =>
