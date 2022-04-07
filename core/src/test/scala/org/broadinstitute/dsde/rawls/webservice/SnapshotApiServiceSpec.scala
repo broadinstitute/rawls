@@ -50,10 +50,6 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
-
-    val gcsDAO = new MockGoogleServicesDAO("test")
-    gcsDAO.storeToken(userInfo, "test_token")
-
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO, new SnapshotApiServiceSpecWorkspaceManagerDAO())
     try {
       testCode(apiService)

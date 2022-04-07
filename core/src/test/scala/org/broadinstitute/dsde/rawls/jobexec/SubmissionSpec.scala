@@ -307,8 +307,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         workbenchMetricBaseName = workbenchMetricBaseName
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
 
-      gcsDAO.storeToken(userInfo, subTestData.refreshToken)
-
       val testConf = ConfigFactory.load()
 
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")

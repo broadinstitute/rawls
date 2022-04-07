@@ -112,11 +112,6 @@ trait AdminApiService extends UserInfoDirectives {
             }
           }
         }
-      } ~
-    path("admin" / "refreshToken" / Segment ) { userSubjectId =>
-      delete {
-        complete { userServiceConstructor(userInfo).adminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))).map(_ => StatusCodes.OK) }
       }
-    }
   }
 }

@@ -27,73 +27,57 @@ trait UserApiService extends UserInfoDirectives {
   // standard /api routes begin here
 
   val userRoutes: server.Route = requireUserInfo() { userInfo =>
-    path("user" / "refreshToken") {
-      put {
-        entity(as[UserRefreshToken]) { token =>
+    pathPrefix("user" / "billing") {
+      pathEnd {
+        get {
           complete {
-            userServiceConstructor(userInfo).setRefreshToken(token).map(_ => StatusCodes.Created)
+            userServiceConstructor(userInfo).listBillingProjects()
+          }
+        }
+      } ~
+      path(Segment) { projectName =>
+        get {
+          complete {
+            import spray.json._
+            userServiceConstructor(userInfo).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
+              case Some(status) => StatusCodes.OK -> Option(status).toJson
+              case _ => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
+            }
+          }
+        }
+      } ~
+      path(Segment) { projectName =>
+        delete {
+          complete {
+            userServiceConstructor(userInfo).deleteBillingProject(RawlsBillingProjectName(projectName)).map(_ => StatusCodes.NoContent)
           }
         }
       }
     } ~
-      path("user" / "refreshTokenDate") {
-        get {
-          complete {
-            userServiceConstructor(userInfo).getRefreshTokenDate()
+    path("user" / "role" / "admin") {
+      get {
+        complete {
+          userServiceConstructor(userInfo).isAdmin(userInfo.userEmail).map {
+            case true => StatusCodes.OK
+            case false => StatusCodes.NotFound
           }
-        }
-      } ~
-      pathPrefix("user" / "billing") {
-        pathEnd {
-          get {
-            complete {
-              userServiceConstructor(userInfo).listBillingProjects()
-            }
-          }
-        } ~
-        path(Segment) { projectName =>
-          get {
-            complete {
-              import spray.json._
-              userServiceConstructor(userInfo).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
-                case Some(status) => StatusCodes.OK -> Option(status).toJson
-                case _ => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
-              }
-            }
-          }
-        } ~
-        path(Segment) { projectName =>
-          delete {
-            complete {
-              userServiceConstructor(userInfo).deleteBillingProject(RawlsBillingProjectName(projectName)).map(_ => StatusCodes.NoContent)
-            }
-          }
-        }
-      } ~
-      path("user" / "role" / "admin") {
-        get {
-          complete {
-            userServiceConstructor(userInfo).isAdmin(userInfo.userEmail).map {
-              case true => StatusCodes.OK
-              case false => StatusCodes.NotFound
-            }
-          }
-        }
-      } ~
-      path("user" / "role" / "curator") {
-        get {
-          complete {
-            userServiceConstructor(userInfo).isLibraryCurator(userInfo.userEmail).map {
-              case true => StatusCodes.OK
-              case false => StatusCodes.NotFound
-            }
-          }
-        }
-      } ~
-      path("user" / "billingAccounts") {
-        get {
-          complete { userServiceConstructor(userInfo).listBillingAccounts() }
         }
       }
+    } ~
+    path("user" / "role" / "curator") {
+      get {
+        complete {
+          userServiceConstructor(userInfo).isLibraryCurator(userInfo.userEmail).map {
+            case true => StatusCodes.OK
+            case false => StatusCodes.NotFound
+          }
+        }
+      }
+    } ~
+    path("user" / "billingAccounts") {
+      get {
+        complete { userServiceConstructor(userInfo).listBillingAccounts() }
+      }
+    }
   }
 }
