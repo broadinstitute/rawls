@@ -208,16 +208,27 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[Set[RawlsBillingProjectMember]] = {
-    requireProjectAction(projectName, SamBillingProjectActions.readPolicies) {
-      samDAO.listPoliciesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policies =>
-        for {
-          (role, policy) <- policies.collect {
-            case SamPolicyWithNameAndEmail(SamBillingProjectPolicyNames.owner, policy, _) => (ProjectRoles.Owner, policy)
-            case SamPolicyWithNameAndEmail(SamBillingProjectPolicyNames.workspaceCreator, policy, _) => (ProjectRoles.User, policy)
-          }
-          email <- policy.memberEmails
-        } yield RawlsBillingProjectMember(RawlsUserEmail(email.value), role)
-      }
+    samDAO.listUserActionsForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo).flatMap {
+      // the JSON responses for listPoliciesForResource and getPolicy are shaped slightly differently.
+      // the initial 2 cases will coerce the data into the same shape so the final yield can be re-used for both cases.
+      // only project owners can call listPoliciesForResource, whereas project users must call getPolicy directly on the owner policy
+      case actions if actions.contains(SamBillingProjectActions.readPolicies) =>
+        samDAO.listPoliciesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policiesWithNameAndEmail =>
+          policiesWithNameAndEmail.map(policyWithNameAndEmail => policyWithNameAndEmail.policyName -> policyWithNameAndEmail.policy)
+        }
+      case actions if actions.contains(SamBillingProjectActions.readPolicy(SamBillingProjectPolicyNames.owner)) =>
+        samDAO.getPolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.owner, userInfo).map { policy =>
+          Set(SamBillingProjectPolicyNames.owner -> policy)
+        }
+      case _ => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You do not have the required actions to perform this.")))
+    }.map { policies =>
+      for {
+        (role, policy) <- policies.collect {
+          case (SamBillingProjectPolicyNames.owner, policy) => (ProjectRoles.Owner, policy)
+          case (SamBillingProjectPolicyNames.workspaceCreator, policy) => (ProjectRoles.User, policy)
+        }
+        email <- policy.memberEmails
+      } yield RawlsBillingProjectMember(RawlsUserEmail(email.value), role)
     }
   }
 

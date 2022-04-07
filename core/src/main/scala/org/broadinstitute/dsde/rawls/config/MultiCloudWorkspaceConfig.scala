@@ -10,8 +10,12 @@ import scala.language.postfixOps
 
 // TODO this data will be pulled from the spend profile service, hardcoding in conf until that svc is ready
 final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
-                                           cloudContextPollTimeout: FiniteDuration,
+                                           workspaceManager: Option[MultiCloudWorkspaceManagerConfig],
                                            azureConfig: Option[AzureConfig])
+
+
+final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String,
+                                                  cloudContextPollTimeout: FiniteDuration)
 
 final case class AzureConfig(spendProfileId: String,
                              azureTenantId: String,
@@ -34,12 +38,15 @@ case object MultiCloudWorkspaceConfig {
     conf.getConfigOption("multiCloudWorkspaces") match {
       case Some(mc) =>
         new MultiCloudWorkspaceConfig(
-          conf.getBoolean("multiCloudWorkspaces.enabled"),
-          util.toScalaDuration(conf.getDuration("multiCloudWorkspaces.cloudContextPollTimeoutSeconds")),
+          mc.getBoolean("enabled"),
+          Some(MultiCloudWorkspaceManagerConfig(
+            mc.getString("workspaceManager.leonardoWsmApplicationId"),
+            util.toScalaDuration(mc.getDuration("workspaceManager.cloudContextPollTimeoutSeconds"))
+          )),
           azureConfig
-        )
+      )
       case None =>
-        new MultiCloudWorkspaceConfig(false, 2 seconds, None)
+        new MultiCloudWorkspaceConfig(false, None, None)
     }
   }
 }

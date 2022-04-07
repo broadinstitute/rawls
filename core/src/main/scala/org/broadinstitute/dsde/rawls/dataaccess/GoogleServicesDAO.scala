@@ -86,7 +86,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param maxResults    (optional) the page size to use when fetching objects
     * @return the size in bytes of the data stored in the bucket
     */
-  def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long] = None): Future[BigInt]
+  def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long] = None): Future[BucketUsageResponse]
 
   /**
     * Gets a Google bucket.
