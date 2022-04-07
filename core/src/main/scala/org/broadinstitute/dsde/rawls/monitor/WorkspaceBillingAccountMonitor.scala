@@ -9,7 +9,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName}
-import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
+import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.{UpdateBillingProjectGoogleProjects, UpdateWorkspaceGoogleProjects}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -20,25 +20,50 @@ object WorkspaceBillingAccountMonitor {
   }
 
   sealed trait WorkspaceBillingAccountsMessage
-  case object CheckAll extends WorkspaceBillingAccountsMessage
+  case object UpdateWorkspaceGoogleProjects extends WorkspaceBillingAccountsMessage
+  case object UpdateBillingProjectGoogleProjects extends WorkspaceBillingAccountsMessage
   val BILLING_ACCOUNT_VALIDATION_ERROR_PREFIX = "Update Billing Account validation failed:"
 }
 
 class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext) extends Actor with LazyLogging {
 
-  context.system.scheduler.scheduleWithFixedDelay(initialDelay, pollInterval, self, CheckAll)
+  context.system.scheduler.scheduleWithFixedDelay(initialDelay, pollInterval, self, UpdateWorkspaceGoogleProjects)
+  context.system.scheduler.scheduleWithFixedDelay(initialDelay, pollInterval, self, UpdateBillingProjectGoogleProjects)
 
   override def receive = {
-    case CheckAll => checkAll()
+    case UpdateWorkspaceGoogleProjects => updateWorkspaceGoogleProjects()
+    case UpdateBillingProjectGoogleProjects => updateBillingProjectGoogleProjects()
   }
 
-  private def checkAll() = {
+  private def updateWorkspaceGoogleProjects() = {
     for {
       workspacesToUpdate <- dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.listWorkspaceGoogleProjectsToUpdateWithNewBillingAccount()
       }
       _ = logger.info(s"Attempting to update workspaces: ${workspacesToUpdate.toList}")
       _ <- workspacesToUpdate.toList.traverse {
+        case (googleProjectId, newBillingAccount, oldBillingAccount) =>
+          IO.fromFuture(IO(updateBillingAccountInRawlsAndGoogle(googleProjectId, newBillingAccount, oldBillingAccount))).attempt.map {
+            case Left(e) => {
+              // We do not want to throw e here. traverse stops executing as soon as it encounters a Failure, but we
+              // want to continue traversing the list to update the rest of the google project billing accounts even
+              // if one of the update operations fails.
+              logger.warn(s"Failed to update billing account from ${oldBillingAccount} to ${newBillingAccount} on project $googleProjectId", e)
+              ()
+            }
+            case Right(res) => res
+          }
+      }.unsafeToFuture()
+    } yield()
+  }
+
+  private def updateBillingProjectGoogleProjects() = {
+    for {
+      billingProjectsToUpdate <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.listWorkspaceGoogleProjectsToUpdateWithNewBillingAccount()
+      }
+      _ = logger.info(s"Attempting to update workspaces: ${billingProjectsToUpdate.toList}")
+      _ <- billingProjectsToUpdate.toList.traverse {
         case (googleProjectId, newBillingAccount, oldBillingAccount) =>
           IO.fromFuture(IO(updateBillingAccountInRawlsAndGoogle(googleProjectId, newBillingAccount, oldBillingAccount))).attempt.map {
             case Left(e) => {
