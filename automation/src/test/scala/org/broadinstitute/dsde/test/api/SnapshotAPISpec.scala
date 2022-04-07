@@ -42,7 +42,7 @@ class SnapshotAPISpec
     with Eventually {
 
   private val dataRepoBaseUrl = FireCloud.dataRepoApiUrl
-  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   override protected def beforeAll(): Unit = {
     assert(Try(Uri.parseAbsolute(dataRepoBaseUrl)).isSuccess,
@@ -70,7 +70,7 @@ class SnapshotAPISpec
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
 
           val drSnapshots = listDataRepoSnapshots(2, owner)(ownerAuthToken)
@@ -120,7 +120,7 @@ class SnapshotAPISpec
       // get N snapshots from TDR
       val drSnapshots = listDataRepoSnapshots(numSnapshotsToVerify, owner)(ownerAuthToken)
 
-      withTemporaryBillingProject(billingAccountName) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
           // loop through each snapshot, and:
           drSnapshots.getItems.asScala.foreach { snapSummary =>
@@ -168,7 +168,7 @@ class SnapshotAPISpec
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
 
           val drSnapshot = listDataRepoSnapshots(1, owner)(ownerAuthToken)

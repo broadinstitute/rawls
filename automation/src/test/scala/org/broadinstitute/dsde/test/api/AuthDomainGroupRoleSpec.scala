@@ -20,7 +20,7 @@ class AuthDomainGroupRoleSpec
     with GroupFixtures
     with Matchers {
 
-  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   "removing permissions from workspace with auth domain" - {
 
@@ -34,7 +34,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName, owners = List(student.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, owners = List(student.email).some) { projectName =>
         withGroup("group", List(student.email)) { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -60,7 +60,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName, owners = List(student.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, owners = List(student.email).some) { projectName =>
         withGroup("group", List(student.email)) { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -86,7 +86,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName, owners = List(student.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, owners = List(student.email).some) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -115,7 +115,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName, owners = List(student.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, owners = List(student.email).some) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -144,7 +144,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group", memberEmails = List(student.email)) { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -172,7 +172,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group", memberEmails = List(student.email)) { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
@@ -199,7 +199,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -230,7 +230,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -262,7 +262,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 
@@ -294,7 +294,7 @@ class AuthDomainGroupRoleSpec
       val student = UserPool.chooseStudent
       val studentToken: AuthToken = student.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
 

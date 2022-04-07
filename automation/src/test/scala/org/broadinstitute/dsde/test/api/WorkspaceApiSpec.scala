@@ -53,7 +53,7 @@ class WorkspaceApiSpec
 
   val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
   val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
-  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
@@ -96,7 +96,7 @@ class WorkspaceApiSpec
     "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
       val owner: Credentials = UserPool.chooseProjectOwner
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
-      withTemporaryBillingProject(billingAccountName) { billingProjectName =>
+      withTemporaryBillingProject(billingAccountId) { billingProjectName =>
         withCleanUp {
           val workspaceName = prependUUID("rbs-project-iam-test")
 
@@ -144,7 +144,7 @@ class WorkspaceApiSpec
       "to create, clone, and delete workspaces" in {
         implicit val token: AuthToken = ownerAuthToken
 
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           val workspaceName = prependUUID("owner-test-workspace")
           val workspaceCloneName = s"$workspaceName-copy"
 
@@ -165,7 +165,7 @@ class WorkspaceApiSpec
       "to delete the google project (from Resource Buffer) in a v2 workspaces (in a v2 billing project) when deleting the workspace" in {
         val owner: Credentials = UserPool.chooseProjectOwner
         implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
-        withTemporaryBillingProject(billingAccountName) { billingProjectName =>
+        withTemporaryBillingProject(billingAccountId) { billingProjectName =>
           val workspaceName = prependUUID("rbs-delete-workspace")
 
           implicit val ec: ExecutionContext = ExecutionContext.global
@@ -194,7 +194,7 @@ class WorkspaceApiSpec
         implicit val token: AuthToken = ownerAuthToken
         val invalidRegion = "invalid-region1"
 
-        val exception = withTemporaryBillingProject(billingAccountName) { billingProject =>
+        val exception = withTemporaryBillingProject(billingAccountId) { billingProject =>
           val workspaceName = prependUUID("owner-invalid-region-workspace")
           intercept[RestException] {
             Orchestration.workspaces.create(billingProject, workspaceName, Set.empty, Option(invalidRegion))
@@ -207,7 +207,7 @@ class WorkspaceApiSpec
       }
 
       "to add readers with can-share access" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("share-reader")) { workspaceName =>
             // grant reader access and can-share permission to student A
             val shareWithStudentA: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader, Some(true), Some(false)))
@@ -232,7 +232,7 @@ class WorkspaceApiSpec
       }
 
       "to add readers without can-share access" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("no-share-reader")) { workspaceName =>
             // grant reader access to student A
             val shareWithStudentA: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader, Some(false), Some(false)))
@@ -253,7 +253,7 @@ class WorkspaceApiSpec
       }
 
       "to add writers with can-compute access and then revoke can-compute" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("compute-writer")) { workspaceName =>
             val writerCanCompute: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, Some(false), Some(true)))
             Rawls.workspaces.updateAcl(projectName, workspaceName, writerCanCompute)(ownerAuthToken)
@@ -277,7 +277,7 @@ class WorkspaceApiSpec
       }
 
       "to change a writer's access level to reader" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("reader-to-writer")) { workspaceName =>
             val writerAccess: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Writer))
             Rawls.workspaces.updateAcl(projectName, workspaceName, writerAccess)(ownerAuthToken)
@@ -301,7 +301,7 @@ class WorkspaceApiSpec
       }
 
       "to change a writer's access level to no access" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("revoke-writer")) { workspaceName =>
             val writerAccess: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Writer))
             Rawls.workspaces.updateAcl(projectName, workspaceName, writerAccess)(ownerAuthToken)
@@ -320,7 +320,7 @@ class WorkspaceApiSpec
       }
 
       "to add an owner to a workspace, but not to change the new owner's permissions" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("two-owners")) { workspaceName =>
             val ownerAccess: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Owner))
             Rawls.workspaces.updateAcl(projectName, workspaceName, ownerAccess)(ownerAuthToken)
@@ -352,7 +352,7 @@ class WorkspaceApiSpec
 
       "to add workspace attributes" in {
         implicit val token: AuthToken = ownerAuthToken
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("add-attributes")) { workspaceName =>
             val attributeUpdates = attributeMap.map(attrTuple => AddUpdateAttribute(attrTuple._1, attrTuple._2)).toList
 
@@ -366,7 +366,7 @@ class WorkspaceApiSpec
 
       "to remove workspace attributes" in {
         implicit val token: AuthToken = ownerAuthToken
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("delete-attributes"), attributes = Some(testAttributes)) { workspaceName =>
             val attributeNameToRemove = testAttributes.keys.head
             val attributeUpdates = List(RemoveAttribute(AttributeName(testAttributeNamespace, attributeNameToRemove)))
@@ -382,7 +382,7 @@ class WorkspaceApiSpec
 
     "should not allow project owners" - {
       "to grant readers can-compute access" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("no-compute-reader")) { workspaceName =>
             val computeReader: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader, Some(false), Some(true)))
 
@@ -405,8 +405,8 @@ class WorkspaceApiSpec
         val workspaceCloneName = s"$workspaceName-copy"
 
         // user does not belong to the source project
-        withTemporaryBillingProject(billingAccountName) { sourceProjectName =>
-          withTemporaryBillingProject(billingAccountName) { destProjectName =>
+        withTemporaryBillingProject(billingAccountId) { sourceProjectName =>
+          withTemporaryBillingProject(billingAccountId) { destProjectName =>
             // The original workspace is in the source project. The user is a Reader on this workspace
             withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
               // Enable requester pays on the original workspace and wait for the change to propagate
@@ -439,7 +439,7 @@ class WorkspaceApiSpec
       )
 
       "to import method configs from another workspace" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("reader-import-config-dest-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { destWorkspaceName =>
             withWorkspace(projectName, prependUUID("method-config-source-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { sourceWorkspaceName =>
               withMethod("reader-import-from-workspace", MethodData.SimpleMethod) { methodName =>
@@ -465,7 +465,7 @@ class WorkspaceApiSpec
       }
 
       "to import method configs from the method repo" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("reader-import-config-dest-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { destWorkspaceName =>
             withMethod("reader-import-from-method-repo", MethodData.SimpleMethod) { methodName =>
               val method = MethodData.SimpleMethod.copy(methodName = methodName)
@@ -498,7 +498,7 @@ class WorkspaceApiSpec
       }
 
       "to launch workflows" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("reader-launch-workflow-fails"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
             Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 
@@ -535,7 +535,7 @@ class WorkspaceApiSpec
 
     "should allow writers" - {
       "to launch workflows if they have can-compute permission" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("writer-can-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(true)))) { workspaceName =>
             Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 
@@ -580,7 +580,7 @@ class WorkspaceApiSpec
 
     "should not allow writers" - {
       "to launch workflows if they don't have can-compute permission" in {
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("writer-cannot-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(false)))) { workspaceName =>
             Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 

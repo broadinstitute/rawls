@@ -56,7 +56,7 @@ class RawlsApiSpec
   val owner: Credentials = UserPool.chooseProjectOwner
   val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   def parseCallsFromMetadata(metadata: String): List[JsonNode] = {
     val mapper = new ObjectMapper()
@@ -152,7 +152,7 @@ class RawlsApiSpec
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 3, scatterCount = 3)
 
-      withTemporaryBillingProject(billingAccountName, users = List(studentB.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
@@ -253,7 +253,7 @@ class RawlsApiSpec
 
       val europeNorth1ZonesPrefix = "europe-north1-"
 
-      withTemporaryBillingProject(billingAccountName, users = List(studentB.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
@@ -363,7 +363,7 @@ class RawlsApiSpec
 
       val europeNorth1ZonesPrefix = "europe-north1-"
 
-      withTemporaryBillingProject(billingAccountName, users = List(studentB.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
         withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
@@ -479,7 +479,7 @@ class RawlsApiSpec
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
 
-      withTemporaryBillingProject(billingAccountName, users = List(studentA.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
           Orchestration.methodConfigurations.createMethodConfigInWorkspace(
             projectName, workspaceName,
@@ -569,7 +569,7 @@ class RawlsApiSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
-      withTemporaryBillingProject(billingAccountName, users = List(studentA.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
           val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
           val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
@@ -585,7 +585,7 @@ class RawlsApiSpec
 
       withGroup("ad") { realmGroup =>
         withGroup("ad2") { realmGroup2 =>
-          withTemporaryBillingProject(billingAccountName, users = List(studentA.email).some) { projectName =>
+          withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
             withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
               val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
               val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
@@ -607,7 +607,7 @@ class RawlsApiSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, s"unconstrained-workspace") { workspaceName =>
           val workspaceId = getWorkspaceId(projectName, workspaceName)
           val samPolicies = verifySamPolicies(workspaceId)
@@ -629,7 +629,7 @@ class RawlsApiSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("authDomain", List(owner.email)) { authDomain =>
           withWorkspace(projectName, s"constrained-workspace", Set(authDomain)) { workspaceName =>
             val workspaceId = getWorkspaceId(projectName, workspaceName)
@@ -651,7 +651,7 @@ class RawlsApiSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
       implicit val token: AuthToken = studentAToken
 
-      withTemporaryBillingProject(billingAccountName, users = List(studentA.email).some) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
           withCleanUp {
             val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
@@ -695,7 +695,7 @@ class RawlsApiSpec
         payload = "task hello {\n  String? name\n\n  command {\n    echo 'hello ${name}!'\n  }\n  output {\n    File response = stdout()\n  }\n  runtime {\n    docker: \"mtalbott/mtalbott-papi-v2\"\n  }\n}\n\nworkflow test {\n  call hello\n}"
       )
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, "rawls-private-image") { workspaceName =>
           withCleanUp {
             Orchestration.methods.createMethod(privateMethod.creationAttributes)
@@ -806,7 +806,7 @@ class RawlsApiSpec
             |""".stripMargin
       )
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, "rawls-wdl-struct") { workspaceName =>
           withCleanUp {
             Orchestration.methods.createMethod(privateMethod.creationAttributes)
@@ -926,7 +926,7 @@ class RawlsApiSpec
     "should fail to launch a submission with a reserved output attribute" in {
       implicit val token: AuthToken = ownerAuthToken
 
-      withTemporaryBillingProject(billingAccountName) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, "rawls-wdl-struct") { workspaceName =>
           withMethod("RawlsApiSpec_invalidOutputs", MethodData.SimpleMethod) { methodName =>
             withCleanUp {

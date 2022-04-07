@@ -29,7 +29,7 @@ class AuthDomainGroupApiSpec
 
   val defaultUser: Credentials = UserPool.chooseProjectOwner
   val defaultUserAuthToken: AuthToken = defaultUser.makeAuthToken()
-  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   "A workspace" - {
     "with one group in its auth domain" - {
@@ -39,7 +39,7 @@ class AuthDomainGroupApiSpec
         implicit val authToken: AuthToken = defaultUserAuthToken
 
         withGroup("authDomain", List(user.email)) { authDomainName =>
-          withTemporaryBillingProject(billingAccountName, users = List(user.email).some) { projectName =>
+          withTemporaryBillingProject(billingAccountId, users = List(user.email).some) { projectName =>
             withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
               // user is one of the authdomain group members
@@ -57,7 +57,7 @@ class AuthDomainGroupApiSpec
         implicit val authToken: AuthToken = defaultUserAuthToken
 
         withGroup("authDomain", List(user.email)) { authDomainName =>
-          withTemporaryBillingProject(billingAccountName, users = List(user.email).some) { projectName =>
+          withTemporaryBillingProject(billingAccountId, users = List(user.email).some) { projectName =>
             withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName),
               List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
@@ -87,7 +87,7 @@ class AuthDomainGroupApiSpec
             implicit val authToken: AuthToken = defaultUserAuthToken
 
             withGroup("authDomain") { authDomainName =>
-              withTemporaryBillingProject(billingAccountName) { projectName =>
+              withTemporaryBillingProject(billingAccountId) { projectName =>
                 withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName),
                   List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
@@ -106,7 +106,7 @@ class AuthDomainGroupApiSpec
             implicit val authToken: AuthToken = defaultUserAuthToken
 
             withGroup("authDomain") { authDomainName =>
-              withTemporaryBillingProject(billingAccountName) { projectName =>
+              withTemporaryBillingProject(billingAccountId) { projectName =>
                 withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
                   // user cannot see workspace and user cannot access workspace
@@ -127,7 +127,7 @@ class AuthDomainGroupApiSpec
             implicit val authToken: AuthToken = defaultUserAuthToken
 
             withGroup("authDomain", List(user.email)) { authDomainName =>
-              withTemporaryBillingProject(billingAccountName) { projectName =>
+              withTemporaryBillingProject(billingAccountId) { projectName =>
                 withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName),
                   List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
@@ -146,7 +146,7 @@ class AuthDomainGroupApiSpec
             implicit val authToken: AuthToken = defaultUserAuthToken
 
             withGroup("AuthDomain", List(user.email)) { authDomainName =>
-              withTemporaryBillingProject(billingAccountName) { projectName =>
+              withTemporaryBillingProject(billingAccountId) { projectName =>
                 withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
                   // user cannot see workspace and user cannot access workspace
@@ -172,7 +172,7 @@ class AuthDomainGroupApiSpec
       val userBToken: AuthToken = userB.makeAuthToken(serviceAccountScopes)
 
       withGroup("AuthDomain") { authDomainName =>
-        withTemporaryBillingProject(billingAccountName, users = List(userB.email).some) { projectName =>
+        withTemporaryBillingProject(billingAccountId, users = List(userB.email).some) { projectName =>
           withWorkspace(projectName, "AuthDomainGroupApiSpec_workspace", Set(authDomainName)) { workspaceName =>
 
             val bucketName = Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(userBToken).parseJson.convertTo[WorkspaceResponse].workspace.bucketName

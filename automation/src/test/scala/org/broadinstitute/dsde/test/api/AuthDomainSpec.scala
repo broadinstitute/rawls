@@ -27,7 +27,7 @@ class AuthDomainSpec
     (users(0), users(1))
   }
 
-  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   "AuthDomains" should "create and access a workspace with an auth domain" in {
     val groupOwnerToken = groupOwner.makeAuthToken()
@@ -35,7 +35,7 @@ class AuthDomainSpec
     withGroup("ad", List(projectUser.email, projectOwner.email)) { realmGroup =>
       withGroup("ad2", List(projectUser.email, projectOwner.email)) { realmGroup2 =>
         withGroup("ad3", List(projectUser.email, projectOwner.email)) { realmGroup3 =>
-          withTemporaryBillingProject(billingAccountName) { projectName =>
+          withTemporaryBillingProject(billingAccountId) { projectName =>
             withWorkspace(projectName, "AuthDomains", Set(realmGroup, realmGroup2, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
               Orchestration.workspaces.setAttributes(projectName, workspace, Map("foo" -> "bar"))(projectUser.makeAuthToken())
             }(projectOwner.makeAuthToken())
@@ -52,7 +52,7 @@ class AuthDomainSpec
       withGroup("ad", List(projectOwner.email)) { realmGroup =>
         withGroup("ad2", List(projectOwner.email)) { realmGroup2 =>
           withGroup("ad3") { realmGroup3 =>
-            withTemporaryBillingProject(billingAccountName) { projectName =>
+            withTemporaryBillingProject(billingAccountId) { projectName =>
               withWorkspace(projectName, "AuthDomains", Set(realmGroup, realmGroup2, realmGroup3)) { _ =>
                 fail("should not have created workspace")
               }(projectOwner.makeAuthToken())
@@ -70,7 +70,7 @@ class AuthDomainSpec
       withGroup("ad2", List(projectUser.email, projectOwner.email)) { realmGroup2 =>
         val realmGroup2Full = Orchestration.groups.getGroup(realmGroup2)(groupOwnerToken)
         withGroup("ad3", List(realmGroup2Full.groupEmail)) { realmGroup3 =>
-          withTemporaryBillingProject(billingAccountName) { projectName =>
+          withTemporaryBillingProject(billingAccountId) { projectName =>
             withWorkspace(projectName, "AuthDomains", Set(realmGroup, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
               for (user <- Set(projectOwner, projectUser)) {
                 val userToken = user.makeAuthToken()
@@ -123,7 +123,7 @@ class AuthDomainSpec
           // which adds the group to the can-compute policy on the project. Deleting the workspace does not remove the group
           // from the policy so the group remains in use and cannot be deleted so cleanup will fail. Using a new project which
           // gets released removes the offending policy and allows the group to be cleaned up.
-          withTemporaryBillingProject(billingAccountName) { localProject =>
+          withTemporaryBillingProject(billingAccountId) { localProject =>
             withWorkspace(localProject, "AuthDomains", Set(realmGroup), List(AclEntry(accessGroupFull.groupEmail, WorkspaceAccessLevel.Writer))) { workspace =>
               val user = projectUser
               val userToken = user.makeAuthToken()
@@ -166,7 +166,7 @@ class AuthDomainSpec
       withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
         withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
           val authDomain = Set(realmGroup, realmGroup2, realmGroup3)
-          withTemporaryBillingProject(billingAccountName, users = List(projectUser.email).some) { projectName =>
+          withTemporaryBillingProject(billingAccountId, users = List(projectUser.email).some) { projectName =>
             withWorkspace(projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
               val clone = "AuthDomainsClone_" + makeRandomId()
               Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain)(projectUser.makeAuthToken())
@@ -198,7 +198,7 @@ class AuthDomainSpec
       withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
         withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
           val authDomain = Set(realmGroup, realmGroup2)
-          withTemporaryBillingProject(billingAccountName, users = List(projectUser.email).some) { projectName =>
+          withTemporaryBillingProject(billingAccountId, users = List(projectUser.email).some) { projectName =>
             withWorkspace(projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
               val clone = "AuthDomainsClone_" + makeRandomId()
               Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain + realmGroup3)(projectUser.makeAuthToken())
@@ -219,7 +219,7 @@ class AuthDomainSpec
 
     withGroup("ad", List(projectUser.email)) { realmGroup =>
       withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
-        withTemporaryBillingProject(billingAccountName) { projectName =>
+        withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, "AuthDomains", Set(realmGroup), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             intercept[RestException] {
               val clone = "AuthDomainsClone_" + makeRandomId()

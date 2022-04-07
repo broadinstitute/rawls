@@ -21,7 +21,7 @@ class MethodConfigApiSpec
     with Matchers
     with CleanUp {
 
-  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   /*
    * This test does
@@ -40,7 +40,7 @@ class MethodConfigApiSpec
       val user = UserPool.chooseProjectOwner
       implicit val authToken: AuthToken = user.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withCleanUp {
           val copyFromWorkspaceSource = uuidWithPrefix("MethodConfigApiSpec_copyMethodConfigFromWorkspaceSource")
           Rawls.workspaces.create(billingProject, copyFromWorkspaceSource);
@@ -104,7 +104,7 @@ class MethodConfigApiSpec
       val user = UserPool.chooseProjectOwner
       implicit val authToken: AuthToken = user.makeAuthToken()
 
-      withTemporaryBillingProject(billingAccountName) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withCleanUp {
 
           val workspaceName = uuidWithPrefix("MethodConfigApiSpec_importMethodConfigFromMethodRepoWorkspace")

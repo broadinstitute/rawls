@@ -35,12 +35,12 @@ class MethodLaunchSpec
   val entitySetMembership: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> entitySetMembershipOperation))
   val inFlightSubmissionStatuses = List("Accepted", "Evaluating", "Submitting", "Submitted")
 
-  val billingAccountName: String = ServiceTestConfig.Projects.billingAccountId
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   "launching a workflow with input not defined should throw exception" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
-    withTemporaryBillingProject(billingAccountName) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_input_not_defined") { workspaceName =>
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
@@ -76,7 +76,7 @@ class MethodLaunchSpec
   "owner can abort a launched submission" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
-    withTemporaryBillingProject(billingAccountName) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_abort_submission") { workspaceName =>
 
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
@@ -129,7 +129,7 @@ class MethodLaunchSpec
     implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
     val readerAuthToken: AuthToken = reader.makeAuthToken()
 
-    withTemporaryBillingProject(billingAccountName) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_reader_cannot_abort_submission", aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
@@ -173,7 +173,7 @@ class MethodLaunchSpec
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
 
-    withTemporaryBillingProject(billingAccountName) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_input_not_defined") { workspaceName =>
 
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
@@ -212,7 +212,7 @@ class MethodLaunchSpec
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
 
-    withTemporaryBillingProject(billingAccountName) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_on_set_without_expression") { workspaceName =>
 
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
