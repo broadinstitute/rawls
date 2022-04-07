@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -1909,7 +1910,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(BucketUsageResponse(BigInt(42))) {
+          assertResult(BucketUsageResponse(BigInt(42), Some(new DateTime(0)))) {
             responseAs[BucketUsageResponse]
           }
         }

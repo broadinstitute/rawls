@@ -4935,6 +4935,10 @@ components:
         usageInBytes:
           type: integer
           description: The current storage bucket usage in bytes
+        lastUpdated:
+          type: string
+          format: timestamp
+          description: timestamp (UTC) marking the date that the bucket usage was last updated (YYYY-MM-DDThh:mm:ss.fffZ)
       description: ""
     PendingCloneWorkspaceFileTransfer:
       type: object
