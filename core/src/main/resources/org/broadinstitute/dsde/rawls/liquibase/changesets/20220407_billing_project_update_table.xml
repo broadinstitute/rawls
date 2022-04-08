@@ -3,8 +3,8 @@
                    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
-    <changeSet logicalFilePath="dummy" author="ci-mob" id="create_BILLING_PROJECT_UPDATES">
-        <createTable tableName="BILLING_PROJECT_UPDATES"
+    <changeSet logicalFilePath="dummy" author="ci-mob" id="create_BILLING_ACCOUNT_CHANGES">
+        <createTable tableName="BILLING_ACCOUNT_CHANGES"
                      remarks="Records the history of billing account changes on billing projects">
             <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true"/>
@@ -35,14 +35,14 @@
                     remarks="When this change was requested.">
                 <constraints nullable="false"/>
             </column>
-            <column name="FINISHED"
-                    type="DATETIME"
-                    remarks="When the system finished migrating the WORKSPACE.">
+            <column name="GOOGLE_SYNC_TIME"
+                    type="DATETIME(6)"
+                    remarks="When these changes were set on GCP">
                 <constraints nullable="true"/>
             </column>
             <column name="OUTCOME"
                     type="VARCHAR(16)"
-                    remarks="The state of migrating the WORKSPACE when the system FINISHED.">
+                    remarks="The outcome from Google whether the update was successful">
                 <constraints nullable="true"/>
             </column>
             <column name="MESSAGE"
@@ -52,10 +52,10 @@
             </column>
         </createTable>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="ci-mob" id="create_BILLING_PROJECT_UPDATES_FK">
+    <changeSet logicalFilePath="dummy" author="ci-mob" id="create_BILLING_ACCOUNT_CHANGES_FK">
         <addForeignKeyConstraint baseColumnNames="BILLING_PROJECT_NAME"
-                                 baseTableName="BILLING_PROJECT_UPDATES"
-                                 constraintName="FK_BILLING_PROJECT_NAME"
+                                 baseTableName="BILLING_ACCOUNT_CHANGES"
+                                 constraintName="FK_BILLING_ACCOUNT_CHANGES_PROJECT_NAME"
                                  deferrable="false"
                                  initiallyDeferred="false"
                                  onUpdate="NO ACTION"
@@ -63,24 +63,21 @@
                                  referencedTableName="BILLING_PROJECT"/>
     </changeSet>
     <changeSet logicalFilePath="dummy" author="ci-mob"
-               id="create_BILLING_PROJECT_UPDATES_insertion_trigger">
+               id="create_BILLING_ACCOUNT_CHANGES_insertion_trigger">
         <comment>
             Enforce that the billing account can't be changed from/to the same billing account.
         </comment>
         <sql endDelimiter="~">
             CREATE TRIGGER fail_insert_if_billing_account_same
-                BEFORE INSERT ON BILLING_PROJECT_UPDATES
+                BEFORE INSERT ON BILLING_ACCOUNT_CHANGES
                 FOR EACH ROW
             BEGIN
                 IF (NEW.ORIGINAL_BILLING_ACCOUNT <=> NEW.NEW_BILLING_ACCOUNT)
                 THEN
                     SET @error_message = CONCAT_WS(' ', 'Billing account', NEW.NEW_BILLING_ACCOUNT, 'is the same as the original billing account.');
-                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @error_message;
-            END IF;
+                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @error_message;
+                END IF;
             END ~
         </sql>
-        <rollback>
-            DROP TRIGGER IF EXISTS fail_insert_if_workspace_is_being_migrated;
-        </rollback>
     </changeSet>
 </databaseChangeLog>
