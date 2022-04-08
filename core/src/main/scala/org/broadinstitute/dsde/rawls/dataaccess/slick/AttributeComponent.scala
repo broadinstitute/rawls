@@ -326,12 +326,12 @@ trait AttributeComponent {
     }
 
     /**
-      * Returns all unique attributes values that meet the specified filters
+      * Returns all unique attribute values, with the specfied filters applied
       *
-      * @param attrName the name of the attribute to search for (note that this is a (namespace, name) pair)
-      * @param queryString the string value to search for, optional
+      * @param attrName the name of the attribute to filter for (note that this is a (namespace, name) pair)
+      * @param queryString the string value to filter for, optional
       * @param limit the maximum number of results to return, optional
-      * @param ownerIds the ownerIds (i.e. the entity ID or workspace ID) to limit the search to, optional. if not specified, will search the entire table
+      * @param ownerIds the ownerIds (i.e. the entity ID or workspace ID that the attribute belongs to) to filter for, optional
       * @return the attribute values that meet the specified filters
       */
     def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String], limit: Option[Int] = None, ownerIds: Option[Seq[OWNER_ID]] = None) = {
