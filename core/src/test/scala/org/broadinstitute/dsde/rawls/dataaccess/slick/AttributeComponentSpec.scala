@@ -694,7 +694,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
           attributeTestFunction.run(attribute1, attribute2)
         }
       case x =>
-         throw new Exception("this is unexpected")
+         throw new Exception(s"${x} is unexpected")
     }
   }
 
