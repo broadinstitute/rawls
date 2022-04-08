@@ -654,9 +654,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
   def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] = {
     for {
       workspacesForUser <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
-      workspaceIds = workspacesForUser.map(x => UUID.fromString(x.resourceId)).toSeq
+      workspaceIdsForUser = workspacesForUser.map(resource => UUID.fromString(resource.resourceId)).toSeq
       result <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.getTags(query, limit, Some(workspaceIds))
+        dataAccess.workspaceQuery.getTags(query, limit, Some(workspaceIdsForUser))
       }
     } yield result
   }
