@@ -13,4 +13,6 @@ abstract class MockGoogleStorageTransferService[F[_]] extends GoogleStorageTrans
   override def getTransferJob(jobName: GoogleStorageTransferService.JobName, project: GoogleProject): F[TransferTypes.TransferJob] = ???
 
   override def listTransferOperations(jobName: GoogleStorageTransferService.JobName, project: GoogleProject): F[Seq[Operation]] = ???
+
+  override def getTransferOperation(operationName: GoogleStorageTransferService.OperationName): F[Operation] = ???
 }

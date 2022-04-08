@@ -108,8 +108,6 @@ class WorkspaceMigrationActorSpec
       IO.pure {
         Seq(Operation.newBuilder.setDone(true).build)
       }
-
-    override def getTransferOperation(operationName: GoogleStorageTransferService.OperationName): IO[Operation] = IO.pure(Operation.newBuilder().build())
   }
 
 
