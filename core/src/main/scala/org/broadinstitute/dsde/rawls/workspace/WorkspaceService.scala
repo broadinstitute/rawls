@@ -651,10 +651,15 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.getTags(query, limit)
-    }
+  def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] = {
+    for {
+      workspacesForUser <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
+      workspaceIds = workspacesForUser.map(x => UUID.fromString(x.resourceId)).toSeq
+      result <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.getTags(query, limit, Some(workspaceIds))
+      }
+    } yield result
+  }
 
   def listWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span): Future[JsValue] = {
 

@@ -325,16 +325,21 @@ trait AttributeComponent {
       qb.sqlBuilder += " collate utf8_bin"
     }
 
-    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String], limit: Option[Int] = None) = {
+    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String], limit: Option[Int] = None, ownerIds: Option[Seq[OWNER_ID]] = None) = {
 
       val basicFilter = filter(rec =>
         rec.namespace === attrName.namespace &&
           rec.name === attrName.name &&
           rec.valueString.isDefined)
 
-      val baseQuery = (queryString match {
-        case Some(query) => basicFilter.filter(_.valueString.like(s"%$query%"))
+      val applyOwnerFilter = ownerIds match {
+        case Some(ids) => basicFilter.filter(_.ownerId inSetBind ids)
         case None => basicFilter
+      }
+
+      val baseQuery = (queryString match {
+        case Some(query) => applyOwnerFilter.filter(_.valueString.like(s"%$query%"))
+        case None => applyOwnerFilter
       })
         .groupBy(r => caseSensitiveCollate(r.valueString))
         .map(queryThing => (queryThing._1, queryThing._2.length))
