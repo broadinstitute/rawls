@@ -327,19 +327,18 @@ trait AttributeComponent {
 
     def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String], limit: Option[Int] = None, ownerIds: Option[Seq[OWNER_ID]] = None) = {
 
-      val basicFilter = filter(rec =>
+      val basicFilter = filter { rec =>
         rec.namespace === attrName.namespace &&
           rec.name === attrName.name &&
-          rec.valueString.isDefined)
-
-      val applyOwnerFilter = ownerIds match {
-        case Some(ids) => basicFilter.filter(_.ownerId inSetBind ids)
-        case None => basicFilter
-      }
+          rec.valueString.isDefined
+        }
+        .filterOpt(ownerIds) { case (table, ownerIds) =>
+          table.ownerId inSetBind ownerIds
+        }
 
       val baseQuery = (queryString match {
-        case Some(query) => applyOwnerFilter.filter(_.valueString.like(s"%$query%"))
-        case None => applyOwnerFilter
+        case Some(query) => basicFilter.filter(_.valueString.like(s"%$query%"))
+        case None => basicFilter
       })
         .groupBy(r => caseSensitiveCollate(r.valueString))
         .map(queryThing => (queryThing._1, queryThing._2.length))
