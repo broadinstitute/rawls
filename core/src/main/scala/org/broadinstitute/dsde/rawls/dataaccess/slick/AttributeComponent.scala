@@ -348,8 +348,8 @@ trait AttributeComponent {
         }
 
       val baseQuery = (queryString match {
-        case Some(query) => basicFilter.filter(_.valueString.like(s"%$query%"))
-        case None => basicFilter
+        case Some(query) => withOptionalOwnerFilter.filter(_.valueString.like(s"%$query%"))
+        case None => withOptionalOwnerFilter
       })
         .groupBy(r => caseSensitiveCollate(r.valueString))
         .map(queryThing => (queryThing._1, queryThing._2.length))
