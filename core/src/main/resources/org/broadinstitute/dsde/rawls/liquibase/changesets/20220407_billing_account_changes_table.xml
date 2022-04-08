@@ -6,7 +6,9 @@
     <changeSet logicalFilePath="dummy" author="ci-mob" id="create_BILLING_ACCOUNT_CHANGES">
         <createTable tableName="BILLING_ACCOUNT_CHANGES"
                      remarks="Records the history of billing account changes on billing projects">
-            <column name="id" type="BIGINT" autoIncrement="true">
+            <column name="ID"
+                    type="BIGINT"
+                    autoIncrement="true">
                 <constraints primaryKey="true"/>
             </column>
             <column name="BILLING_PROJECT_NAME"

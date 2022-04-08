@@ -9,10 +9,13 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsBillingAccountName, RawlsBillingProjectName}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName, RawlsBillingProjectName, RawlsUserSubjectId}
 import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
+import org.broadinstitute.dsde.rawls.monitor.migration.{MigrationUtils, WorkspaceMigration}
 
-import scala.collection.mutable
+import java.sql.Timestamp
+import java.time.Instant
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -25,6 +28,89 @@ object WorkspaceBillingAccountMonitor {
   case object CheckAll extends WorkspaceBillingAccountsMessage
   val BILLING_ACCOUNT_VALIDATION_ERROR_PREFIX = "Update Billing Account validation failed:"
 }
+
+final case class BillingAccountChange(id: Long,
+                                      billingProjectName: RawlsBillingProjectName,
+                                      userId: RawlsUserSubjectId,
+                                      originalBillingAccount: Option[RawlsBillingAccountName],
+                                      newBillingAccount: Option[RawlsBillingAccountName],
+                                      created: Instant,
+                                      googleSyncTime: Option[Instant],
+                                      outcome: Option[Outcome]
+                                     )
+
+private[monitor]
+object BillingAccountChanges {
+
+  type RecordType = (
+    Long, // id
+      String, // billing project name
+      String, // User Id
+      Option[String], // Original billing account
+      Option[String], // New billing account
+      Timestamp, // Created
+      Option[Timestamp], // Google sync time
+      Option[String], // Outcome
+      Option[String] // Message
+    )
+
+  def fromRecord(record: RecordType): Either[String, BillingAccountChange] = record match {
+    case (id, billingProjectName, userId, originalBillingAccount, newBillingAccount, created, googleSyncTime, outcome, message) =>
+      Outcome.fromFields(outcome, message).map { outcome =>
+        BillingAccountChange(
+          id,
+          RawlsBillingProjectName(billingProjectName),
+          RawlsUserSubjectId(userId),
+          originalBillingAccount.map(RawlsBillingAccountName),
+          newBillingAccount.map(RawlsBillingAccountName),
+          created.toInstant,
+          googleSyncTime.map(_.toInstant),
+          outcome
+        )
+      }
+  }
+
+  def toRecord(billingAccountChange: BillingAccountChange): RecordType = {
+    val (outcome, message) = billingAccountChange.outcome.map(Outcome.toTuple).getOrElse((None, None))
+    (
+      billingAccountChange.id,
+      billingAccountChange.billingProjectName.value,
+      billingAccountChange.userId.value,
+      billingAccountChange.originalBillingAccount.map(_.value),
+      billingAccountChange.newBillingAccount.map(_.value),
+      Timestamp.from(billingAccountChange.created),
+      billingAccountChange.googleSyncTime.map(Timestamp.from),
+      outcome,
+      message
+    )
+  }
+
+  import slick.jdbc.MySQLProfile.api._
+
+  final class BillingAccountChanges(tag: Tag)
+    extends Table[BillingAccountChange](tag, "BILLING_ACCOUNT_CHANGES") {
+
+    def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
+    def billingProjectName = column[String]("BILLING_PROJECT_NAME")
+    def userId = column[String]("USER_ID")
+    def originalBillingAccount = column[Option[String]]("ORIGINAL_BILLING_ACCOUNT")
+    def newBillingAccount = column[Option[String]]("NEW_BILLING_ACCOUNT")
+    def created = column[Timestamp]("CREATED")
+    def googleSyncTime = column[Option[Timestamp]]("GOOGLE_SYNC_TIME")
+    def outcome = column[Option[String]]("OUTCOME")
+    def message = column[Option[String]]("MESSAGE")
+
+    override def * =
+      (
+        id, billingProjectName, userId, originalBillingAccount, newBillingAccount, created,
+        googleSyncTime, outcome, message
+      ) <> (
+        r => MigrationUtils.unsafeFromEither(fromRecord(r)),
+        toRecord(_: BillingAccountChange).some
+      )
+  }
+}
+
 
 class WorkspaceBillingAccountMonitor(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext) extends Actor with LazyLogging {
 
