@@ -108,4 +108,5 @@
     <include file="changesets/20220127_add_workspace_type_column.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220219_add_workspace_feature_flag_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220303_drop_workspace_shard_state.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20220407_billing_account_changes_table.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

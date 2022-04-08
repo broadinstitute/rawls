@@ -72,7 +72,7 @@
                 BEFORE INSERT ON BILLING_ACCOUNT_CHANGES
                 FOR EACH ROW
             BEGIN
-                IF (NEW.ORIGINAL_BILLING_ACCOUNT <=> NEW.NEW_BILLING_ACCOUNT)
+                IF (NEW.ORIGINAL_BILLING_ACCOUNT &lt;=> NEW.NEW_BILLING_ACCOUNT)
                 THEN
                     SET @error_message = CONCAT_WS(' ', 'Billing account', NEW.NEW_BILLING_ACCOUNT, 'is the same as the original billing account.');
                     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @error_message;
