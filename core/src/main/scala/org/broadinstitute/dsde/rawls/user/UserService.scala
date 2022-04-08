@@ -532,9 +532,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
       billingAccountNames.find(_.accountName == billingAccountName) match {
-        case Some(billingAccount) if billingAccount.firecloudHasAccess => Future.successful(billingAccount)
         case None => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))))
-        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
+        case Some(billingAccount) =>
+          if (billingAccount.firecloudHasAccess)
+            Future.successful(billingAccount)
+          else
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
       }
     }
   }
@@ -648,6 +651,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(folderId) => Future.successful(folderId)
     }
   }
+
+  private def deleteRefreshTokenInternal(rawlsUserRef: RawlsUserRef): Future[Unit] = {
+    for {
+      _ <- gcsDAO.revokeToken(rawlsUserRef)
+      _ <- gcsDAO.deleteToken(rawlsUserRef).recover { case e: HttpResponseException if e.getStatusCode == 404 => () }
+    } yield ()
+  }
+
 
   // User needs to be an owner of the billing project and have the AddProject action on the service perimeter
   private def requirePermissionsToAddToServicePerimeter[T](servicePerimeterName: ServicePerimeterName, projectName: RawlsBillingProjectName)(op: => Future[T]): Future[T] = {
