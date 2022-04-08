@@ -340,8 +340,10 @@ trait AttributeComponent {
         rec.namespace === attrName.namespace &&
           rec.name === attrName.name &&
           rec.valueString.isDefined
-        }
-        .filterOpt(ownerIds) { case (table, ownerIds) =>
+      }
+
+      val withOptionalOwnerFilter =
+        basicFilter.filterOpt(ownerIds) { case (table, ownerIds) =>
           table.ownerId inSetBind ownerIds
         }
 
