@@ -541,10 +541,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
       billingAccountNames.find(_.accountName == billingAccountName) match {
-        case Some(billingAccount) if billingAccount.firecloudHasAccess => Future.successful(billingAccount)
         case None => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))))
-        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
-        case Some(billingAccount) => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unexpected billing account ${billingAccount}")))
+        case Some(billingAccount) =>
+          if (billingAccount.firecloudHasAccess)
+            Future.successful(billingAccount)
+          else
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
       }
     }
   }
