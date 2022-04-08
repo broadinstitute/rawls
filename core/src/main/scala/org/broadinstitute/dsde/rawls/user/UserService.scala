@@ -76,20 +76,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def setRefreshToken(userRefreshToken: UserRefreshToken): Future[Unit] = {
-    gcsDAO.storeToken(userInfo, userRefreshToken.refreshToken)
-  }
-
-  def getRefreshTokenDate(): Future[UserRefreshTokenDate] = {
-    gcsDAO.getTokenDate(RawlsUser(userInfo)).map(_ match {
-      case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"no refresh token stored for ${userInfo.userEmail}"))
-      case Some(date) => UserRefreshTokenDate(date)
-    }).recover {
-      case t: TokenResponseException =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(t.getStatusCode, t))
-    }
-  }
-
   def isAdmin(userEmail: RawlsUserEmail): Future[Boolean] = {
     toFutureTry(tryIsFCAdmin(userEmail)) map {
       case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
@@ -486,12 +472,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def adminDeleteRefreshToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
-    asFCAdmin {
-      deleteRefreshTokenInternal(rawlsUserRef)
-    }
-  }
-
   def updateBillingProjectBillingAccount(billingProjectName: RawlsBillingProjectName, updateAccountRequest: UpdateRawlsBillingAccountRequest): Future[Option[RawlsBillingProjectResponse]] = {
     validateBillingAccountName(updateAccountRequest.billingAccount.value)
 
@@ -668,14 +648,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(folderId) => Future.successful(folderId)
     }
   }
-
-  private def deleteRefreshTokenInternal(rawlsUserRef: RawlsUserRef): Future[Unit] = {
-    for {
-      _ <- gcsDAO.revokeToken(rawlsUserRef)
-      _ <- gcsDAO.deleteToken(rawlsUserRef).recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
-    } yield { Unit }
-  }
-
 
   // User needs to be an owner of the billing project and have the AddProject action on the service perimeter
   private def requirePermissionsToAddToServicePerimeter[T](servicePerimeterName: ServicePerimeterName, projectName: RawlsBillingProjectName)(op: => Future[T]): Future[T] = {

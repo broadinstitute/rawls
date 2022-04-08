@@ -108,8 +108,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     val sample2 = Entity("sample2", "Sample",
       Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
 
-    val refreshToken = UUID.randomUUID.toString
-
     val existingWorkflowId = Option("69d1d92f-3895-4a7b-880a-82535e9a096e")
     val nonExistingWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c9999")
     val alreadyTerminatedWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c8778")
@@ -306,8 +304,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         config,
         workbenchMetricBaseName = workbenchMetricBaseName
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-
-      gcsDAO.storeToken(userInfo, subTestData.refreshToken)
 
       val testConf = ConfigFactory.load()
 
