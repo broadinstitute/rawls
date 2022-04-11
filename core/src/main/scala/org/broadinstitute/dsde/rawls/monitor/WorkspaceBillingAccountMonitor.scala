@@ -7,12 +7,13 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName, RawlsBillingProjectName, RawlsUserSubjectId}
 import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 
 import java.sql.Timestamp
@@ -117,7 +118,14 @@ object BillingAccountChanges {
     def create(billingProjectName: RawlsBillingProjectName,
                oldBillingAccount: Option[RawlsBillingAccountName],
                newBillingAccount: Option[RawlsBillingAccountName],
-               userId: RawlsUserSubjectId): ReadWriteAction[BillingAccountChange] = ???
+               userId: RawlsUserSubjectId): ReadWriteAction[Unit] =
+      billingAccountChangeQuery
+        .map(change => (change.billingProjectName, change.originalBillingAccount, change.newBillingAccount, change.userId))
+        .insert((billingProjectName.value, oldBillingAccount.map(_.value), newBillingAccount.map(_.value), userId.value))
+        .ignore
+
+    def lastChange(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Option[BillingAccountChange]] = ???
+
   }
 }
 

@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.testkit.TestKit
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -306,6 +307,12 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
     ).io
 
   "BillingAccountChanges" should "make a row" in {
-
+    withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val test = for {
+        _ <- updateBillingAccount(minimalTestData.billingProject.projectName, minimalTestData.billingProject.billingAccount, minimalTestData.userReader.userSubjectId, dataSource)
+        resultRow <- dataSource.inTransaction(_ => BillingAccountChanges.billingAccountChangeQuery.lastChange(minimalTestData.billingProject.projectName)).io
+      } yield resultRow shouldBe defined
+      test.unsafeRunSync()
+    }
   }
 }
