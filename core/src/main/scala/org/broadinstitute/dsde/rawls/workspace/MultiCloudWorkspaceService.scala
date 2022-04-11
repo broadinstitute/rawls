@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.model.CreateCloudContextResult
+import bio.terra.workspace.model.{AzureRelayNamespaceCreationParameters, CreateCloudContextResult, CreateControlledAzureRelayNamespaceRequestBody}
 import bio.terra.workspace.model.JobReport.StatusEnum
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
@@ -96,9 +96,27 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
           parentSpan)
       }, TransactionIsolation.ReadCommitted)
       )
+      // /api/workspaces/v1/{workspaceId}/applications/{applicationId}/enable
       _ = logger.info(s"Enabling leonardo app in WSM [workspaceId = ${workspaceId}]")
       _ <- traceWithParent("enableLeoInWSM", parentSpan)(_ =>
         Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, userInfo.accessToken))
+      )
+      _ = logger.info(s"Creating azure relay in WSM [workspaceId = ${workspaceId}]")
+      azureRelayCreateResult <- traceWithParent("createAzureRelayInWsm", parentSpan)(_ =>
+        Future(
+          workspaceManagerDAO.createControlledAzureRelay(
+            workspaceId,
+            new CreateControlledAzureRelayNamespaceRequestBody().azureRelayNamespace(
+              new AzureRelayNamespaceCreationParameters().namespaceName(s"relay-ns-${workspaceId}").region(workspaceRequest.region)
+            ),
+            userInfo.accessToken
+          )
+        )
+      )
+      relayJobControlId = azureRelayCreateResult.getJobReport.getId
+      _ = logger.info(s"Polling on azureRelay in WSM [jobControlId = ${relayJobControlId}]")
+      _ <- traceWithParent("pollCreateAzureRelayInWSM", parentSpan)(_ =>
+        pollCloudContext(workspaceId, relayJobControlId, userInfo.accessToken, wsmConfig.cloudContextPollTimeout)
       )
     } yield {
       savedWorkspace

@@ -1831,7 +1831,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription().azureContext(new AzureContext()
@@ -1858,7 +1858,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
     // ApiException is a checked exception so we need to use thenAnswer rather than thenThrow
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenAnswer(
@@ -1884,7 +1884,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "return an error if an MC workspace does not have an Azure context" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription() // no azureContext, should be an error

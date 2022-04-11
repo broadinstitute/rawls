@@ -26,6 +26,7 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   }
   def mockInitialCreateAzureCloudContextResult() = new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.RUNNING))
   def mockCreateAzureCloudContextResult() = createCloudContextResult
+  def mockAzureRelayNamespaceResult() = new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("relay_fake_id").status(StatusEnum.RUNNING))
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
 
@@ -104,6 +105,11 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   override def enableApplication(workspaceId: UUID, applicationId: String, accessToken: OAuth2BearerToken): WorkspaceApplicationDescription = {
     new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
   }
+
+  override def createControlledAzureRelay(workspaceId: UUID, requestInfo: CreateControlledAzureRelayNamespaceRequestBody, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
+    mockAzureRelayNamespaceResult() // TODO: set any properties in this?
+  }
+
 }
 
 

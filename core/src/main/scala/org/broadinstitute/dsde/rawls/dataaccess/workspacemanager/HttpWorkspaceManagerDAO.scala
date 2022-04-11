@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi, WorkspaceApplicationApi}
+import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
@@ -31,6 +31,10 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   private def getWorkspaceApplicationApi(accessToken: OAuth2BearerToken) = {
     apiClientProvider.getWorkspaceApplicationApi(accessToken.token)
+  }
+
+  private def getControlledAzureResourceApi(accessToken: OAuth2BearerToken) = {
+    apiClientProvider.getControlledAzureResourceApi(accessToken.token)
   }
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = {
@@ -106,5 +110,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     getWorkspaceApplicationApi(accessToken).enableWorkspaceApplication(
       workspaceId, applicationId
     )
+  }
+
+  def createControlledAzureRelay(workspaceId: UUID, requestInfo: CreateControlledAzureRelayNamespaceRequestBody, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
+    getControlledAzureResourceApi(accessToken).createAzureRelayNamespace(requestInfo, workspaceId)
   }
 }

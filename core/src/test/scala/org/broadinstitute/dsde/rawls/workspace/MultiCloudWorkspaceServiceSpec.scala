@@ -36,7 +36,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, config
     )(userInfo)
-    val request = MultiCloudWorkspaceRequest("fake", "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure)
+    val request = MultiCloudWorkspaceRequest("fake", "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
       mcWorkspaceService.createMultiCloudWorkspace(request)
@@ -54,7 +54,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       slickDataSource, workspaceManagerDAO, activeMcWorkspaceConfig
     )(userInfo)
     val request = MultiCloudWorkspaceRequest(
-      namespace, name, Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure)
+      namespace, name, Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
     Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
     val thrown = intercept[RawlsExceptionWithErrorReport] {
@@ -72,7 +72,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
-      namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure)
+      namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
     val result: Workspace = Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
 
@@ -102,7 +102,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
-      namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure)
+      namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
     intercept[CloudContextCreationFailureException] {
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
